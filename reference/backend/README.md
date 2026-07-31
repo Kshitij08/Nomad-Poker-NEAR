@@ -53,6 +53,13 @@ In the backend service → **Variables**, add:
 
 Railway runs `npm start`, which applies migrations then starts the server (`backend/railway.toml`).
 
+**Build note:** Railway’s root directory is `backend`, so `shared/idl/` is not available at build time. The IDL is vendored at `backend/idl/poker_escrow.json`. After changing the on-chain program, refresh it:
+
+```bash
+npm run copy-idl --prefix backend
+git add backend/idl/poker_escrow.json
+```
+
 ### C. Verify
 
 ```bash
