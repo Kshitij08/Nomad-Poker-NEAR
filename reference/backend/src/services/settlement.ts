@@ -1,5 +1,5 @@
-import { AnchorProvider, BN, Program, Wallet } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
+import { AnchorProvider, BN, Program, Wallet } from "../config/anchor.js";
 import { createConnection, loadSettlementKeypair } from "../config/solana.js";
 import { loadEscrowIdl } from "../config/idl.js";
 import { createPool } from "../db/pool.js";
