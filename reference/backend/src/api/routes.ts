@@ -1,4 +1,5 @@
 import express from "express";
+import { createAuthRouter } from "../auth/routes.js";
 import { createPool } from "../db/pool.js";
 import {
   DEFAULT_PROGRAM_ID,
@@ -9,6 +10,8 @@ import {
 export function createApiRouter() {
   const router = express.Router();
   const pool = createPool();
+
+  router.use(createAuthRouter(pool));
 
   router.get("/health", (_req, res) => {
     res.json({ ok: true });

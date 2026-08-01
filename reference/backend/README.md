@@ -107,6 +107,9 @@ API: `http://localhost:8787`
 | `POKER_PROGRAM_ID` | Deployed escrow program id |
 | `SETTLEMENT_AUTHORITY_SECRET` | Base58 secret key for `begin_round` / `settle_round` (devnet only) |
 | `INTERNAL_API_KEY` | **Required before public deploy** — protects `/internal/*` (CLI uses same value) |
+| `JWT_SECRET` | **Required for wallet login** — HS256 secret for player JWTs (min 16 chars) |
+| `JWT_TTL` | Optional JWT lifetime (default `7d`) |
+| `AUTH_DOMAIN` | Domain shown in the SIWS sign-in message (default `poker.app`) |
 | `PORT` | HTTP port (default `8787`; Railway injects its own) |
 | `BACKEND_PUBLIC_URL` | Optional; public Railway URL for CLI scripts |
 
@@ -180,6 +183,13 @@ Browser builds use Phantom via the Solana Unity SDK wallet adapter (`LoginWallet
 
 Build: **SolanaTest → Create Solana Test Scene**, then build WebGL (`Assets/SolanaTest/build-webgl.bat`). At runtime, **Connect Wallet** opens the Phantom picker (Resources prefabs loaded automatically by `Web3.cs`).
 
+### Player login (SIWS)
+
+1. Set `JWT_SECRET` (min 16 chars) in `backend/.env` and Railway.
+2. Unity: open [`Assets/SolanaTest/Scenes/SolanaAuth.unity`](../Assets/SolanaTest/Scenes/SolanaAuth.unity) (or **SolanaTest → Create Solana Auth Scene** to regenerate it). Auth UI is only in this scene.
+3. Flow: connect wallet → sign message → backend upserts `players` by pubkey → JWT stored in `PokerClientIdentity`.
+4. Optional soft email prompt saves to `players.email` + `marketing_opt_in` (no verification).
+
 ---
 
 ## API routes
@@ -188,6 +198,10 @@ Build: **SolanaTest → Create Solana Test Scene**, then build WebGL (`Assets/So
 |--------|------|-------------|
 | GET | `/api/health` | Liveness check |
 | GET | `/api/config` | Program id + settlement pubkey |
+| POST | `/api/auth/nonce` | Start wallet login — returns SIWS message to sign |
+| POST | `/api/auth/verify` | Verify signature, upsert player, return JWT |
+| GET | `/api/me` | Player profile + ledger summary (Bearer JWT) |
+| PUT | `/api/me/email` | Save voluntary email + marketing opt-in (Bearer JWT) |
 | GET | `/api/tables` | Indexed tables |
 | GET | `/api/tables/:id/seats` | Seats for a table |
 | GET | `/api/tables/:id/ledger` | Player ledger |
