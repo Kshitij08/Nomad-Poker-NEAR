@@ -108,6 +108,37 @@ export async function settleRound(request: SettlementRequest): Promise<string> {
   return sig;
 }
 
+export type BeginRoundRequest = {
+  tableId: number[];
+  tablePda: string;
+};
+
+export async function beginRound(request: BeginRoundRequest): Promise<string> {
+  const connection = createConnection();
+  const settlement = loadSettlementKeypair();
+  const wallet = new Wallet(settlement);
+  const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
+  const program = new Program(idl as any, provider);
+
+  const sig = await (program.methods as any)
+    .beginRound(request.tableId)
+    .accounts({
+      settlementAuthority: settlement.publicKey,
+      table: new PublicKey(request.tablePda),
+    })
+    .rpc();
+
+  const pool = createPool();
+  await pool.query(
+    `INSERT INTO transactions (signature, kind, table_id, confirmed_at)
+     VALUES ($1, 'BeginRound', $2, NOW())
+     ON CONFLICT (signature) DO NOTHING`,
+    [sig, Buffer.from(request.tableId).toString("hex")]
+  );
+
+  return sig;
+}
+
 export async function cashOutDisconnectedPlayer(params: {
   tableId: number[];
   tablePda: string;

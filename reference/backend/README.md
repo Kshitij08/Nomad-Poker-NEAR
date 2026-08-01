@@ -49,6 +49,7 @@ In the backend service → **Variables**, add:
 | `SOLANA_RPC_URL` | `https://api.devnet.solana.com` |
 | `POKER_PROGRAM_ID` | `DBKWKynzCeAFBijg9AN2WcRz3X8H3tapxSD6VnTMkGM5` |
 | `SETTLEMENT_AUTHORITY_SECRET` | Same base58 secret as in local `backend/.env` |
+| `INTERNAL_API_KEY` | Random secret; clients send `X-API-Key: <value>` on `/internal/*` |
 | `PORT` | Railway sets this automatically; optional |
 
 Railway runs `npm start`, which applies migrations then starts the server (`backend/railway.toml`).
@@ -102,7 +103,8 @@ API: `http://localhost:8787`
 | `DATABASE_SSL` | `true` for Railway; auto-enabled for non-local hosts |
 | `SOLANA_RPC_URL` | Devnet RPC (default: public devnet) |
 | `POKER_PROGRAM_ID` | Deployed escrow program id |
-| `SETTLEMENT_AUTHORITY_SECRET` | Base58 secret key for `settle_round` (devnet only) |
+| `SETTLEMENT_AUTHORITY_SECRET` | Base58 secret key for `begin_round` / `settle_round` (devnet only) |
+| `INTERNAL_API_KEY` | **Required before public deploy** — protects `/internal/*` (CLI uses same value) |
 | `PORT` | HTTP port (default `8787`; Railway injects its own) |
 | `BACKEND_PUBLIC_URL` | Optional; public Railway URL for CLI scripts |
 
@@ -120,6 +122,62 @@ API: `http://localhost:8787`
 
 Unity calls this when creating tables so the on-chain settlement authority matches the backend signer.
 
+### Settlement authority & fees
+
+`begin_round` and `settle_round` are signed by the **settlement authority** keypair (`SETTLEMENT_AUTHORITY_SECRET`), not player wallets. Players only sign `buy_in`, `rebuy`, `cash_out`, etc.
+
+The settlement wallet pays Solana **transaction fees** (not Ethereum-style gas). On devnet each tx is typically ~0.000005 SOL. Fund the settlement pubkey with 1–2 devnet SOL for thousands of hand settlements.
+
+---
+
+## Game server integration
+
+Poker betting is off-chain. Your authoritative game server should:
+
+1. **`POST /internal/hand/start`** (or `/internal/begin-round`) before dealing — locks the table (`round_active = true`).
+2. Run the hand in your poker engine.
+3. **`POST /internal/hand/end`** (or `/internal/settle`) with zero-sum chip deltas from the engine.
+
+Example settle body:
+
+```json
+{
+  "tableId": [100, 101, 118, ...],
+  "tablePda": "...",
+  "vaultPda": "...",
+  "nonce": 0,
+  "chipsInPlay": 2000,
+  "deltas": [
+    { "player": "HOST...", "chipDelta": 50, "seatPda": "..." },
+    { "player": "P2...", "chipDelta": -50, "seatPda": "..." }
+  ]
+}
+```
+
+Unity (authoritative server in-process): use `Poker.Chain.PokerChainBackend.BeginHandAsync` / `SettleHandAsync`.
+
+All `/internal/*` routes require `INTERNAL_API_KEY` when that env var is set (`X-API-Key` or `Authorization: Bearer`).
+
+---
+
+## Indexer
+
+The backend subscribes to program logs and:
+
+- Classifies transactions (`BuyIn`, `SettleRound`, …) from Anchor log lines
+- Upserts `tables`, `seats`, and `player_ledger` from on-chain account data
+- `rounds` are written at settle time by the settlement service
+
+Public history/UI: `GET /api/tables`, `/api/tables/:id/seats`, `/api/tables/:id/ledger`.
+
+---
+
+## WebGL wallet (Phantom)
+
+Browser builds use Phantom via the Solana Unity SDK wallet adapter (`LoginWalletAdapter`). The Editor uses an in-game dev wallet instead.
+
+Build: **SolanaTest → Create Solana Test Scene**, then build WebGL (`Assets/SolanaTest/build-webgl.bat`). At runtime, **Connect Wallet** opens the Phantom picker (Resources prefabs loaded automatically by `Web3.cs`).
+
 ---
 
 ## API routes
@@ -131,8 +189,13 @@ Unity calls this when creating tables so the on-chain settlement authority match
 | GET | `/api/tables` | Indexed tables |
 | GET | `/api/tables/:id/seats` | Seats for a table |
 | GET | `/api/tables/:id/ledger` | Player ledger |
+| POST | `/internal/begin-round` | Lock table for a hand (`begin_round`) |
 | POST | `/internal/settle` | Settle a hand (game server) |
+| POST | `/internal/hand/start` | Alias for begin-round (game server) |
+| POST | `/internal/hand/end` | Alias for settle (game server) |
 | POST | `/internal/cash-out` | Force cash-out (disconnected player) |
+
+All `/internal/*` routes require `X-API-Key` when `INTERNAL_API_KEY` is set.
 
 ---
 

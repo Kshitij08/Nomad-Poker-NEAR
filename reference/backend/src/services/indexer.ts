@@ -1,8 +1,43 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import { programId } from "../config/solana.js";
 import { createPool } from "../db/pool.js";
+import { syncSeatsForTable, syncTableFromChain } from "./chainSync.js";
 
-const LAMPORTS_PER_CHIP = 100_000n;
+const INSTRUCTION_KINDS = new Map<string, string>([
+  ["InitializeTable", "InitializeTable"],
+  ["BuyIn", "BuyIn"],
+  ["Rebuy", "Rebuy"],
+  ["BeginRound", "BeginRound"],
+  ["SettleRound", "SettleRound"],
+  ["RequestLeave", "RequestLeave"],
+  ["CashOut", "CashOut"],
+  ["SweepAbandonedSeat", "SweepAbandonedSeat"],
+  ["CloseTable", "CloseTable"],
+]);
+
+/** Table account index in the instruction's account metas (after program id lookup). */
+const TABLE_ACCOUNT_INDEX: Record<string, number> = {
+  InitializeTable: 2,
+  BuyIn: 2,
+  Rebuy: 2,
+  BeginRound: 1,
+  SettleRound: 1,
+  RequestLeave: 1,
+  CashOut: 1,
+  SweepAbandonedSeat: 1,
+  CloseTable: 1,
+};
+
+const SYNC_KINDS = new Set([
+  "InitializeTable",
+  "BuyIn",
+  "Rebuy",
+  "BeginRound",
+  "SettleRound",
+  "CashOut",
+  "SweepAbandonedSeat",
+  "CloseTable",
+]);
 
 export async function startIndexer(connection: Connection) {
   const pid = programId();
@@ -18,23 +53,109 @@ export async function startIndexer(connection: Connection) {
 
   connection.onLogs(pid, async (logs) => {
     if (logs.err) return;
+
     const sig = logs.signature;
+    const kind = parseInstructionKind(logs.logs) ?? "Unknown";
 
-    await pool.query(
-      `INSERT INTO transactions (signature, kind, confirmed_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (signature) DO NOTHING`,
-      [sig, "ProgramLog"]
-    );
+    try {
+      await pool.query(
+        `INSERT INTO transactions (signature, kind, confirmed_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (signature) DO UPDATE SET kind = EXCLUDED.kind`,
+        [sig, kind]
+      );
 
-    for (const line of logs.logs) {
-      if (line.includes("SettlementNotZeroSum") || line.includes("chip_delta")) {
-        console.warn("[indexer] anomaly log", sig, line);
+      if (SYNC_KINDS.has(kind)) {
+        const tablePda = await extractTablePda(connection, sig, kind);
+        if (tablePda) {
+          const tableIdHex = await fetchTableIdHex(connection, tablePda);
+          if (tableIdHex) {
+            await pool.query(
+              `UPDATE transactions SET table_id = $2 WHERE signature = $1`,
+              [sig, tableIdHex]
+            );
+            await syncTableFromChain(connection, tablePda, tableIdHex);
+          }
+        }
       }
+
+      for (const line of logs.logs) {
+        if (line.includes("SettlementNotZeroSum") || line.includes("chip_delta")) {
+          console.warn("[indexer] anomaly log", sig, line);
+        }
+      }
+    } catch (err) {
+      console.error("[indexer] failed to index", sig, err);
     }
   });
 
   console.log(`[indexer] listening on ${pid.toBase58()}`);
+}
+
+function parseInstructionKind(logLines: string[]): string | null {
+  for (const line of logLines) {
+    const match = line.match(/Instruction:\s*(\w+)/);
+    if (match) {
+      return INSTRUCTION_KINDS.get(match[1]) ?? match[1];
+    }
+  }
+  return null;
+}
+
+async function extractTablePda(
+  connection: Connection,
+  signature: string,
+  kind: string
+): Promise<PublicKey | null> {
+  const tableIndex = TABLE_ACCOUNT_INDEX[kind];
+  if (tableIndex === undefined) {
+    return null;
+  }
+
+  const pid = programId();
+  if (!pid) {
+    return null;
+  }
+
+  const tx = await connection.getTransaction(signature, {
+    commitment: "confirmed",
+    maxSupportedTransactionVersion: 0,
+  });
+  if (!tx?.transaction) {
+    return null;
+  }
+
+  const message = tx.transaction.message;
+  const accountKeys = message.getAccountKeys({
+    accountKeysFromLookups: tx.meta?.loadedAddresses,
+  });
+
+  for (const ix of message.compiledInstructions) {
+    const programKey = accountKeys.get(ix.programIdIndex);
+    if (!programKey || !programKey.equals(pid)) {
+      continue;
+    }
+
+    const tableKeyIndex = ix.accountKeyIndexes[tableIndex];
+    if (tableKeyIndex === undefined) {
+      continue;
+    }
+
+    return accountKeys.get(tableKeyIndex) ?? null;
+  }
+
+  return null;
+}
+
+async function fetchTableIdHex(connection: Connection, tablePda: PublicKey): Promise<string | null> {
+  const info = await connection.getAccountInfo(tablePda);
+  if (!info?.data || info.data.length < 8 + 32 + 32 + 32) {
+    return null;
+  }
+
+  // Table layout: discriminator (8) + host (32) + settlement_authority (32) + table_id (32)
+  const tableIdBytes = info.data.subarray(8 + 32 + 32, 8 + 32 + 32 + 32);
+  return Buffer.from(tableIdBytes).toString("hex");
 }
 
 export async function checkSettlementAnomaly(
@@ -60,6 +181,7 @@ export async function reconcileVault(
   chipsInPlay: bigint,
   rentReserve: bigint
 ) {
+  const LAMPORTS_PER_CHIP = 100_000n;
   const balance = BigInt(await connection.getBalance(vaultPda));
   const expected = chipsInPlay * LAMPORTS_PER_CHIP + rentReserve;
   if (balance !== expected) {
