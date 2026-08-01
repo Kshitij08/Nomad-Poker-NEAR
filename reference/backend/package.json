@@ -13,6 +13,7 @@
     "dev": "tsx watch src/index.ts",
     "migrate": "node --import tsx src/db/migrate.ts",
     "reconcile": "node --import tsx src/jobs/reconcile.ts",
+    "db:backfill": "node --import tsx src/jobs/backfill-db.ts",
     "start": "node dist/db/migrate.js && node dist/index.js"
   },
   "dependencies": {
