@@ -28,6 +28,15 @@ const TABLE_ACCOUNT_INDEX: Record<string, number> = {
   CloseTable: 1,
 };
 
+/** Player signer index in the instruction's account metas. */
+const PLAYER_ACCOUNT_INDEX: Record<string, number> = {
+  InitializeTable: 0,
+  BuyIn: 0,
+  Rebuy: 0,
+};
+
+const RAKE_KINDS = new Set(["InitializeTable", "BuyIn", "Rebuy"]);
+
 const SYNC_KINDS = new Set([
   "InitializeTable",
   "BuyIn",
@@ -75,6 +84,9 @@ export async function startIndexer(connection: Connection) {
               [sig, tableIdHex]
             );
             await syncTableFromChain(connection, tablePda, tableIdHex);
+            if (RAKE_KINDS.has(kind)) {
+              await recordRakeEvent(connection, pool, sig, kind, tablePda, tableIdHex);
+            }
           }
         }
       }
@@ -156,6 +168,90 @@ async function fetchTableIdHex(connection: Connection, tablePda: PublicKey): Pro
   // Table layout: discriminator (8) + host (32) + settlement_authority (32) + table_id (32)
   const tableIdBytes = info.data.subarray(8 + 32 + 32, 8 + 32 + 32 + 32);
   return Buffer.from(tableIdBytes).toString("hex");
+}
+
+async function recordRakeEvent(
+  connection: Connection,
+  pool: ReturnType<typeof createPool>,
+  signature: string,
+  kind: string,
+  tablePda: PublicKey,
+  tableIdHex: string
+) {
+  const { rows } = await pool.query(`SELECT 1 FROM rake_events WHERE signature = $1`, [signature]);
+  if (rows.length > 0) {
+    return;
+  }
+
+  const player = await extractAccountPubkey(connection, signature, kind, PLAYER_ACCOUNT_INDEX);
+  if (!player) {
+    return;
+  }
+
+  const info = await connection.getAccountInfo(tablePda);
+  if (!info?.data || info.data.length < 8 + 32 + 32 + 32 + 8 + 2) {
+    return;
+  }
+
+  // buy_in_lamports at offset 104 (after disc + host + settlement + table_id)
+  const buyInLamports = info.data.readBigUInt64LE(104);
+  const rakeBps = info.data.readUInt16LE(112);
+  const rakeLamports = (buyInLamports * BigInt(rakeBps)) / 10_000n;
+  if (rakeLamports <= 0n) {
+    return;
+  }
+
+  await pool.query(
+    `INSERT INTO rake_events (signature, table_id, player_pubkey, rake_lamports, rake_bps)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [signature, tableIdHex, player.toBase58(), rakeLamports.toString(), rakeBps]
+  );
+}
+
+async function extractAccountPubkey(
+  connection: Connection,
+  signature: string,
+  kind: string,
+  indexMap: Record<string, number>
+): Promise<PublicKey | null> {
+  const accountIndex = indexMap[kind];
+  if (accountIndex === undefined) {
+    return null;
+  }
+
+  const pid = programId();
+  if (!pid) {
+    return null;
+  }
+
+  const tx = await connection.getTransaction(signature, {
+    commitment: "confirmed",
+    maxSupportedTransactionVersion: 0,
+  });
+  if (!tx?.transaction) {
+    return null;
+  }
+
+  const message = tx.transaction.message;
+  const accountKeys = message.getAccountKeys({
+    accountKeysFromLookups: tx.meta?.loadedAddresses,
+  });
+
+  for (const ix of message.compiledInstructions) {
+    const programKey = accountKeys.get(ix.programIdIndex);
+    if (!programKey || !programKey.equals(pid)) {
+      continue;
+    }
+
+    const keyIndex = ix.accountKeyIndexes[accountIndex];
+    if (keyIndex === undefined) {
+      continue;
+    }
+
+    return accountKeys.get(keyIndex) ?? null;
+  }
+
+  return null;
 }
 
 export async function checkSettlementAnomaly(

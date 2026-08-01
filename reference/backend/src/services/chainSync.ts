@@ -75,7 +75,8 @@ export async function syncTableFromChain(connection: Connection, tablePda: Publi
        rake_bps = EXCLUDED.rake_bps,
        small_blind_chips = EXCLUDED.small_blind_chips,
        big_blind_chips = EXCLUDED.big_blind_chips,
-       max_seats = EXCLUDED.max_seats`,
+       max_seats = EXCLUDED.max_seats,
+       state = EXCLUDED.state`,
     [
       tableIdHex,
       tablePda.toBase58(),
@@ -86,7 +87,11 @@ export async function syncTableFromChain(connection: Connection, tablePda: Publi
       table.smallBlindChips.toNumber(),
       table.bigBlindChips.toNumber(),
       table.maxSeats,
-      table.roundActive ? "round_active" : "open",
+      table.roundActive
+        ? "round_active"
+        : table.seatedCount === 0
+          ? "empty"
+          : "open",
     ]
   );
 
@@ -171,6 +176,13 @@ export async function syncSeatsForTable(
       `UPDATE seats SET status = 'left'
        WHERE table_id = $1 AND player_pubkey <> ALL($2::text[]) AND status <> 'left'`,
       [tableIdHex, [...activePlayers]]
+    );
+  } else {
+    // All seats closed on-chain (e.g. after full cash-out) — mark DB rows stale.
+    await pool.query(
+      `UPDATE seats SET status = 'left', chips = 0
+       WHERE table_id = $1 AND status <> 'left'`,
+      [tableIdHex]
     );
   }
 }
