@@ -2,6 +2,8 @@
 
 Hosted API + indexer for the Solana poker escrow program. Uses **Railway Postgres** for persistence.
 
+**Integrating Unity / game server?** See [`docs/INTEGRATION_HANDOVER.md`](../docs/INTEGRATION_HANDOVER.md) for C# API reference, hand lifecycle, and security notes.
+
 ## Architecture
 
 | Component | Where it runs |
