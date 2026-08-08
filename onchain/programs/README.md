@@ -36,10 +36,12 @@ After `anchor build`, copy `target/idl/poker_escrow.json` to `shared/idl/` and u
 
 ## Unity integration
 
-Your gameplay teammate calls `Poker.Chain.PokerChain` after wallet connect:
+Your gameplay teammate calls `Poker.Chain` after wallet connect:
 
-- `CreateTableAsync` — host creates table + buys in (one signature)
-- `BuyInAsync` / `RebuyAsync` / `CashOutAsync`
+- `PokerChainBackend.CreateTableAsync` — server creates empty table (game server / internal API)
+- `PokerChain.BuyInAsync` / `RebuyAsync` — player-signed (host and joiners)
+- `PokerChain.RequestLeaveAsync` — player marks seat as leaving
+- `PokerChainBackend.CashOutPlayerAsync` — server cashes out after hand completes
 - `QuoteBuyInAsync` — show buy-in + 5% fee before wallet popup
 
-Settlement (`settle_round`) is server-signed via `POST /internal/settle`.
+Settlement (`begin_round` / `settle_round`) is server-signed via `/internal/hand/*`.

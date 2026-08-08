@@ -4,7 +4,7 @@ import bs58 from "bs58";
 const MAINNET_HOSTS = ["mainnet-beta", "api.mainnet-beta.solana.com"];
 
 /** Valid devnet placeholder until `anchor deploy` — replace with deployed program id. */
-export const DEFAULT_PROGRAM_ID = "DBKWKynzCeAFBijg9AN2WcRz3X8H3tapxSD6VnTMkGM5";
+export const DEFAULT_PROGRAM_ID = "GdduGzsoiEamv285Z4DnBapmkMScnHLDdUAdWPywHozo";
 
 export function loadSettlementKeypair(): Keypair {
   const secret = process.env.SETTLEMENT_AUTHORITY_SECRET?.trim();

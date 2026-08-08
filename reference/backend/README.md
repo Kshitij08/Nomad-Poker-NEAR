@@ -49,7 +49,7 @@ In the backend service → **Variables**, add:
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference your Postgres service) |
 | `DATABASE_SSL` | `true` |
 | `SOLANA_RPC_URL` | `https://api.devnet.solana.com` |
-| `POKER_PROGRAM_ID` | `DBKWKynzCeAFBijg9AN2WcRz3X8H3tapxSD6VnTMkGM5` |
+| `POKER_PROGRAM_ID` | `GdduGzsoiEamv285Z4DnBapmkMScnHLDdUAdWPywHozo` |
 | `SETTLEMENT_AUTHORITY_SECRET` | Same base58 secret as in local `backend/.env` |
 | `INTERNAL_API_KEY` | Random secret; clients send `X-API-Key: <value>` on `/internal/*` |
 | `PORT` | Railway sets this automatically; optional |
@@ -119,7 +119,7 @@ API: `http://localhost:8787`
 
 ```json
 {
-  "programId": "DBKWKynzCeAFBijg9AN2WcRz3X8H3tapxSD6VnTMkGM5",
+  "programId": "GdduGzsoiEamv285Z4DnBapmkMScnHLDdUAdWPywHozo",
   "settlementAuthority": "FcjrYf725azTnMao6xEzKPSrT4hD5YKYhKUHnVbWCUMH",
   "rpcUrl": "https://api.devnet.solana.com"
 }
@@ -139,9 +139,13 @@ The settlement wallet pays Solana **transaction fees** (not Ethereum-style gas).
 
 Poker betting is off-chain. Your authoritative game server should:
 
-1. **`POST /internal/hand/start`** (or `/internal/begin-round`) before dealing — locks the table (`round_active = true`).
-2. Run the hand in your poker engine.
-3. **`POST /internal/hand/end`** (or `/internal/settle`) with zero-sum chip deltas from the engine.
+1. **`POST /internal/table/create`** when the host opens a lobby — server creates the on-chain table (empty).
+2. Players sign **`buy_in`** from the Unity client (host and joiners use the same flow).
+3. **`POST /internal/hand/start`** before dealing — locks the table (`round_active = true`).
+4. Run the hand in your poker engine.
+5. **`POST /internal/hand/end`** with zero-sum chip deltas from the engine.
+6. On leave: player signs **`request_leave`**, then after the hand **`POST /internal/cash-out`** for that player.
+7. When the table is empty: **`POST /internal/table/close`** to recover PDA rent.
 
 Example settle body:
 
@@ -159,7 +163,7 @@ Example settle body:
 }
 ```
 
-Unity (authoritative server in-process): use `Poker.Chain.PokerChainBackend.BeginHandAsync` / `SettleHandAsync`.
+Unity (authoritative server in-process): use `Poker.Chain.PokerChainBackend.CreateTableAsync`, `BeginHandAsync`, `SettleHandAsync`, `CashOutPlayerAsync`, and `CloseTableAsync`.
 
 All `/internal/*` routes require `INTERNAL_API_KEY` when that env var is set (`X-API-Key` or `Authorization: Bearer`).
 
@@ -205,11 +209,13 @@ Build: **SolanaTest → Create Solana Test Scene**, then build WebGL (`Assets/So
 | GET | `/api/tables` | Indexed tables |
 | GET | `/api/tables/:id/seats` | Seats for a table |
 | GET | `/api/tables/:id/ledger` | Player ledger |
+| POST | `/internal/table/create` | Create empty table (settlement authority) |
+| POST | `/internal/table/close` | Close empty table (settlement authority) |
 | POST | `/internal/begin-round` | Lock table for a hand (`begin_round`) |
 | POST | `/internal/settle` | Settle a hand (game server) |
 | POST | `/internal/hand/start` | Alias for begin-round (game server) |
 | POST | `/internal/hand/end` | Alias for settle (game server) |
-| POST | `/internal/cash-out` | Force cash-out (disconnected player) |
+| POST | `/internal/cash-out` | Server-signed cash-out (default leave path) |
 
 All `/internal/*` routes require `X-API-Key` when `INTERNAL_API_KEY` is set.
 

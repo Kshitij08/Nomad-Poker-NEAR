@@ -1,11 +1,122 @@
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { AnchorProvider, BN, Program, Wallet } from "../config/anchor.js";
-import { createConnection, loadSettlementKeypair } from "../config/solana.js";
+import { createConnection, loadSettlementKeypair, programId } from "../config/solana.js";
 import { loadEscrowIdl } from "../config/idl.js";
 import { createPool } from "../db/pool.js";
 import { checkSettlementAnomaly } from "./indexer.js";
+import { syncTableFromChain } from "./chainSync.js";
+import {
+  deriveTablePdas,
+  resolveTableIdBytes,
+  tableIdToNumberArray,
+} from "../utils/tableId.js";
 
 const idl = loadEscrowIdl();
+
+export type CreateTableRequest = {
+  tableId: string | number[];
+  hostPubkey: string;
+  buyInLamports: number;
+  smallBlindChips: number;
+  bigBlindChips: number;
+  maxSeats: number;
+};
+
+export type CreateTableResponse = {
+  signature: string;
+  tablePda: string;
+  vaultPda: string;
+};
+
+export async function createTable(request: CreateTableRequest): Promise<CreateTableResponse> {
+  const pid = programId();
+  if (!pid) {
+    throw new Error("POKER_PROGRAM_ID is required to create tables");
+  }
+
+  const tableIdBuf = resolveTableIdBytes(request.tableId);
+  const tableIdArr = [...tableIdBuf];
+  const { tablePda, vaultPda } = deriveTablePdas(pid, tableIdBuf);
+
+  const connection = createConnection();
+  const settlement = loadSettlementKeypair();
+  const wallet = new Wallet(settlement);
+  const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
+  const program = new Program(idl as any, provider);
+
+  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], pid);
+
+  const sig = await (program.methods as any)
+    .createTable(
+      tableIdArr,
+      new PublicKey(request.hostPubkey),
+      new BN(request.buyInLamports),
+      new BN(request.smallBlindChips),
+      new BN(request.bigBlindChips),
+      request.maxSeats
+    )
+    .accounts({
+      settlementAuthority: settlement.publicKey,
+      config: configPda,
+      table: tablePda,
+      vault: vaultPda,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+
+  const tableIdHex = tableIdBuf.toString("hex");
+  const pool = createPool();
+  await pool.query(
+    `INSERT INTO transactions (signature, kind, table_id, confirmed_at)
+     VALUES ($1, 'CreateTable', $2, NOW())
+     ON CONFLICT (signature) DO NOTHING`,
+    [sig, tableIdHex]
+  );
+
+  await syncTableFromChain(connection, tablePda, tableIdHex);
+
+  return {
+    signature: sig,
+    tablePda: tablePda.toBase58(),
+    vaultPda: vaultPda.toBase58(),
+  };
+}
+
+export type CloseTableRequest = {
+  tableId: string | number[];
+  tablePda: string;
+  vaultPda: string;
+};
+
+export async function closeTable(request: CloseTableRequest): Promise<string> {
+  const tableIdBuf = resolveTableIdBytes(request.tableId);
+  const tableIdArr = [...tableIdBuf];
+
+  const connection = createConnection();
+  const settlement = loadSettlementKeypair();
+  const wallet = new Wallet(settlement);
+  const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
+  const program = new Program(idl as any, provider);
+
+  const sig = await (program.methods as any)
+    .closeTable(tableIdArr)
+    .accounts({
+      settlementAuthority: settlement.publicKey,
+      table: new PublicKey(request.tablePda),
+      vault: new PublicKey(request.vaultPda),
+    })
+    .rpc();
+
+  const pool = createPool();
+  await pool.query(
+    `INSERT INTO transactions (signature, kind, table_id, confirmed_at)
+     VALUES ($1, 'CloseTable', $2, NOW())
+     ON CONFLICT (signature) DO NOTHING`,
+    [sig, tableIdBuf.toString("hex")]
+  );
+
+  return sig;
+}
 
 export type SettlementRequest = {
   tableId: number[];
@@ -139,22 +250,27 @@ export async function beginRound(request: BeginRoundRequest): Promise<string> {
   return sig;
 }
 
-export async function cashOutDisconnectedPlayer(params: {
-  tableId: number[];
+export type CashOutPlayerRequest = {
+  tableId: string | number[];
   tablePda: string;
   vaultPda: string;
   seatPda: string;
   playerWallet: string;
-  payer: string;
-}) {
+};
+
+/** Server-signed cash-out (default leave path after request_leave + hand completion). */
+export async function cashOutPlayer(params: CashOutPlayerRequest): Promise<string> {
+  const tableIdBuf = resolveTableIdBytes(params.tableId);
+  const tableIdArr = [...tableIdBuf];
+
   const connection = createConnection();
   const settlement = loadSettlementKeypair();
   const wallet = new Wallet(settlement);
   const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
   const program = new Program(idl as any, provider);
 
-  return (program.methods as any)
-    .cashOut(params.tableId)
+  const sig = await (program.methods as any)
+    .cashOut(tableIdArr)
     .accounts({
       payer: settlement.publicKey,
       table: new PublicKey(params.tablePda),
@@ -164,4 +280,34 @@ export async function cashOutDisconnectedPlayer(params: {
       systemProgram: SystemProgram.programId,
     })
     .rpc();
+
+  const pool = createPool();
+  await pool.query(
+    `INSERT INTO transactions (signature, kind, table_id, confirmed_at)
+     VALUES ($1, 'CashOut', $2, NOW())
+     ON CONFLICT (signature) DO NOTHING`,
+    [sig, tableIdBuf.toString("hex")]
+  );
+
+  return sig;
 }
+
+/** @deprecated Use cashOutPlayer */
+export async function cashOutDisconnectedPlayer(params: {
+  tableId: number[];
+  tablePda: string;
+  vaultPda: string;
+  seatPda: string;
+  playerWallet: string;
+  payer: string;
+}) {
+  return cashOutPlayer({
+    tableId: params.tableId,
+    tablePda: params.tablePda,
+    vaultPda: params.vaultPda,
+    seatPda: params.seatPda,
+    playerWallet: params.playerWallet,
+  });
+}
+
+export { tableIdToNumberArray };

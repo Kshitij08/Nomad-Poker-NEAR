@@ -1,5 +1,5 @@
 {
-  "address": "DBKWKynzCeAFBijg9AN2WcRz3X8H3tapxSD6VnTMkGM5",
+  "address": "GdduGzsoiEamv285Z4DnBapmkMScnHLDdUAdWPywHozo",
   "metadata": {
     "name": "poker_escrow",
     "version": "0.1.0",
@@ -311,7 +311,7 @@
       ],
       "accounts": [
         {
-          "name": "host",
+          "name": "settlement_authority",
           "writable": true,
           "signer": true,
           "relations": [
@@ -372,6 +372,123 @@
               32
             ]
           }
+        }
+      ]
+    },
+    {
+      "name": "create_table",
+      "discriminator": [
+        214,
+        142,
+        131,
+        250,
+        242,
+        83,
+        135,
+        185
+      ],
+      "accounts": [
+        {
+          "name": "settlement_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "table_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "table_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "table_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "host",
+          "type": "pubkey"
+        },
+        {
+          "name": "buy_in_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "small_blind_chips",
+          "type": "u64"
+        },
+        {
+          "name": "big_blind_chips",
+          "type": "u64"
+        },
+        {
+          "name": "max_seats",
+          "type": "u8"
         }
       ]
     },

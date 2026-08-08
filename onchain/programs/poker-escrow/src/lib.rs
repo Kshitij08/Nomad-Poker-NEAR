@@ -8,7 +8,7 @@ pub mod state;
 pub use instructions::*;
 use state::ChipDelta;
 
-declare_id!("DBKWKynzCeAFBijg9AN2WcRz3X8H3tapxSD6VnTMkGM5");
+declare_id!("GdduGzsoiEamv285Z4DnBapmkMScnHLDdUAdWPywHozo");
 
 #[program]
 pub mod poker_escrow {
@@ -36,6 +36,26 @@ pub mod poker_escrow {
         new_authority: Pubkey,
     ) -> Result<()> {
         config::update_settlement_authority_handler(ctx, table_id, new_authority)
+    }
+
+    pub fn create_table(
+        ctx: Context<CreateTable>,
+        table_id: [u8; 32],
+        host: Pubkey,
+        buy_in_lamports: u64,
+        small_blind_chips: u64,
+        big_blind_chips: u64,
+        max_seats: u8,
+    ) -> Result<()> {
+        deposit::create_table_handler(
+            ctx,
+            table_id,
+            host,
+            buy_in_lamports,
+            small_blind_chips,
+            big_blind_chips,
+            max_seats,
+        )
     }
 
     pub fn initialize_table(

@@ -4,6 +4,7 @@ import { createPool } from "../db/pool.js";
 import { syncSeatsForTable, syncTableFromChain } from "./chainSync.js";
 
 const INSTRUCTION_KINDS = new Map<string, string>([
+  ["CreateTable", "CreateTable"],
   ["InitializeTable", "InitializeTable"],
   ["BuyIn", "BuyIn"],
   ["Rebuy", "Rebuy"],
@@ -17,6 +18,7 @@ const INSTRUCTION_KINDS = new Map<string, string>([
 
 /** Table account index in the instruction's account metas (after program id lookup). */
 const TABLE_ACCOUNT_INDEX: Record<string, number> = {
+  CreateTable: 2,
   InitializeTable: 2,
   BuyIn: 2,
   Rebuy: 2,
@@ -38,6 +40,7 @@ const PLAYER_ACCOUNT_INDEX: Record<string, number> = {
 const RAKE_KINDS = new Set(["InitializeTable", "BuyIn", "Rebuy"]);
 
 const SYNC_KINDS = new Set([
+  "CreateTable",
   "InitializeTable",
   "BuyIn",
   "Rebuy",

@@ -191,14 +191,14 @@ fn execute_cash_out<'info>(
 #[instruction(table_id: [u8; 32])]
 pub struct CloseTable<'info> {
     #[account(mut)]
-    pub host: Signer<'info>,
+    pub settlement_authority: Signer<'info>,
 
     #[account(
         mut,
         seeds = [TABLE_SEED, table_id.as_ref()],
         bump = table.bump,
-        has_one = host @ PokerError::Unauthorized,
-        close = host
+        has_one = settlement_authority @ PokerError::Unauthorized,
+        close = settlement_authority
     )]
     pub table: Account<'info, Table>,
 
@@ -206,7 +206,7 @@ pub struct CloseTable<'info> {
         mut,
         seeds = [VAULT_SEED, table_id.as_ref()],
         bump = vault.bump,
-        close = host
+        close = settlement_authority
     )]
     pub vault: Account<'info, Vault>,
 }

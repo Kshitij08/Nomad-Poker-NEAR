@@ -10,6 +10,87 @@ use crate::state::{
 
 #[derive(Accounts)]
 #[instruction(table_id: [u8; 32])]
+pub struct CreateTable<'info> {
+    #[account(mut)]
+    pub settlement_authority: Signer<'info>,
+
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump
+    )]
+    pub config: Account<'info, Config>,
+
+    #[account(
+        init,
+        payer = settlement_authority,
+        space = 8 + Table::INIT_SPACE,
+        seeds = [TABLE_SEED, table_id.as_ref()],
+        bump
+    )]
+    pub table: Account<'info, Table>,
+
+    #[account(
+        init,
+        payer = settlement_authority,
+        space = 8 + Vault::INIT_SPACE,
+        seeds = [VAULT_SEED, table_id.as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, Vault>,
+
+    pub system_program: Program<'info, System>,
+}
+
+pub fn create_table_handler(
+    ctx: Context<CreateTable>,
+    table_id: [u8; 32],
+    host: Pubkey,
+    buy_in_lamports: u64,
+    small_blind_chips: u64,
+    big_blind_chips: u64,
+    max_seats: u8,
+) -> Result<()> {
+    let _ = chips_from_lamports(buy_in_lamports)?;
+    let rake_bps = ctx.accounts.config.rake_bps;
+    let now = Clock::get()?.unix_timestamp;
+    let vault_rent = Rent::get()?.minimum_balance(8 + Vault::INIT_SPACE);
+
+    let vault = &mut ctx.accounts.vault;
+    vault.rent_reserve_lamports = vault_rent;
+    vault.bump = ctx.bumps.vault;
+
+    let table = &mut ctx.accounts.table;
+    table.host = host;
+    table.settlement_authority = ctx.accounts.settlement_authority.key();
+    table.table_id = table_id;
+    table.buy_in_lamports = buy_in_lamports;
+    table.rake_bps = rake_bps;
+    table.small_blind_chips = small_blind_chips;
+    table.big_blind_chips = big_blind_chips;
+    table.max_seats = max_seats;
+    table.seated_count = 0;
+    table.chips_in_play = 0;
+    table.round_nonce = 0;
+    table.round_active = false;
+    table.last_settlement_ts = now;
+    table.bump = ctx.bumps.table;
+
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.settlement_authority.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+            },
+        ),
+        vault_rent,
+    )?;
+
+    Ok(())
+}
+
+#[derive(Accounts)]
+#[instruction(table_id: [u8; 32])]
 pub struct InitializeTable<'info> {
     #[account(mut)]
     pub host: Signer<'info>,

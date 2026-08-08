@@ -1,9 +1,33 @@
 import { Router } from "express";
-import { beginRound, cashOutDisconnectedPlayer, settleRound } from "./services/settlement.js";
+import {
+  beginRound,
+  cashOutPlayer,
+  closeTable,
+  createTable,
+  settleRound,
+} from "./services/settlement.js";
 import { endHand, startHand } from "./services/gameHand.js";
 
 export function createInternalRouter(): Router {
   const router = Router();
+
+  router.post("/table/create", async (req, res) => {
+    try {
+      const result = await createTable(req.body);
+      res.json(result);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? String(err) });
+    }
+  });
+
+  router.post("/table/close", async (req, res) => {
+    try {
+      const sig = await closeTable(req.body);
+      res.json({ signature: sig });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? String(err) });
+    }
+  });
 
   router.post("/begin-round", async (req, res) => {
     try {
@@ -25,7 +49,7 @@ export function createInternalRouter(): Router {
 
   router.post("/cash-out", async (req, res) => {
     try {
-      const sig = await cashOutDisconnectedPlayer(req.body);
+      const sig = await cashOutPlayer(req.body);
       res.json({ signature: sig });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? String(err) });
