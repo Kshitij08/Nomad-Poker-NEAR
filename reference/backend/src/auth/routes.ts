@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Pool } from "pg";
-import { hasJwtSecretConfigured, signPlayerToken } from "./jwt.js";
+import { hasJwtSecretConfigured, signPlayerToken, verifyPlayerToken } from "./jwt.js";
 import {
   buildSignInMessage,
   createNonce,
@@ -101,6 +101,31 @@ export function createAuthRouter(pool: Pool): Router {
 
     const token = await signPlayerToken(pubkey);
     res.json({ token, player: playerRows[0] });
+  });
+
+  /**
+   * Token introspection for the game host: a Fusion host cannot verify HS256
+   * player JWTs locally, so it forwards a joiner's token here and binds the seat
+   * to the returned pubkey. Confirms only a token the caller already holds.
+   */
+  router.post("/auth/introspect", authLimit, async (req, res) => {
+    if (!hasJwtSecretConfigured()) {
+      res.status(503).json({ error: "Auth not configured (JWT_SECRET missing)" });
+      return;
+    }
+
+    const token = String(req.body?.token ?? "").trim();
+    if (!token) {
+      res.status(400).json({ error: "token is required" });
+      return;
+    }
+
+    try {
+      const payload = await verifyPlayerToken(token);
+      res.json({ pubkey: payload.sub });
+    } catch {
+      res.status(401).json({ error: "Invalid or expired token" });
+    }
   });
 
   router.get("/me", requirePlayerJwt, async (req: AuthedRequest, res) => {

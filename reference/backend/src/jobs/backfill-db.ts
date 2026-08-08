@@ -5,7 +5,7 @@
  *
  * Uses DATABASE_URL from backend/.env (Railway public URL works from your machine).
  */
-import "dotenv/config";
+import "../config/env.js";
 import pg from "pg";
 import { formatConnectionTarget, getPgConfig } from "../db/config.js";
 

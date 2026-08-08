@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import "dotenv/config";
+import "../config/env.js";
 import { formatConnectionTarget, getPgConfig } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

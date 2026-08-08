@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "../config/env.js";
 import { PublicKey } from "@solana/web3.js";
 import { createConnection } from "../config/solana.js";
 import { createPool } from "../db/pool.js";
