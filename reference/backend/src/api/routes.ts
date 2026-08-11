@@ -2,6 +2,7 @@ import express from "express";
 import { createAuthRouter } from "../auth/routes.js";
 import { createPool } from "../db/pool.js";
 import {
+  DEFAULT_DEVNET_RPC,
   DEFAULT_PROGRAM_ID,
   programId,
   settlementAuthorityPublicKey,
@@ -22,7 +23,7 @@ export function createApiRouter() {
     res.json({
       programId: programId()?.toBase58() ?? DEFAULT_PROGRAM_ID,
       settlementAuthority: settlementAuthorityPublicKey()?.toBase58() ?? null,
-      rpcUrl: process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com",
+      rpcUrl: process.env.SOLANA_RPC_URL ?? DEFAULT_DEVNET_RPC,
     });
   });
 

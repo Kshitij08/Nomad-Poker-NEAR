@@ -3,7 +3,7 @@ use anchor_lang::{AccountDeserialize, AccountSerialize};
 
 use crate::constants::*;
 use crate::error::PokerError;
-use crate::state::{apply_chip_delta, ChipDelta, Seat, Table, Vault};
+use crate::state::{apply_chip_delta, apply_pending_chips, ChipDelta, Seat, Table, Vault};
 
 pub const MAX_DELTAS: usize = 9;
 
@@ -67,12 +67,22 @@ pub fn settle_round_handler(
     require!(sum == 0, PokerError::SettlementNotZeroSum);
 
     require!(
-        ctx.remaining_accounts.len() == deltas.len(),
+        ctx.remaining_accounts.len() >= deltas.len(),
         PokerError::SeatNotInSettlement
     );
 
     let now = Clock::get()?.unix_timestamp;
     let table_key = ctx.accounts.table.key();
+    let table = &mut ctx.accounts.table;
+
+    // Apply mid-round buy-ins/rebuys before hand deltas (extra accounts after deltas are pending-only).
+    for seat_info in ctx.remaining_accounts.iter() {
+        let mut data = seat_info.try_borrow_mut_data()?;
+        let mut seat = Seat::try_deserialize(&mut &data[..])?;
+        require!(seat.table == table_key, PokerError::SeatNotInSettlement);
+        apply_pending_chips(&mut seat, table)?;
+        seat.try_serialize(&mut &mut data[..])?;
+    }
 
     for (i, delta) in deltas.iter().enumerate() {
         let seat_info = &ctx.remaining_accounts[i];
@@ -86,13 +96,17 @@ pub fn settle_round_handler(
         seat.try_serialize(&mut &mut data[..])?;
     }
 
-    let table = &mut ctx.accounts.table;
     table.round_nonce = table
         .round_nonce
         .checked_add(1)
         .ok_or(PokerError::MathOverflow)?;
     table.round_active = false;
     table.last_settlement_ts = now;
+
+    require!(
+        table.pending_chips_in_play == 0,
+        PokerError::VaultInvariant
+    );
 
     crate::instructions::deposit::verify_vault_balance(&ctx.accounts.vault, table)?;
 

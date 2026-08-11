@@ -6,6 +6,9 @@ const MAINNET_HOSTS = ["mainnet-beta", "api.mainnet-beta.solana.com"];
 /** Valid devnet placeholder until `anchor deploy` — replace with deployed program id. */
 export const DEFAULT_PROGRAM_ID = "GdduGzsoiEamv285Z4DnBapmkMScnHLDdUAdWPywHozo";
 
+/** MagicBlock public devnet RPC — free for development (see docs.magicblock.gg). */
+export const DEFAULT_DEVNET_RPC = "https://rpc.magicblock.app/devnet/";
+
 export function loadSettlementKeypair(): Keypair {
   const secret = process.env.SETTLEMENT_AUTHORITY_SECRET?.trim();
   if (!secret) {
@@ -15,7 +18,7 @@ export function loadSettlementKeypair(): Keypair {
     );
   }
 
-  const rpc = process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
+  const rpc = process.env.SOLANA_RPC_URL ?? DEFAULT_DEVNET_RPC;
   assertDevnetOnlyKeyFromEnv(secret, rpc);
 
   const decoded = bs58.decode(secret);
@@ -44,7 +47,7 @@ export function assertDevnetOnlyKeyFromEnv(secretFromEnv: string, rpcUrl: string
 }
 
 export function createConnection(): Connection {
-  return new Connection(process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com", "confirmed");
+  return new Connection(process.env.SOLANA_RPC_URL ?? DEFAULT_DEVNET_RPC, "confirmed");
 }
 
 export function programId(): PublicKey | null {

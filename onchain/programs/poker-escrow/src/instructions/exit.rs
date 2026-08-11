@@ -154,13 +154,22 @@ fn execute_cash_out<'info>(
 
     require!(seat.table == table.key(), PokerError::Unauthorized);
 
-    let chips = seat.chips;
-    let payout = lamports_from_chips(chips)?;
+    let active_chips = seat.chips;
+    let pending = seat.pending_chips;
+    let total_chips = active_chips
+        .checked_add(pending)
+        .ok_or(PokerError::ChipOverflow)?;
+    let payout = lamports_from_chips(total_chips)?;
 
     seat.chips = 0;
+    seat.pending_chips = 0;
     table.chips_in_play = table
         .chips_in_play
-        .checked_sub(chips)
+        .checked_sub(active_chips)
+        .ok_or(PokerError::ChipUnderflow)?;
+    table.pending_chips_in_play = table
+        .pending_chips_in_play
+        .checked_sub(pending)
         .ok_or(PokerError::ChipUnderflow)?;
     table.seated_count = table.seated_count.saturating_sub(1);
 
@@ -214,6 +223,7 @@ pub struct CloseTable<'info> {
 pub fn close_table_handler(ctx: Context<CloseTable>, _table_id: [u8; 32]) -> Result<()> {
     let table = &ctx.accounts.table;
     require!(table.seated_count == 0, PokerError::TableNotEmpty);
+    require!(table.pending_chips_in_play == 0, PokerError::VaultInvariant);
     assert_between_rounds(table)?;
 
     let vault = &ctx.accounts.vault;

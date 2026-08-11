@@ -27,6 +27,8 @@ pub struct Table {
     pub round_nonce: u64,
     pub round_active: bool,
     pub last_settlement_ts: i64,
+    /// Sum of all seat `pending_chips` — escrowed during an active round, applied at settle.
+    pub pending_chips_in_play: u64,
     pub bump: u8,
 }
 
@@ -54,6 +56,8 @@ pub struct Seat {
     pub rake_paid_lamports: u64,
     pub status: SeatStatus,
     pub last_active_ts: i64,
+    /// Buy-in/rebuy lamports received mid-round; moved to `chips` at settle_round.
+    pub pending_chips: u64,
     pub bump: u8,
 }
 
@@ -112,5 +116,30 @@ pub fn assert_cash_out_allowed(table: &Table, now: i64) -> Result<()> {
 
 pub fn assert_between_rounds(table: &Table) -> Result<()> {
     require!(!table.round_active, crate::error::PokerError::RoundInProgress);
+    Ok(())
+}
+
+/// Move a seat's pending deposit into active chips (called at settle_round).
+pub fn apply_pending_chips(seat: &mut Seat, table: &mut Table) -> Result<()> {
+    let pending = seat.pending_chips;
+    if pending == 0 {
+        return Ok(());
+    }
+
+    seat.chips = seat
+        .chips
+        .checked_add(pending)
+        .ok_or(error!(crate::error::PokerError::ChipOverflow))?;
+    seat.pending_chips = 0;
+
+    table.chips_in_play = table
+        .chips_in_play
+        .checked_add(pending)
+        .ok_or(error!(crate::error::PokerError::ChipOverflow))?;
+    table.pending_chips_in_play = table
+        .pending_chips_in_play
+        .checked_sub(pending)
+        .ok_or(error!(crate::error::PokerError::ChipUnderflow))?;
+
     Ok(())
 }

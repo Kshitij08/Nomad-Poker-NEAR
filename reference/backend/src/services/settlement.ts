@@ -126,6 +126,7 @@ export type SettlementRequest = {
   potChips?: number;
   deltas: { player: string; chipDelta: number; seatPda: string }[];
   chipsInPlay: number;
+  pendingSeatPdas?: string[];
 };
 
 export async function settleRound(request: SettlementRequest): Promise<string> {
@@ -146,11 +147,18 @@ export async function settleRound(request: SettlementRequest): Promise<string> {
     BigInt(request.chipsInPlay)
   );
 
-  const remainingAccounts = request.deltas.map((d) => ({
-    pubkey: new PublicKey(d.seatPda),
-    isWritable: true,
-    isSigner: false,
-  }));
+  const remainingAccounts = [
+    ...request.deltas.map((d) => ({
+      pubkey: new PublicKey(d.seatPda),
+      isWritable: true,
+      isSigner: false,
+    })),
+    ...(request.pendingSeatPdas ?? []).map((pda) => ({
+      pubkey: new PublicKey(pda),
+      isWritable: true,
+      isSigner: false,
+    })),
+  ];
 
   const tableIdHex = Buffer.from(request.tableId).toString("hex");
   const tableAccount = await (program.account as any).table.fetch(

@@ -70,21 +70,15 @@ pub fn create_table_handler(
     table.max_seats = max_seats;
     table.seated_count = 0;
     table.chips_in_play = 0;
+    table.pending_chips_in_play = 0;
     table.round_nonce = 0;
     table.round_active = false;
     table.last_settlement_ts = now;
     table.bump = ctx.bumps.table;
 
-    system_program::transfer(
-        CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.settlement_authority.to_account_info(),
-                to: ctx.accounts.vault.to_account_info(),
-            },
-        ),
-        vault_rent,
-    )?;
+    // Anchor `init` on the vault PDA already transfers the rent-exempt minimum from the payer.
+    // Do not transfer vault_rent again — that leaves extra lamports in the vault and breaks
+    // close_table (which requires vault_lamports == rent_reserve_lamports).
 
     Ok(())
 }
@@ -170,6 +164,7 @@ pub fn initialize_table_handler(
     table.max_seats = max_seats;
     table.seated_count = 1;
     table.chips_in_play = chips;
+    table.pending_chips_in_play = 0;
     table.round_nonce = 0;
     table.round_active = false;
     table.last_settlement_ts = now;
@@ -183,13 +178,10 @@ pub fn initialize_table_handler(
     host_seat.rake_paid_lamports = rake;
     host_seat.status = SeatStatus::Active;
     host_seat.last_active_ts = now;
+    host_seat.pending_chips = 0;
     host_seat.bump = ctx.bumps.host_seat;
 
-    // Fund vault: player principal + rent reserve (host pays rent for vault PDA creation)
-    let vault_funding = buy_in_lamports
-        .checked_add(vault_rent)
-        .ok_or(PokerError::MathOverflow)?;
-
+    // Fund vault with the buy-in principal only. Anchor `init` on the vault PDA already paid its rent.
     system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -198,7 +190,7 @@ pub fn initialize_table_handler(
                 to: ctx.accounts.vault.to_account_info(),
             },
         ),
-        vault_funding,
+        buy_in_lamports,
     )?;
 
     if rake > 0 {
@@ -262,7 +254,6 @@ pub struct BuyIn<'info> {
 
 pub fn buy_in_handler(ctx: Context<BuyIn>, _table_id: [u8; 32]) -> Result<()> {
     let table = &ctx.accounts.table;
-    crate::state::assert_between_rounds(table)?;
     require!(
         table.seated_count < table.max_seats,
         PokerError::TableFull
@@ -342,8 +333,6 @@ pub struct Rebuy<'info> {
 }
 
 pub fn rebuy_handler(ctx: Context<Rebuy>, table_id: [u8; 32], buy_in_lamports: u64) -> Result<()> {
-    crate::state::assert_between_rounds(&ctx.accounts.table)?;
-
     let rake_bps = ctx.accounts.table.rake_bps;
     let chips = chips_from_lamports(buy_in_lamports)?;
     let rake = compute_rake(buy_in_lamports, rake_bps)?;
@@ -426,17 +415,36 @@ fn deposit_to_seat<'info>(
         .ok_or(PokerError::MathOverflow)?;
     seat.last_active_ts = now;
 
-    table.chips_in_play = table
-        .chips_in_play
-        .checked_add(chips)
-        .ok_or(PokerError::ChipOverflow)?;
+    if table.round_active {
+        seat.pending_chips = seat
+            .pending_chips
+            .checked_add(chips)
+            .ok_or(PokerError::ChipOverflow)?;
+        table.pending_chips_in_play = table
+            .pending_chips_in_play
+            .checked_add(chips)
+            .ok_or(PokerError::ChipOverflow)?;
+    } else {
+        seat.chips = seat
+            .chips
+            .checked_add(chips)
+            .ok_or(PokerError::ChipOverflow)?;
+        table.chips_in_play = table
+            .chips_in_play
+            .checked_add(chips)
+            .ok_or(PokerError::ChipOverflow)?;
+    }
 
     verify_vault_balance(vault, table)?;
     Ok(())
 }
 
 pub fn verify_vault_balance(vault: &Account<'_, Vault>, table: &Table) -> Result<()> {
-    let expected_player_lamports = lamports_from_chips(table.chips_in_play)?;
+    let chips_backed = table
+        .chips_in_play
+        .checked_add(table.pending_chips_in_play)
+        .ok_or(PokerError::MathOverflow)?;
+    let expected_player_lamports = lamports_from_chips(chips_backed)?;
     let total = vault.to_account_info().lamports();
     let required = expected_player_lamports
         .checked_add(vault.rent_reserve_lamports)

@@ -70,18 +70,13 @@ const forbidden = await post(`/host/tables/${tableId}/hand/start`, {}, stranger.
 console.log("non-host hand/start:", forbidden.status, forbidden.json);
 if (forbidden.status !== 403) throw new Error("expected 403 for non-host");
 
-// KNOWN ISSUE: create_table pays the vault's rent twice (Anchor `init` funds it, then the handler
-// transfers vault_rent again) while recording rent_reserve_lamports as 1x. close_table requires
-// vault_lamports == rent_reserve_lamports, so server-created tables cannot be closed until the
-// program is fixed and redeployed. Escrowed player funds are unaffected — cash_out works.
+// close_table recovers table + vault PDA rent once seated_count and pending deposits are zero.
 const close = await post(`/host/tables/${tableId}/close`, {}, host.jwt);
 if (close.status === 200) {
   console.log("close:", close.status, close.json);
-} else if (JSON.stringify(close.json).includes("VaultInvariant")) {
-  console.log("close: skipped — known on-chain double-rent bug (VaultInvariant)");
 } else {
   console.log("close:", close.status, close.json);
-  throw new Error("close_table failed for an unexpected reason");
+  throw new Error("close_table failed");
 }
 
 console.log("\nE2E PASSED ✅");

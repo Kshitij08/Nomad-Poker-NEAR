@@ -1425,6 +1425,13 @@
             "type": "i64"
           },
           {
+            "name": "pending_chips",
+            "docs": [
+              "Buy-in/rebuy lamports received mid-round; moved to `chips` at settle_round."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -1506,6 +1513,13 @@
           {
             "name": "last_settlement_ts",
             "type": "i64"
+          },
+          {
+            "name": "pending_chips_in_play",
+            "docs": [
+              "Sum of all seat `pending_chips` — escrowed during an active round, applied at settle."
+            ],
+            "type": "u64"
           },
           {
             "name": "bump",

@@ -165,6 +165,17 @@ export function createHostRouter(pool: Pool): Router {
       const pid = programId()!;
       const potChips = req.body?.potChips != null ? Number(req.body.potChips) : undefined;
 
+      const rawPending = req.body?.pendingSeatPdas;
+      const pendingSeatPdas: string[] = Array.isArray(rawPending)
+        ? rawPending.map((p: unknown) => String(p ?? "").trim()).filter((p) => p.length > 0)
+        : [];
+      for (const pda of pendingSeatPdas) {
+        if (!isValidSolanaPubkey(pda)) {
+          res.status(400).json({ error: "Invalid pendingSeatPda" });
+          return;
+        }
+      }
+
       const sig = await settleRound({
         tableId: [...resolved.tableIdBuf],
         tablePda: resolved.tablePda.toBase58(),
@@ -177,6 +188,7 @@ export function createHostRouter(pool: Pool): Router {
           chipDelta: d.chipDelta,
           seatPda: deriveSeatPda(pid, resolved.tableIdBuf, new PublicKey(d.player)).toBase58(),
         })),
+        pendingSeatPdas,
       });
       res.json({ signature: sig, roundNonce: chainNonce + 1, replayed: false });
     } catch (err: any) {
