@@ -401,10 +401,6 @@ fn deposit_to_seat<'info>(
         )?;
     }
 
-    seat.chips = seat
-        .chips
-        .checked_add(chips)
-        .ok_or(PokerError::ChipOverflow)?;
     seat.deposited_lamports = seat
         .deposited_lamports
         .checked_add(buy_in_lamports)
