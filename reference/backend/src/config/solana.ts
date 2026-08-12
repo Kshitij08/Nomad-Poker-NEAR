@@ -6,8 +6,15 @@ const MAINNET_HOSTS = ["mainnet-beta", "api.mainnet-beta.solana.com"];
 /** Valid devnet placeholder until `anchor deploy` — replace with deployed program id. */
 export const DEFAULT_PROGRAM_ID = "GdduGzsoiEamv285Z4DnBapmkMScnHLDdUAdWPywHozo";
 
-/** MagicBlock public devnet RPC — free for development (see docs.magicblock.gg). */
-export const DEFAULT_DEVNET_RPC = "https://rpc.magicblock.app/devnet/";
+/**
+ * Fallback devnet RPC when SOLANA_RPC_URL is unset. `/api/config` hands this to clients and the WebGL build
+ * adopts it as its own RPC, so it must answer CORS preflights or the browser blocks every call from the
+ * game — MagicBlock's endpoint (the previous default) does not send `Access-Control-Allow-Origin`, which is
+ * what stopped WebGL buy-ins from ever reaching the wallet. Solana's public devnet RPC clears CORS and
+ * carries no key, which makes it the right default to commit; set SOLANA_RPC_URL to the Alchemy endpoint in
+ * deployment for headroom the public one does not have.
+ */
+export const DEFAULT_DEVNET_RPC = "https://api.devnet.solana.com/";
 
 export function loadSettlementKeypair(): Keypair {
   const secret = process.env.SETTLEMENT_AUTHORITY_SECRET?.trim();
