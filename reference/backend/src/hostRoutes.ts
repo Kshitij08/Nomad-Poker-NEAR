@@ -12,6 +12,7 @@ import {
   deriveSeatPda,
   fetchTableByIdString,
   isValidTableIdString,
+  listSeatPdasWithPendingChips,
 } from "./services/tableRead.js";
 import { isValidSolanaPubkey } from "./auth/siws.js";
 import { programId } from "./config/solana.js";
@@ -166,14 +167,46 @@ export function createHostRouter(pool: Pool): Router {
       const potChips = req.body?.potChips != null ? Number(req.body.potChips) : undefined;
 
       const rawPending = req.body?.pendingSeatPdas;
-      const pendingSeatPdas: string[] = Array.isArray(rawPending)
+      const hostPendingSeatPdas: string[] = Array.isArray(rawPending)
         ? rawPending.map((p: unknown) => String(p ?? "").trim()).filter((p) => p.length > 0)
         : [];
-      for (const pda of pendingSeatPdas) {
+      for (const pda of hostPendingSeatPdas) {
         if (!isValidSolanaPubkey(pda)) {
           res.status(400).json({ error: "Invalid pendingSeatPda" });
           return;
         }
+      }
+
+      const settleDeltas = deltas.map((d) => ({
+        player: d.player,
+        chipDelta: d.chipDelta,
+        seatPda: deriveSeatPda(pid, resolved.tableIdBuf, new PublicKey(d.player)).toBase58(),
+      }));
+
+      // Which seats carry mid-round buy-ins is read from the chain, not taken from the host. The
+      // host builds its list from its own roster before the settle goes out and its retries resend
+      // that same list, so a buy-in confirming in between leaves a seat holding pending_chips that
+      // no attempt ever passes — settle_round then fails on pending_chips_in_play != 0 every time
+      // and the host halts the table. The chain read cannot miss one, and it cannot name a seat
+      // account that does not exist (a PDA with nothing behind it fails the settle just as hard).
+      // The host's list is still accepted and validated, but only as a cross-check.
+      //
+      // Seats that carry a delta are excluded: the program applies pending chips to every remaining
+      // account, and only the first `deltas.length` of them may be delta seats.
+      const deltaSeatPdas = new Set(settleDeltas.map((d) => d.seatPda));
+      const settlePendingPdas =
+        resolved.table.pendingChipsInPlay.toNumber() > 0
+          ? await listSeatPdasWithPendingChips(resolved.tablePda)
+          : [];
+
+      const hostOnlyPdas = hostPendingSeatPdas.filter(
+        (pda) => !settlePendingPdas.includes(pda) && !deltaSeatPdas.has(pda)
+      );
+      if (hostOnlyPdas.length > 0) {
+        console.warn(
+          `[settle] host listed ${hostOnlyPdas.length} pending seat(s) the chain has no pending ` +
+            `chips for on table ${req.tableIdStr}: ${hostOnlyPdas.join(", ")}`
+        );
       }
 
       const sig = await settleRound({
@@ -183,12 +216,9 @@ export function createHostRouter(pool: Pool): Router {
         nonce: chainNonce,
         potChips: Number.isSafeInteger(potChips!) ? potChips : undefined,
         chipsInPlay: resolved.table.chipsInPlay.toNumber(),
-        deltas: deltas.map((d) => ({
-          player: d.player,
-          chipDelta: d.chipDelta,
-          seatPda: deriveSeatPda(pid, resolved.tableIdBuf, new PublicKey(d.player)).toBase58(),
-        })),
-        pendingSeatPdas,
+        deltas: settleDeltas,
+        pendingSeatPdas: settlePendingPdas.filter((pda) => !deltaSeatPdas.has(pda)),
+        // (delta seats get their pending chips applied by the same pass, from their own account)
       });
       res.json({ signature: sig, roundNonce: chainNonce + 1, replayed: false });
     } catch (err: any) {
