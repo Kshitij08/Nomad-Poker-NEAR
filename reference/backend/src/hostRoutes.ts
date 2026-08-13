@@ -14,7 +14,7 @@ import {
   isValidTableIdString,
   listSeatPdasWithPendingChips,
 } from "./services/tableRead.js";
-import { isValidSolanaPubkey } from "./auth/siws.js";
+import { isValidAccountAddress, isValidSolanaPubkey } from "./auth/siws.js";
 import { programId } from "./config/solana.js";
 import { requireTableHost, type HostAuthedRequest } from "./middleware/hostAuth.js";
 import type { AuthedRequest } from "./middleware/playerAuth.js";
@@ -166,16 +166,20 @@ export function createHostRouter(pool: Pool): Router {
       const pid = programId()!;
       const potChips = req.body?.potChips != null ? Number(req.body.potChips) : undefined;
 
+      // Advisory input, so a bad entry is dropped rather than 400'd. Rejecting the request over this
+      // list is how a settle becomes unretryable: the host resends the same list on every attempt, so
+      // one rejected entry burns all three and halts a live table with money on it. (It used to be
+      // checked with isValidSolanaPubkey, which demands an on-curve key — a seat PDA is off-curve by
+      // construction, so EVERY mid-round buy-in took its table down.)
       const rawPending = req.body?.pendingSeatPdas;
-      const hostPendingSeatPdas: string[] = Array.isArray(rawPending)
-        ? rawPending.map((p: unknown) => String(p ?? "").trim()).filter((p) => p.length > 0)
-        : [];
-      for (const pda of hostPendingSeatPdas) {
-        if (!isValidSolanaPubkey(pda)) {
-          res.status(400).json({ error: "Invalid pendingSeatPda" });
-          return;
-        }
-      }
+      const hostPendingSeatPdas: string[] = (Array.isArray(rawPending) ? rawPending : [])
+        .map((p: unknown) => String(p ?? "").trim())
+        .filter((p: string) => {
+          if (p.length === 0) return false;
+          if (isValidAccountAddress(p)) return true;
+          console.warn(`[settle] ignoring malformed pendingSeatPda from host: ${p}`);
+          return false;
+        });
 
       const settleDeltas = deltas.map((d) => ({
         player: d.player,
@@ -183,13 +187,12 @@ export function createHostRouter(pool: Pool): Router {
         seatPda: deriveSeatPda(pid, resolved.tableIdBuf, new PublicKey(d.player)).toBase58(),
       }));
 
-      // Which seats carry mid-round buy-ins is read from the chain, not taken from the host. The
-      // host builds its list from its own roster before the settle goes out and its retries resend
-      // that same list, so a buy-in confirming in between leaves a seat holding pending_chips that
-      // no attempt ever passes — settle_round then fails on pending_chips_in_play != 0 every time
-      // and the host halts the table. The chain read cannot miss one, and it cannot name a seat
-      // account that does not exist (a PDA with nothing behind it fails the settle just as hard).
-      // The host's list is still accepted and validated, but only as a cross-check.
+      // Which seats carry mid-round buy-ins is read from the chain, not taken from the host, because
+      // settle_round will not finish while pending_chips_in_play != 0 and a host cannot reliably know
+      // that number: it builds its list from its own roster before the settle goes out and its retries
+      // resend that same list, so a buy-in confirming in between is invisible to every attempt. The
+      // chain read cannot miss one, and it cannot name a seat account that does not exist (a PDA with
+      // nothing behind it fails the settle just as hard). The host's list is kept as a cross-check.
       //
       // Seats that carry a delta are excluded: the program applies pending chips to every remaining
       // account, and only the first `deltas.length` of them may be delta seats.

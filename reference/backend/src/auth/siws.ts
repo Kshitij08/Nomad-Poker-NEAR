@@ -23,10 +23,27 @@ export function buildSignInMessage(pubkey: string, nonce: string, issuedAt: stri
   ].join("\n");
 }
 
+/**
+ * A wallet address: on the ed25519 curve, so something can sign for it. The curve test is the point
+ * here — it rejects a PDA, which no one holds a key for. Never use it on a program address.
+ */
 export function isValidSolanaPubkey(pubkey: string): boolean {
   try {
     const key = new PublicKey(pubkey);
     return PublicKey.isOnCurve(key.toBytes());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Any 32-byte account address, wallet or PDA. Program addresses are derived by searching for a
+ * bump that lands OFF the curve, so `isValidSolanaPubkey` rejects every one of them by design —
+ * use this for seat/table/vault PDAs.
+ */
+export function isValidAccountAddress(address: string): boolean {
+  try {
+    return new PublicKey(address).toBytes().length === 32;
   } catch {
     return false;
   }
