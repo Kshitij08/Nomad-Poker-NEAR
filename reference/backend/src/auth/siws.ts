@@ -3,7 +3,9 @@ import { PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
 import nacl from "tweetnacl";
 
-export const AUTH_DOMAIN = process.env.AUTH_DOMAIN?.trim() || "poker.app";
+/** The name the wallet shows on the sign-in prompt, and the site the sign-in is for. */
+export const AUTH_DOMAIN = process.env.AUTH_DOMAIN?.trim() || "nomadpoker.fun";
+export const AUTH_URI = process.env.AUTH_URI?.trim() || `https://${AUTH_DOMAIN}/`;
 export const NONCE_TTL_MS = 5 * 60 * 1000;
 
 export function createNonce(): string {
@@ -16,7 +18,7 @@ export function buildSignInMessage(pubkey: string, nonce: string, issuedAt: stri
     `${AUTH_DOMAIN} wants you to sign in with your Solana account:`,
     pubkey,
     "",
-    "URI: https://" + AUTH_DOMAIN,
+    `URI: ${AUTH_URI}`,
     "Version: 1",
     `Nonce: ${nonce}`,
     `Issued At: ${issuedAt}`,

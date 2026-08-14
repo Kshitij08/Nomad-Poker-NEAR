@@ -109,7 +109,8 @@ API: `http://localhost:8787`
 | `INTERNAL_API_KEY` | **Required before public deploy** — protects `/internal/*` (CLI uses same value) |
 | `JWT_SECRET` | **Required for wallet login** — HS256 secret for player JWTs (min 16 chars) |
 | `JWT_TTL` | Optional JWT lifetime (default `7d`) |
-| `AUTH_DOMAIN` | Domain shown in the SIWS sign-in message (default `poker.app`) |
+| `AUTH_DOMAIN` | Domain shown in the SIWS sign-in message (default `nomadpoker.fun`) |
+| `AUTH_URI` | URI line of that message (default `https://<AUTH_DOMAIN>/`) |
 | `PORT` | HTTP port (default `8787`; Railway injects its own) |
 | `BACKEND_PUBLIC_URL` | Optional; public Railway URL for CLI scripts |
 
