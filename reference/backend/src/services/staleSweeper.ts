@@ -15,6 +15,13 @@ const STALE_MARGIN_SECS = 300;
 /** A table idle this long with players still seated is treated as abandoned (host gone for good). */
 const ABANDONED_TABLE_SECS = Number(process.env.SWEEP_ABANDONED_SECS ?? 6 * 3600);
 
+/**
+ * Empty lobby tables (dedicated VPS money rooms) stay open until this idle window.
+ * `create_table` leaves `last_settlement_ts` at 0, so idle must be measured from `created_at`.
+ * Set `SWEEP_EMPTY_SECS=0` to never auto-close empty tables.
+ */
+const EMPTY_TABLE_SECS = Number(process.env.SWEEP_EMPTY_SECS ?? 24 * 3600);
+
 type SeatRow = { player: string; seatPda: string };
 
 function createReadProgram() {
@@ -56,7 +63,8 @@ async function listChainSeats(tablePda: PublicKey): Promise<SeatRow[]> {
  * A table is swept when, on chain, either:
  *  - a round is stuck active well past the stale window (host died mid-hand), or
  *  - it has been idle with seated players far longer than any real game pauses.
- * Empty, round-free tables are simply closed.
+ * Empty, round-free tables are closed only after {@link EMPTY_TABLE_SECS} — a dedicated
+ * lobby is empty by design until the first buy-in.
  */
 export async function sweepStaleTables(): Promise<void> {
   const pool = createPool();
@@ -67,7 +75,8 @@ export async function sweepStaleTables(): Promise<void> {
     table_id: string;
     table_pda: string;
     vault_pda: string;
-  }>(`SELECT table_id, table_pda, vault_pda FROM tables WHERE state IS DISTINCT FROM 'closed'`);
+    created_at: Date | string;
+  }>(`SELECT table_id, table_pda, vault_pda, created_at FROM tables WHERE state IS DISTINCT FROM 'closed'`);
 
   for (const row of tables) {
     try {
@@ -81,10 +90,17 @@ export async function sweepStaleTables(): Promise<void> {
         continue;
       }
 
-      const idle = now - table.lastSettlementTs.toNumber();
+      const lastSettle = table.lastSettlementTs.toNumber();
+      const createdAt = Math.floor(new Date(row.created_at).getTime() / 1000);
+      const lastActive = Math.max(lastSettle > 0 ? lastSettle : 0, Number.isFinite(createdAt) ? createdAt : 0);
+      const idle = now - lastActive;
       const stuckRound = table.roundActive && idle > STALE_ROUND_SECS + STALE_MARGIN_SECS;
       const abandoned = !table.roundActive && table.seatedCount > 0 && idle > ABANDONED_TABLE_SECS;
-      const emptyIdle = table.seatedCount === 0 && !table.roundActive;
+      const emptyIdle =
+        table.seatedCount === 0 &&
+        !table.roundActive &&
+        EMPTY_TABLE_SECS > 0 &&
+        idle >= EMPTY_TABLE_SECS;
 
       if (stuckRound || abandoned) {
         console.log(
