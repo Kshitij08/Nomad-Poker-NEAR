@@ -7,6 +7,7 @@ import {
   settleRound,
 } from "./services/settlement.js";
 import { endHand, startHand } from "./services/gameHand.js";
+import { claimNext, markReady, toPublic } from "./services/partySessions.js";
 
 export function createInternalRouter(): Router {
   const router = Router();
@@ -64,6 +65,30 @@ export function createInternalRouter(): Router {
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? String(err) });
     }
+  });
+
+  /** Dedicated VPS: claim the next Party Create / overflow code for this lobby. */
+  router.get("/party/pending", (req, res) => {
+    const mode = String(req.query.mode ?? "");
+    if (mode !== "free" && mode !== "chain") {
+      res.status(400).json({ error: "mode must be free or chain" });
+      return;
+    }
+    const room = claimNext(mode);
+    res.json(room ? toPublic(room) : { session: "", status: "", mode: "", error: "" });
+  });
+
+  /** Dedicated child: Photon session is up (or failed to start). */
+  router.post("/party/ready", (req, res) => {
+    const session = String(req.body?.session ?? "");
+    const ok = Boolean(req.body?.ok);
+    const error = typeof req.body?.error === "string" ? req.body.error : undefined;
+    const room = markReady(session, ok, error);
+    if (!room) {
+      res.status(404).json({ error: "Unknown party session" });
+      return;
+    }
+    res.json(toPublic(room));
   });
 
   /** Game server: settle chip deltas after a hand (on-chain settle_round). */
