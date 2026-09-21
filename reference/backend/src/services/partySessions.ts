@@ -1,8 +1,8 @@
 /**
  * In-memory queue of Fusion rooms the dedicated VPS should host:
  * - Party Create: generated private codes (`kind=private`)
- * - Quick Play overflow: `poker-free-2`, `poker-money-3`, … (`kind=quick`) when the
- *   long-lived primary table is full.
+ * - Quick Play overflow: `poker-free-2`, `poker-free-st50-2`, `poker-money-3`, … (`kind=quick`)
+ *   when the long-lived primary table for that stake is full.
  *
  * The Unity dedicated process claims a pending row, spawns a child with that
  * -session name, then marks ready so clients can join as GameMode.Client.
@@ -35,7 +35,7 @@ const MAX_ROOMS = Number(process.env.POKER_MAX_PARTY_ROOMS ?? 8);
 const MAX_OVERFLOW_INDEX = 20;
 
 const SESSION_RE = /^[A-Z0-9]{4,16}$/;
-const OVERFLOW_RE = /^(poker-free|poker-money)-[1-9][0-9]*$/i;
+const OVERFLOW_RE = /^(poker-free|poker-money)(-st[1-9][0-9]*)?-[1-9][0-9]*$/i;
 const RESERVED = new Set(["POKERFREE", "POKERMONEY", "POKER-FREE", "POKER-MONEY"]);
 
 export function normalizePartySession(raw: string): string {
@@ -131,7 +131,7 @@ export function startParty(
   return room;
 }
 
-export function requestOverflow(mode: PartyMode, fullSession?: string): PartyRoom {
+export function requestOverflow(mode: PartyMode, fullSession?: string, stake?: number): PartyRoom {
   gc();
 
   if (fullSession) {
@@ -142,9 +142,12 @@ export function requestOverflow(mode: PartyMode, fullSession?: string): PartyRoo
     }
   }
 
+  const prefix = overflowPrefix(mode, stake, fullSession);
+
   let reusable: PartyRoom | undefined;
   for (const room of rooms.values()) {
     if (room.mode !== mode || room.kind !== "quick" || room.full) continue;
+    if (!sessionMatchesPrefix(room.session, prefix)) continue;
     if (room.status === "pending" || room.status === "claimed" || room.status === "ready") {
       if (!reusable || room.createdAt < reusable.createdAt) reusable = room;
     }
@@ -153,7 +156,6 @@ export function requestOverflow(mode: PartyMode, fullSession?: string): PartyRoo
 
   throwIfAtCap();
 
-  const prefix = mode === "chain" ? "poker-money" : "poker-free";
   let session: string | undefined;
   for (let n = 2; n <= MAX_OVERFLOW_INDEX; n++) {
     const name = `${prefix}-${n}`;
@@ -179,6 +181,28 @@ export function requestOverflow(mode: PartyMode, fullSession?: string): PartyRoo
   };
   rooms.set(session, room);
   return room;
+}
+
+function overflowPrefix(mode: PartyMode, stake?: number, fullSession?: string): string {
+  const root = mode === "chain" ? "poker-money" : "poker-free";
+  const fromName = parseStakeFromSession(fullSession);
+  const buyIn = Number(stake) > 0 ? Number(stake) : fromName;
+  if (buyIn > 0 && buyIn !== 1000) return `${root}-st${buyIn}`;
+  return root;
+}
+
+function parseStakeFromSession(session?: string): number {
+  const match = String(session ?? "").trim().match(/-st([1-9][0-9]*)(?:-|$)/i);
+  if (!match) return 0;
+  return Number(match[1]) || 0;
+}
+
+function sessionMatchesPrefix(session: string, prefix: string): boolean {
+  const name = String(session ?? "").toLowerCase();
+  const p = prefix.toLowerCase();
+  if (name === p) return true;
+  if (!name.startsWith(`${p}-`)) return false;
+  return /^[1-9][0-9]*$/.test(name.slice(p.length + 1));
 }
 
 export function getParty(sessionRaw: string): PartyRoom | undefined {

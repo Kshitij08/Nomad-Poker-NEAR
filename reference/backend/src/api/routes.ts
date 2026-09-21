@@ -111,7 +111,7 @@ export function createApiRouter() {
     }
 
     try {
-      const room = requestOverflow(money ? "chain" : "free", fullSession || undefined);
+      const room = requestOverflow(money ? "chain" : "free", fullSession || undefined, Number(req.body?.stake) || 0);
       res.json(toPublic(room));
     } catch (err: any) {
       const status = Number(err?.status) || 400;
