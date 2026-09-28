@@ -10,10 +10,12 @@ import {
 } from "../config/solana.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import {
+  getAgentResult,
   getParty,
   isPartySessionName,
   isTrackedSessionName,
   requestOverflow,
+  startAgent,
   startParty,
   toPublic,
 } from "../services/partySessions.js";
@@ -66,6 +68,51 @@ export function createApiRouter() {
       const status = Number(err?.status) || 400;
       res.status(status).json({ error: err.message ?? String(err) });
     }
+  });
+
+  /** Queue a Web2 AFK agent table for the VPS dedicated process to host. */
+  router.post("/agent/start", partyLimit, async (req, res) => {
+    const session = String(req.body?.session ?? "");
+    if (!isPartySessionName(session)) {
+      res.status(400).json({ error: "Invalid agent session code" });
+      return;
+    }
+
+    try {
+      const room = startAgent(session, "free", {
+        ownerId: String(req.body?.ownerId ?? ""),
+        deploymentId: String(req.body?.deploymentId ?? session),
+        agentName: String(req.body?.agentName ?? "Agent"),
+        profile: String(req.body?.profile ?? "balanced"),
+        strategyVersion: String(req.body?.strategyVersion ?? "v1"),
+        bankroll: Number(req.body?.bankroll) || 5000,
+        maxHands: Number(req.body?.maxHands) || 100,
+        maxRuntime: Number(req.body?.maxRuntime) || 3600,
+        stopLoss: Number(req.body?.stopLoss) || 0,
+        profitTarget: Number(req.body?.profitTarget) || 0,
+        fillers: Number(req.body?.fillers) || 3,
+        stake: Number(req.body?.stake) || 1000,
+      });
+      res.json(toPublic(room));
+    } catch (err: any) {
+      const status = Number(err?.status) || 400;
+      res.status(status).json({ error: err.message ?? String(err) });
+    }
+  });
+
+  /** Owner client: fetch AFK agent return summary after deployment ends. */
+  router.get("/agent/result", (req, res) => {
+    const session = String(req.query.session ?? "");
+    if (!isPartySessionName(session)) {
+      res.status(400).json({ error: "Invalid agent session code" });
+      return;
+    }
+    const result = getAgentResult(session);
+    if (!result) {
+      res.status(404).json({ error: "No result yet" });
+      return;
+    }
+    res.json(result);
   });
 
   router.get("/party/status", (req, res) => {

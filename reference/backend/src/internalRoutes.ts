@@ -7,7 +7,7 @@ import {
   settleRound,
 } from "./services/settlement.js";
 import { endHand, startHand } from "./services/gameHand.js";
-import { claimNext, markReady, toPublic } from "./services/partySessions.js";
+import { claimNext, markReady, saveAgentResult, toPublic } from "./services/partySessions.js";
 
 export function createInternalRouter(): Router {
   const router = Router();
@@ -76,6 +76,17 @@ export function createInternalRouter(): Router {
     }
     const room = claimNext(mode);
     res.json(room ? toPublic(room) : { session: "", status: "", mode: "", error: "" });
+  });
+
+  /** Dedicated agent child: publish deployment return summary for the owner client. */
+  router.post("/agent/complete", (req, res) => {
+    const session = String(req.body?.session ?? "");
+    if (!session) {
+      res.status(400).json({ error: "session required" });
+      return;
+    }
+    saveAgentResult(session, req.body ?? {});
+    res.json({ ok: true });
   });
 
   /** Dedicated child: Photon session is up (or failed to start). */

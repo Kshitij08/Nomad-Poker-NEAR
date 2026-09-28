@@ -12,7 +12,22 @@
 
 export type PartyMode = "free" | "chain";
 export type PartyStatus = "pending" | "claimed" | "ready" | "failed";
-export type PartyKind = "private" | "quick";
+export type PartyKind = "private" | "quick" | "agent";
+
+export interface AgentDeployPayload {
+  ownerId?: string;
+  deploymentId?: string;
+  agentName?: string;
+  profile?: string;
+  strategyVersion?: string;
+  bankroll?: number;
+  maxHands?: number;
+  maxRuntime?: number;
+  stopLoss?: number;
+  profitTarget?: number;
+  fillers?: number;
+  stake?: number;
+}
 
 export interface PartyRoom {
   session: string;
@@ -25,6 +40,7 @@ export interface PartyRoom {
   updatedAt: number;
   claimedAt?: number;
   creatorPubkey?: string;
+  agent?: AgentDeployPayload;
 }
 
 const rooms = new Map<string, PartyRoom>();
@@ -129,6 +145,72 @@ export function startParty(
   };
   rooms.set(session, room);
   return room;
+}
+
+/** Queue a Web2 AFK agent Fusion child (kind=agent). Session must be A-Z0-9 party-style code. */
+export function startAgent(
+  sessionRaw: string,
+  mode: PartyMode,
+  agent: AgentDeployPayload
+): PartyRoom {
+  gc();
+  const session = normalizePartySession(sessionRaw);
+  if (!isPartySessionName(session)) {
+    throw Object.assign(new Error("Invalid agent session code"), { status: 400 });
+  }
+
+  const existing = rooms.get(session);
+  if (existing && existing.status !== "failed") {
+    if (existing.mode !== mode) {
+      throw Object.assign(new Error("That code is already in use in the other lobby"), {
+        status: 409,
+      });
+    }
+    return existing;
+  }
+
+  throwIfAtCap();
+
+  const room: PartyRoom = {
+    session,
+    mode,
+    kind: "agent",
+    status: "pending",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    agent: {
+      ownerId: String(agent?.ownerId ?? ""),
+      deploymentId: String(agent?.deploymentId ?? session),
+      agentName: String(agent?.agentName ?? "Agent"),
+      profile: String(agent?.profile ?? "balanced"),
+      strategyVersion: String(agent?.strategyVersion ?? "v1"),
+      bankroll: Math.max(50, Number(agent?.bankroll) || 5000),
+      maxHands: Math.max(1, Number(agent?.maxHands) || 100),
+      maxRuntime: Math.max(60, Number(agent?.maxRuntime) || 3600),
+      stopLoss: Math.max(0, Number(agent?.stopLoss) || 0),
+      profitTarget: Math.max(0, Number(agent?.profitTarget) || 0),
+      fillers: Math.max(1, Math.min(5, Number(agent?.fillers) || 3)),
+      stake: Math.max(50, Number(agent?.stake) || 1000),
+    },
+  };
+  rooms.set(session, room);
+  return room;
+}
+
+const agentResults = new Map<string, Record<string, unknown>>();
+
+export function saveAgentResult(sessionRaw: string, summary: Record<string, unknown>): void {
+  const key = roomKey(sessionRaw);
+  agentResults.set(key, { ...summary, updatedAt: Date.now() });
+  const room = rooms.get(key);
+  if (room) {
+    room.updatedAt = Date.now();
+  }
+}
+
+export function getAgentResult(sessionRaw: string): Record<string, unknown> | undefined {
+  gc();
+  return agentResults.get(roomKey(sessionRaw));
 }
 
 export function requestOverflow(mode: PartyMode, fullSession?: string, stake?: number): PartyRoom {
@@ -241,5 +323,17 @@ export function toPublic(room: PartyRoom) {
     mode: room.mode,
     kind: room.kind,
     error: room.error ?? "",
+    ownerId: room.agent?.ownerId ?? "",
+    deploymentId: room.agent?.deploymentId ?? "",
+    agentName: room.agent?.agentName ?? "",
+    profile: room.agent?.profile ?? "",
+    strategyVersion: room.agent?.strategyVersion ?? "",
+    bankroll: room.agent?.bankroll ?? 0,
+    maxHands: room.agent?.maxHands ?? 0,
+    maxRuntime: room.agent?.maxRuntime ?? 0,
+    stopLoss: room.agent?.stopLoss ?? 0,
+    profitTarget: room.agent?.profitTarget ?? 0,
+    fillers: room.agent?.fillers ?? 0,
+    stake: room.agent?.stake ?? 0,
   };
 }
