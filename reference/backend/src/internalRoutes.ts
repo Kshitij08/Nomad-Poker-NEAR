@@ -7,7 +7,14 @@ import {
   settleRound,
 } from "./services/settlement.js";
 import { endHand, startHand } from "./services/gameHand.js";
-import { claimNext, markReady, saveAgentResult, toPublic } from "./services/partySessions.js";
+import {
+  claimNext,
+  isAgentStopRequested,
+  markReady,
+  saveAgentProgress,
+  saveAgentResult,
+  toPublic,
+} from "./services/partySessions.js";
 
 export function createInternalRouter(): Router {
   const router = Router();
@@ -76,6 +83,26 @@ export function createInternalRouter(): Router {
     }
     const room = claimNext(mode);
     res.json(room ? toPublic(room) : { session: "", status: "", mode: "", error: "" });
+  });
+
+  /** Dedicated agent child: publish hands played and current stack for the owner. */
+  router.post("/agent/progress", (req, res) => {
+    const session = String(req.body?.session ?? "");
+    if (!session) {
+      res.status(400).json({ error: "session required" });
+      return;
+    }
+    res.json(saveAgentProgress(session, req.body ?? {}));
+  });
+
+  /** Dedicated agent child: whether the owner has asked this table to stop. */
+  router.get("/agent/control", (req, res) => {
+    const session = String(req.query.session ?? "");
+    if (!session) {
+      res.status(400).json({ error: "session required" });
+      return;
+    }
+    res.json({ stopRequested: isAgentStopRequested(session) });
   });
 
   /** Dedicated agent child: publish deployment return summary for the owner client. */

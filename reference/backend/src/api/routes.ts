@@ -10,10 +10,12 @@ import {
 } from "../config/solana.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import {
+  getAgentProgress,
   getAgentResult,
   getParty,
   isPartySessionName,
   isTrackedSessionName,
+  requestAgentStop,
   requestOverflow,
   startAgent,
   startParty,
@@ -98,6 +100,31 @@ export function createApiRouter() {
       const status = Number(err?.status) || 400;
       res.status(status).json({ error: err.message ?? String(err) });
     }
+  });
+
+  /** Owner client: live hands / stack while the agent table is still farming. */
+  router.get("/agent/progress", (req, res) => {
+    const session = String(req.query.session ?? "");
+    if (!isPartySessionName(session)) {
+      res.status(400).json({ error: "Invalid agent session code" });
+      return;
+    }
+    const live = getAgentProgress(session);
+    if (!live) {
+      res.status(404).json({ error: "No progress yet" });
+      return;
+    }
+    res.json(live);
+  });
+
+  /** Owner client: ask the farming table to stop after the current hand and return the stack. */
+  router.post("/agent/stop", (req, res) => {
+    const session = String(req.body?.session ?? "");
+    if (!isPartySessionName(session)) {
+      res.status(400).json({ error: "Invalid agent session code" });
+      return;
+    }
+    res.json(requestAgentStop(session));
   });
 
   /** Owner client: fetch AFK agent return summary after deployment ends. */

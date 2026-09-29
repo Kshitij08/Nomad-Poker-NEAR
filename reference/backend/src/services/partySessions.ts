@@ -199,9 +199,83 @@ export function startAgent(
 
 const agentResults = new Map<string, Record<string, unknown>>();
 
+export interface AgentLive {
+  session: string;
+  running: boolean;
+  stopRequested: boolean;
+  HandsPlayed: number;
+  MaxHands: number;
+  StartingBankroll: number;
+  Stack: number;
+  NetPnl: number;
+  RuntimeSeconds: number;
+  updatedAt: number;
+}
+
+const agentLive = new Map<string, AgentLive>();
+const agentStop = new Set<string>();
+
+export function saveAgentProgress(sessionRaw: string, body: Record<string, unknown>): AgentLive {
+  const key = roomKey(sessionRaw);
+  const prev = agentLive.get(key);
+  const stopRequested = agentStop.has(key);
+  const live: AgentLive = {
+    session: key,
+    running: body?.running !== false && !agentResults.has(key),
+    stopRequested,
+    HandsPlayed: Number(body?.HandsPlayed) || 0,
+    MaxHands: Number(body?.MaxHands) || prev?.MaxHands || 0,
+    StartingBankroll: Number(body?.StartingBankroll) || prev?.StartingBankroll || 0,
+    Stack: Number(body?.Stack) || 0,
+    NetPnl: Number(body?.NetPnl) || 0,
+    RuntimeSeconds: Number(body?.RuntimeSeconds) || 0,
+    updatedAt: Date.now(),
+  };
+  agentLive.set(key, live);
+  const room = rooms.get(key);
+  if (room) room.updatedAt = Date.now();
+  return live;
+}
+
+export function getAgentProgress(sessionRaw: string): AgentLive | undefined {
+  return agentLive.get(roomKey(sessionRaw));
+}
+
+/** Owner asked the farming table to cash out after the current hand. */
+export function requestAgentStop(sessionRaw: string): AgentLive {
+  const key = roomKey(sessionRaw);
+  agentStop.add(key);
+  const prev = agentLive.get(key);
+  const live: AgentLive = {
+    session: key,
+    running: prev?.running !== false && !agentResults.has(key),
+    stopRequested: true,
+    HandsPlayed: prev?.HandsPlayed ?? 0,
+    MaxHands: prev?.MaxHands ?? 0,
+    StartingBankroll: prev?.StartingBankroll ?? 0,
+    Stack: prev?.Stack ?? 0,
+    NetPnl: prev?.NetPnl ?? 0,
+    RuntimeSeconds: prev?.RuntimeSeconds ?? 0,
+    updatedAt: Date.now(),
+  };
+  agentLive.set(key, live);
+  return live;
+}
+
+export function isAgentStopRequested(sessionRaw: string): boolean {
+  return agentStop.has(roomKey(sessionRaw));
+}
+
 export function saveAgentResult(sessionRaw: string, summary: Record<string, unknown>): void {
   const key = roomKey(sessionRaw);
   agentResults.set(key, { ...summary, updatedAt: Date.now() });
+  agentStop.delete(key);
+  const live = agentLive.get(key);
+  if (live) {
+    live.running = false;
+    live.stopRequested = false;
+    live.updatedAt = Date.now();
+  }
   const room = rooms.get(key);
   if (room) {
     room.updatedAt = Date.now();
