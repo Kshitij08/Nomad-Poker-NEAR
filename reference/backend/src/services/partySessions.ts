@@ -250,7 +250,26 @@ export function saveAgentProgress(sessionRaw: string, body: Record<string, unkno
 }
 
 export function getAgentProgress(sessionRaw: string): AgentLive | undefined {
-  return agentLive.get(roomKey(sessionRaw));
+  const key = roomKey(sessionRaw);
+  const live = agentLive.get(key);
+  if (live) return live;
+
+  // Room exists but the child has not posted yet (pending/claimed/just-ready).
+  // Return a stub so the WebGL client does not spam 404s while the VPS boots Fusion.
+  const room = rooms.get(key);
+  if (!room || room.kind !== "agent") return undefined;
+  return {
+    session: key,
+    running: room.status !== "failed",
+    stopRequested: agentStop.has(key),
+    HandsPlayed: 0,
+    MaxHands: Number(room.agent?.maxHands) || 0,
+    StartingBankroll: Number(room.agent?.bankroll) || 0,
+    Stack: Number(room.agent?.bankroll) || 0,
+    NetPnl: 0,
+    RuntimeSeconds: 0,
+    updatedAt: room.updatedAt,
+  };
 }
 
 /** Owner asked the farming table to cash out after the current hand. */

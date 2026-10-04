@@ -73,6 +73,12 @@ try {
   assert.equal(claimed.hasCustom, true);
   assert.equal(claimed.raiseFractionOfPot, 0.7);
 
+  // Stub progress while claimed — owner WebGL polls must not 404 before the child posts.
+  const stubProgress = await json('GET', `/api/agent/progress?session=${session}`);
+  assert.equal(stubProgress.HandsPlayed, 0);
+  assert.equal(stubProgress.StartingBankroll, 500);
+  assert.equal(stubProgress.running, true);
+
   const ready = await json('POST', '/internal/party/ready', { session, ok: true }, keyHeader);
   assert.equal(ready.status, 'ready');
 
