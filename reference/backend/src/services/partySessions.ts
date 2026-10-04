@@ -27,6 +27,12 @@ export interface AgentDeployPayload {
   profitTarget?: number;
   fillers?: number;
   stake?: number;
+  hasCustom?: boolean;
+  foldBelow?: number;
+  raiseAbove?: number;
+  aggression?: number;
+  bluffChance?: number;
+  raiseFractionOfPot?: number;
 }
 
 export interface PartyRoom {
@@ -191,6 +197,12 @@ export function startAgent(
       profitTarget: Math.max(0, Number(agent?.profitTarget) || 0),
       fillers: Math.max(1, Math.min(5, Number(agent?.fillers) || 3)),
       stake: Math.max(50, Number(agent?.stake) || 1000),
+      hasCustom: Boolean(agent?.hasCustom),
+      foldBelow: Number(agent?.foldBelow) || 0,
+      raiseAbove: Number(agent?.raiseAbove) || 0,
+      aggression: Number(agent?.aggression) || 0,
+      bluffChance: Number(agent?.bluffChance) || 0,
+      raiseFractionOfPot: Number(agent?.raiseFractionOfPot) || 0,
     },
   };
   rooms.set(session, room);
@@ -409,5 +421,11 @@ export function toPublic(room: PartyRoom) {
     profitTarget: room.agent?.profitTarget ?? 0,
     fillers: room.agent?.fillers ?? 0,
     stake: room.agent?.stake ?? 0,
+    hasCustom: Boolean(room.agent?.hasCustom),
+    foldBelow: room.agent?.foldBelow ?? 0,
+    raiseAbove: room.agent?.raiseAbove ?? 0,
+    aggression: room.agent?.aggression ?? 0,
+    bluffChance: room.agent?.bluffChance ?? 0,
+    raiseFractionOfPot: room.agent?.raiseFractionOfPot ?? 0,
   };
 }

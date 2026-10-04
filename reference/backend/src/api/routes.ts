@@ -94,6 +94,12 @@ export function createApiRouter() {
         profitTarget: Number(req.body?.profitTarget) || 0,
         fillers: Number(req.body?.fillers) || 3,
         stake: Number(req.body?.stake) || 1000,
+        hasCustom: Boolean(req.body?.hasCustom),
+        foldBelow: Number(req.body?.foldBelow) || 0,
+        raiseAbove: Number(req.body?.raiseAbove) || 0,
+        aggression: Number(req.body?.aggression) || 0,
+        bluffChance: Number(req.body?.bluffChance) || 0,
+        raiseFractionOfPot: Number(req.body?.raiseFractionOfPot) || 0,
       });
       res.json(toPublic(room));
     } catch (err: any) {
