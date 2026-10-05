@@ -236,14 +236,29 @@ export class AgentDeploymentService {
       const selected = await client.query(
         `SELECT *
            FROM agent_deployments
-          WHERE phase = 'queued' AND stake = $1
-          ORDER BY created_at
+          WHERE phase = 'queued'
+            AND (stake = $1 OR stake = 0)
+          ORDER BY CASE WHEN stake = $1 THEN 0 ELSE 1 END, created_at
           FOR UPDATE SKIP LOCKED
           LIMIT 1`,
         [stake]
       );
       if (!selected.rows[0]) {
+        // Help ops: stake mismatch is the usual reason a WebGL deploy stays "Queued" forever.
+        const waiting = await client.query(
+          `SELECT stake, COUNT(*)::int AS n
+             FROM agent_deployments
+            WHERE phase = 'queued'
+            GROUP BY stake
+            ORDER BY stake`
+        );
         await client.query("COMMIT");
+        if (waiting.rows.length > 0) {
+          console.warn(
+            `[agent] claim miss table=${table} stake=${stake}; queued=` +
+              waiting.rows.map((r) => `${r.stake}x${r.n}`).join(",")
+          );
+        }
         return null;
       }
       const updated = await client.query(
