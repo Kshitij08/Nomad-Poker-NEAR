@@ -1,4 +1,5 @@
 import express from "express";
+import type { Pool } from "pg";
 import { createAuthRouter } from "../auth/routes.js";
 import { hasJwtSecretConfigured, verifyPlayerToken } from "../auth/jwt.js";
 import { createPool } from "../db/pool.js";
@@ -10,21 +11,19 @@ import {
 } from "../config/solana.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import {
-  getAgentProgress,
-  getAgentResult,
   getParty,
   isPartySessionName,
   isTrackedSessionName,
-  requestAgentStop,
   requestOverflow,
-  startAgent,
   startParty,
   toPublic,
 } from "../services/partySessions.js";
+import { AgentDeploymentService } from "../services/agentDeployments.js";
 
-export function createApiRouter() {
+export function createApiRouter(providedPool?: Pool) {
   const router = express.Router();
-  const pool = createPool();
+  const pool = providedPool ?? createPool();
+  const agents = new AgentDeploymentService(pool);
 
   router.use(createAuthRouter(pool));
 
@@ -72,7 +71,7 @@ export function createApiRouter() {
     }
   });
 
-  /** Queue a Web2 AFK agent table for the VPS dedicated process to host. */
+  /** Queue an agent for a seat on an existing normal Quick Play table. */
   router.post("/agent/start", partyLimit, async (req, res) => {
     const session = String(req.body?.session ?? "");
     if (!isPartySessionName(session)) {
@@ -81,27 +80,38 @@ export function createApiRouter() {
     }
 
     try {
-      const room = startAgent(session, "free", {
-        ownerId: String(req.body?.ownerId ?? ""),
-        deploymentId: String(req.body?.deploymentId ?? session),
+      const ownerId = String(req.body?.ownerId ?? "").trim();
+      if (!ownerId) {
+        res.status(400).json({ error: "ownerId required" });
+        return;
+      }
+      const stake = Math.max(50, Number(req.body?.stake) || 1000);
+      const deployment = await agents.enqueue({
+        deploymentId: session,
+        ownerId,
         agentName: String(req.body?.agentName ?? "Agent"),
         profile: String(req.body?.profile ?? "balanced"),
         strategyVersion: String(req.body?.strategyVersion ?? "v1"),
-        bankroll: Number(req.body?.bankroll) || 5000,
-        maxHands: Number(req.body?.maxHands) || 100,
-        maxRuntime: Number(req.body?.maxRuntime) || 3600,
-        stopLoss: Number(req.body?.stopLoss) || 0,
-        profitTarget: Number(req.body?.profitTarget) || 0,
-        fillers: Number(req.body?.fillers) || 3,
-        stake: Number(req.body?.stake) || 1000,
-        hasCustom: Boolean(req.body?.hasCustom),
-        foldBelow: Number(req.body?.foldBelow) || 0,
-        raiseAbove: Number(req.body?.raiseAbove) || 0,
-        aggression: Number(req.body?.aggression) || 0,
-        bluffChance: Number(req.body?.bluffChance) || 0,
-        raiseFractionOfPot: Number(req.body?.raiseFractionOfPot) || 0,
+        strategyConfig: {
+          hasCustom: Boolean(req.body?.hasCustom),
+          foldBelow: Number(req.body?.foldBelow) || 0,
+          raiseAbove: Number(req.body?.raiseAbove) || 0,
+          aggression: Number(req.body?.aggression) || 0,
+          bluffChance: Number(req.body?.bluffChance) || 0,
+          raiseFractionOfPot: Number(req.body?.raiseFractionOfPot) || 0,
+        },
+        bankroll: Math.max(stake, Number(req.body?.bankroll) || 5000),
+        maxHands: Math.max(1, Math.min(5000, Number(req.body?.maxHands) || 100)),
+        maxRuntimeSeconds: Math.max(
+          60,
+          Math.min(86_400, Number(req.body?.maxRuntime) || 3600)
+        ),
+        stopLoss: Math.max(0, Number(req.body?.stopLoss) || 0),
+        profitTarget: Math.max(0, Number(req.body?.profitTarget) || 0),
+        stake,
       });
-      res.json(toPublic(room));
+      // No child room needs to boot; "ready" keeps legacy Unity deploy clients compatible.
+      res.json({ ...deployment, status: "ready", kind: "agent" });
     } catch (err: any) {
       const status = Number(err?.status) || 400;
       res.status(status).json({ error: err.message ?? String(err) });
@@ -109,43 +119,93 @@ export function createApiRouter() {
   });
 
   /** Owner client: live hands / stack while the agent table is still farming. */
-  router.get("/agent/progress", (req, res) => {
+  router.get("/agent/progress", async (req, res) => {
     const session = String(req.query.session ?? "");
     if (!isPartySessionName(session)) {
       res.status(400).json({ error: "Invalid agent session code" });
       return;
     }
-    const live = getAgentProgress(session);
-    if (!live) {
-      res.status(404).json({ error: "No progress yet" });
-      return;
+    try {
+      await agents.assertOwner(session, optionalString(req.query.ownerId));
+      const live = await agents.get(session);
+      res.json(live ? { ...live, RecentHands: await agents.recentHands(session, 10) } : live);
+    } catch (err: any) {
+      res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
     }
-    res.json(live);
   });
 
   /** Owner client: ask the farming table to stop after the current hand and return the stack. */
-  router.post("/agent/stop", (req, res) => {
+  router.post("/agent/stop", async (req, res) => {
     const session = String(req.body?.session ?? "");
     if (!isPartySessionName(session)) {
       res.status(400).json({ error: "Invalid agent session code" });
       return;
     }
-    res.json(requestAgentStop(session));
+    try {
+      res.json(await agents.requestStop(session, optionalString(req.body?.ownerId)));
+    } catch (err: any) {
+      res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
+    }
   });
 
   /** Owner client: fetch AFK agent return summary after deployment ends. */
-  router.get("/agent/result", (req, res) => {
+  router.get("/agent/result", async (req, res) => {
     const session = String(req.query.session ?? "");
     if (!isPartySessionName(session)) {
       res.status(400).json({ error: "Invalid agent session code" });
       return;
     }
-    const result = getAgentResult(session);
-    if (!result) {
-      res.status(404).json({ error: "No result yet" });
+    try {
+      await agents.assertOwner(session, optionalString(req.query.ownerId));
+      const result = await agents.getResult(session);
+      if (!result) {
+        res.status(404).json({ error: "No result yet" });
+        return;
+      }
+      res.json(result);
+    } catch (err: any) {
+      res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
+    }
+  });
+
+  router.get("/agent/history", async (req, res) => {
+    const ownerId = String(req.query.ownerId ?? "").trim();
+    if (!ownerId) {
+      res.status(400).json({ error: "ownerId required" });
       return;
     }
-    res.json(result);
+    const { limit, offset } = pagination(req.query.limit, req.query.offset);
+    try {
+      const sessions = await agents.list(ownerId, limit, offset);
+      const total = await agents.count(ownerId);
+      res.json({ Sessions: sessions, deployments: sessions, Total: total, total, limit, offset });
+    } catch (err: any) {
+      res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
+    }
+  });
+
+  router.get("/agent/hands", async (req, res) => {
+    const ownerId = String(req.query.ownerId ?? "").trim();
+    const deploymentId = String(req.query.deploymentId ?? "").trim();
+    if (!ownerId || !deploymentId) {
+      res.status(400).json({ error: "ownerId and deploymentId required" });
+      return;
+    }
+    const { limit, offset } = pagination(req.query.limit, req.query.offset);
+    try {
+      const hands = await agents.hands(ownerId, deploymentId, limit, offset);
+      const total = await agents.handCount(ownerId, deploymentId);
+      res.json({
+        Hands: hands,
+        hands,
+        Total: total,
+        total,
+        limit,
+        offset,
+      });
+    } catch (err: any) {
+      res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
+    }
   });
 
   router.get("/party/status", (req, res) => {
@@ -239,4 +299,15 @@ export function createApiRouter() {
   });
 
   return router;
+}
+
+function optionalString(value: unknown): string | undefined {
+  const text = String(value ?? "").trim();
+  return text || undefined;
+}
+
+function pagination(rawLimit: unknown, rawOffset: unknown) {
+  const limit = Math.max(1, Math.min(100, Math.trunc(Number(rawLimit) || 25)));
+  const offset = Math.max(0, Math.trunc(Number(rawOffset) || 0));
+  return { limit, offset };
 }

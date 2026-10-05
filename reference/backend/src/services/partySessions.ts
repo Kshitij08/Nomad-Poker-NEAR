@@ -12,28 +12,7 @@
 
 export type PartyMode = "free" | "chain";
 export type PartyStatus = "pending" | "claimed" | "ready" | "failed";
-export type PartyKind = "private" | "quick" | "agent";
-
-export interface AgentDeployPayload {
-  ownerId?: string;
-  deploymentId?: string;
-  agentName?: string;
-  profile?: string;
-  strategyVersion?: string;
-  bankroll?: number;
-  maxHands?: number;
-  maxRuntime?: number;
-  stopLoss?: number;
-  profitTarget?: number;
-  fillers?: number;
-  stake?: number;
-  hasCustom?: boolean;
-  foldBelow?: number;
-  raiseAbove?: number;
-  aggression?: number;
-  bluffChance?: number;
-  raiseFractionOfPot?: number;
-}
+export type PartyKind = "private" | "quick";
 
 export interface PartyRoom {
   session: string;
@@ -46,7 +25,6 @@ export interface PartyRoom {
   updatedAt: number;
   claimedAt?: number;
   creatorPubkey?: string;
-  agent?: AgentDeployPayload;
 }
 
 const rooms = new Map<string, PartyRoom>();
@@ -151,171 +129,6 @@ export function startParty(
   };
   rooms.set(session, room);
   return room;
-}
-
-/** Queue a Web2 AFK agent Fusion child (kind=agent). Session must be A-Z0-9 party-style code. */
-export function startAgent(
-  sessionRaw: string,
-  mode: PartyMode,
-  agent: AgentDeployPayload
-): PartyRoom {
-  gc();
-  const session = normalizePartySession(sessionRaw);
-  if (!isPartySessionName(session)) {
-    throw Object.assign(new Error("Invalid agent session code"), { status: 400 });
-  }
-
-  const existing = rooms.get(session);
-  if (existing && existing.status !== "failed") {
-    if (existing.mode !== mode) {
-      throw Object.assign(new Error("That code is already in use in the other lobby"), {
-        status: 409,
-      });
-    }
-    return existing;
-  }
-
-  throwIfAtCap();
-
-  const room: PartyRoom = {
-    session,
-    mode,
-    kind: "agent",
-    status: "pending",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    agent: {
-      ownerId: String(agent?.ownerId ?? ""),
-      deploymentId: String(agent?.deploymentId ?? session),
-      agentName: String(agent?.agentName ?? "Agent"),
-      profile: String(agent?.profile ?? "balanced"),
-      strategyVersion: String(agent?.strategyVersion ?? "v1"),
-      bankroll: Math.max(50, Number(agent?.bankroll) || 5000),
-      maxHands: Math.max(1, Number(agent?.maxHands) || 100),
-      maxRuntime: Math.max(60, Number(agent?.maxRuntime) || 3600),
-      stopLoss: Math.max(0, Number(agent?.stopLoss) || 0),
-      profitTarget: Math.max(0, Number(agent?.profitTarget) || 0),
-      fillers: Math.max(1, Math.min(5, Number(agent?.fillers) || 3)),
-      stake: Math.max(50, Number(agent?.stake) || 1000),
-      hasCustom: Boolean(agent?.hasCustom),
-      foldBelow: Number(agent?.foldBelow) || 0,
-      raiseAbove: Number(agent?.raiseAbove) || 0,
-      aggression: Number(agent?.aggression) || 0,
-      bluffChance: Number(agent?.bluffChance) || 0,
-      raiseFractionOfPot: Number(agent?.raiseFractionOfPot) || 0,
-    },
-  };
-  rooms.set(session, room);
-  return room;
-}
-
-const agentResults = new Map<string, Record<string, unknown>>();
-
-export interface AgentLive {
-  session: string;
-  running: boolean;
-  stopRequested: boolean;
-  HandsPlayed: number;
-  MaxHands: number;
-  StartingBankroll: number;
-  Stack: number;
-  NetPnl: number;
-  RuntimeSeconds: number;
-  updatedAt: number;
-}
-
-const agentLive = new Map<string, AgentLive>();
-const agentStop = new Set<string>();
-
-export function saveAgentProgress(sessionRaw: string, body: Record<string, unknown>): AgentLive {
-  const key = roomKey(sessionRaw);
-  const prev = agentLive.get(key);
-  const stopRequested = agentStop.has(key);
-  const live: AgentLive = {
-    session: key,
-    running: body?.running !== false && !agentResults.has(key),
-    stopRequested,
-    HandsPlayed: Number(body?.HandsPlayed) || 0,
-    MaxHands: Number(body?.MaxHands) || prev?.MaxHands || 0,
-    StartingBankroll: Number(body?.StartingBankroll) || prev?.StartingBankroll || 0,
-    Stack: Number(body?.Stack) || 0,
-    NetPnl: Number(body?.NetPnl) || 0,
-    RuntimeSeconds: Number(body?.RuntimeSeconds) || 0,
-    updatedAt: Date.now(),
-  };
-  agentLive.set(key, live);
-  const room = rooms.get(key);
-  if (room) room.updatedAt = Date.now();
-  return live;
-}
-
-export function getAgentProgress(sessionRaw: string): AgentLive | undefined {
-  const key = roomKey(sessionRaw);
-  const live = agentLive.get(key);
-  if (live) return live;
-
-  // Room exists but the child has not posted yet (pending/claimed/just-ready).
-  // Return a stub so the WebGL client does not spam 404s while the VPS boots Fusion.
-  const room = rooms.get(key);
-  if (!room || room.kind !== "agent") return undefined;
-  return {
-    session: key,
-    running: room.status !== "failed",
-    stopRequested: agentStop.has(key),
-    HandsPlayed: 0,
-    MaxHands: Number(room.agent?.maxHands) || 0,
-    StartingBankroll: Number(room.agent?.bankroll) || 0,
-    Stack: Number(room.agent?.bankroll) || 0,
-    NetPnl: 0,
-    RuntimeSeconds: 0,
-    updatedAt: room.updatedAt,
-  };
-}
-
-/** Owner asked the farming table to cash out after the current hand. */
-export function requestAgentStop(sessionRaw: string): AgentLive {
-  const key = roomKey(sessionRaw);
-  agentStop.add(key);
-  const prev = agentLive.get(key);
-  const live: AgentLive = {
-    session: key,
-    running: prev?.running !== false && !agentResults.has(key),
-    stopRequested: true,
-    HandsPlayed: prev?.HandsPlayed ?? 0,
-    MaxHands: prev?.MaxHands ?? 0,
-    StartingBankroll: prev?.StartingBankroll ?? 0,
-    Stack: prev?.Stack ?? 0,
-    NetPnl: prev?.NetPnl ?? 0,
-    RuntimeSeconds: prev?.RuntimeSeconds ?? 0,
-    updatedAt: Date.now(),
-  };
-  agentLive.set(key, live);
-  return live;
-}
-
-export function isAgentStopRequested(sessionRaw: string): boolean {
-  return agentStop.has(roomKey(sessionRaw));
-}
-
-export function saveAgentResult(sessionRaw: string, summary: Record<string, unknown>): void {
-  const key = roomKey(sessionRaw);
-  agentResults.set(key, { ...summary, updatedAt: Date.now() });
-  agentStop.delete(key);
-  const live = agentLive.get(key);
-  if (live) {
-    live.running = false;
-    live.stopRequested = false;
-    live.updatedAt = Date.now();
-  }
-  const room = rooms.get(key);
-  if (room) {
-    room.updatedAt = Date.now();
-  }
-}
-
-export function getAgentResult(sessionRaw: string): Record<string, unknown> | undefined {
-  gc();
-  return agentResults.get(roomKey(sessionRaw));
 }
 
 export function requestOverflow(mode: PartyMode, fullSession?: string, stake?: number): PartyRoom {
@@ -428,23 +241,5 @@ export function toPublic(room: PartyRoom) {
     mode: room.mode,
     kind: room.kind,
     error: room.error ?? "",
-    ownerId: room.agent?.ownerId ?? "",
-    deploymentId: room.agent?.deploymentId ?? "",
-    agentName: room.agent?.agentName ?? "",
-    profile: room.agent?.profile ?? "",
-    strategyVersion: room.agent?.strategyVersion ?? "",
-    bankroll: room.agent?.bankroll ?? 0,
-    maxHands: room.agent?.maxHands ?? 0,
-    maxRuntime: room.agent?.maxRuntime ?? 0,
-    stopLoss: room.agent?.stopLoss ?? 0,
-    profitTarget: room.agent?.profitTarget ?? 0,
-    fillers: room.agent?.fillers ?? 0,
-    stake: room.agent?.stake ?? 0,
-    hasCustom: Boolean(room.agent?.hasCustom),
-    foldBelow: room.agent?.foldBelow ?? 0,
-    raiseAbove: room.agent?.raiseAbove ?? 0,
-    aggression: room.agent?.aggression ?? 0,
-    bluffChance: room.agent?.bluffChance ?? 0,
-    raiseFractionOfPot: room.agent?.raiseFractionOfPot ?? 0,
   };
 }

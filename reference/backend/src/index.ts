@@ -11,6 +11,7 @@ import { createPool } from "./db/pool.js";
 import { startIndexer } from "./services/indexer.js";
 
 const app = express();
+const pool = createPool();
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
@@ -22,9 +23,9 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
-app.use("/api", createApiRouter());
-app.use("/internal", requireInternalApiKey, createInternalRouter());
-app.use("/host", requirePlayerJwt, createHostRouter(createPool()));
+app.use("/api", createApiRouter(pool));
+app.use("/internal", requireInternalApiKey, createInternalRouter(pool));
+app.use("/host", requirePlayerJwt, createHostRouter(pool));
 
 const port = Number(process.env.PORT ?? 8787);
 
