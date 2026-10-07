@@ -4345,6 +4345,11 @@
       "code": 6043,
       "name": "TooEarlyToAbort",
       "msg": "Randomness is still expected; too early to abandon the hand"
+    },
+    {
+      "code": 6044,
+      "name": "NotShuffling",
+      "msg": "No hand is waiting for randomness"
     }
   ],
   "types": [
@@ -5153,11 +5158,18 @@
             "type": "u64"
           },
           {
+            "name": "shuffle_started_ts",
+            "docs": [
+              "Rollup clock when the current hand started shuffling (the abort deadline counts from here)."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                68
+                60
               ]
             }
           }

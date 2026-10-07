@@ -2,7 +2,7 @@
 // spoofed callback, two real hands dealt by the VRF inside the TEE, private hole cards, the ledger
 // salt, what a reader can see of the oracle's transaction, the public hand record and the off-chain
 // verifier (including tampered records). Results go to results/m4-hand-<ts>.json.
-import { SystemProgram, Transaction } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { NATIVE_MINT, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction } from "@solana/spl-token";
 import { delegateSpl } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { randomBytes } from "crypto";
@@ -13,6 +13,17 @@ import { recoverHand } from "./attack";
 
 const S = new Suite("m4-hand");
 const HAND_DEALT = 2, HAND_IDLE = 0;
+
+// MagicBlock leak 2: simulateTransaction returns accounts listed in `accounts.addresses`, without a login.
+async function simulateLeak(accounts: PublicKey[]): Promise<Buffer[]> {
+  const stranger = Keypair.generate();
+  const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: stranger.publicKey, toPubkey: stranger.publicKey, lamports: 0 }));
+  tx.feePayer = stranger.publicKey;
+  tx.recentBlockhash = (await rpcAt(TEE_URL, "getLatestBlockhash", [])).result.value.blockhash;
+  const b64 = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString("base64");
+  const sim = await rpcAt(TEE_URL, "simulateTransaction", [b64, { encoding: "base64", sigVerify: false, replaceRecentBlockhash: true, accounts: { encoding: "base64", addresses: accounts.map((a) => a.toBase58()) } }]);
+  return (sim.result?.value?.accounts ?? []).filter((a: any) => !!a).map((a: any) => Buffer.from(a.data[0], "base64")).filter((b: Buffer) => b.length > 0);
+}
 
 async function rpcAt(url: string, method: string, params: any[]) {
   return (await (await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json()) as any;
@@ -87,13 +98,16 @@ async function main() {
     return { found: !!r.result, seedVisible: !!raw?.includes(seed1) };
   };
   const views = { p1WalletControl: await txView(connUrl(er.p1)), p2Reader: await txView(url.p2), outsider: await txView(url.outsider), noLogin: await txView(TEE_URL) };
-  S.check("p1's seed: p1 can fetch its own transaction (control), but the other player, an outsider and no login can't see the seed",
+  // During play the RPC withholds the contents of transactions touching private accounts, even from
+  // their signer (found, but the seed isn't in what comes back). The after-close check below shows the
+  // same probe does find the seed once the contents are released, so a "not visible" here is meaningful.
+  S.check("p1's seed can't be read from its transaction by the other player, an outsider or without login (contents withheld even from p1)",
     views.p1WalletControl.found && !views.p2Reader.seedVisible && !views.outsider.seedVisible && !views.noLogin.seedVisible, views);
 
   // ---- a spoofed callback
   await S.err("a fake VRF callback signed by an outsider is rejected", "ConstraintAddress",
     () => prog.p3.methods.deal(Array.from(randomBytes(32)), BN(1)).accountsPartial({ vrfProgramIdentity: p3.publicKey, table: T.table, deck: T.deck, ledger: T.ledger }).rpc());
-  await S.err("abort with no hand running is refused", "HandNotDealt", () => T.abortHand(prog.p3, p3.publicKey));
+  await S.err("abort with no hand running is refused", "NotShuffling", () => T.abortHand(prog.p3, p3.publicKey));
 
   // ---- hand 1
   await S.ok("an outsider (p3) starts hand 1: VRF requested", () => T.startHand(prog.p3, p3.publicKey));
@@ -105,7 +119,7 @@ async function main() {
   await S.err("no second start while dealt", "HandInProgress", () => T.startHand(prog.p3, p3.publicKey));
   await S.err("no seed commits during a hand", "HandInProgress", () => T.commitSeed(prog.p1, p1.publicKey, 0, randomBytes(32)));
   await S.err("no cash-out during a hand", "HandInProgress", () => T.cashOut(prog.p1, p1.publicKey, 0));
-  await S.err("abort of a dealt hand is refused", "HandNotDealt", () => T.abortHand(prog.p3, p3.publicKey));
+  await S.err("abort of a dealt hand is refused", "NotShuffling", () => T.abortHand(prog.p3, p3.publicKey));
 
   const h0 = await readHand(url.p1, 0), h3 = await readHand(url.p2, 3);
   S.check("each player reads their own two cards (dealt, hand 1)", !!h0 && !!h3 && h0.cards.every((c: number) => c < 52) && h3.cards.every((c: number) => c < 52) && Number(h0.handNo) === 1,
@@ -125,9 +139,16 @@ async function main() {
     p2Reader: await recoverHand(url.p2, T.table, 1n, 0b1001, 5_000),
   };
   const rebuilt = (r: any) => !!r.predicted && h0 && r.predicted[0].join() === h0.cards.map(cardName).join();
-  S.check("while the hand is live, nobody else can rebuild p1's cards from transaction data (no login, outsider, the other player)",
-    !rebuilt(live.noLogin) && !rebuilt(live.outsider) && !rebuilt(live.p2Reader) && !live.noLogin.vrfOutputFound && (live.noLogin.seedsFound & 1) === 0,
+  S.check("while the hand is live, nobody else can rebuild p1's cards from transaction data, or see any seed or the VRF output (no login, outsider, the other player)",
+    Object.values(live).every((r: any) => !rebuilt(r) && !r.vrfOutputFound && r.seedsFound === 0),
     Object.fromEntries(Object.entries(live).map(([k, v]: any) => [k, { listed: v.signaturesListed, hidden: v.transactionsHidden, seeds: v.seedsFound, vrf: v.vrfOutputFound }])));
+
+  // MagicBlock leak 2 (M3): simulateTransaction hands out private accounts with no login. Probed on
+  // the live deck and a hand; tracked as KNOWN until MagicBlock fixes it.
+  const leakDeck = await simulateLeak([T.deck]), leakHand = await simulateLeak([handOf(T.table, 0)]);
+  const leakedDeck = leakDeck[0] ? coder.decode("deck", leakDeck[0]) : null;
+  S.known("MagicBlock leak 2: simulateTransaction returns the live deck and hands with no login", leakDeck.length > 0 || leakHand.length > 0,
+    { deckReturned: leakDeck.length, handReturned: leakHand.length, leakedDeckMatchesP1Cards: !!leakedDeck && h0 && holeCards(Array.from(leakedDeck.cards), dealOrder(t1.button, 0b1001))[0].join() === Array.from(h0.cards).join() });
 
   // ---- end hand 1 and verify it from the public record
   await S.err("an outsider can't end the hand", "NotSeated", () => T.endHand(prog.p3, p3.publicKey));
@@ -175,6 +196,8 @@ async function main() {
   await S.ok("creator closes the table (record deleted too)", () => T.close(prog.deployer, deployer.publicKey));
   await sleep(6000);
   const afterClose = await recoverHand(TEE_URL, T.table, 1n, 0b1001, 60_000);
+  const seedAfter = await txView(TEE_URL);
+  S.check("probe control: after close, the same no-login probe finds p1's seed in its transaction", seedAfter.seedVisible, seedAfter);
   S.known("after the table closes, its seeds and VRF output become readable with no login (cards are public anyway; the ledger salt isn't meant to be: fix in M6)",
     !!afterClose.predicted && afterClose.predicted[0].join() === h0?.cards.map(cardName).join(), { seeds: afterClose.seedsFound, vrf: afterClose.vrfOutputFound, hidden: afterClose.transactionsHidden });
   S.check("after close the record, deck and ledger are gone from the rollup", !(await rawRead(TEE_URL, T.record)).visible && !(await rawRead(url.p1, T.deck)).visible && !(await rawRead(url.p1, T.ledger)).visible, {});

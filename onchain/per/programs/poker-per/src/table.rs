@@ -11,8 +11,8 @@ pub const HAND_SEED: &[u8] = b"hand";
 pub const INVITES_SEED: &[u8] = b"invites";
 pub const RECORD_SEED: &[u8] = b"record";
 pub const TABLE_VERSION: u8 = 2;
-/// M4 took 28 of the original 96 reserved bytes for the hand fields; the account size is unchanged.
-pub const TABLE_RESERVED: usize = 68;
+/// M4 took 36 of the original 96 reserved bytes for the hand fields; the account size is unchanged.
+pub const TABLE_RESERVED: usize = 60;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -30,8 +30,43 @@ pub const HAND_SHUFFLING: u8 = 1;
 pub const HAND_DEALT: u8 = 2;
 /// If the VRF callback hasn't arrived after this long, anyone may request again.
 pub const VRF_RETRY_SECS: i64 = 20;
-/// If it still hasn't arrived after this long, anyone may abandon the hand, so players can leave.
+/// If it still hasn't arrived this long after the hand started shuffling (retries don't reset this),
+/// anyone may abandon the hand, so players can leave.
 pub const VRF_ABORT_SECS: i64 = 300;
+
+/// What `start_hand` does in a given state.
+#[derive(Debug, PartialEq)]
+pub enum StartKind {
+    /// A new hand: needs seeds, bumps the hand number.
+    NewHand,
+    /// Re-request randomness for the hand that's already shuffling.
+    Retry,
+}
+
+pub fn start_rule(hand_state: u8, now: i64, vrf_requested_ts: i64) -> Result<StartKind> {
+    match hand_state {
+        HAND_IDLE => Ok(StartKind::NewHand),
+        HAND_SHUFFLING => {
+            require!(now.saturating_sub(vrf_requested_ts) >= VRF_RETRY_SECS, PokerError::VrfPending);
+            Ok(StartKind::Retry)
+        }
+        _ => err!(PokerError::HandInProgress),
+    }
+}
+
+/// `abort_hand` is allowed only while shuffling, `VRF_ABORT_SECS` after the hand *started*
+/// shuffling, so repeated retries can't postpone it.
+pub fn abort_rule(hand_state: u8, now: i64, shuffle_started_ts: i64) -> Result<()> {
+    require!(hand_state == HAND_SHUFFLING, PokerError::NotShuffling);
+    require!(now.saturating_sub(shuffle_started_ts) >= VRF_ABORT_SECS, PokerError::TooEarlyToAbort);
+    Ok(())
+}
+
+/// The VRF callback deals only for the latest request of a hand that's still shuffling.
+pub fn deal_rule(hand_state: u8, nonce: u64, current_nonce: u64) -> Result<()> {
+    require!(hand_state == HAND_SHUFFLING && nonce == current_nonce, PokerError::StaleRandomness);
+    Ok(())
+}
 
 /// The only token tables accept for now: wrapped SOL. The stake cap is denominated in it.
 pub const WSOL_MINT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
@@ -101,6 +136,8 @@ pub struct Table {
     /// Bumped on every randomness request (and abort). The callback must echo the current value,
     /// so only the latest request can deal.
     pub vrf_nonce: u64,
+    /// Rollup clock when the current hand started shuffling (the abort deadline counts from here).
+    pub shuffle_started_ts: i64,
     pub reserved: [u8; TABLE_RESERVED],
 }
 
@@ -336,6 +373,27 @@ mod tests {
         assert_ne!(f1, f2, "any change moves the fingerprint");
         l.salt = [1; 32];
         assert_ne!(f2, l.fingerprint().unwrap(), "the salt is part of the fingerprint");
+    }
+
+    #[test]
+    fn hand_state_machine() {
+        // start: idle -> new hand; shuffling -> retry only after VRF_RETRY_SECS; dealt -> refused
+        assert_eq!(start_rule(HAND_IDLE, 100, 0).unwrap(), StartKind::NewHand);
+        assert!(start_rule(HAND_SHUFFLING, 100 + VRF_RETRY_SECS - 1, 100).is_err());
+        assert_eq!(start_rule(HAND_SHUFFLING, 100 + VRF_RETRY_SECS, 100).unwrap(), StartKind::Retry);
+        assert!(start_rule(HAND_DEALT, 1_000, 0).is_err());
+        // abort counts from the shuffle start, so a retry 1 s before the deadline doesn't postpone it
+        let started = 1_000;
+        let last_retry = started + VRF_ABORT_SECS - 1;
+        assert!(abort_rule(HAND_SHUFFLING, started + VRF_ABORT_SECS - 1, started).is_err());
+        assert!(abort_rule(HAND_SHUFFLING, last_retry + 1, started).is_ok(), "retries don't reset the abort deadline");
+        assert!(abort_rule(HAND_IDLE, i64::MAX, 0).is_err());
+        assert!(abort_rule(HAND_DEALT, i64::MAX, 0).is_err());
+        // deal: only the latest request, only while shuffling
+        assert!(deal_rule(HAND_SHUFFLING, 7, 7).is_ok());
+        assert!(deal_rule(HAND_SHUFFLING, 6, 7).is_err(), "a superseded request can't deal");
+        assert!(deal_rule(HAND_IDLE, 7, 7).is_err(), "a late callback after an abort can't deal");
+        assert!(deal_rule(HAND_DEALT, 7, 7).is_err(), "a replay after the deal can't deal");
     }
 
     #[test]

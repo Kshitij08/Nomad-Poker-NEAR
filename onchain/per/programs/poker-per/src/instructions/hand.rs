@@ -23,8 +23,8 @@ use crate::errors::PokerError;
 use crate::private::write;
 use crate::state::Config;
 use crate::table::{
-    Deck, Hand, HandRecord, Ledger, Table, DECK_SEED, HAND_DEALT, HAND_IDLE, HAND_SEED, HAND_SHUFFLING, LEDGER_SEED,
-    RECORD_SEED, STATUS_OPEN, TABLE_SEED, VRF_ABORT_SECS, VRF_RETRY_SECS,
+    abort_rule, deal_rule, start_rule, Deck, Hand, HandRecord, Ledger, StartKind, Table, DECK_SEED, HAND_DEALT, HAND_IDLE,
+    HAND_SEED, HAND_SHUFFLING, LEDGER_SEED, RECORD_SEED, STATUS_OPEN, TABLE_SEED,
 };
 
 // ---------------------------------------------------------------------------------------- seeds
@@ -85,8 +85,8 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let table = &mut ctx.accounts.table;
     require!(table.status == STATUS_OPEN, PokerError::TableNotOpen);
-    match table.hand_state {
-        HAND_IDLE => {
+    match start_rule(table.hand_state, now, table.vrf_requested_ts)? {
+        StartKind::NewHand => {
             require!(table.seated() >= 2, PokerError::NotEnoughPlayers);
             let deck = &mut ctx.accounts.deck;
             let ledger = &ctx.accounts.ledger;
@@ -105,10 +105,10 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
             table.hand_no = table.hand_no.checked_add(1).ok_or(PokerError::MathOverflow)?;
             table.dealt_mask = table.seat_mask;
             table.hand_state = HAND_SHUFFLING;
+            table.shuffle_started_ts = now;
             deck.hand_no = table.hand_no;
         }
-        HAND_SHUFFLING => require!(now.saturating_sub(table.vrf_requested_ts) >= VRF_RETRY_SECS, PokerError::VrfPending),
-        _ => return err!(PokerError::HandInProgress),
+        StartKind::Retry => {}
     }
     table.vrf_requested_ts = now;
     table.vrf_nonce = table.vrf_nonce.checked_add(1).ok_or(PokerError::MathOverflow)?;
@@ -147,17 +147,17 @@ pub struct AbortHand<'info> {
     pub table: Box<Account<'info, Table>>,
 }
 
-/// Anyone may abandon a hand whose randomness never came, after `VRF_ABORT_SECS`, so a VRF outage
-/// can't keep players from leaving. Nothing was dealt. Outstanding requests become invalid; the
-/// committed seeds stay for the next attempt.
+/// Anyone may abandon a hand whose randomness never came, `VRF_ABORT_SECS` after it started
+/// shuffling, so a VRF outage can't keep players from leaving. Nothing was dealt, so the hand
+/// number is given back (the next hand is still "hand 1" with a random button if this was the
+/// first). Outstanding requests become invalid; the committed seeds stay for the next attempt.
 pub fn abort_hand(ctx: Context<AbortHand>) -> Result<()> {
     let table = &mut ctx.accounts.table;
-    require!(table.hand_state == HAND_SHUFFLING, PokerError::HandNotDealt);
-    let now = Clock::get()?.unix_timestamp;
-    require!(now.saturating_sub(table.vrf_requested_ts) >= VRF_ABORT_SECS, PokerError::TooEarlyToAbort);
+    abort_rule(table.hand_state, Clock::get()?.unix_timestamp, table.shuffle_started_ts)?;
     table.vrf_nonce = table.vrf_nonce.checked_add(1).ok_or(PokerError::MathOverflow)?;
     table.hand_state = HAND_IDLE;
     table.dealt_mask = 0;
+    table.hand_no = table.hand_no.saturating_sub(1);
     emit!(HandAborted { table: table.key(), hand_no: table.hand_no });
     Ok(())
 }
@@ -181,7 +181,7 @@ pub struct Deal<'info> {
 /// shuffling, so randomness can't be replayed, swapped or chosen between two requests.
 pub fn deal<'info>(ctx: Context<'info, Deal<'info>>, randomness: [u8; 32], nonce: u64) -> Result<()> {
     let table = &mut ctx.accounts.table;
-    require!(table.hand_state == HAND_SHUFFLING && nonce == table.vrf_nonce, PokerError::StaleRandomness);
+    deal_rule(table.hand_state, nonce, table.vrf_nonce)?;
     let table_key = table.key();
     let deck = &mut ctx.accounts.deck;
     require!(deck.hand_no == table.hand_no, PokerError::StaleRandomness);

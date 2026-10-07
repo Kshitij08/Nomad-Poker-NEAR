@@ -90,4 +90,6 @@ pub enum PokerError {
     MissingSeeds,
     #[msg("Randomness is still expected; too early to abandon the hand")]
     TooEarlyToAbort,
+    #[msg("No hand is waiting for randomness")]
+    NotShuffling,
 }
