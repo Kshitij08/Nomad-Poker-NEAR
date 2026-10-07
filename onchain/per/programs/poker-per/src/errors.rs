@@ -86,4 +86,8 @@ pub enum PokerError {
     StaleRandomness,
     #[msg("No dealt hand to end")]
     HandNotDealt,
+    #[msg("Every seated player must commit a seed before the hand starts")]
+    MissingSeeds,
+    #[msg("Randomness is still expected; too early to abandon the hand")]
+    TooEarlyToAbort,
 }

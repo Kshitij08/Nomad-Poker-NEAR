@@ -99,7 +99,7 @@ pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
     if deck_info.data_is_empty() {
         sp.create_account(&deck_info, deck_seeds, 8 + Deck::INIT_SPACE)?;
         write(&deck_info, &Deck {
-            table: table_key, hand_no: 0, seed_mask: 0, seeds: Default::default(), entropy: [0; 32], shuffle_seed: [0; 32],
+            table: table_key, hand_no: 0, seed_mask: 0, seeds: Default::default(), seed_owners: Default::default(), entropy: [0; 32], shuffle_seed: [0; 32],
             cards: [NO_CARD; 52],
         })?;
     }

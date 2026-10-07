@@ -8,6 +8,54 @@
   },
   "instructions": [
     {
+      "name": "abort_hand",
+      "discriminator": [
+        113,
+        51,
+        128,
+        228,
+        142,
+        157,
+        190,
+        187
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "accept_admin",
       "discriminator": [
         112,
@@ -1841,6 +1889,10 @@
               32
             ]
           }
+        },
+        {
+          "name": "nonce",
+          "type": "u64"
         }
       ]
     },
@@ -3594,6 +3646,27 @@
           "signer": true
         },
         {
+          "name": "config",
+          "docs": [
+            "Read-only copy of the L1 config inside the rollup."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "table",
           "writable": true,
           "pda": {
@@ -3647,6 +3720,9 @@
         },
         {
           "name": "ledger",
+          "docs": [
+            "Who sits where, to check every seat's seed is its current occupant's."
+          ],
           "pda": {
             "seeds": [
               {
@@ -3929,6 +4005,19 @@
         77,
         40,
         50
+      ]
+    },
+    {
+      "name": "HandAborted",
+      "discriminator": [
+        163,
+        190,
+        151,
+        239,
+        21,
+        30,
+        249,
+        170
       ]
     },
     {
@@ -4246,6 +4335,16 @@
       "code": 6041,
       "name": "HandNotDealt",
       "msg": "No dealt hand to end"
+    },
+    {
+      "code": 6042,
+      "name": "MissingSeeds",
+      "msg": "Every seated player must commit a seed before the hand starts"
+    },
+    {
+      "code": 6043,
+      "name": "TooEarlyToAbort",
+      "msg": "Randomness is still expected; too early to abandon the hand"
     }
   ],
   "types": [
@@ -4528,6 +4627,18 @@
             }
           },
           {
+            "name": "seed_owners",
+            "docs": [
+              "Who committed each seed. A seed counts only while its committer still holds the seat."
+            ],
+            "type": {
+              "array": [
+                "pubkey",
+                9
+              ]
+            }
+          },
+          {
             "name": "entropy",
             "docs": [
               "Public stand-in for the VRF output (see deal.rs)."
@@ -4593,6 +4704,22 @@
                 2
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "HandAborted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "hand_no",
+            "type": "u64"
           }
         ]
       }
@@ -5018,11 +5145,19 @@
             "type": "i64"
           },
           {
+            "name": "vrf_nonce",
+            "docs": [
+              "Bumped on every randomness request (and abort). The callback must echo the current value,",
+              "so only the latest request can deal."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                76
+                68
               ]
             }
           }

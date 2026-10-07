@@ -64,9 +64,18 @@ export const cardName = (c: number) => (c === NO_CARD ? "--" : RANKS[c % 13] + S
 /** A published hand record, as decoded from the program's `HandRecord` account. */
 export type Record = { table: PublicKey; handNo: bigint; button: number; dealtMask: number; seedMask: number; seeds: Buffer[]; entropy: Buffer; shuffleSeed: Buffer; cards: number[] };
 
-/** Checks a record end to end. `mySeed`/`mySeat` let a player confirm their own seed went in. */
-export function verify(r: Record, mine?: { seat: number; seed: Buffer; cards?: number[] }) {
+/**
+ * Checks a record end to end: seeds only from dealt seats, the shuffle seed, the deck, and the
+ * button (recomputed for hand 1; for later hands pass the previous hand's button). `mine` lets a
+ * player confirm their own seed went in and their hole cards came from this deck.
+ */
+export function verify(r: Record, mine?: { seat: number; seed: Buffer; cards?: number[] }, prevButton?: number) {
   const problems: string[] = [];
+  if ((r.seedMask & ~r.dealtMask) !== 0) problems.push("a seat that wasn't dealt in has a seed");
+  r.seeds.forEach((s, i) => { if (!(r.seedMask & (1 << i)) && !s.equals(Buffer.alloc(32))) problems.push(`seat ${i} has a seed but isn't marked as committed`); });
+  if (!(r.dealtMask & (1 << r.button))) problems.push("the button isn't on a dealt seat");
+  const expectedButton = r.handNo === 1n ? firstButton(r.shuffleSeed, r.dealtMask) : prevButton === undefined ? undefined : nextButton(prevButton, r.dealtMask);
+  if (expectedButton !== undefined && expectedButton !== r.button) problems.push(`button should be seat ${expectedButton}, record says ${r.button}`);
   const seedOk = shuffleSeed(r.table, r.handNo, r.entropy, r.seedMask, r.seeds).equals(r.shuffleSeed);
   if (!seedOk) problems.push("shuffle seed doesn't match entropy + seeds");
   const deck = shuffle(r.shuffleSeed);
@@ -88,5 +97,9 @@ if (require.main === module) {
   seeds[0] = Buffer.alloc(32, 1); seeds[3] = Buffer.alloc(32, 2);
   const s = shuffleSeed(table, 5n, entropyOf(Buffer.alloc(32, 9)), 0b1001, seeds);
   const d = shuffle(s);
-  console.log(JSON.stringify({ seed: s.toString("hex"), deck: d, button: firstButton(s, 0b1001) }));
+  const KNOWN_SEED = "d12346b4bf0787f377276f2df1ed63464de16f3a0352a6a3e956f59b299fc540";
+  const KNOWN_DECK = [14, 22, 24, 23, 15, 17, 13, 49, 35, 11, 34, 10, 25, 39, 42, 33, 6, 40, 26, 21, 20, 28, 31, 32, 27, 48, 47, 38, 41, 46, 45, 4, 36, 18, 43, 44, 9, 30, 19, 37, 7, 0, 8, 16, 50, 3, 29, 51, 2, 5, 12, 1];
+  const ok = s.toString("hex") === KNOWN_SEED && d.join() === KNOWN_DECK.join() && firstButton(s, 0b1001) === 3;
+  console.log(JSON.stringify({ seed: s.toString("hex"), deck: d, button: firstButton(s, 0b1001), matchesRustVector: ok }));
+  if (!ok) process.exit(1);
 }

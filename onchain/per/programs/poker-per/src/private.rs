@@ -11,12 +11,14 @@ use ephemeral_rollups_sdk::access_control::instructions::{
     CloseEphemeralPermissionCpi, CreateEphemeralPermissionCpi, UpdateEphemeralPermissionCpi,
 };
 use ephemeral_rollups_sdk::access_control::structs::{
-    EphemeralMembersArgs, Member, TX_BALANCES_FLAG, TX_LOGS_FLAG, TX_MESSAGE_FLAG,
+    EphemeralMembersArgs, Member, TX_BALANCES_FLAG,
 };
 use ephemeral_rollups_sdk::ephemeral_accounts::EphemeralAccount;
 
-/// Read-only access: account data, plus logs, balances and messages of transactions touching it.
-pub const READER_FLAGS: u8 = TX_LOGS_FLAG | TX_BALANCES_FLAG | TX_MESSAGE_FLAG;
+/// Read access to the account's data, plus balance changes of transactions touching it. No
+/// transaction messages or logs (M4 review): the VRF oracle's fulfillment transaction touches the
+/// ledger and hands, and its message carries the VRF output.
+pub const READER_FLAGS: u8 = TX_BALANCES_FLAG;
 
 pub fn readers(keys: &[Pubkey]) -> Vec<Member> {
     keys.iter().map(|k| Member { flags: READER_FLAGS, pubkey: *k }).collect()

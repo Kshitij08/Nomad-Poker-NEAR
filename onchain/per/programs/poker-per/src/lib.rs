@@ -101,8 +101,12 @@ pub mod poker_per {
         instructions::hand::start_hand(ctx)
     }
 
-    pub fn deal<'info>(ctx: Context<'info, Deal<'info>>, randomness: [u8; 32]) -> Result<()> {
-        instructions::hand::deal(ctx, randomness)
+    pub fn deal<'info>(ctx: Context<'info, Deal<'info>>, randomness: [u8; 32], nonce: u64) -> Result<()> {
+        instructions::hand::deal(ctx, randomness, nonce)
+    }
+
+    pub fn abort_hand(ctx: Context<AbortHand>) -> Result<()> {
+        instructions::hand::abort_hand(ctx)
     }
 
     pub fn end_hand(ctx: Context<EndHand>) -> Result<()> {

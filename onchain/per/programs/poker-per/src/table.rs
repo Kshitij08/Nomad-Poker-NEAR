@@ -11,8 +11,8 @@ pub const HAND_SEED: &[u8] = b"hand";
 pub const INVITES_SEED: &[u8] = b"invites";
 pub const RECORD_SEED: &[u8] = b"record";
 pub const TABLE_VERSION: u8 = 2;
-/// M4 took 20 of the original 96 reserved bytes for the hand fields; the account size is unchanged.
-pub const TABLE_RESERVED: usize = 76;
+/// M4 took 28 of the original 96 reserved bytes for the hand fields; the account size is unchanged.
+pub const TABLE_RESERVED: usize = 68;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -30,6 +30,8 @@ pub const HAND_SHUFFLING: u8 = 1;
 pub const HAND_DEALT: u8 = 2;
 /// If the VRF callback hasn't arrived after this long, anyone may request again.
 pub const VRF_RETRY_SECS: i64 = 20;
+/// If it still hasn't arrived after this long, anyone may abandon the hand, so players can leave.
+pub const VRF_ABORT_SECS: i64 = 300;
 
 /// The only token tables accept for now: wrapped SOL. The stake cap is denominated in it.
 pub const WSOL_MINT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
@@ -96,6 +98,9 @@ pub struct Table {
     pub dealt_mask: u16,
     /// Rollup clock when randomness was last requested.
     pub vrf_requested_ts: i64,
+    /// Bumped on every randomness request (and abort). The callback must echo the current value,
+    /// so only the latest request can deal.
+    pub vrf_nonce: u64,
     pub reserved: [u8; TABLE_RESERVED],
 }
 
@@ -160,6 +165,8 @@ pub struct Deck {
     /// Bit i set = seat i committed a seed.
     pub seed_mask: u16,
     pub seeds: [[u8; 32]; MAX_SEATS as usize],
+    /// Who committed each seed. A seed counts only while its committer still holds the seat.
+    pub seed_owners: [Pubkey; MAX_SEATS as usize],
     /// Public stand-in for the VRF output (see deal.rs).
     pub entropy: [u8; 32],
     pub shuffle_seed: [u8; 32],

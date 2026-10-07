@@ -107,7 +107,8 @@ export function tableApi(creator: Keypair, tableId: bigint) {
     commitSeed: (prog: anchor.Program, player: PublicKey, seat: number, seed: Buffer) => prog.methods.commitSeed(seat, Array.from(seed))
       .accountsPartial({ player, table, deck, hand: handOf(table, seat) }).rpc(),
     startHand: (prog: anchor.Program, payer: PublicKey) => prog.methods.startHand()
-      .accountsPartial({ payer, table, deck, ledger, oracleQueue: EPHEMERAL_QUEUE }).rpc(),
+      .accountsPartial({ payer, config: CONFIG_PDA, table, deck, ledger, oracleQueue: EPHEMERAL_QUEUE }).rpc(),
+    abortHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.abortHand().accountsPartial({ signer, table }).rpc(),
     endHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.endHand()
       .accountsPartial({ signer, table, deck, ledger, record }).rpc(),
     buyIn: (prog: anchor.Program, player: PublicKey, seat: number, amount: bigint, overrides: any = {}) => {
