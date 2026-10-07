@@ -2,16 +2,16 @@
 // spoofed callback, two real hands dealt by the VRF inside the TEE, private hole cards, the ledger
 // salt, what a reader can see of the oracle's transaction, the public hand record and the off-chain
 // verifier (including tampered records). Results go to results/m4-hand-<ts>.json.
-import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { SystemProgram, Transaction } from "@solana/web3.js";
 import { NATIVE_MINT, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction } from "@solana/spl-token";
 import { delegateSpl } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { randomBytes } from "crypto";
 import { programFor, programOn, loadKey, teeConnection, TEE_URL, TEE_VALIDATOR, randomTableId } from "../scripts/lib";
 import { BN, Suite, errName, sleep, tableApi, handOf, rawRead, readerFor, sendL1, sha256, tokenOf, connUrl } from "./helpers";
 import { verify, holeCards, dealOrder, nextButton, cardName, NO_CARD, Record } from "./verifier";
+import { recoverHand } from "./attack";
 
 const S = new Suite("m4-hand");
-const VRF_PROGRAM = new PublicKey("Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz");
 const HAND_DEALT = 2, HAND_IDLE = 0;
 
 async function rpcAt(url: string, method: string, params: any[]) {
@@ -116,15 +116,18 @@ async function main() {
   const salt = ledgerRaw ? Buffer.from(coder.decode("ledger", ledgerRaw).salt) : Buffer.alloc(32);
   S.check("the ledger got a salt from the VRF, and the table's fingerprint covers it", !!ledgerRaw && !salt.equals(Buffer.alloc(32)) && Buffer.from(t1.ledgerHash).equals(sha256(ledgerRaw)), { ledgerReadable: !!ledgerRaw });
 
-  // What can a seated player's reader see of the VRF oracle's transaction (it touches the ledger and hands)?
-  const sigs = (await rpcAt(url.p1, "getSignaturesForAddress", [T.ledger.toBase58(), { limit: 20 }])).result ?? [];
-  let oracleTx: any = { listed: sigs.length, fulfillmentSeen: false };
-  for (const s of sigs) {
-    const r = await rpcAt(url.p1, "getTransaction", [s.signature, { encoding: "json", maxSupportedTransactionVersion: 0 }]);
-    const keys: string[] = r.result?.transaction?.message?.accountKeys ?? [];
-    if (keys.includes(VRF_PROGRAM.toBase58())) { oracleTx = { listed: sigs.length, fulfillmentSeen: true, dataBytes: (r.result.transaction.message.instructions ?? []).map((i: any) => i.data?.length ?? 0) }; break; }
-  }
-  S.check("a seated player's reader can't see the VRF oracle's fulfillment transaction", !oracleTx.fulfillmentSeen, oracleTx);
+  // Can anyone rebuild the live hand from transaction data (seeds in commit_seed transactions, the
+  // VRF output in the oracle's fulfillment)? Tried with no login, an outsider's login, and the other
+  // seated player's reader (who knows the ledger but not p1's seed).
+  const live = {
+    noLogin: await recoverHand(TEE_URL, T.table, 1n, 0b1001, 15_000),
+    outsider: await recoverHand(url.outsider, T.table, 1n, 0b1001, 5_000),
+    p2Reader: await recoverHand(url.p2, T.table, 1n, 0b1001, 5_000),
+  };
+  const rebuilt = (r: any) => !!r.predicted && h0 && r.predicted[0].join() === h0.cards.map(cardName).join();
+  S.check("while the hand is live, nobody else can rebuild p1's cards from transaction data (no login, outsider, the other player)",
+    !rebuilt(live.noLogin) && !rebuilt(live.outsider) && !rebuilt(live.p2Reader) && !live.noLogin.vrfOutputFound && (live.noLogin.seedsFound & 1) === 0,
+    Object.fromEntries(Object.entries(live).map(([k, v]: any) => [k, { listed: v.signaturesListed, hidden: v.transactionsHidden, seeds: v.seedsFound, vrf: v.vrfOutputFound }])));
 
   // ---- end hand 1 and verify it from the public record
   await S.err("an outsider can't end the hand", "NotSeated", () => T.endHand(prog.p3, p3.publicKey));
@@ -171,6 +174,9 @@ async function main() {
   await S.ok("collect rake", () => T.collectRake(prog.deployer, tokenOf(deployer.publicKey)));
   await S.ok("creator closes the table (record deleted too)", () => T.close(prog.deployer, deployer.publicKey));
   await sleep(6000);
+  const afterClose = await recoverHand(TEE_URL, T.table, 1n, 0b1001, 60_000);
+  S.known("after the table closes, its seeds and VRF output become readable with no login (cards are public anyway; the ledger salt isn't meant to be: fix in M6)",
+    !!afterClose.predicted && afterClose.predicted[0].join() === h0?.cards.map(cardName).join(), { seeds: afterClose.seedsFound, vrf: afterClose.vrfOutputFound, hidden: afterClose.transactionsHidden });
   S.check("after close the record, deck and ledger are gone from the rollup", !(await rawRead(TEE_URL, T.record)).visible && !(await rawRead(url.p1, T.deck)).visible && !(await rawRead(url.p1, T.ledger)).visible, {});
 
   S.finish({ table: T.table.toBase58(), latenciesMs: [lat1, lat2], hand1: { button: r1?.button, deck: r1?.cards.map(cardName).join(" ") } });

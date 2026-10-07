@@ -16,7 +16,7 @@ pub mod table;
 
 use instructions::*;
 
-declare_id!("6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR");
+declare_id!("7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv");
 
 #[ephemeral]
 #[program]

@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-poker_per = "6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR"
+poker_per = "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv"
 
 [provider]
 cluster = "devnet"

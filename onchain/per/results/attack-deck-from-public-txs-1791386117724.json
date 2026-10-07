@@ -1,0 +1,22 @@
+{
+  "ranAt": "2026-10-07T15:15:15.293Z",
+  "table": "3Y4WxAM52VbZgRDnMZRJvEVnoX4Ep9WXavYZGf1hdRRW",
+  "note": "everything under `attack` used the TEE RPC with no login",
+  "attack": {
+    "signaturesListed": 8,
+    "seedsFound": 0,
+    "vrfFulfillmentFound": false,
+    "vrfIxLen": 0
+  },
+  "truth": {
+    "seat0": [
+      "5s",
+      "4d"
+    ],
+    "seat3": [
+      "6h",
+      "Ah"
+    ]
+  },
+  "deckRecoveredByOutsider": false
+}
