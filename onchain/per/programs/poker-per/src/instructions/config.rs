@@ -73,6 +73,15 @@ pub fn update_config(ctx: Context<AdminOnly>, args: ConfigArgs) -> Result<()> {
     Ok(())
 }
 
+/// Sets the key that may read finished hands' action logs. `Pubkey::default()` removes it; logs
+/// already opened to the old auditor stay readable to it until their table's next hand begins.
+pub fn set_auditor(ctx: Context<AdminOnly>, auditor: Pubkey) -> Result<()> {
+    let config = &mut ctx.accounts.config;
+    config.auditor = auditor;
+    emit!(AuditorSet { auditor });
+    Ok(())
+}
+
 /// Step one of an admin handover. Passing `None` cancels a pending proposal.
 pub fn propose_admin(ctx: Context<AdminOnly>, new_admin: Option<Pubkey>) -> Result<()> {
     let config = &mut ctx.accounts.config;
@@ -152,6 +161,7 @@ pub fn migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
         max_buy_in: old.max_buy_in,
         paused: old.paused,
         escape_idle_secs: 0,
+        auditor: Pubkey::default(),
         reserved: [0; CONFIG_RESERVED],
     };
     let mut data = info.try_borrow_mut_data()?;
@@ -198,4 +208,9 @@ pub struct ConfigMigrated {
     pub from_version: u8,
     pub to_version: u8,
     pub new_len: u32,
+}
+
+#[event]
+pub struct AuditorSet {
+    pub auditor: Pubkey,
 }

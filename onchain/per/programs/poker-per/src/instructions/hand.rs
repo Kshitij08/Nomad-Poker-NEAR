@@ -224,6 +224,7 @@ pub fn deal<'info>(ctx: Context<'info, Deal<'info>>, randomness: [u8; 32], nonce
     let button = if table.hand_no == 1 { dealing::first_button(seed, table.dealt_mask) } else { dealing::next_button(table.button, table.dealt_mask) };
     let holes = dealing::hole_cards(&cards, &dealing::deal_order(button, table.dealt_mask));
     deck.entropy = entropy;
+    deck.log_secret = dealing::log_secret_of(&randomness);
     deck.shuffle_seed = seed;
     deck.cards = cards;
 

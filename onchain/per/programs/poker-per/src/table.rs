@@ -13,8 +13,9 @@ pub const INVITES_SEED: &[u8] = b"invites";
 pub const RECORD_SEED: &[u8] = b"record";
 pub const LOG_SEED: &[u8] = b"log";
 pub const TABLE_VERSION: u8 = 2;
-/// M4 and M5 took 60 of the original 96 reserved bytes for the hand fields; the account size is
-/// unchanged.
+/// M4 and M5 took 60 of the original 96 reserved bytes for the hand fields. M6 added
+/// `last_record`, which grew the account: tables created before M6 can't be read by this layout
+/// (only `reclaim_table` handles them), so none may be open when this build is deployed.
 pub const TABLE_RESERVED: usize = 36;
 pub const MAX_INVITES: usize = 16;
 
@@ -164,6 +165,10 @@ pub struct Table {
     pub idle_since: i64,
     /// Rollup clock at the table's last commit to L1.
     pub last_commit_ts: i64,
+    /// The last finished hand's public record (all zero before the first). Copied here at the end
+    /// of every hand so each commit of the table publishes the latest hand on L1; the backend
+    /// archives every hand from the rollup's `HandRecord`.
+    pub last_record: HandRecord,
     pub reserved: [u8; TABLE_RESERVED],
 }
 
@@ -218,30 +223,42 @@ pub const LOG_BIG_BLIND: u8 = 7;
 pub const LOG_TIMEOUT: u8 = 0x80;
 
 /// A hand's action log: rollup-only, readable by the players dealt into the current hand (set by
-/// `begin_hand`). Holds the entries (up to LOG_CAPACITY) and a hash chain over all of them: it
-/// starts at sha256(table, hand number) and becomes sha256(previous, street, seat, kind, committed)
-/// per action. The final hash is published in the hand record, so each player can check the log
+/// `begin_hand`), and once that hand is over also by the config's auditor (`open_log`). Holds the
+/// entries (up to LOG_CAPACITY) and a hash chain over all of them: it starts at sha256(table, hand
+/// number, secret) and becomes sha256(previous, street, seat, kind, committed) per action. The
+/// secret comes from the hand's VRF output; without it a short hand's bets could be found by
+/// trying every likely log against the public hash (M6 review). The final hash is published in the hand record, so each player can check the log
 /// they were shown. Zero-copy: read in place, never copied onto the stack.
 #[account(zero_copy)]
 pub struct HandLog {
     pub table: Pubkey,
     pub hand_no: u64,
     pub hash: [u8; 32],
+    /// The hand's log secret (first link of the hash chain); readers need it to check the hash.
+    pub secret: [u8; 32],
     pub len: u32,
-    pub pad: [u8; 4],
+    /// How many of `readers` are set.
+    pub readers_len: u8,
+    pub pad: [u8; 3],
+    /// The reader keys of the players dealt into this hand, as set by `begin_hand`.
+    pub readers: [Pubkey; MAX_SEATS as usize],
+    /// The auditor this hand's log was opened to (default = not yet), so `open_log` runs once.
+    pub audited_by: Pubkey,
     pub entries: [LogEntry; LOG_CAPACITY],
 }
 
 impl HandLog {
-    pub fn reset(&mut self, table: &Pubkey, hand_no: u64) {
+    pub fn reset(&mut self, table: &Pubkey, hand_no: u64, secret: &[u8; 32]) {
         self.hand_no = hand_no;
+        self.secret = *secret;
+        self.audited_by = Pubkey::default();
         // Clear the previous hand's entries: this hand's readers may not have played it.
         let used = (self.len as usize).min(LOG_CAPACITY);
         for e in self.entries[..used].iter_mut() {
             *e = LogEntry::default();
         }
         self.len = 0;
-        self.hash = log_start(table, hand_no);
+        self.hash = log_start(table, hand_no, secret);
     }
 
     pub fn push(&mut self, street: u8, seat: u8, kind: u8, committed: u64) {
@@ -253,8 +270,8 @@ impl HandLog {
     }
 }
 
-pub fn log_start(table: &Pubkey, hand_no: u64) -> [u8; 32] {
-    hashv(&[table.as_ref(), &hand_no.to_le_bytes()]).to_bytes()
+pub fn log_start(table: &Pubkey, hand_no: u64, secret: &[u8; 32]) -> [u8; 32] {
+    hashv(&[table.as_ref(), &hand_no.to_le_bytes(), secret]).to_bytes()
 }
 
 pub fn log_step(prev: &[u8; 32], street: u8, seat: u8, kind: u8, committed: u64) -> [u8; 32] {
@@ -299,10 +316,13 @@ pub struct Deck {
     pub entropy: [u8; 32],
     pub shuffle_seed: [u8; 32],
     pub cards: [u8; 52],
+    /// The hand's log secret (see `dealing::log_secret_of`), handed to the log by `begin_hand`.
+    pub log_secret: [u8; 32],
 }
 
 /// The last finished hand, readable by anyone so anyone can recompute its deck (tests/verifier.ts).
-/// Rollup-only for now, overwritten each hand; M6 publishes each record to Solana.
+/// Rollup-only and overwritten each hand; a copy goes into the table (`last_record`), so each
+/// commit publishes the latest hand on Solana.
 #[account]
 #[derive(InitSpace)]
 pub struct HandRecord {
@@ -474,18 +494,32 @@ mod tests {
     }
 
     #[test]
+    fn table_status_offset() {
+        // reclaim_table reads the status at a fixed offset; keep it in step with the layout.
+        let mut t = Table::deserialize(&mut &vec![0u8; Table::INIT_SPACE][..]).unwrap();
+        t.status = STATUS_CLOSED;
+        t.version = 9;
+        t.bump = 8;
+        let mut bytes = Vec::new();
+        t.try_serialize(&mut bytes).unwrap();
+        assert_eq!(&bytes[8..11], &[9, 8, STATUS_CLOSED]);
+    }
+
+    #[test]
     fn action_log_hash_chain() {
         let t = Pubkey::new_unique();
-        let chain = |change: Option<u64>, hand: u64| {
-            let mut h = log_start(&t, hand);
+        let chain_with = |change: Option<u64>, hand: u64, secret: [u8; 32]| {
+            let mut h = log_start(&t, hand, &secret);
             for i in 0..(LOG_CAPACITY as u64 + 5) {
                 h = log_step(&h, 1, (i % 9) as u8, 2, if Some(i) == change { 99 } else { i });
             }
             h
         };
+        let chain = |change: Option<u64>, hand: u64| chain_with(change, hand, [7; 32]);
         assert_eq!(chain(None, 1), chain(None, 1));
         assert_ne!(chain(None, 1), chain(Some(3), 1), "changing any entry changes the final hash");
         assert_ne!(chain(None, 1), chain(None, 2), "the chain is bound to the hand number");
+        assert_ne!(chain(None, 1), chain_with(None, 1, [8; 32]), "and to the hand's secret");
         assert_eq!(std::mem::size_of::<LogEntry>(), 16);
     }
 

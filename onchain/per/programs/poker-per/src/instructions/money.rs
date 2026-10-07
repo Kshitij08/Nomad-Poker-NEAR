@@ -4,7 +4,8 @@
 //!
 //! Privacy (M3): seats, stacks and money live in the rollup-only `Ledger`, readable only by seated
 //! players. Each seat's `Hand` is readable only by its owner; the `Deck` by nobody. The public
-//! `Table` (committed to L1) carries only settings, a seat-occupancy mask and the ledger's hash.
+//! `Table` (committed to L1) carries settings, a seat-occupancy mask, the ledger's hash and the
+//! last finished hand's public record (M6).
 
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::get_associated_token_address;
@@ -111,7 +112,7 @@ pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
         sp.create_account(&deck_info, deck_seeds, 8 + Deck::INIT_SPACE)?;
         write(&deck_info, &Deck {
             table: table_key, hand_no: 0, seed_mask: 0, seeds: Default::default(), seed_owners: Default::default(), entropy: [0; 32], shuffle_seed: [0; 32],
-            cards: [NO_CARD; 52],
+            cards: [NO_CARD; 52], log_secret: [0; 32],
         })?;
     }
     sp.create_permission(&deck_info, deck_seeds, &a.deck_permission.to_account_info(), &[])?;
@@ -205,6 +206,7 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
     let table_key = table.key();
 
     let (hand_idle, dealt_mask) = (table.hand_state == HAND_IDLE, table.dealt_mask);
+    let auditor = ctx.accounts.config.auditor;
     let ledger = &mut ctx.accounts.ledger;
     let sitting_down = match ledger.seat_of(&player) {
         Some(i) => {
@@ -222,7 +224,7 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
                 let inv = ctx.accounts.invites.as_ref().ok_or(PokerError::NotInvited)?;
                 require!(inv.contains(&table_key, &player), PokerError::NotInvited);
             }
-            require!(reader != Pubkey::default() && reader != player, PokerError::InvalidReader);
+            require!(reader != Pubkey::default() && reader != player && reader != auditor, PokerError::InvalidReader);
             // A reader key belongs to one seat: never another seat's reader or anyone seated's wallet.
             require!(!ledger.seats.iter().any(|s| !s.is_empty() && (s.reader == reader || s.player == reader)), PokerError::InvalidReader);
             ledger.seats[idx] = Seat { player, reader, stack: 0, deposited: 0, sitting_out: false };
@@ -442,22 +444,27 @@ pub struct CloseTable<'info> {
     pub table: Box<Account<'info, Table>>,
     #[account(mut, seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
     pub ledger: Box<Account<'info, Ledger>>,
-    /// CHECK: permission PDA of the ledger; closed here.
+    /// CHECK: permission PDA of the ledger; its readers are removed here.
     #[account(mut, seeds = [PERMISSION_SEED, ledger.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
     pub ledger_permission: UncheckedAccount<'info>,
-    /// CHECK: deck PDA; closed here.
+    /// CHECK: deck PDA; kept, its contents erased (see `close_table`).
     #[account(mut, seeds = [DECK_SEED, table.key().as_ref()], bump)]
     pub deck: UncheckedAccount<'info>,
-    /// CHECK: permission PDA of the deck; closed here.
-    #[account(mut, seeds = [PERMISSION_SEED, deck.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
-    pub deck_permission: UncheckedAccount<'info>,
+    #[account(mut, address = get_associated_token_address(&table.key(), &table.mint))]
+    pub escrow: Box<Account<'info, TokenAccount>>,
+    /// The creator's token account (delegated to the rollup). Receives whatever is left in the
+    /// escrow, which with every seat empty and the rake collected can only be tokens sent to it
+    /// directly. Optional: without it the leftover stays in the escrow, so nobody can block a close
+    /// by sending dust.
+    #[account(mut, token::mint = table.mint, token::authority = creator)]
+    pub creator_token: Option<Box<Account<'info, TokenAccount>>>,
     /// CHECK: public hand record PDA; closed here.
     #[account(mut, seeds = [RECORD_SEED, table.key().as_ref()], bump)]
     pub record: UncheckedAccount<'info>,
-    /// CHECK: hand log PDA; closed here.
+    /// CHECK: hand log PDA; kept (see `close_table`).
     #[account(mut, seeds = [LOG_SEED, table.key().as_ref()], bump)]
     pub log: UncheckedAccount<'info>,
-    /// CHECK: permission PDA of the hand log; closed here.
+    /// CHECK: permission PDA of the hand log; its readers are removed here.
     #[account(mut, seeds = [PERMISSION_SEED, log.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
     pub log_permission: UncheckedAccount<'info>,
     /// CHECK: MagicBlock's rent vault for rollup-only accounts.
@@ -466,14 +473,21 @@ pub struct CloseTable<'info> {
     /// CHECK: MagicBlock's permission program.
     #[account(address = PERMISSION_PROGRAM_ID)]
     pub permission_program: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
 }
 
-/// The normal way out: the creator closes an empty table. Its private accounts are deleted (rent
-/// back to the table), then it's committed to L1 as closed and handed back to this program.
+/// The normal way out: the creator closes an empty table. Anything left in the escrow goes to the
+/// creator. Its private accounts stay, private and readable by nobody (so its transaction history
+/// stays private), its public record is deleted, then it's committed to L1 as closed and handed
+/// back to this program, where `reclaim_table` returns its rent.
 pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
     let a = &ctx.accounts;
     require!(a.table.status == STATUS_OPEN, PokerError::TableNotOpen);
     require!(a.table.seat_mask == 0 && a.ledger.escrow_owed == 0, PokerError::TableNotEmpty);
+    let leftover = a.escrow.amount;
+    if let (true, Some(to)) = (leftover > 0, a.creator_token.as_ref()) {
+        pay_from_escrow(&a.escrow, to, &a.table, &a.token_program, leftover)?;
+    }
     {
         let (id, bump) = (a.table.table_id.to_le_bytes(), [a.table.bump]);
         let ts = table_seeds(&a.table, &id, &bump);
@@ -482,27 +496,39 @@ pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
         let table_key = a.table.key();
         let ledger_bump = [ctx.bumps.ledger];
         let ledger_seeds: &[&[u8]] = &[LEDGER_SEED, table_key.as_ref(), &ledger_bump];
-        let deck_bump = [ctx.bumps.deck];
-        let deck_seeds: &[&[u8]] = &[DECK_SEED, table_key.as_ref(), &deck_bump];
+        // The ledger, deck and log are kept, private, with no readers at all: while an account's
+        // permission exists the TEE withholds the contents of every transaction that touched it, so
+        // the table's bets, seeds and VRF outputs stay hidden after close. Deleting them (as before
+        // M6) made that history public. Their contents are erased below: only the permission is
+        // needed, and MagicBlock's simulateTransaction leak can still read private accounts.
         let ledger_info = a.ledger.to_account_info();
-        let deck_info = a.deck.to_account_info();
-        sp.close_permission(&ledger_info, ledger_seeds, &a.ledger_permission.to_account_info())?;
-        sp.close_permission(&deck_info, deck_seeds, &a.deck_permission.to_account_info())?;
-        sp.close_account(&deck_info)?;
-        sp.close_account(&ledger_info)?;
+        sp.set_readers(&ledger_info, ledger_seeds, &a.ledger_permission.to_account_info(), &[])?;
+        // The deck never had readers.
+        let log_bump = [ctx.bumps.log];
+        let log_seeds: &[&[u8]] = &[LOG_SEED, table_key.as_ref(), &log_bump];
+        if !a.log_permission.data_is_empty() {
+            sp.set_readers(&a.log.to_account_info(), log_seeds, &a.log_permission.to_account_info(), &[])?;
+        }
+        // The public hand record can go.
         let record_info = a.record.to_account_info();
         if !record_info.data_is_empty() {
             sp.close_account(&record_info)?;
         }
-        let log_bump = [ctx.bumps.log];
-        let log_seeds: &[&[u8]] = &[LOG_SEED, table_key.as_ref(), &log_bump];
-        let log_info = a.log.to_account_info();
-        if !a.log_permission.data_is_empty() {
-            sp.close_permission(&log_info, log_seeds, &a.log_permission.to_account_info())?;
+    }
+    // Erase what the kept accounts hold: the deck (last seeds, their committers' wallets, cards,
+    // log secret), the hand log (last hand's actions, readers, secret) and the ledger's game,
+    // salt and seats. Only each account's discriminator stays.
+    for info in [ctx.accounts.deck.to_account_info(), ctx.accounts.log.to_account_info()] {
+        let mut data = info.try_borrow_mut_data()?;
+        if data.len() > 8 {
+            data[8..].fill(0);
         }
-        if !log_info.data_is_empty() {
-            sp.close_account(&log_info)?;
-        }
+    }
+    {
+        let ledger = &mut ctx.accounts.ledger;
+        ledger.game = Default::default();
+        ledger.salt = [0; 32];
+        ledger.seats = Default::default();
     }
     let table = &mut ctx.accounts.table;
     table.status = STATUS_CLOSED;

@@ -2,7 +2,7 @@
 // spoofed callback, two real hands dealt by the VRF inside the TEE, private hole cards, the ledger
 // salt, what a reader can see of the oracle's transaction, the public hand record and the off-chain
 // verifier (including tampered records). Results go to results/m4-hand-<ts>.json.
-import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { NATIVE_MINT, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction } from "@solana/spl-token";
 import { delegateSpl } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { randomBytes } from "crypto";
@@ -103,9 +103,27 @@ async function main() {
     return { found: !!r.result, seedVisible: !!raw?.includes(seed1) };
   };
   const views = { p1WalletControl: await txView(connUrl(er.p1)), p2Reader: await txView(url.p2), outsider: await txView(url.outsider), noLogin: await txView(TEE_URL) };
+  // Control: the same no-login probe reads a public transaction (a memo touching no private account) in
+  // full, so a "not visible" for a seed means the contents were withheld, not that the probe is blind.
+  const memoBytes = randomBytes(32);
+  const teeDeployer = await teeConnection(deployer);
+  const memoTx = new Transaction().add(new TransactionInstruction({ programId: new PublicKey("MemoSq4gqABAXKFwFSyoZ8CprTPJyJJ5XrjqJhnwV2Q"),
+    keys: [{ pubkey: deployer.publicKey, isSigner: true, isWritable: false }], data: Buffer.from(memoBytes.toString("hex")) }));
+  memoTx.feePayer = deployer.publicKey;
+  memoTx.recentBlockhash = (await teeDeployer.getLatestBlockhash()).blockhash;
+  memoTx.sign(deployer);
+  const memoSig = await teeDeployer.sendRawTransaction(memoTx.serialize(), { skipPreflight: true });
+  await teeDeployer.confirmTransaction(memoSig, "confirmed");
+  let memoView = { found: false, visible: false };
+  for (let i = 0; i < 10 && !memoView.found; i++) {
+    const r = await rpcAt(TEE_URL, "getTransaction", [memoSig, { encoding: "base64", maxSupportedTransactionVersion: 0, commitment: "confirmed" }]);
+    const raw = r.result?.transaction?.[0] ? Buffer.from(r.result.transaction[0], "base64") : null;
+    memoView = { found: !!r.result, visible: !!raw?.includes(Buffer.from(memoBytes.toString("hex"))) };
+    if (!memoView.found) await sleep(1500);
+  }
+  S.check("probe control: with no login, a public memo transaction's 32 random bytes are readable", memoView.found && memoView.visible, { memoSig, ...memoView });
   // During play the RPC withholds the contents of transactions touching private accounts, even from
-  // their signer (found, but the seed isn't in what comes back). The after-close check below shows the
-  // same probe does find the seed once the contents are released, so a "not visible" here is meaningful.
+  // their signer (found, but the seed isn't in what comes back).
   S.check("p1's seed can't be read from its transaction by the other player, an outsider or without login (contents withheld even from p1)",
     views.p1WalletControl.found && !views.p2Reader.seedVisible && !views.outsider.seedVisible && !views.noLogin.seedVisible, views);
 
@@ -199,14 +217,23 @@ async function main() {
   await S.ok("p1 cashes out", () => T.cashOut(prog.p1, p1.publicKey, 0));
   await S.ok("p2 cashes out", () => T.cashOut(prog.p2, p2.publicKey, 3));
   await S.ok("collect rake", () => T.collectRake(prog.deployer, tokenOf(deployer.publicKey)));
-  await S.ok("creator closes the table (record deleted too)", () => T.close(prog.deployer, deployer.publicKey));
+  await S.ok("creator closes the table (record deleted; ledger and deck kept, readable by nobody)", () => T.close(prog.deployer, deployer.publicKey));
   await sleep(6000);
   const afterClose = await recoverHand(TEE_URL, T.table, 1n, 0b1001, 60_000);
   const seedAfter = await txView(TEE_URL);
-  S.check("probe control: after close, the same no-login probe finds p1's seed in its transaction", seedAfter.seedVisible, seedAfter);
-  S.known("after the table closes, its seeds and VRF output become readable with no login (cards are public anyway; the ledger salt isn't meant to be: fix in M6)",
-    !!afterClose.predicted && afterClose.predicted[0].join() === h0?.cards.map(cardName).join(), { seeds: afterClose.seedsFound, vrf: afterClose.vrfOutputFound, hidden: afterClose.transactionsHidden });
-  S.check("after close the record, deck and ledger are gone from the rollup", !(await rawRead(TEE_URL, T.record)).visible && !(await rawRead(url.p1, T.deck)).visible && !(await rawRead(url.p1, T.ledger)).visible, {});
+  // Before M6, closing deleted the private accounts and the TEE then served these transactions in full.
+  S.check("after close, the no-login probe still finds p1's seed transaction, but its contents stay hidden", seedAfter.found && !seedAfter.seedVisible, seedAfter);
+  S.check("after close, nobody can rebuild the hand from public transactions (no seeds, no VRF output)",
+    !afterClose.predicted && afterClose.seedsFound === 0 && !afterClose.vrfOutputFound, { seeds: afterClose.seedsFound, vrf: afterClose.vrfOutputFound, hidden: afterClose.transactionsHidden });
+  S.check("after close the record is gone; p1's reader key can no longer read the deck or ledger",
+    !(await rawRead(TEE_URL, T.record)).visible && !(await rawRead(url.p1, T.deck)).visible && !(await rawRead(url.p1, T.ledger)).visible, {});
+  const leakClosed = await simulateLeak([T.ledger]);
+  S.known("MagicBlock leak 2 also covers a closed table: simulateTransaction returns its kept ledger with no login", leakClosed.length > 0, { bytes: leakClosed.map((b) => b.length) });
+  const deckClosed = await simulateLeak([T.deck]);
+  const closedLedger = leakClosed[0] ? coder.decode("ledger", leakClosed[0]) : null;
+  S.check("...but close erased what it would show: the ledger's salt, game and seats are zero, the deck is all zero",
+    !!closedLedger && Buffer.from(closedLedger.salt).equals(Buffer.alloc(32)) && closedLedger.game.seats.every((s: any) => Number(s.stack) === 0 && Number(s.total) === 0) && closedLedger.seats.every((s: any) => s.player.equals(PublicKey.default))
+      && deckClosed.length === 1 && deckClosed[0].subarray(8).every((b) => b === 0), { deckBytes: deckClosed[0]?.length });
 
   S.finish({ table: T.table.toBase58(), latenciesMs: [lat1, lat2], hand1: { button: r1?.button, deck: r1?.cards.map(cardName).join(" ") } });
 }

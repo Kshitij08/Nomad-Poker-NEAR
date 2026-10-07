@@ -62,6 +62,18 @@ pub mod poker_per {
         instructions::table::rollback_table(ctx, table_id, creator)
     }
 
+    pub fn reclaim_table(ctx: Context<ReclaimTable>, table_id: u64) -> Result<()> {
+        instructions::table::reclaim_table(ctx, table_id)
+    }
+
+    pub fn set_auditor(ctx: Context<AdminOnly>, auditor: Pubkey) -> Result<()> {
+        instructions::config::set_auditor(ctx, auditor)
+    }
+
+    pub fn open_log(ctx: Context<OpenLog>) -> Result<()> {
+        instructions::play::open_log(ctx)
+    }
+
     pub fn set_invites(ctx: Context<SetInvites>, table_id: u64, hashes: Vec<[u8; 32]>) -> Result<()> {
         instructions::table::set_invites(ctx, table_id, hashes)
     }

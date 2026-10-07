@@ -4,7 +4,7 @@ use crate::constants::MAX_RAKE_BPS;
 use crate::errors::PokerError;
 
 /// Bytes kept free at the end of Config so later modules can add fields without a realloc.
-pub const CONFIG_RESERVED: usize = 124;
+pub const CONFIG_RESERVED: usize = 92;
 
 /// Default and bounds for `escape_idle_secs` (0 in the account means the default).
 pub const DEFAULT_ESCAPE_IDLE_SECS: u32 = 3_600;
@@ -35,6 +35,9 @@ pub struct Config {
     /// How long a table's last L1 commit must be idle before an emergency undelegation request.
     /// Carved from the old reserved bytes, so existing v2 accounts read 0 = default.
     pub escape_idle_secs: u32,
+    /// May read finished hands' action logs (`open_log`); default = no auditor. Carved from the
+    /// reserved bytes, so existing accounts read "none".
+    pub auditor: Pubkey,
     pub reserved: [u8; CONFIG_RESERVED],
 }
 
@@ -110,13 +113,16 @@ mod tests {
             max_buy_in: v1.max_buy_in,
             paused: v1.paused,
             escape_idle_secs: 0,
+            auditor: Pubkey::default(),
             reserved: [0; CONFIG_RESERVED],
         };
         let mut v2_bytes = Vec::new();
         AnchorSerialize::serialize(&v2, &mut v2_bytes).unwrap();
-        // Same bytes after the version byte, then a zero tail: escape_idle_secs + reserved.
+        // Same bytes after the version byte, then a zero tail: escape_idle_secs + auditor + reserved,
+        // the same length as before the auditor was carved out of reserved.
         assert_eq!(&v2_bytes[1..v1_bytes.len()], &v1_bytes[1..]);
-        assert_eq!(v2_bytes.len(), v1_bytes.len() + 4 + CONFIG_RESERVED);
+        assert_eq!(v2_bytes.len(), v1_bytes.len() + 4 + 32 + CONFIG_RESERVED);
+        assert_eq!(32 + CONFIG_RESERVED, 124);
         assert!(v2_bytes[v1_bytes.len()..].iter().all(|b| *b == 0));
     }
 }

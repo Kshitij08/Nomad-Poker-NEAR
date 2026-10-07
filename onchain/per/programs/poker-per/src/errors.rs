@@ -102,4 +102,10 @@ pub enum PokerError {
     HandNotPlaying,
     #[msg("The table was committed recently; only the creator may commit again this soon")]
     CommitTooSoon,
+    #[msg("The table isn't closed and back on Solana (or was already reclaimed)")]
+    TableNotClosed,
+    #[msg("No auditor is set in the config")]
+    NoAuditor,
+    #[msg("This table hasn't finished a hand yet")]
+    NoFinishedHand,
 }

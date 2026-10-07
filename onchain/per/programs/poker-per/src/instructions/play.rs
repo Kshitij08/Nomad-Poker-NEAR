@@ -16,14 +16,15 @@ use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::access_control::structs::PERMISSION_SEED;
 use ephemeral_rollups_sdk::consts::PERMISSION_PROGRAM_ID;
 
-use crate::constants::MAX_SEATS;
+use crate::constants::{CONFIG_SEED, CONFIG_VERSION, MAX_SEATS};
 use crate::dealing;
 use crate::engine::{Awards, Cards, EngineError, Game, DONE, PREFLOP};
 use crate::errors::PokerError;
 use crate::instructions::money::*;
 use crate::private::Sponsor;
+use crate::state::Config;
 use crate::table::{
-    Deck, HandLog, HandRecord, Ledger, Table, DECK_SEED, HAND_DEALT, HAND_IDLE, HAND_PLAYING, LEDGER_SEED, LOG_BIG_BLIND,
+    Deck, HandLog, HandRecord, Ledger, Table, DECK_SEED, HAND_DEALT, HAND_IDLE, HAND_PLAYING, LEDGER_SEED, LOG_BIG_BLIND, STATUS_OPEN,
     LOG_SEED, LOG_SMALL_BLIND, LOG_TIMEOUT, RECORD_SEED, TABLE_SEED, TURN_SECS,
 };
 
@@ -112,13 +113,66 @@ fn begin(b: &mut BeginHand, log_bump: u8, now: i64) -> Result<()> {
         .map_err(engine_error)?;
     {
         let mut log = a.log.load_mut()?;
-        log.reset(&table_key, a.table.hand_no);
+        log.reset(&table_key, a.table.hand_no, &a.deck.log_secret);
+        log.readers = [Pubkey::default(); MAX_SEATS as usize];
+        log.readers[..readers.len()].copy_from_slice(&readers);
+        log.readers_len = readers.len() as u8;
         log.push(PREFLOP, game.sb_seat, LOG_SMALL_BLIND, game.seats[game.sb_seat as usize].total);
         log.push(PREFLOP, game.bb_seat, LOG_BIG_BLIND, game.seats[game.bb_seat as usize].total);
     }
     a.ledger.game = game;
     a.table.hand_state = HAND_PLAYING;
     after_move(a, awards, now)
+}
+
+/// `open_log`: shows a finished hand's action log to the auditor.
+#[derive(Accounts)]
+pub struct OpenLog<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump, constraint = config.version == CONFIG_VERSION @ PokerError::ConfigOutdated)]
+    pub config: Box<Account<'info, Config>>,
+    #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
+    pub table: Box<Account<'info, Table>>,
+    #[account(mut, seeds = [LOG_SEED, table.key().as_ref()], bump)]
+    pub log: AccountLoader<'info, HandLog>,
+    /// CHECK: permission PDA of the hand log; the auditor is added to its readers.
+    #[account(mut, seeds = [PERMISSION_SEED, log.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub log_permission: UncheckedAccount<'info>,
+    pub rollup: RollupPrograms<'info>,
+}
+
+/// Anyone (the keeper, normally) may add the config's auditor to the readers of the last finished
+/// hand's log. Never while a hand is being played: the log then holds the live hand. The hand's
+/// players stay readers; the next `begin_hand` replaces them all (the backend archives in between).
+pub fn open_log(ctx: Context<OpenLog>) -> Result<()> {
+    let a = &ctx.accounts;
+    let auditor = a.config.auditor;
+    require!(auditor != Pubkey::default(), PokerError::NoAuditor);
+    require!(a.table.status == STATUS_OPEN, PokerError::TableNotOpen);
+    require!(a.table.hand_state != HAND_PLAYING, PokerError::HandInProgress);
+    let mut readers = {
+        let log = a.log.load()?;
+        // The log must hold the table's last finished hand. After an escape-hatch rollback the
+        // table may say idle while the log still holds a hand that never finished.
+        require!(log.hand_no > 0 && log.hand_no == a.table.last_record.hand_no, PokerError::NoFinishedHand);
+        if log.audited_by == auditor {
+            return Ok(()); // already open to this auditor: nothing to pay for again
+        }
+        log.readers[..log.readers_len as usize].to_vec()
+    };
+    if !readers.contains(&auditor) {
+        readers.push(auditor);
+    }
+    let t = &a.table;
+    let (id, bump) = (t.table_id.to_le_bytes(), [t.bump]);
+    let ts = table_seeds(t, &id, &bump);
+    let (table_info, magic, vault, perm) = (t.to_account_info(), a.rollup.magic_program.to_account_info(), a.rollup.vault.to_account_info(), a.rollup.permission_program.to_account_info());
+    let sp = Sponsor { table: &table_info, table_seeds: &ts, vault: &vault, magic_program: &magic, permission_program: &perm };
+    let table_key = t.key();
+    let log_bump = [ctx.bumps.log];
+    let log_seeds: &[&[u8]] = &[LOG_SEED, table_key.as_ref(), &log_bump];
+    sp.set_readers(&a.log.to_account_info(), log_seeds, &a.log_permission.to_account_info(), &readers)?;
+    a.log.load_mut()?.audited_by = auditor;
+    Ok(())
 }
 
 /// The awaited seat's action (engine kinds FOLD..ALL_IN; for BET and RAISE `amount` is the total
@@ -196,6 +250,8 @@ fn finish_hand(a: &mut HandAccounts, now: i64) -> Result<()> {
     record.board_len = ledger.game.board_len;
     record.log_hash = log_hash;
     record.log_len = log_len;
+    let published: &HandRecord = record;
+    table.last_record = published.clone();
     deck.seed_mask = 0;
     deck.seeds = Default::default();
     deck.seed_owners = Default::default();

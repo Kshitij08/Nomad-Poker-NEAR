@@ -166,10 +166,15 @@ export function tableApi(creator: Keypair, tableId: bigint) {
     collectRake: (prog: anchor.Program, devToken: PublicKey) => prog.methods.collectRake()
       .accountsPartial({ config: CONFIG_PDA, table, ledger, escrow, devToken, magicProgram: MAGIC_PROGRAM_ID }).rpc(),
     commit: (prog: anchor.Program, payer: PublicKey) => prog.methods.commitTable().accountsPartial({ payer, table }).rpc(),
-    close: (prog: anchor.Program, signer: PublicKey) => prog.methods.closeTable().accountsPartial({
-      creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, log, logPermission: permissionPdaFromAccount(log),
+    /** `creatorToken` receives what's left in the escrow; with null any leftover stays there. */
+    close: (prog: anchor.Program, signer: PublicKey, creatorToken: PublicKey | null = tokenOf(signer)) => prog.methods.closeTable().accountsPartial({
+      creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, escrow, creatorToken, record, log, logPermission: permissionPdaFromAccount(log),
       vault: EPHEMERAL_VAULT, permissionProgram: PERMISSION_PROGRAM_ID,
     }).rpc(),
+    openLog: (prog: anchor.Program) => prog.methods.openLog()
+      .accountsPartial({ config: CONFIG_PDA, table, log, logPermission: permissionPdaFromAccount(log), rollup }).rpc(),
+    reclaim: (signer: Keypair = creator) => programFor(signer).methods.reclaimTable(BN(tableId))
+      .accountsPartial({ creator: signer.publicKey, table, escapePayer: escapePayerOf(table) }).rpc(),
     request: (signer: Keypair) => programFor(signer).methods.requestTableUndelegation(BN(tableId), creator.publicKey).accountsPartial({
       requester: signer.publicKey, config: CONFIG_PDA, table, escapePayer: escapePayerOf(table), ownerProgram: PROGRAM_ID,
       undelegationRequest: dlpPda("undelegation-request", table), delegationRecord: dlpPda("delegation", table), delegationMetadata: dlpPda("delegation-metadata", table), delegationProgram: DLP,

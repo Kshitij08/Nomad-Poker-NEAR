@@ -1185,69 +1185,19 @@
           }
         },
         {
-          "name": "deck_permission",
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "creator_token",
+          "docs": [
+            "The creator's token account (delegated to the rollup). Receives whatever is left in the",
+            "escrow, which with every seat empty and the rake collected can only be tokens sent to it",
+            "directly. Optional: without it the leftover stays in the escrow, so nobody can block a close",
+            "by sending dust."
+          ],
           "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  101,
-                  114,
-                  109,
-                  105,
-                  115,
-                  115,
-                  105,
-                  111,
-                  110,
-                  58
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "deck"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                136,
-                161,
-                10,
-                196,
-                33,
-                152,
-                1,
-                214,
-                246,
-                106,
-                29,
-                60,
-                6,
-                152,
-                192,
-                102,
-                169,
-                175,
-                212,
-                217,
-                180,
-                252,
-                231,
-                71,
-                151,
-                141,
-                209,
-                5,
-                168,
-                212,
-                103,
-                82
-              ]
-            }
-          }
+          "optional": true
         },
         {
           "name": "record",
@@ -1365,6 +1315,10 @@
         {
           "name": "permission_program",
           "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
           "name": "magic_program",
@@ -2816,6 +2770,174 @@
       "args": []
     },
     {
+      "name": "open_log",
+      "discriminator": [
+        115,
+        60,
+        228,
+        114,
+        7,
+        161,
+        104,
+        158
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "log",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "log_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "log"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "rollup",
+          "accounts": [
+            {
+              "name": "magic_program",
+              "docs": [
+                "keeps these instructions off L1."
+              ],
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "vault",
+              "writable": true,
+              "address": "MagicVau1t999999999999999999999999999999999"
+            },
+            {
+              "name": "permission_program",
+              "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+            }
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "open_table",
       "discriminator": [
         251,
@@ -3317,6 +3439,94 @@
           "type": {
             "option": "pubkey"
           }
+        }
+      ]
+    },
+    {
+      "name": "reclaim_table",
+      "discriminator": [
+        226,
+        134,
+        250,
+        125,
+        43,
+        183,
+        77,
+        1
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "table",
+          "docs": [
+            "(it's emptied here, so it can't be an `Account`)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "table_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escape_payer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  97,
+                  112,
+                  101,
+                  45,
+                  112,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "table_id",
+          "type": "u64"
         }
       ]
     },
@@ -4080,6 +4290,53 @@
         },
         {
           "name": "creator",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_auditor",
+      "discriminator": [
+        90,
+        12,
+        154,
+        66,
+        85,
+        118,
+        8,
+        107
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "auditor",
           "type": "pubkey"
         }
       ]
@@ -4895,6 +5152,19 @@
       ]
     },
     {
+      "name": "AuditorSet",
+      "discriminator": [
+        95,
+        116,
+        119,
+        135,
+        41,
+        72,
+        133,
+        143
+      ]
+    },
+    {
       "name": "BoughtIn",
       "discriminator": [
         44,
@@ -5035,6 +5305,19 @@
         213,
         187,
         147
+      ]
+    },
+    {
+      "name": "TableReclaimed",
+      "discriminator": [
+        145,
+        227,
+        124,
+        2,
+        139,
+        35,
+        225,
+        58
       ]
     },
     {
@@ -5314,6 +5597,21 @@
       "code": 6049,
       "name": "CommitTooSoon",
       "msg": "The table was committed recently; only the creator may commit again this soon"
+    },
+    {
+      "code": 6050,
+      "name": "TableNotClosed",
+      "msg": "The table isn't closed and back on Solana (or was already reclaimed)"
+    },
+    {
+      "code": 6051,
+      "name": "NoAuditor",
+      "msg": "No auditor is set in the config"
+    },
+    {
+      "code": 6052,
+      "name": "NoFinishedHand",
+      "msg": "This table hasn't finished a hand yet"
     }
   ],
   "types": [
@@ -5347,6 +5645,18 @@
             "type": {
               "option": "pubkey"
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "AuditorSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "auditor",
+            "type": "pubkey"
           }
         ]
       }
@@ -5467,11 +5777,19 @@
             "type": "u32"
           },
           {
+            "name": "auditor",
+            "docs": [
+              "May read finished hands' action logs (`open_log`); default = no auditor. Carved from the",
+              "reserved bytes, so existing accounts read \"none\"."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                124
+                92
               ]
             }
           }
@@ -5634,6 +5952,18 @@
               "array": [
                 "u8",
                 52
+              ]
+            }
+          },
+          {
+            "name": "log_secret",
+            "docs": [
+              "The hand's log secret (see `dealing::log_secret_of`), handed to the log by `begin_hand`."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
               ]
             }
           }
@@ -5865,9 +6195,11 @@
       "name": "HandLog",
       "docs": [
         "A hand's action log: rollup-only, readable by the players dealt into the current hand (set by",
-        "`begin_hand`). Holds the entries (up to LOG_CAPACITY) and a hash chain over all of them: it",
-        "starts at sha256(table, hand number) and becomes sha256(previous, street, seat, kind, committed)",
-        "per action. The final hash is published in the hand record, so each player can check the log",
+        "`begin_hand`), and once that hand is over also by the config's auditor (`open_log`). Holds the",
+        "entries (up to LOG_CAPACITY) and a hash chain over all of them: it starts at sha256(table, hand",
+        "number, secret) and becomes sha256(previous, street, seat, kind, committed) per action. The",
+        "secret comes from the hand's VRF output; without it a short hand's bets could be found by",
+        "trying every likely log against the public hash (M6 review). The final hash is published in the hand record, so each player can check the log",
         "they were shown. Zero-copy: read in place, never copied onto the stack."
       ],
       "serialization": "bytemuck",
@@ -5895,17 +6227,55 @@
             }
           },
           {
+            "name": "secret",
+            "docs": [
+              "The hand's log secret (first link of the hash chain); readers need it to check the hash."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
             "name": "len",
             "type": "u32"
+          },
+          {
+            "name": "readers_len",
+            "docs": [
+              "How many of `readers` are set."
+            ],
+            "type": "u8"
           },
           {
             "name": "pad",
             "type": {
               "array": [
                 "u8",
-                4
+                3
               ]
             }
+          },
+          {
+            "name": "readers",
+            "docs": [
+              "The reader keys of the players dealt into this hand, as set by `begin_hand`."
+            ],
+            "type": {
+              "array": [
+                "pubkey",
+                9
+              ]
+            }
+          },
+          {
+            "name": "audited_by",
+            "docs": [
+              "The auditor this hand's log was opened to (default = not yet), so `open_log` runs once."
+            ],
+            "type": "pubkey"
           },
           {
             "name": "entries",
@@ -5927,7 +6297,8 @@
       "name": "HandRecord",
       "docs": [
         "The last finished hand, readable by anyone so anyone can recompute its deck (tests/verifier.ts).",
-        "Rollup-only for now, overwritten each hand; M6 publishes each record to Solana."
+        "Rollup-only and overwritten each hand; a copy goes into the table (`last_record`), so each",
+        "commit publishes the latest hand on Solana."
       ],
       "type": {
         "kind": "struct",
@@ -6438,6 +6809,19 @@
             "type": "i64"
           },
           {
+            "name": "last_record",
+            "docs": [
+              "The last finished hand's public record (all zero before the first). Copied here at the end",
+              "of every hand so each commit of the table publishes the latest hand on L1; the backend",
+              "archives every hand from the rollup's `HandRecord`."
+            ],
+            "type": {
+              "defined": {
+                "name": "HandRecord"
+              }
+            }
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
@@ -6521,6 +6905,29 @@
           {
             "name": "invite_only",
             "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TableReclaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "table_id",
+            "type": "u64"
+          },
+          {
+            "name": "refund",
+            "docs": [
+              "Lamports returned to the creator (table rent and escape payer)."
+            ],
+            "type": "u64"
           }
         ]
       }

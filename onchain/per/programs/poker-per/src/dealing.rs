@@ -21,6 +21,7 @@ pub const SHUFFLE_DOMAIN: &[u8] = b"poker-per/shuffle/v1";
 pub const ENTROPY_DOMAIN: &[u8] = b"poker-per/entropy/v1";
 pub const SALT_DOMAIN: &[u8] = b"poker-per/salt/v1";
 pub const BUTTON_DOMAIN: &[u8] = b"poker-per/button/v1";
+pub const LOG_DOMAIN: &[u8] = b"poker-per/log/v1";
 pub const DECK_SIZE: usize = 52;
 /// Marks "no card" in a hand or an unused deck.
 pub const NO_CARD: u8 = u8::MAX;
@@ -32,6 +33,12 @@ pub fn entropy_of(vrf_output: &[u8; 32]) -> [u8; 32] {
 }
 
 /// The ledger's fingerprint salt for the next hand. Never published.
+/// The hand's log secret: starts the action log's hash chain, so the public log hash can't be
+/// matched against guessed logs. Only the log's readers (and later the auditor) see it.
+pub fn log_secret_of(vrf_output: &[u8; 32]) -> [u8; 32] {
+    hashv(&[LOG_DOMAIN, vrf_output]).to_bytes()
+}
+
 pub fn salt_of(vrf_output: &[u8; 32]) -> [u8; 32] {
     hashv(&[SALT_DOMAIN, vrf_output]).to_bytes()
 }

@@ -179,13 +179,17 @@ async function main() {
   // ---- clean up both tables
   await S.ok("p1 leaves table B", () => B.cashOut(prog.p1, p1.publicKey, 0));
   await S.ok("collect B's rake", () => B.collectRake(prog.deployer, tokenOf(deployer.publicKey)));
-  await S.ok("creator closes table B (private accounts deleted, table back on L1)", () => B.close(prog.deployer, deployer.publicKey));
+  await S.ok("creator closes table B (private accounts kept with no readers, table back on L1)", () => B.close(prog.deployer, deployer.publicKey));
   await S.ok("p2 leaves table A", () => A.cashOut(prog.p2, p2.publicKey, 3));
   await S.ok("p3 leaves table A", () => A.cashOut(prog.p3, p3.publicKey, 0));
   await S.ok("collect A's rake", () => A.collectRake(prog.deployer, tokenOf(deployer.publicKey)));
   await S.ok("creator closes table A", () => A.close(prog.deployer, deployer.publicKey));
   await sleep(8000);
-  S.check("after close, A's ledger and deck no longer exist in the rollup", !(await rawRead(urls["p2 reader"], A.ledger)).visible && !(await rawRead(urls["p2 reader"], A.deck)).visible && (await simulateLeak([A.ledger, A.deck])).length === 0, {});
+  S.check("after close, p2's reader key can no longer read A's ledger or deck", !(await rawRead(urls["p2 reader"], A.ledger)).visible && !(await rawRead(urls["p2 reader"], A.deck)).visible, {});
+  const leakClosedA = await simulateLeak([A.ledger, A.deck]);
+  S.known("MagicBlock leak 2 also covers a closed table: simulateTransaction returns its kept ledger and deck with no login", leakClosedA.length > 0, { bytes: leakClosedA.map((b) => b.length) });
+  const deckA = await simulateLeak([A.deck]);
+  S.check("...but A's deck was erased at close (all zero after its discriminator)", deckA.length === 1 && deckA[0].subarray(8).every((b) => b === 0), { deckBytes: deckA[0]?.length });
   S.check("table A is back on L1, CLOSED", (l1.coder.accounts as any).decode("table", (await connection.getAccountInfo(A.table))!.data).status === 2, {});
 
   S.finish({ tableA: A.table.toBase58(), tableB: B.table.toBase58() });

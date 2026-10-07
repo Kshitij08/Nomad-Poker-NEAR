@@ -93,6 +93,31 @@ export function verify(r: Record, mine?: { seat: number; seed: Buffer; cards?: n
   return { ok: problems.length === 0, problems, deck };
 }
 
+/** One action-log entry, as in the program's `LogEntry`. */
+export type LogEntry = { street: number; seat: number; kind: number; committed: bigint };
+/** A downloaded action log: the hand it belongs to and its entries in order. */
+export type HandLogFile = { table: string; handNo: string; secret: string; len: number; entries: { street: number; seat: number; kind: number; committed: string }[] };
+
+/** The log's hash chain (mirrors `log_start` / `log_step` in table.rs). `secret` is the hand's log secret, which only the log's readers see. */
+export function logHash(table: PublicKey, handNo: bigint, secret: Buffer, entries: LogEntry[]): Buffer {
+  let h = sha(table.toBuffer(), u64le(handNo), secret);
+  for (const e of entries) h = sha(h, Buffer.from([e.street, e.seat, e.kind]), u64le(e.committed));
+  return h;
+}
+
+/**
+ * Checks a downloaded log against a record's public log hash. A log that held more than the
+ * on-chain capacity can't be checked in full (its tail was never stored).
+ */
+export function verifyLog(r: { table: PublicKey; handNo: bigint; logHash: Buffer; logLen: number }, log: HandLogFile) {
+  const problems: string[] = [];
+  if (log.table !== r.table.toBase58() || BigInt(log.handNo) !== r.handNo) problems.push("the log belongs to another table or hand");
+  if (log.len !== r.logLen || log.entries.length !== r.logLen) problems.push(`the log has ${log.entries.length} entries (says ${log.len}), the record says ${r.logLen}`);
+  const entries = log.entries.map((e) => ({ street: e.street, seat: e.seat, kind: e.kind, committed: BigInt(e.committed) }));
+  if (!logHash(r.table, r.handNo, Buffer.from(log.secret, "hex"), entries).equals(r.logHash)) problems.push("the log doesn't hash to the record's log hash");
+  return { ok: problems.length === 0, problems };
+}
+
 // Self-test against the fixed vector in dealing.rs (known_vector).
 if (require.main === module) {
   const table = new PublicKey(Buffer.alloc(32, 7));

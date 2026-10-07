@@ -55,3 +55,32 @@ export async function recoverHand(url: string, table: PublicKey, handNo: bigint,
   }
   return r;
 }
+
+/**
+ * Brute-forces a short heads-up hand's bets from its public record alone: the log hash chain
+ * starts at sha256(table, hand number), so without a secret in it an observer can try every
+ * likely log. Covers the shape "blinds, button raises/calls/shoves to X, big blind folds" (log
+ * length 4) for every X from the big blind up to `maxAmount`, in steps of 1.
+ */
+export function recoverBetFromLogHash(r: { table: PublicKey; handNo: bigint; logHash: Buffer; logLen: number; button: number; dealtMask: number },
+  blinds: { small: bigint; big: bigint }, maxAmount: bigint) {
+  const started = Date.now();
+  const seats = Array.from({ length: SEATS }, (_, i) => i).filter((i) => r.dealtMask & (1 << i));
+  if (r.logLen !== 4 || seats.length !== 2) return { found: null as null | { kind: number; amount: string }, tried: 0, ms: 0, reason: "not a 4-action heads-up hand" };
+  const sb = r.button, bb = seats.find((s) => s !== sb)!;
+  const u64 = (n: bigint) => { const b = Buffer.alloc(8); b.writeBigUInt64LE(n); return b; };
+  const step = (prev: Buffer, street: number, seat: number, kind: number, committed: bigint) =>
+    createHash("sha256").update(prev).update(Buffer.from([street, seat, kind])).update(u64(committed)).digest();
+  let h = createHash("sha256").update(r.table.toBuffer()).update(u64(r.handNo)).digest();
+  const PREFLOP = 1;
+  h = step(step(h, PREFLOP, sb, 6, blinds.small), PREFLOP, bb, 7, blinds.big);
+  let tried = 0;
+  for (const kind of [4, 2, 5]) {
+    for (let x = blinds.big; x <= maxAmount; x++) {
+      const h4 = step(step(h, PREFLOP, sb, kind, x), PREFLOP, bb, 0, blinds.big);
+      tried++;
+      if (h4.equals(r.logHash)) return { found: { kind, amount: x.toString() }, tried, ms: Date.now() - started };
+    }
+  }
+  return { found: null, tried, ms: Date.now() - started };
+}

@@ -209,7 +209,7 @@ async function main() {
   S.check("hand B: on-chain final stacks equal the C# engine's replay (including the timeout fold)", repB.match, repB);
   const logRaw = (await rawRead(rd.p1, T.log)).data!;
   const log = coder.decode("handLog", logRaw);
-  let h = createHash("sha256").update(T.table.toBuffer()).update(u64(BigInt(B.handNo))).digest();
+  let h = createHash("sha256").update(T.table.toBuffer()).update(u64(BigInt(B.handNo))).update(Buffer.from(log.secret)).digest();
   for (let i = 0; i < log.len; i++) {
     const e = log.entries[i];
     h = createHash("sha256").update(h).update(Buffer.from([e.street, e.seat, e.kind])).update(u64(BigInt(e.committed.toString()))).digest();
@@ -277,10 +277,10 @@ async function main() {
   // ---- clean up
   for (const s of SEATS) await S.ok(`seat ${s} cashes out`, () => T.cashOut(prog[s], wallets[s].publicKey, s));
   await S.ok("collect rake", () => T.collectRake(prog.deployer, tokenOf(deployer.publicKey)));
-  await S.ok("creator closes the table (hand log deleted too)", () => T.close(prog.deployer, deployer.publicKey));
+  await S.ok("creator closes the table (hand log and ledger kept, readable by nobody)", () => T.close(prog.deployer, deployer.publicKey));
   await sleep(6000);
-  S.check("after close the hand log and ledger are gone", !(await rawRead(rd.p1, T.log)).visible && !(await rawRead(rd.p1, T.ledger)).visible, {});
-  // Are bet sizes readable from the act transactions once the table's private accounts are gone?
+  S.check("after close p1's reader key can no longer read the hand log or ledger", !(await rawRead(rd.p1, T.log)).visible && !(await rawRead(rd.p1, T.ledger)).visible, {});
+  // Are bet sizes readable from the act transactions once the table is closed? (Before M6 they were.)
   const actDisc = createHash("sha256").update("global:act").digest().subarray(0, 8);
   const rpcNoLogin = async (method: string, params: any[]) => (await (await fetch(TEE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json()) as any;
   let bets = { listed: 0, actTxs: 0, actWithAmountVisible: 0, hidden: 0 };
@@ -298,7 +298,8 @@ async function main() {
     if (bets.actTxs > 0) break;
     await sleep(10_000);
   }
-  S.known("after the table closes, bet sizes in its act transactions are readable with no login (bets are meant to stay private)", bets.actWithAmountVisible > 0, bets);
+  S.check("after the table closes, its transactions are listed but their contents stay hidden: no act instruction or bet size is readable with no login",
+    bets.listed > 0 && bets.hidden > 0 && bets.actTxs === 0 && bets.actWithAmountVisible === 0, bets);
 
   S.finish({ table: T.table.toBase58(), hands: hands.map((x) => ({ label: x.label, handNo: x.handNo, button: x.button, dealtMask: x.dealtMask, actions: x.allActions ?? x.actions })),
     replays: { A: repA, B: repB, C: repC, D1: repD1, D2: repD2 }, computeUnits: cu });

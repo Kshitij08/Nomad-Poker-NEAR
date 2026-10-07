@@ -1,0 +1,422 @@
+{
+  "suite": "m6-records",
+  "program": "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv",
+  "ranAt": "2026-10-07T19:28:49.111Z",
+  "pass": 52,
+  "fail": 0,
+  "knownPlatformIssues": 0,
+  "table": "GwFkY5gYpBWEBq1bR1ajfJDsJWKpMWSR5pzRLRc34uoW",
+  "tableId": "4922587867654432901",
+  "auditor": "F26zJQE8A5XbyaPcCpskGaKERq9bsKg4FVy5LV6NEx9",
+  "commitTx": "3om9FFPW2VwCvsStxhLHxkrT3XpZURZnQcJMJj4fmqtnRhxsif9c2risHtWho8hEMR4n2qu2AsuuksyDkHirQPAZ",
+  "reclaimTx": "5Dp2DCNfTYhJG8MV4rsZvATZRojYLMhTihjTwk998yFN3xHiXidNWsUhqCDy4u5L92WGKNa9t6LkJtUon5dbXqwx",
+  "outcomes": [
+    {
+      "name": "admin sets a fresh auditor key",
+      "status": "PASS",
+      "detail": {
+        "sig": "2fx9Mn3R5SRSWWRHGnwjEhrhhb9pXHgmgRnAYr1ctUu1njGgaNyDWU2u2mCXcbtbm4xpgo6WbRPMfmYiR2kTkCv4",
+        "problem": null
+      }
+    },
+    {
+      "name": "create + delegate a 6-seat table",
+      "status": "PASS",
+      "detail": {
+        "sig": "dFPWH4knAoHs3jpb9okXR8QtiHKsjZAHTxEZFpUEm4a8huyw9xmN2gCEz2M4hU2cCrg8Ni6qfQF27WV9sbmx7Jx",
+        "problem": null
+      }
+    },
+    {
+      "name": "open",
+      "status": "PASS",
+      "detail": {
+        "sig": "BYyhTtX2t7J57cbH9kGwgWEokeRj3K8YkgL5W5ehYz5rmiCYzwEm4JWGEP5yuLPicV2kTJ7WfXnzKY9mgj5AKDS",
+        "problem": null
+      }
+    },
+    {
+      "name": "p1 sits in seat 0, p2 in seat 3",
+      "status": "PASS",
+      "detail": {
+        "sig": "4jbVEuHhhahPhSUQUd8kSUk45TTmpf1Ypwp38j9BxwmmUt1J7j2HQnHh6nQDP9ckxYfQrV9StEKQxNAXdMKqaGiw",
+        "problem": null
+      }
+    },
+    {
+      "name": "open_log before any hand has finished is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "NoFinishedHand",
+        "got": "NoFinishedHand (6053)"
+      }
+    },
+    {
+      "name": "hand 1: p1 and p2 commit seeds",
+      "status": "PASS",
+      "detail": {
+        "sig": "3L85NwNhrdU6XpexLo6wYxpex5Qvd7fiEsVqUZMfR6QzsAdK5BpetFRP4zT7MtWchzQfqRNPmyKNWUWie1nnJHtY",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 1: start (VRF requested)",
+      "status": "PASS",
+      "detail": {
+        "sig": "21um9xqzPcUQf1nLrtuoYWknRVGk5Li1ZiGGqpz4utsTZgkaptnkLEagCXw6zcUviHzvULPEzbUeM7jsk6QFbzSD",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 1: dealt by the VRF callback",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "hand 1: begin (blinds)",
+      "status": "PASS",
+      "detail": {
+        "sig": "466dJjDbDJgYWygZMUNZSiR2d15RhzU3jN74MoNcp5Esuxm26J9ucHUX6MJktgbRCY48PgLqLzS2QKv7fKdze8xx",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 1: open_log while the hand is being played is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "HandInProgress",
+        "got": "HandInProgress (6037)"
+      }
+    },
+    {
+      "name": "hand 1: during play the auditor can't read the log; the players can",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "hand 1: seat 0 raises to 734000",
+      "status": "PASS",
+      "detail": {
+        "sig": "5Mx8aTxyGpJhKDsUHDQRQ7E4oUbX6qXAg9rizzUHHGrxPZVSpwreaaxsYMZgaPLcPXrxuBsCieGQiRj2kutgvx6Q",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 1: seat 3 folds, the hand ends",
+      "status": "PASS",
+      "detail": {
+        "sig": "5b4JBcEq7oE1zdfWg954dGhJJDJBhTKJF7Lo2UykeJ6WdDnGsgoMCaGXG55jcsk7XcZe94cYA2G4ArmH8qKEJWpK",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 1 over: the table holds hand 1's record (lastRecord)",
+      "status": "PASS",
+      "detail": {
+        "handNo": "1",
+        "logLen": 4
+      }
+    },
+    {
+      "name": "hand 1 over: still no auditor access until open_log",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "an outsider (p3) opens hand 1's log to the auditor",
+      "status": "PASS",
+      "detail": {
+        "sig": "9214Ls7EiAQocnwyqWPqf3jZvhUmhsm4xE8gjMTuX7t1kaWCixGHN5CP5y7GUxiDLoYdD6a85fP595eDy2kphSH",
+        "problem": null
+      }
+    },
+    {
+      "name": "the auditor now reads hand 1's log, and so do its players still",
+      "status": "PASS",
+      "detail": {
+        "actions": 4
+      }
+    },
+    {
+      "name": "verifier CLI: hand 1 (rollup record + the auditor's log) verifies",
+      "status": "PASS",
+      "detail": {
+        "exit": 0,
+        "output": "{  \"ok\": true,  \"hand\": \"1\",  \"button\": 0,  \"deck\": \"recomputed from seeds + VRF entropy: matches\",  \"holeCards\": {   \"0\": \"9h 4d\",   \"3\": \"Qc 7d\"  },  \"board\": \"\",  \"log\": \"4 actions, hash matches the record\",  \"problems\": [] }"
+      }
+    },
+    {
+      "name": "verifier CLI: the same log with the raise changed (734,000 -> 600,000) fails",
+      "status": "PASS",
+      "detail": {
+        "exit": 1
+      }
+    },
+    {
+      "name": "verifier: a log with its last action dropped fails",
+      "status": "PASS",
+      "detail": {
+        "problems": [
+          "the log has 3 entries (says 4), the record says 4",
+          "the log doesn't hash to the record's log hash"
+        ]
+      }
+    },
+    {
+      "name": "verifier: a record with two cards swapped fails",
+      "status": "PASS",
+      "detail": {
+        "problems": [
+          "deck doesn't match the shuffle seed"
+        ]
+      }
+    },
+    {
+      "name": "verifier: a record with a changed seed fails",
+      "status": "PASS",
+      "detail": {
+        "problems": [
+          "shuffle seed doesn't match entropy + seeds"
+        ]
+      }
+    },
+    {
+      "name": "the creator commits the table (the keeper's job in M7)",
+      "status": "PASS",
+      "detail": {
+        "sig": "RABsBAVJrGNkQGUuqKEfRiKG9wmvcLsqGEUQ9De9BnERvQ9Nfqkhu87UjN4SK9q7nycy5iMd73KFgUaUtH5T8x5",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 1's record reached Solana in the table account",
+      "status": "PASS",
+      "detail": {
+        "l1Commit": "https://explorer.solana.com/tx/3om9FFPW2VwCvsStxhLHxkrT3XpZURZnQcJMJj4fmqtnRhxsif9c2risHtWho8hEMR4n2qu2AsuuksyDkHirQPAZ?cluster=devnet",
+        "rollupCommitTx": "RABsBAVJrGNkQGUuqKEfRiKG9wmvcLsqGEUQ9De9BnERvQ9Nfqkhu87UjN4SK9q7nycy5iMd73KFgUaUtH5T8x5"
+      }
+    },
+    {
+      "name": "brute force: the 734,000 raise can't be recovered from the record on Solana (every amount up to 2,500,000 tried)",
+      "status": "PASS",
+      "detail": {
+        "found": null,
+        "tried": 6900003,
+        "ms": 26439
+      }
+    },
+    {
+      "name": "verifier CLI: hand 1 verifies from the copy on Solana (--l1) too",
+      "status": "PASS",
+      "detail": {
+        "exit": 0,
+        "output": "{  \"ok\": true,  \"hand\": \"1\",  \"button\": 0,  \"deck\": \"recomputed from seeds + VRF entropy: matches\",  \"holeCards\": {   \"0\": \"9h 4d\",   \"3\": \"Qc 7d\"  },  \"board\": \"\",  \"log\": \"4 actions, hash matches the record\",  \"problems\": [] }"
+      }
+    },
+    {
+      "name": "hand 2: p1 and p2 commit seeds",
+      "status": "PASS",
+      "detail": {
+        "sig": "3w4NvB58bngaziESfuSqMD1fX8BFTk9LEwUJjwrmCiUCegiZvcM3k33toZaj7BTQaQu3S558TJVJ42SqEujRhbDB",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 2: start (VRF requested)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2P3QsaCLEZ2R8qRxMnrSjEa5mFKx8MURbdtgbfPW62vexeL6jThm3VGqPXzNTnJnzmigdP8BfmmqGgKNKEbD9Cgg",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 2: dealt by the VRF callback",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "hand 2: begin (blinds)",
+      "status": "PASS",
+      "detail": {
+        "sig": "4wv89RZwB8AD3sK6C2F8heuMGqn8HY1YPVgKzVnZokutMdJZtYpnu7QoFUKgjPEkFtXzJVu8KUcvHSMJRYxhKM4Y",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 2 in play: the auditor can no longer read the log (hand 1's entries were cleared, readers replaced)",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "hand 2: open_log during play is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "HandInProgress",
+        "got": "HandInProgress (6037)"
+      }
+    },
+    {
+      "name": "hand 2: seat 3 raises to 734000",
+      "status": "PASS",
+      "detail": {
+        "sig": "4arwFxG19yZRHrkT962wKvEfvrTdE8fVLErLoZwqgVgKXtrtM3oeu4iU1neQDegja5vDz7uNfrVz2HSURDkQ7gFa",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 2: seat 0 folds, the hand ends",
+      "status": "PASS",
+      "detail": {
+        "sig": "X7RjC5QWkDh86dffW8akVTSTi81euY5YGtSumossWE7sLBkQsgbKUegMBW4bjAUgq68XgqaWAo6F9YArkxba29n",
+        "problem": null
+      }
+    },
+    {
+      "name": "the auditor is given hand 2's log",
+      "status": "PASS",
+      "detail": {
+        "sig": "5irjbEZQLDKeDLFbTC6sB45VdS1wqGxAJYqV1qFSCZuSVNcmpKD2yW3WX2S379twD9dCwie3DEZwLNzAZX1BExEp",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 2's log (as the auditor reads it) verifies against hand 2's record",
+      "status": "PASS",
+      "detail": {
+        "problems": []
+      }
+    },
+    {
+      "name": "set_auditor by a non-admin is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotAdmin",
+        "got": "NotAdmin (6001)"
+      }
+    },
+    {
+      "name": "p1 and p2 cash out",
+      "status": "PASS",
+      "detail": {
+        "sig": "Kur9jiVSQygehfLWozwy977tqFaa25TehSRpTQdq8QhHz4nmbvsnb2Dexg9iaxngp5UcHtS7BrRXNqVzyJvNbRV",
+        "problem": null
+      }
+    },
+    {
+      "name": "collect rake",
+      "status": "PASS",
+      "detail": {
+        "sig": "betDhPbB6xXWnRD34RtiemLPRaqpNQnLmxmcPeyFHo9DBAtLT2UpsJpLseynx9NE5fpxB4C1Hqg6GkWzcGMNge2",
+        "problem": null
+      }
+    },
+    {
+      "name": "an outsider (p3) sends 12,345 straight to the escrow in the rollup (a donation)",
+      "status": "PASS",
+      "detail": {
+        "sig": "58qknoBM5jhGReaARVfdNvZuixuRKtP9KSRiytNGxybaApotkMT3G33KrXWn1yhQBZcjuZQQbTG6GPAKYfw7Lcgn",
+        "problem": null
+      }
+    },
+    {
+      "name": "close without the creator's token account is refused while the escrow holds something",
+      "status": "PASS",
+      "detail": {
+        "expected": "CreatorTokenMissing",
+        "got": "CreatorTokenMissing (6050)"
+      }
+    },
+    {
+      "name": "creator closes the table",
+      "status": "PASS",
+      "detail": {
+        "sig": "3jjanwgKDDD8r2Fm72fQ8bYifmM4JM49dedHgPfYrQ3r4He6BXsdQmmv8wK1UGm23e2h6pHdPJRrQAHH4LDMjhXL",
+        "problem": null
+      }
+    },
+    {
+      "name": "close swept the 12,345 donation to the creator's rollup balance",
+      "status": "PASS",
+      "detail": {
+        "delta": "12345"
+      }
+    },
+    {
+      "name": "the closed table is back on Solana, CLOSED, with hand 2's record",
+      "status": "PASS",
+      "detail": {
+        "status": 2,
+        "lastHand": "2"
+      }
+    },
+    {
+      "name": "a stranger can't reclaim it (the address is derived from the creator)",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintSeeds",
+        "got": "ConstraintSeeds (2006)"
+      }
+    },
+    {
+      "name": "the creator reclaims the table",
+      "status": "PASS",
+      "detail": {
+        "sig": "5Dp2DCNfTYhJG8MV4rsZvATZRojYLMhTihjTwk998yFN3xHiXidNWsUhqCDy4u5L92WGKNa9t6LkJtUon5dbXqwx",
+        "problem": null
+      }
+    },
+    {
+      "name": "reclaim returned the table rent (all but an empty account's) and the escape payer's leftovers",
+      "status": "PASS",
+      "detail": {
+        "returned": 13247208,
+        "tableRent": 7112968,
+        "keptForEmptyAccount": 650240,
+        "escapePayerLeft": 6784480,
+        "tx": "https://explorer.solana.com/tx/5Dp2DCNfTYhJG8MV4rsZvATZRojYLMhTihjTwk998yFN3xHiXidNWsUhqCDy4u5L92WGKNa9t6LkJtUon5dbXqwx?cluster=devnet"
+      }
+    },
+    {
+      "name": "the table account remains, empty and owned by the program",
+      "status": "PASS",
+      "detail": {
+        "dataLen": 0
+      }
+    },
+    {
+      "name": "a second reclaim is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableNotClosed",
+        "got": "TableNotClosed (6051)"
+      }
+    },
+    {
+      "name": "the same table id can't be created again",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "Allocate: account Address { address: GwFkY5gYpBWEBq1bR1ajfJDsJWKpMWSR5pzRLRc34uoW, base: None } already in use"
+      }
+    },
+    {
+      "name": "byte-scan control: the same scan finds the creator's wallet and the big blind (public by design)",
+      "status": "PASS",
+      "detail": {
+        "found": [
+          "the creator's wallet",
+          "the 200,000 big blind"
+        ]
+      }
+    },
+    {
+      "name": "byte scan of every Solana transaction touching the table (and its data): no wallets of players, no reader keys, no bets, no stacks",
+      "status": "PASS",
+      "detail": {
+        "transactionsScanned": 5,
+        "tableSnapshotsScanned": 2,
+        "found": []
+      }
+    }
+  ]
+}

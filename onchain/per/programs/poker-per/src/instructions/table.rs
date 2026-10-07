@@ -1,5 +1,6 @@
-//! L1 table lifecycle: create (with its escrow), delegate to the TEE rollup, and the
-//! timeout-rollback escape hatch. Closing a table happens inside the rollup (see money.rs).
+//! L1 table lifecycle: create (with its escrow), delegate to the TEE rollup, the timeout-rollback
+//! escape hatch, and reclaiming a closed table's rent. Closing a table happens inside the rollup
+//! (see money.rs).
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
@@ -19,7 +20,7 @@ use crate::errors::PokerError;
 use crate::state::Config;
 use crate::table::{
     check_table_params, may_delegate, may_request_escape, Invites, Table, TableParams, INVITES_SEED, MAX_INVITES,
-    STATUS_CREATED, STATUS_OPEN, TABLE_RESERVED, TABLE_SEED, TABLE_SPONSOR_LAMPORTS, TABLE_VERSION, WSOL_MINT,
+    STATUS_CLOSED, STATUS_CREATED, STATUS_OPEN, TABLE_RESERVED, TABLE_SEED, TABLE_SPONSOR_LAMPORTS, TABLE_VERSION, WSOL_MINT,
 };
 
 pub const DELEGATION_PROGRAM_ID: Pubkey = pubkey!("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");
@@ -551,6 +552,72 @@ pub fn rollback_table(ctx: Context<RollbackTable>, table_id: u64, creator: Pubke
     table_info.try_borrow_mut_data()?.copy_from_slice(&saved);
     emit!(TableRolledBack { table: a.table.key(), table_id });
     Ok(())
+}
+
+/// After `close_table` has handed a closed table back to L1: return its rent and everything left in
+/// its escape payer to the creator. The table account is emptied to zero bytes but kept, owned by
+/// this program, so the same table id can never be created again: the table's private accounts
+/// still exist in the rollup, under addresses derived from the table's.
+#[derive(Accounts)]
+#[instruction(table_id: u64)]
+pub struct ReclaimTable<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
+    /// CHECK: the closed table, back on L1; owner, layout and status are checked in the handler
+    /// (it's emptied here, so it can't be an `Account`).
+    #[account(mut, seeds = [TABLE_SEED, creator.key().as_ref(), &table_id.to_le_bytes()], bump)]
+    pub table: UncheckedAccount<'info>,
+    #[account(mut, seeds = [ESCAPE_PAYER_SEED, table.key().as_ref()], bump)]
+    pub escape_payer: SystemAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Byte offset of `Table::status` in the account (discriminator, version, bump).
+const TABLE_STATUS_OFFSET: usize = 10;
+
+pub fn reclaim_table(ctx: Context<ReclaimTable>, table_id: u64) -> Result<()> {
+    let a = &ctx.accounts;
+    let table_info = a.table.to_account_info();
+    // Owned by this program again means undelegated; a delegated table is owned by the delegation
+    // program, and an already reclaimed one has no data left to deserialize.
+    require_keys_eq!(*table_info.owner, crate::ID, PokerError::TableNotClosed);
+    // Read only the discriminator and the status byte (after version and bump), so tables written
+    // by earlier layouts can be reclaimed too.
+    let status = {
+        let data = table_info.try_borrow_data()?;
+        require!(data.len() > TABLE_STATUS_OFFSET && data[..8] == *Table::DISCRIMINATOR, PokerError::TableNotClosed);
+        data[TABLE_STATUS_OFFSET]
+    };
+    require!(status == STATUS_CLOSED, PokerError::TableNotClosed);
+
+    let left = a.escape_payer.lamports();
+    if left > 0 {
+        let table_key = a.table.key();
+        let payer_bump = [ctx.bumps.escape_payer];
+        transfer(
+            CpiContext::new_with_signer(
+                a.system_program.key(),
+                Transfer { from: a.escape_payer.to_account_info(), to: a.creator.to_account_info() },
+                &[&[ESCAPE_PAYER_SEED, table_key.as_ref(), &payer_bump]],
+            ),
+            left,
+        )?;
+    }
+    table_info.resize(0)?;
+    let keep = Rent::get()?.minimum_balance(0);
+    let refund = table_info.lamports().saturating_sub(keep);
+    **table_info.try_borrow_mut_lamports()? -= refund;
+    **a.creator.to_account_info().try_borrow_mut_lamports()? += refund;
+    emit!(TableReclaimed { table: a.table.key(), table_id, refund: refund + left });
+    Ok(())
+}
+
+#[event]
+pub struct TableReclaimed {
+    pub table: Pubkey,
+    pub table_id: u64,
+    /// Lamports returned to the creator (table rent and escape payer).
+    pub refund: u64,
 }
 
 /// Sets the invite list of an invite-only table (L1, creator only, any time; the rollup reads a
