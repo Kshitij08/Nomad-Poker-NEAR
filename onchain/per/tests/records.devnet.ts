@@ -73,7 +73,8 @@ async function main() {
     await S.ok(`hand ${hand}: seat ${seat} folds, the hand ends`, () => T.act(bySeat[seat][0], bySeat[seat][1], seat, KIND.fold));
   };
 
-  // ---- setup
+  // ---- setup (the backend's auditor is put back at the end)
+  const previousAuditor: PublicKey = ((await (l1.account as any).config.fetch(CONFIG_PDA)) as any).auditor;
   await S.ok("admin sets a fresh auditor key", () => l1.methods.setAuditor(auditor.publicKey).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc());
   await S.ok("create + delegate a 6-seat table", async () => { await T.create(params); return T.delegate(); });
   await sleep(4000);
@@ -229,6 +230,7 @@ async function main() {
   S.check("byte scan of every Solana transaction touching the table (and its data): no wallets of players, no reader keys, no bets, no stacks",
     scanned > 0 && l1TableData.length === 2 && found.length === 0, { transactionsScanned: scanned, tableSnapshotsScanned: l1TableData.length, found });
 
+  await S.ok("admin restores the previous auditor (the backend's)", () => l1.methods.setAuditor(previousAuditor).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc());
   S.finish({ table: T.table.toBase58(), tableId: tableId.toString(), auditor: auditor.publicKey.toBase58(), commitTx: l1Sigs[0]?.signature, reclaimTx: reclaimSig });
 }
 

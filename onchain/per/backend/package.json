@@ -1,0 +1,28 @@
+{
+  "name": "poker-per-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "engines": { "node": ">=20.18.0" },
+  "scripts": {
+    "sync": "node scripts/sync-shared.mjs",
+    "check": "tsc --noEmit -p .",
+    "start": "node --import tsx src/index.ts",
+    "test:routes": "node --import tsx test/routes.test.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.32.1",
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.17.3",
+    "@solana/web3.js": "1.98.4",
+    "express": "5.1.0",
+    "pg": "8.13.1",
+    "tsx": "4.20.6",
+    "tweetnacl": "1.0.3"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.3",
+    "@types/node": "22.18.0",
+    "@types/pg": "8.11.10",
+    "typescript": "5.9.3"
+  }
+}

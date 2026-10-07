@@ -18,7 +18,7 @@ export function shuffleSeed(table: PublicKey, handNo: bigint, entropy: Buffer, s
 }
 
 class Stream {
-  private counter = 0; private block = Buffer.alloc(32); private used = 32;
+  private counter = 0; private block: Buffer = Buffer.alloc(32); private used = 32;
   constructor(private seed: Buffer) {}
   nextU64(): bigint {
     if (this.used === 32) { this.block = sha(this.seed, u32le(this.counter++)); this.used = 0; }
