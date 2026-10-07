@@ -28,6 +28,21 @@ export const logOf = (t: PublicKey) => pda([Buffer.from("log"), t.toBuffer()]);
 export const KIND = { fold: 0, check: 1, call: 2, bet: 3, raise: 4, allIn: 5 } as const;
 /** act/timeout may run a showdown (every remaining hand evaluated), so they get a large budget. */
 export const PLAY_CU = 1_400_000;
+export const MAGIC_CONTEXT_ID = new PublicKey("MagicContext1111111111111111111111111111111");
+/** The TEE validator's magic fee vault: tables pay their own commits into it. */
+export const MAGIC_FEE_VAULT = PublicKey.findProgramAddressSync([Buffer.from("magic-fee-vault"), TEE_VALIDATOR.toBuffer()], new PublicKey("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"))[0];
+/** Smallest compute limit (to within `step`) at which `build(units)` simulates without error; -1 if none up to 1.4M. */
+export async function bisectCompute(conn: Connection, signer: Keypair, build: (units: number) => Promise<Transaction>, step = 2_000) {
+  const passes = async (units: number) => {
+    const tx = await build(units);
+    tx.feePayer = signer.publicKey; tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash; tx.sign(signer);
+    return !(await conn.simulateTransaction(tx)).value.err;
+  };
+  let lo = 0, hi = PLAY_CU;
+  if (!(await passes(hi))) return -1;
+  while (hi - lo > step) { const mid = Math.floor((lo + hi) / 2); if (await passes(mid)) hi = mid; else lo = mid; }
+  return hi;
+}
 export const EPHEMERAL_QUEUE = new PublicKey("5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc");
 export const escapePayerOf = (t: PublicKey) => pda([Buffer.from("escape-payer"), t.toBuffer()]);
 export const escrowOf = (t: PublicKey) => getAssociatedTokenAddressSync(NATIVE_MINT, t, true);
@@ -96,7 +111,7 @@ export function tableApi(creator: Keypair, tableId: bigint) {
   const escrow = escrowOf(table);
   const [escrowEata] = PublicKey.findProgramAddressSync([table.toBuffer(), NATIVE_MINT.toBuffer()], ESPL);
   const ledger = ledgerOf(table), deck = deckOf(table), record = recordOf(table), log = logOf(table);
-  const play = (signer: PublicKey) => ({ signer, table, ledger, deck, record, log });
+  const play = (signer: PublicKey) => ({ signer, table, ledger, deck, record, log, magicFeeVault: MAGIC_FEE_VAULT, magicProgram: MAGIC_PROGRAM_ID, magicContext: MAGIC_CONTEXT_ID });
   return {
     table, escrow, escrowEata, ledger, deck, record, log,
     // create_table uses 124k-202k compute units depending on the id (PDA bump searches), so it always
@@ -115,6 +130,11 @@ export function tableApi(creator: Keypair, tableId: bigint) {
     startHand: (prog: anchor.Program, payer: PublicKey) => prog.methods.startHand()
       .accountsPartial({ payer, config: CONFIG_PDA, table, deck, ledger, oracleQueue: EPHEMERAL_QUEUE }).rpc(),
     abortHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.abortHand().accountsPartial({ signer, table }).rpc(),
+    beginHandTx: (prog: anchor.Program, signer: PublicKey, units = PLAY_CU) => prog.methods.beginHand()
+      .accountsPartial({ play: play(signer), logPermission: permissionPdaFromAccount(log), rollup } as any)
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units })]).transaction(),
+    timeoutTx: (prog: anchor.Program, signer: PublicKey, units = PLAY_CU) => prog.methods.timeout()
+      .accountsPartial(play(signer)).preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units })]).transaction(),
     beginHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.beginHand()
       .accountsPartial({ play: play(signer), logPermission: permissionPdaFromAccount(log), rollup } as any)
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc(),

@@ -13,9 +13,9 @@ pub const INVITES_SEED: &[u8] = b"invites";
 pub const RECORD_SEED: &[u8] = b"record";
 pub const LOG_SEED: &[u8] = b"log";
 pub const TABLE_VERSION: u8 = 2;
-/// M4 and M5 took 52 of the original 96 reserved bytes for the hand fields; the account size is
+/// M4 and M5 took 60 of the original 96 reserved bytes for the hand fields; the account size is
 /// unchanged.
-pub const TABLE_RESERVED: usize = 44;
+pub const TABLE_RESERVED: usize = 36;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -44,8 +44,11 @@ pub const TURN_SECS: i64 = 15;
 /// Seconds after a hand ends during which every seated player with chips must commit a seed before
 /// the next hand can start. After that, seats without a seed sit the next hand out.
 pub const SEED_WINDOW_SECS: i64 = 20;
-/// Actions kept in a hand's log. The hash chain covers every action even past this.
-pub const LOG_CAPACITY: usize = 256;
+/// Actions kept in a hand's log (8 KB). The hash chain covers every action even past this.
+pub const LOG_CAPACITY: usize = 512;
+/// A hand that ends at least this long after the table's last commit commits it to L1 (keeps the
+/// L1 copy fresh for the escape hatch, whose idle delay is an hour by default).
+pub const COMMIT_EVERY_SECS: i64 = 900;
 
 /// What `start_hand` does in a given state.
 #[derive(Debug, PartialEq)]
@@ -100,6 +103,9 @@ pub struct Seat {
     pub stack: u64,
     /// Everything this player has put in at this seat (before rake), for the audit trail.
     pub deposited: u64,
+    /// Missed a hand by not committing a seed: no longer waited for. Committing a seed brings the
+    /// seat back from the next hand on.
+    pub sitting_out: bool,
 }
 
 impl Seat {
@@ -153,8 +159,11 @@ pub struct Table {
     pub shuffle_started_ts: i64,
     /// While a hand is played: when the awaited player's turn runs out.
     pub turn_deadline: i64,
-    /// When the table last became idle (a hand ended); the seed window counts from here.
+    /// When the table last became idle (opened, or a hand ended or was aborted); the seed window
+    /// counts from here. Sitting down doesn't move it, so nobody can stall hands by re-seating.
     pub idle_since: i64,
+    /// Rollup clock at the table's last commit to L1.
+    pub last_commit_ts: i64,
     pub reserved: [u8; TABLE_RESERVED],
 }
 
@@ -226,6 +235,11 @@ pub struct HandLog {
 impl HandLog {
     pub fn reset(&mut self, table: &Pubkey, hand_no: u64) {
         self.hand_no = hand_no;
+        // Clear the previous hand's entries: this hand's readers may not have played it.
+        let used = (self.len as usize).min(LOG_CAPACITY);
+        for e in self.entries[..used].iter_mut() {
+            *e = LogEntry::default();
+        }
         self.len = 0;
         self.hash = log_start(table, hand_no);
     }
@@ -447,7 +461,7 @@ mod tests {
         };
         let a = Pubkey::new_unique();
         let r = Pubkey::new_unique();
-        l.seats[3] = Seat { player: a, reader: r, stack: 10, deposited: 10 };
+        l.seats[3] = Seat { player: a, reader: r, stack: 10, deposited: 10, sitting_out: false };
         assert_eq!(l.seat_of(&a), Some(3));
         assert_eq!(l.readers(), vec![r], "permission members are reader keys, never wallets");
         assert_eq!(l.computed_owed(), Some(15));

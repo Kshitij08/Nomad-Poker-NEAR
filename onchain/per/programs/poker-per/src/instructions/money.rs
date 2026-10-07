@@ -14,7 +14,10 @@ use ephemeral_rollups_sdk::anchor::commit;
 use ephemeral_rollups_sdk::consts::{EPHEMERAL_VAULT_ID, MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID};
 use ephemeral_rollups_sdk::ephem::{FoldableIntentBuilder, MagicIntentBundleBuilder};
 
-use crate::constants::{CONFIG_SEED, CONFIG_VERSION};
+use crate::constants::{CONFIG_SEED, CONFIG_VERSION, TEE_VALIDATOR};
+use crate::instructions::table::DELEGATION_PROGRAM_ID;
+
+pub(crate) const MAGIC_FEE_VAULT_SEED: &[u8] = b"magic-fee-vault";
 use crate::errors::PokerError;
 use crate::private::{write, Sponsor};
 use crate::state::Config;
@@ -196,14 +199,15 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
     let (min_buy_in, big_blind, invite_only, taken) = (table.min_buy_in, table.big_blind, table.invite_only, table.seat_taken(idx));
     let table_key = table.key();
 
-    let hand_idle = table.hand_state == HAND_IDLE;
+    let (hand_idle, dealt_mask) = (table.hand_state == HAND_IDLE, table.dealt_mask);
     let ledger = &mut ctx.accounts.ledger;
     let sitting_down = match ledger.seat_of(&player) {
         Some(i) => {
             require!(i == idx, PokerError::InvalidSeat);
             require!(amount >= big_blind, PokerError::RebuyTooSmall);
-            // Live stacks are in the engine during a hand; a rebuy waits until it ends.
-            require!(hand_idle, PokerError::HandInProgress);
+            // A seat dealt into the running hand has its live stack in the engine; its rebuy waits
+            // until the hand ends. Seats not dealt in may rebuy any time.
+            require!(hand_idle || dealt_mask & (1 << idx) == 0, PokerError::HandInProgress);
             false
         }
         None => {
@@ -216,7 +220,7 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
             require!(reader != Pubkey::default() && reader != player, PokerError::InvalidReader);
             // A reader key belongs to one seat: never another seat's reader or anyone seated's wallet.
             require!(!ledger.seats.iter().any(|s| !s.is_empty() && (s.reader == reader || s.player == reader)), PokerError::InvalidReader);
-            ledger.seats[idx] = Seat { player, reader, stack: 0, deposited: 0 };
+            ledger.seats[idx] = Seat { player, reader, stack: 0, deposited: 0, sitting_out: false };
             true
         }
     };
@@ -266,10 +270,6 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
     let table = &mut ctx.accounts.table;
     if sitting_down {
         table.seat_mask |= 1 << idx;
-        // A new player gets the full seed window before the next hand can start without them.
-        if table.hand_state == HAND_IDLE {
-            table.idle_since = Clock::get()?.unix_timestamp;
-        }
     }
     stamp(table, fp)?;
     emit!(BoughtIn { table: table_key, seat, amount, rake, stack });
@@ -395,18 +395,28 @@ pub struct CommitTable<'info> {
     pub payer: Signer<'info>,
     #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
     pub table: Box<Account<'info, Table>>,
+    /// CHECK: the TEE validator's magic fee vault (delegation program PDA), which collects commit
+    /// fees from a delegated fee payer.
+    #[account(mut, seeds = [MAGIC_FEE_VAULT_SEED, TEE_VALIDATOR.as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub magic_fee_vault: UncheckedAccount<'info>,
 }
 
 /// Permissionless: copy the public table (settings, occupancy, ledger hash) to L1. The ledger itself
-/// is rollup-only and never committed.
+/// is rollup-only and never committed. The table pays the commit fee itself, as a delegated fee
+/// payer: MagicBlock allows only 10 commits for an account with no delegated fee payer.
 pub fn commit_table(ctx: Context<CommitTable>) -> Result<()> {
+    let t = &ctx.accounts.table;
+    let (id, bump) = (t.table_id.to_le_bytes(), [t.bump]);
+    let ts = table_seeds(t, &id, &bump);
     MagicIntentBundleBuilder::new(
-        ctx.accounts.payer.to_account_info(),
+        ctx.accounts.table.to_account_info(),
         ctx.accounts.magic_context.to_account_info(),
         ctx.accounts.magic_program.to_account_info(),
     )
+    .magic_fee_vault(ctx.accounts.magic_fee_vault.to_account_info())
     .commit(&[ctx.accounts.table.to_account_info()])
-    .build_and_invoke()?;
+    .build_and_invoke_signed(&[&ts])?;
+    ctx.accounts.table.last_commit_ts = Clock::get()?.unix_timestamp;
     Ok(())
 }
 

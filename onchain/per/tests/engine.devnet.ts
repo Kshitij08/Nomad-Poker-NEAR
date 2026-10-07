@@ -11,8 +11,8 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { programFor, programOn, loadKey, teeConnection, TEE_URL, TEE_VALIDATOR, randomTableId } from "../scripts/lib";
-import { BN, KIND, Suite, errName, sleep, tableApi, rawRead, readerFor, sendL1, tokenOf, connUrl, handOf } from "./helpers";
+import { connection, programFor, programOn, loadKey, teeConnection, TEE_URL, TEE_VALIDATOR, randomTableId } from "../scripts/lib";
+import { BN, KIND, Suite, bisectCompute, errName, sleep, tableApi, rawRead, readerFor, sendL1, tokenOf, connUrl, handOf } from "./helpers";
 import { holeCards, dealOrder, boardOf, cardName } from "./verifier";
 
 const S = new Suite("m5-engine");
@@ -61,16 +61,22 @@ async function main() {
   await S.ok("p3 sits in seat 4 with 6,000,000", () => T.buyIn(prog[4], p3.publicKey, 4, 6_000_000n));
 
   const hands: any[] = [];
+  const readerActed: any[] = [];
   const cu: { hand: string; seat: number; kind: number; units: number; endsHand: boolean }[] = [];
   const conns: Record<number, any> = { 0: er.p1, 2: er.p2, 4: er.p3 };
+  // Each seat's reader key, which may also act (the session-key path).
+  const readerKey: Record<number, any> = { 0: readerFor(p1.publicKey), 2: readerFor(p2.publicKey), 4: readerFor(p3.publicKey) };
+  const readerProg: Record<number, any> = {};
+  for (const s of SEATS) readerProg[s] = programOn(await teeConnection(readerKey[s]), readerKey[s]);
   /** Plays one hand: seeds for `seeders`, start, deal, begin, then `policy` until it ends. */
-  async function playHand(label: string, seeders: number[], policy: (seat: number, g: any) => [number, bigint], hooks: { afterBegin?: (g: any) => Promise<void> } = {}) {
+  async function playHand(label: string, seeders: number[], policy: (seat: number, g: any) => [number, bigint], hooks: { afterBegin?: (g: any) => Promise<void>; readerActsFor?: number } = {}) {
     for (const s of seeders) await T.commitSeed(prog[s], wallets[s].publicKey, s, randomBytes(32));
     const t0 = await readTable();
     const handNo = Number(t0.handNo) + 1;
     const stacksBefore = (await readLedger()).seats.map((s: any) => BigInt(s.stack.toString()));
     await T.startHand(prog.deployer, deployer.publicKey);
     const dealtT = await waitState(2, handNo);
+    cu.push({ hand: label, seat: -1, kind: -1, units: await bisectCompute(er.deployer, deployer, (u) => T.beginHandTx(prog.deployer, deployer.publicKey, u)), endsHand: false, what: "begin_hand" } as any);
     await T.beginHand(prog.deployer, deployer.publicKey);
     let g = (await readLedger()).game;
     const begun = g;
@@ -92,7 +98,12 @@ async function main() {
       if (!(await passes(hi))) hi = -1;
       while (hi > 0 && hi - lo > 2_000) { const mid = Math.floor((lo + hi) / 2); if (await passes(mid)) hi = mid; else lo = mid; }
       cu.push({ hand: label, seat, kind, units: hi, endsHand: false });
-      await T.act(prog[seat], wallets[seat].publicKey, seat, kind, amount);
+      if (hooks.readerActsFor === seat) {
+        await T.act(readerProg[seat], readerKey[seat].publicKey, seat, kind, amount);
+        readerActed.push({ hand: label, seat, kind });
+      } else {
+        await T.act(prog[seat], wallets[seat].publicKey, seat, kind, amount);
+      }
       actions.push([seat, kind, amount.toString()]);
       g = (await readLedger()).game;
       if (g.street === 5) cu[cu.length - 1].endsHand = true;
@@ -125,7 +136,8 @@ async function main() {
     const onChain = h.ledgerAfter.seats.slice(0, seatCount).map((s: any, i: number) => (dealt(i) ? Number(s.stack.toString()) : -1));
     const csharp = out.final.map((x: number, i: number) => (dealt(i) ? x : -1));
     return {
-      match: out.problem === null && onChain.every((v: number, i: number) => v === csharp[i]) && JSON.stringify(out.board.slice(0, h.record.boardLen)) === JSON.stringify(board.slice(0, h.record.boardLen)),
+      match: out.problem === null && onChain.every((v: number, i: number) => v === csharp[i]) && JSON.stringify(out.board.slice(0, h.record.boardLen)) === JSON.stringify(board.slice(0, h.record.boardLen))
+        && order.every((s) => JSON.stringify(out.holes[s]) === JSON.stringify(holes[s])),
       onChain, csharp, problem: out.problem, csharpAwards: out.awards, board: board.slice(0, h.record.boardLen).map(cardName),
       holes: Object.fromEntries(order.map((s) => [s, holes[s].map(cardName)])),
     };
@@ -146,6 +158,10 @@ async function main() {
   S.check("hand A: on-chain final stacks equal the C# engine's replay of the same hand", repA.match, repA);
   S.check("hand A: chips conserved (stacks before = stacks after)", sum(A.stacksBefore) === sum(A.ledgerAfter.seats.map((s: any) => BigInt(s.stack.toString()))), {});
   S.check("hand A: more than one pot paid out (main + side pot)", repA.csharpAwards.length >= 2, { awards: repA.csharpAwards });
+  await sleep(8000);
+  const l1AfterA = coder.decode("table", (await connection.getAccountInfo(T.table))!.data);
+  S.check("hand A: the table's first hand end committed it to Solana itself (L1 copy shows hand 1, idle)", Number(l1AfterA.handNo) === 1 && l1AfterA.handState === 0,
+    { l1HandNo: Number(l1AfterA.handNo), l1HandState: l1AfterA.handState, lastCommitTs: Number(l1AfterA.lastCommitTs) });
 
   // Anyone left with nothing rebuys between hands.
   for (const s of SEATS) {
@@ -174,6 +190,7 @@ async function main() {
       (globalThis as any).bPre = [[seat, KIND.raise, minTo.toString()]];
       const next = (await readLedger()).game.toAct;
       await sleep(16_500);
+      cu.push({ hand: "B: rules and timeout", seat: next, kind: -1, units: await bisectCompute(er.deployer, deployer, (u) => T.timeoutTx(prog.deployer, deployer.publicKey, u)), endsHand: false, what: "timeout" } as any);
       await S.ok(`hand B: after 15 s anyone (the creator, not seated) times out seat ${next}`, () => T.timeout(prog.deployer, deployer.publicKey));
       const g2 = (await readLedger()).game;
       (globalThis as any).bPre.push([next, g2.seats[next].status === 3 ? KIND.fold : KIND.check, "0"]);
@@ -194,6 +211,8 @@ async function main() {
   S.check("hand B: the log a player reads hashes to the public record's log hash, and marks the timeout", h.equals(Buffer.from(B.record.logHash)) && log.len === B.record.logLen && timeoutLogged,
     { entries: log.len, recordLogLen: B.record.logLen, timeoutLogged });
 
+  const l1AfterB = coder.decode("table", (await connection.getAccountInfo(T.table))!.data);
+  S.check("hand B: no commit within 15 minutes of the last one (L1 copy still shows hand 1)", Number(l1AfterB.handNo) === 1, { l1HandNo: Number(l1AfterB.handNo) });
   for (const s of SEATS) {
     const st = BigInt((await readLedger()).seats[s].stack.toString());
     if (st === 0n) await T.buyIn(prog[s], wallets[s].publicKey, s, 2_000_000n);
@@ -213,10 +232,36 @@ async function main() {
   S.check("hand C: heads-up rule: the button posts the small blind", C.begun.sbSeat === C.button, { button: C.button, sb: C.begun.sbSeat });
   S.check("hand C: on-chain final stacks equal the C# engine's replay", repC.match, repC);
   S.check("hand C: p3's stack is untouched", BigInt(C.ledgerAfter.seats[4].stack.toString()) === C.stacksBefore[4], {});
+  S.check("hand C: p3, who missed the seed window, is now marked sitting out", C.ledgerAfter.seats[4].sittingOut === true, {});
+
+  // ---- hand D1: p3 is sitting out, so the next hand starts at once without waiting for them; a
+  // seat not dealt in may rebuy mid-hand; p1 acts with its reader key instead of its wallet
+  const callOrCheck = (seat: number, g: any): [number, bigint] => {
+    const s = g.seats[seat], toCall = BigInt(g.highBet.toString()) - BigInt(s.currentBet.toString());
+    return toCall > 0n ? [KIND.call, 0n] : [KIND.check, 0n];
+  };
+  const D1 = await playHand("D1: p3 sitting out", [0, 2], callOrCheck, {
+    readerActsFor: 0,
+    afterBegin: async () => {
+      await S.ok("hand D1: p3 (not dealt in) rebuys 1,000,000 while the hand runs", () => T.buyIn(prog[4], p3.publicKey, 4, 1_000_000n));
+    },
+  });
+  S.check("hand D1: started straight away (no seed window) and dealt seats 0 and 2 only", D1.dealtMask === 0b101, { dealtMask: D1.dealtMask });
+  S.check("hand D1: p1's reader key acted for seat 0 (no wallet signature needed)", readerActed.some((r) => r.hand.startsWith("D1") && r.seat === 0), { readerActed });
+  const repD1 = replay(D1);
+  S.check("hand D1: on-chain final stacks equal the C# engine's replay", repD1.match, repD1);
+  // ---- hand D2: p3 commits a seed and plays again
+  const D2 = await playHand("D2: p3 back", SEATS, callOrCheck);
+  S.check("hand D2: p3 committed a seed and was dealt in again", D2.dealtMask === 0b10101 && D2.ledgerAfter.seats[4].sittingOut === false, { dealtMask: D2.dealtMask });
+  const repD2 = replay(D2);
+  S.check("hand D2: on-chain final stacks equal the C# engine's replay", repD2.match, repD2);
 
   const showdownCu = cu.filter((c) => c.endsHand);
-  S.check("compute (bisected, within 2,000 units): every action, including those that run a showdown and settle the hand, fits well under 1.4M", cu.length > 0 && cu.every((c) => c.units > 0 && c.units < 1_000_000),
-    { maxAny: Math.max(...cu.map((c) => c.units)), endOfHand: showdownCu.map((c) => ({ hand: c.hand, units: c.units })), all: cu.map((c) => c.units) });
+  const what = (c: any) => c.what ?? "act";
+  S.check("compute (bisected, within 2,000 units): begin_hand, every act (incl. showdown + settlement + commit) and timeout fit well under 1.4M",
+    cu.length > 0 && cu.every((c) => c.units > 0 && c.units < 1_000_000),
+    { maxAny: Math.max(...cu.map((c) => c.units)), beginHand: cu.filter((c) => what(c) === "begin_hand").map((c) => c.units), timeout: cu.filter((c) => what(c) === "timeout").map((c) => c.units),
+      endOfHand: showdownCu.map((c) => ({ hand: c.hand, units: c.units })), acts: cu.filter((c) => what(c) === "act").map((c) => c.units) });
 
   // ---- clean up
   for (const s of SEATS) await S.ok(`seat ${s} cashes out`, () => T.cashOut(prog[s], wallets[s].publicKey, s));
@@ -224,9 +269,28 @@ async function main() {
   await S.ok("creator closes the table (hand log deleted too)", () => T.close(prog.deployer, deployer.publicKey));
   await sleep(6000);
   S.check("after close the hand log and ledger are gone", !(await rawRead(rd.p1, T.log)).visible && !(await rawRead(rd.p1, T.ledger)).visible, {});
+  // Are bet sizes readable from the act transactions once the table's private accounts are gone?
+  const actDisc = createHash("sha256").update("global:act").digest().subarray(0, 8);
+  const rpcNoLogin = async (method: string, params: any[]) => (await (await fetch(TEE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json()) as any;
+  let bets = { listed: 0, actTxs: 0, actWithAmountVisible: 0, hidden: 0 };
+  for (let tries = 0; tries < 6; tries++) {
+    const sigs = (await rpcNoLogin("getSignaturesForAddress", [T.table.toBase58(), { limit: 200 }])).result ?? [];
+    bets = { listed: sigs.length, actTxs: 0, actWithAmountVisible: 0, hidden: 0 };
+    for (const sg of sigs) {
+      const msg = (await rpcNoLogin("getTransaction", [sg.signature, { encoding: "json", maxSupportedTransactionVersion: 0 }])).result?.transaction?.message;
+      if (!msg || !(msg.accountKeys ?? []).length) { bets.hidden++; continue; }
+      for (const ix of msg.instructions ?? []) {
+        const d = Buffer.from(require("bs58").decode(ix.data));
+        if (d.subarray(0, 8).equals(actDisc)) { bets.actTxs++; if (d.length >= 18) bets.actWithAmountVisible++; }
+      }
+    }
+    if (bets.actTxs > 0) break;
+    await sleep(10_000);
+  }
+  S.known("after the table closes, bet sizes in its act transactions are readable with no login (bets are meant to stay private)", bets.actWithAmountVisible > 0, bets);
 
   S.finish({ table: T.table.toBase58(), hands: hands.map((x) => ({ label: x.label, handNo: x.handNo, button: x.button, dealtMask: x.dealtMask, actions: x.allActions ?? x.actions })),
-    replays: { A: repA, B: repB, C: repC }, computeUnits: cu });
+    replays: { A: repA, B: repB, C: repC, D1: repD1, D2: repD2 }, computeUnits: cu });
 }
 
 function nextOf(seat: number, mask: number) {

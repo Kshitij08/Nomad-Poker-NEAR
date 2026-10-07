@@ -10,9 +10,12 @@
 
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::access_control::structs::PERMISSION_SEED;
+use ephemeral_rollups_sdk::anchor::commit;
+use ephemeral_rollups_sdk::ephem::{FoldableIntentBuilder, MagicIntentBundleBuilder};
 use ephemeral_rollups_sdk::consts::PERMISSION_PROGRAM_ID;
 
-use crate::constants::MAX_SEATS;
+use crate::constants::{MAX_SEATS, TEE_VALIDATOR};
+use crate::instructions::table::DELEGATION_PROGRAM_ID;
 use crate::dealing;
 use crate::engine::{Awards, Cards, EngineError, Game, DONE, PREFLOP};
 use crate::errors::PokerError;
@@ -20,9 +23,10 @@ use crate::instructions::money::*;
 use crate::private::Sponsor;
 use crate::table::{
     Deck, HandLog, HandRecord, Ledger, Table, DECK_SEED, HAND_DEALT, HAND_IDLE, HAND_PLAYING, LEDGER_SEED, LOG_BIG_BLIND,
-    LOG_SEED, LOG_SMALL_BLIND, LOG_TIMEOUT, RECORD_SEED, TABLE_SEED, TURN_SECS,
+    COMMIT_EVERY_SECS, LOG_SEED, LOG_SMALL_BLIND, LOG_TIMEOUT, RECORD_SEED, TABLE_SEED, TURN_SECS,
 };
 
+#[commit]
 #[derive(Accounts)]
 pub struct Play<'info> {
     pub signer: Signer<'info>,
@@ -37,6 +41,10 @@ pub struct Play<'info> {
     pub record: Box<Account<'info, HandRecord>>,
     #[account(mut, seeds = [LOG_SEED, table.key().as_ref()], bump)]
     pub log: AccountLoader<'info, HandLog>,
+    /// CHECK: the TEE validator's magic fee vault; the table pays its periodic commits (see
+    /// money.rs `commit_table`).
+    #[account(mut, seeds = [MAGIC_FEE_VAULT_SEED, TEE_VALIDATOR.as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub magic_fee_vault: UncheckedAccount<'info>,
 }
 
 #[derive(Accounts)]
@@ -91,13 +99,15 @@ pub fn begin_hand(ctx: Context<BeginHand>) -> Result<()> {
 }
 
 /// The awaited seat's action (engine kinds FOLD..ALL_IN; for BET and RAISE `amount` is the total
-/// the seat's bet becomes this street). Only the seat's own wallet may act.
+/// the seat's bet becomes this street). The seat's wallet may act, or its reader key: the key the
+/// player's client already holds for reading the table, so play needs no wallet prompt per action.
 pub fn act(ctx: Context<Play>, seat: u8, kind: u8, amount: u64) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let a = &mut *ctx.accounts;
     require!(a.table.hand_state == HAND_PLAYING, PokerError::HandNotPlaying);
     let i = seat as usize;
-    require!(i < a.ledger.seats.len() && a.ledger.seats[i].player == a.signer.key(), PokerError::NotSeated);
+    let signer = a.signer.key();
+    require!(i < a.ledger.seats.len() && !a.ledger.seats[i].is_empty() && (a.ledger.seats[i].player == signer || a.ledger.seats[i].reader == signer), PokerError::NotSeated);
     apply(a, seat, kind, amount, false, now)
 }
 
@@ -173,7 +183,24 @@ fn finish_hand(a: &mut Play, now: i64) -> Result<()> {
     table.idle_since = now;
     table.turn_deadline = 0;
     emit!(HandEnded { table: table.key(), hand_no: table.hand_no });
-    stamp(table, ledger, now)
+    stamp(table, ledger, now)?;
+    if now.saturating_sub(table.last_commit_ts) >= COMMIT_EVERY_SECS {
+        table.last_commit_ts = now;
+        commit_paid_by_table(table, &a.magic_context, &a.magic_program, &a.magic_fee_vault)?;
+    }
+    Ok(())
+}
+
+/// Commits the table to L1, the table paying the fee (see money.rs `commit_table`).
+fn commit_paid_by_table<'info>(table: &mut Box<Account<'info, Table>>, magic_context: &AccountInfo<'info>, magic_program: &AccountInfo<'info>, fee_vault: &AccountInfo<'info>) -> Result<()> {
+    table.exit(&crate::ID)?;
+    let (id, bump) = (table.table_id.to_le_bytes(), [table.bump]);
+    let ts = table_seeds(table, &id, &bump);
+    MagicIntentBundleBuilder::new(table.to_account_info(), magic_context.clone(), magic_program.clone())
+        .magic_fee_vault(fee_vault.clone())
+        .commit(&[table.to_account_info()])
+        .build_and_invoke_signed(&[&ts])?;
+    Ok(())
 }
 
 /// Hole cards and board of the current hand, from the private deck (M4's dealing order).

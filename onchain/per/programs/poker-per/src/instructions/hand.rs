@@ -66,8 +66,9 @@ pub struct StartHand<'info> {
     pub table: Box<Account<'info, Table>>,
     #[account(mut, seeds = [DECK_SEED, table.key().as_ref()], bump, has_one = table)]
     pub deck: Box<Account<'info, Deck>>,
-    /// Who sits where, to check every seat's seed is its current occupant's.
-    #[account(seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
+    /// Who sits where, to check every seat's seed is its current occupant's; seats that miss the
+    /// seed window are marked sitting out here.
+    #[account(mut, seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
     pub ledger: Box<Account<'info, Ledger>>,
     /// CHECK: MagicBlock's ephemeral VRF queue (the one that serves the rollup).
     #[account(mut, address = DEFAULT_EPHEMERAL_QUEUE)]
@@ -88,14 +89,16 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
     match start_rule(table.hand_state, now, table.vrf_requested_ts)? {
         StartKind::NewHand => {
             let deck = &mut ctx.accounts.deck;
-            let ledger = &ctx.accounts.ledger;
-            // Seats with chips, and those of them whose current occupant committed a seed.
+            let ledger = &mut ctx.accounts.ledger;
+            // Seats with chips that are waited for, and those whose current occupant committed a
+            // seed. A seat sitting out isn't waited for, but plays again once it commits.
             let (mut funded, mut seeded) = (0u16, 0u16);
             for seat in dealing::seats_in(table.seat_mask) {
                 let (i, bit) = (seat as usize, 1u16 << seat);
-                if ledger.seats[i].stack > 0 {
+                let has_seed = deck.seed_mask & bit != 0 && deck.seed_owners[i] == ledger.seats[i].player;
+                if ledger.seats[i].stack > 0 && (has_seed || !ledger.seats[i].sitting_out) {
                     funded |= bit;
-                    if deck.seed_mask & bit != 0 && deck.seed_owners[i] == ledger.seats[i].player {
+                    if has_seed {
                         seeded |= bit;
                     }
                 }
@@ -110,6 +113,17 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
                 seeded
             };
             require!(dealt.count_ones() >= 2, PokerError::NotEnoughPlayers);
+            // Who missed the window sits out until they commit again; who's dealt is back in.
+            for seat in dealing::seats_in(table.seat_mask) {
+                let i = seat as usize;
+                if dealt & (1 << seat) != 0 {
+                    ledger.seats[i].sitting_out = false;
+                } else if funded & (1 << seat) != 0 {
+                    ledger.seats[i].sitting_out = true;
+                }
+            }
+            table.ledger_hash = ledger.fingerprint()?;
+            table.ledger_seq = table.ledger_seq.checked_add(1).ok_or(PokerError::MathOverflow)?;
             // Only dealt seats' seeds count; the rest are dropped.
             for i in 0..deck.seeds.len() {
                 if dealt & (1 << i) == 0 {

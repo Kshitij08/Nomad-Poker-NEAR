@@ -232,6 +232,120 @@
               }
             ]
           }
+        },
+        {
+          "name": "magic_fee_vault",
+          "docs": [
+            "money.rs `commit_table`)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  103,
+                  105,
+                  99,
+                  45,
+                  102,
+                  101,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  5,
+                  61,
+                  71,
+                  26,
+                  133,
+                  158,
+                  115,
+                  46,
+                  104,
+                  11,
+                  201,
+                  88,
+                  248,
+                  65,
+                  7,
+                  43,
+                  143,
+                  63,
+                  188,
+                  25,
+                  115,
+                  155,
+                  230,
+                  151,
+                  196,
+                  198,
+                  129,
+                  18,
+                  111,
+                  140,
+                  31,
+                  116
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                181,
+                183,
+                0,
+                225,
+                242,
+                87,
+                58,
+                192,
+                204,
+                6,
+                34,
+                1,
+                52,
+                74,
+                207,
+                151,
+                184,
+                53,
+                6,
+                235,
+                140,
+                229,
+                25,
+                152,
+                204,
+                98,
+                126,
+                24,
+                147,
+                128,
+                167,
+                62
+              ]
+            }
+          }
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
         }
       ],
       "args": [
@@ -390,6 +504,120 @@
                   }
                 ]
               }
+            },
+            {
+              "name": "magic_fee_vault",
+              "docs": [
+                "money.rs `commit_table`)."
+              ],
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      109,
+                      97,
+                      103,
+                      105,
+                      99,
+                      45,
+                      102,
+                      101,
+                      101,
+                      45,
+                      118,
+                      97,
+                      117,
+                      108,
+                      116
+                    ]
+                  },
+                  {
+                    "kind": "const",
+                    "value": [
+                      5,
+                      61,
+                      71,
+                      26,
+                      133,
+                      158,
+                      115,
+                      46,
+                      104,
+                      11,
+                      201,
+                      88,
+                      248,
+                      65,
+                      7,
+                      43,
+                      143,
+                      63,
+                      188,
+                      25,
+                      115,
+                      155,
+                      230,
+                      151,
+                      196,
+                      198,
+                      129,
+                      18,
+                      111,
+                      140,
+                      31,
+                      116
+                    ]
+                  }
+                ],
+                "program": {
+                  "kind": "const",
+                  "value": [
+                    181,
+                    183,
+                    0,
+                    225,
+                    242,
+                    87,
+                    58,
+                    192,
+                    204,
+                    6,
+                    34,
+                    1,
+                    52,
+                    74,
+                    207,
+                    151,
+                    184,
+                    53,
+                    6,
+                    235,
+                    140,
+                    229,
+                    25,
+                    152,
+                    204,
+                    98,
+                    126,
+                    24,
+                    147,
+                    128,
+                    167,
+                    62
+                  ]
+                }
+              }
+            },
+            {
+              "name": "magic_program",
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "magic_context",
+              "writable": true,
+              "address": "MagicContext1111111111111111111111111111111"
             }
           ]
         },
@@ -1614,6 +1842,111 @@
                 "account": "Table"
               }
             ]
+          }
+        },
+        {
+          "name": "magic_fee_vault",
+          "docs": [
+            "fees from a delegated fee payer."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  103,
+                  105,
+                  99,
+                  45,
+                  102,
+                  101,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  5,
+                  61,
+                  71,
+                  26,
+                  133,
+                  158,
+                  115,
+                  46,
+                  104,
+                  11,
+                  201,
+                  88,
+                  248,
+                  65,
+                  7,
+                  43,
+                  143,
+                  63,
+                  188,
+                  25,
+                  115,
+                  155,
+                  230,
+                  151,
+                  196,
+                  198,
+                  129,
+                  18,
+                  111,
+                  140,
+                  31,
+                  116
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                181,
+                183,
+                0,
+                225,
+                242,
+                87,
+                58,
+                192,
+                204,
+                6,
+                34,
+                1,
+                52,
+                74,
+                207,
+                151,
+                184,
+                53,
+                6,
+                235,
+                140,
+                229,
+                25,
+                152,
+                204,
+                98,
+                126,
+                24,
+                147,
+                128,
+                167,
+                62
+              ]
+            }
           }
         },
         {
@@ -4162,8 +4495,10 @@
         {
           "name": "ledger",
           "docs": [
-            "Who sits where, to check every seat's seed is its current occupant's."
+            "Who sits where, to check every seat's seed is its current occupant's; seats that miss the",
+            "seed window are marked sitting out here."
           ],
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -4362,6 +4697,120 @@
               }
             ]
           }
+        },
+        {
+          "name": "magic_fee_vault",
+          "docs": [
+            "money.rs `commit_table`)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  103,
+                  105,
+                  99,
+                  45,
+                  102,
+                  101,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  5,
+                  61,
+                  71,
+                  26,
+                  133,
+                  158,
+                  115,
+                  46,
+                  104,
+                  11,
+                  201,
+                  88,
+                  248,
+                  65,
+                  7,
+                  43,
+                  143,
+                  63,
+                  188,
+                  25,
+                  115,
+                  155,
+                  230,
+                  151,
+                  196,
+                  198,
+                  129,
+                  18,
+                  111,
+                  140,
+                  31,
+                  116
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                181,
+                183,
+                0,
+                225,
+                242,
+                87,
+                58,
+                192,
+                204,
+                6,
+                34,
+                1,
+                52,
+                74,
+                207,
+                151,
+                184,
+                53,
+                6,
+                235,
+                140,
+                229,
+                25,
+                152,
+                204,
+                98,
+                126,
+                24,
+                147,
+                128,
+                167,
+                62
+              ]
+            }
+          }
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
         }
       ],
       "args": []
@@ -5568,7 +6017,7 @@
                     "name": "LogEntry"
                   }
                 },
-                256
+                512
               ]
             }
           }
@@ -5909,6 +6358,14 @@
               "Everything this player has put in at this seat (before rake), for the audit trail."
             ],
             "type": "u64"
+          },
+          {
+            "name": "sitting_out",
+            "docs": [
+              "Missed a hand by not committing a seed: no longer waited for. Committing a seed brings the",
+              "seat back from the next hand on."
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -6069,7 +6526,15 @@
           {
             "name": "idle_since",
             "docs": [
-              "When the table last became idle (a hand ended); the seed window counts from here."
+              "When the table last became idle (opened, or a hand ended or was aborted); the seed window",
+              "counts from here. Sitting down doesn't move it, so nobody can stall hands by re-seating."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "last_commit_ts",
+            "docs": [
+              "Rollup clock at the table's last commit to L1."
             ],
             "type": "i64"
           },
@@ -6078,7 +6543,7 @@
             "type": {
               "array": [
                 "u8",
-                44
+                36
               ]
             }
           }

@@ -102,7 +102,7 @@ static class Program
     {
         var rng = new Random(33);
         var sb = new StringBuilder("[\n");
-        int written = 0, showdowns = 0, sidePots = 0, allIns = 0, headsUp = 0, splits = 0;
+        int written = 0, showdowns = 0, sidePots = 0, allIns = 0, headsUp = 0, splits = 0, illegalTried = 0;
         int game = 0;
         while (written < target)
         {
@@ -146,9 +146,19 @@ static class Program
                 {
                     int seat = engine.AwaitingActionSeat;
                     var l = engine.CurrentLegalActions;
+                    // Sometimes try an illegal action first: the C# engine must reject it (and so
+                    // must the Rust one), leaving the hand unchanged.
+                    if (rng.Next(8) == 0 && Illegal(rng, l, out var bad))
+                    {
+                        bool rejected = false;
+                        try { engine.SubmitAction(seat, bad); } catch (InvalidOperationException) { rejected = true; }
+                        if (!rejected) throw new Exception($"C# accepted an action chosen as illegal: {bad}");
+                        illegalTried++;
+                        steps.Add($"[{seat},{B(l.CanFold)},{B(l.CanCheck)},{B(l.CanCall)},{l.CallAmount},{B(l.CanBet)},{B(l.CanRaise)},{l.MinRaiseTo},{l.MaxRaiseTo},{B(l.CanAllIn)},{(int)bad.Type},{bad.Amount},1]");
+                    }
                     var a = Choose(rng, l);
                     if (a.Type == ActionType.AllIn) sawAllIn = true;
-                    steps.Add($"[{seat},{B(l.CanFold)},{B(l.CanCheck)},{B(l.CanCall)},{l.CallAmount},{B(l.CanBet)},{B(l.CanRaise)},{l.MinRaiseTo},{l.MaxRaiseTo},{B(l.CanAllIn)},{(int)a.Type},{a.Amount}]");
+                    steps.Add($"[{seat},{B(l.CanFold)},{B(l.CanCheck)},{B(l.CanCall)},{l.CallAmount},{B(l.CanBet)},{B(l.CanRaise)},{l.MinRaiseTo},{l.MaxRaiseTo},{B(l.CanAllIn)},{(int)a.Type},{a.Amount},0]");
                     engine.SubmitAction(seat, a);
                 }
                 engine.Events -= OnEvent;
@@ -175,10 +185,28 @@ static class Program
             }
         }
         sb.Append("]\n");
-        return (sb.ToString(), $"hands={written} games={game} showdowns={showdowns} multiAward={splits} sidePotHands={sidePots} allInHands={allIns} headsUp={headsUp}");
+        return (sb.ToString(), $"hands={written} games={game} showdowns={showdowns} multiAward={splits} sidePotHands={sidePots} allInHands={allIns} headsUp={headsUp} illegalTried={illegalTried}");
     }
 
     static int B(bool b) => b ? 1 : 0;
+
+    // An action the legal set forbids: a check facing a bet, a call or raise with nothing to call,
+    // a bet or raise outside [min, max], an all-in when barred.
+    static bool Illegal(Random rng, LegalActions l, out PlayerAction a)
+    {
+        var options = new List<PlayerAction>();
+        if (!l.CanCheck) options.Add(PlayerAction.Check());
+        if (!l.CanCall) options.Add(PlayerAction.Call());
+        if (!l.CanBet) options.Add(PlayerAction.Bet(l.MaxRaiseTo));
+        if (!l.CanRaise) options.Add(PlayerAction.Raise(l.MaxRaiseTo));
+        if (l.CanBet && l.MinRaiseTo > 1) options.Add(PlayerAction.Bet(l.MinRaiseTo - 1));
+        if (l.CanRaise && l.MinRaiseTo > 1) options.Add(PlayerAction.Raise(l.MinRaiseTo - 1));
+        if (l.CanBet) options.Add(PlayerAction.Bet(l.MaxRaiseTo + 1));
+        if (l.CanRaise) options.Add(PlayerAction.Raise(l.MaxRaiseTo + 1));
+        if (!l.CanAllIn) options.Add(PlayerAction.AllIn());
+        a = options.Count > 0 ? options[rng.Next(options.Count)] : default;
+        return options.Count > 0;
+    }
 
     // ------------------------------------------------------------------ replay of an on-chain hand
 

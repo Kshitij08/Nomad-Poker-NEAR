@@ -651,7 +651,7 @@ mod tests {
     #[test]
     fn whole_hands_match_csharp() {
         let hands = golden("hands.json");
-        let (mut n, mut steps) = (0, 0);
+        let (mut n, mut steps, mut rejected) = (0, 0, 0);
         for h in hands.as_array().unwrap() {
             let seat_count = h["seatCount"].as_u64().unwrap() as u8;
             let before: Vec<i64> = h["before"].as_array().unwrap().iter().map(|x| x.as_i64().unwrap()).collect();
@@ -681,7 +681,15 @@ mod tests {
                     can_raise: v[6] == 1, min_raise_to: v[7] as u64, max_raise_to: v[8] as u64, can_all_in: v[9] == 1,
                 };
                 assert_eq!(g.legal(), want, "hand {n} step {steps}: legal actions");
-                awards = g.act(v[0] as u8, v[10] as u8, v[11] as u64, &cards).unwrap();
+                if v[12] == 1 {
+                    // C# rejected this action: so must we, with the hand unchanged.
+                    let before = g;
+                    assert_eq!(g.act(v[0] as u8, v[10] as u8, v[11] as u64, &cards), Err(EngineError::Illegal), "hand {n} step {steps}: illegal action accepted");
+                    assert_eq!(g, before, "hand {n} step {steps}: a rejected action changed the hand");
+                    rejected += 1;
+                } else {
+                    awards = g.act(v[0] as u8, v[10] as u8, v[11] as u64, &cards).unwrap();
+                }
                 steps += 1;
             }
             assert!(g.is_over(), "hand {n} should be over");
@@ -695,6 +703,6 @@ mod tests {
             assert_eq!(g.board_len as usize, h["board"].as_array().unwrap().len(), "hand {n}: board dealt");
             n += 1;
         }
-        println!("GOLDEN hands={n} actions={steps} all match");
+        println!("GOLDEN hands={n} actions={steps} (illegal, rejected by both: {rejected}) all match");
     }
 }
