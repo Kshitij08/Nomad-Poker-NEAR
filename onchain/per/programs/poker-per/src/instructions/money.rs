@@ -24,8 +24,9 @@ use crate::state::Config;
 use crate::dealing::NO_CARD;
 use crate::table::{
     rake_for, Deck, Hand, HandLog, HandRecord, Invites, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, INVITES_SEED,
-    LEDGER_SEED, LOG_SEED, RECORD_SEED, STATUS_CLOSED, STATUS_OPEN, TABLE_SEED,
+    COMMIT_EVERY_SECS, LEDGER_SEED, LOG_SEED, RECORD_SEED, STATUS_CLOSED, STATUS_OPEN, TABLE_SEED,
 };
+use crate::instructions::keeper::{cancel_crank, CRANK_SEED, HYDRA_EPHEMERAL_ID};
 
 /// MagicBlock programs every private-account operation needs.
 #[derive(Accounts)]
@@ -93,7 +94,8 @@ pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
     let ledger_bump = [ctx.bumps.ledger];
     let ledger_seeds: &[&[u8]] = &[LEDGER_SEED, table_key.as_ref(), &ledger_bump];
     let ledger_info = a.ledger.to_account_info();
-    if ledger_info.data_is_empty() {
+    let first_open = ledger_info.data_is_empty();
+    if first_open {
         sp.create_account(&ledger_info, ledger_seeds, 8 + Ledger::INIT_SPACE)?;
         // A new ledger is all zeros except its discriminator and table (building the ~3 KB value
         // on the stack would overflow it), and a fresh rollup-only account is already zeroed.
@@ -142,7 +144,11 @@ pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
         Ledger::try_deserialize(&mut &data[..])?.fingerprint()?
     };
     ctx.accounts.table.ledger_hash = fp;
-    ctx.accounts.table.idle_since = Clock::get()?.unix_timestamp;
+    // The seed window counts from the first open only: calling open_table again (it's idempotent and
+    // permissionless) must not restart it.
+    if first_open {
+        ctx.accounts.table.idle_since = Clock::get()?.unix_timestamp;
+    }
     Ok(())
 }
 
@@ -401,10 +407,19 @@ pub struct CommitTable<'info> {
     pub magic_fee_vault: UncheckedAccount<'info>,
 }
 
-/// Permissionless: copy the public table (settings, occupancy, ledger hash) to L1. The ledger itself
-/// is rollup-only and never committed. The table pays the commit fee itself, as a delegated fee
-/// payer: MagicBlock allows only 10 commits for an account with no delegated fee payer.
+/// Copy the public table (settings, occupancy, ledger hash) to L1. The ledger itself is
+/// rollup-only and never committed. The table pays the commit fee itself, as a delegated fee payer
+/// (MagicBlock allows only 10 commits for an account with none). Because the table pays, anyone but
+/// the creator may commit at most once per `COMMIT_EVERY_SECS`; that keeps the L1 copy fresh for
+/// the escape hatch (clients or a keeper call it) without letting strangers run up its fees.
 pub fn commit_table(ctx: Context<CommitTable>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    {
+        let t = &mut ctx.accounts.table;
+        require!(ctx.accounts.payer.key() == t.creator || now.saturating_sub(t.last_commit_ts) >= COMMIT_EVERY_SECS, PokerError::CommitTooSoon);
+        t.last_commit_ts = now;
+        t.exit(&crate::ID)?;
+    }
     let t = &ctx.accounts.table;
     let (id, bump) = (t.table_id.to_le_bytes(), [t.bump]);
     let ts = table_seeds(t, &id, &bump);
@@ -416,7 +431,6 @@ pub fn commit_table(ctx: Context<CommitTable>) -> Result<()> {
     .magic_fee_vault(ctx.accounts.magic_fee_vault.to_account_info())
     .commit(&[ctx.accounts.table.to_account_info()])
     .build_and_invoke_signed(&[&ts])?;
-    ctx.accounts.table.last_commit_ts = Clock::get()?.unix_timestamp;
     Ok(())
 }
 
@@ -447,6 +461,14 @@ pub struct CloseTable<'info> {
     /// CHECK: permission PDA of the hand log; closed here.
     #[account(mut, seeds = [PERMISSION_SEED, log.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
     pub log_permission: UncheckedAccount<'info>,
+    /// CHECK: the table's keeper crank, passed only if one was scheduled (a missing account can't be
+    /// loaded writable in the rollup); cancelled here, since once the table leaves the rollup it
+    /// could no longer cancel it.
+    #[account(mut, seeds = [CRANK_SEED, table.key().as_ref(), table.key().as_ref()], bump, seeds::program = HYDRA_EPHEMERAL_ID)]
+    pub crank: Option<UncheckedAccount<'info>>,
+    /// CHECK: fixed id; needed with `crank`.
+    #[account(address = HYDRA_EPHEMERAL_ID)]
+    pub hydra_program: Option<UncheckedAccount<'info>>,
     /// CHECK: MagicBlock's rent vault for rollup-only accounts.
     #[account(mut, address = EPHEMERAL_VAULT_ID)]
     pub vault: UncheckedAccount<'info>,
@@ -489,6 +511,11 @@ pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
         }
         if !log_info.data_is_empty() {
             sp.close_account(&log_info)?;
+        }
+        if let (Some(crank), Some(hydra)) = (&a.crank, &a.hydra_program) {
+            if !crank.data_is_empty() && *crank.owner == HYDRA_EPHEMERAL_ID {
+                cancel_crank(&a.table, crank, &a.vault, &a.magic_program, hydra)?;
+            }
         }
     }
     let table = &mut ctx.accounts.table;

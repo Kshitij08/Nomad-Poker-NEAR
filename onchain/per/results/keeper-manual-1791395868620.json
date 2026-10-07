@@ -1,0 +1,11 @@
+{
+  "table": "6z7jFzKJXjXLFJF9BcVm3okwikEfxU5p1WqvF8ctEJ6d",
+  "crank": "8TjyAk787szPWwcrWWYPKsGQJoxWebY9AHVwsfwWt3kT",
+  "executedBefore": 0,
+  "manualTrigger": "vPs99vj2igNBxaVeEQqeAGKvccwenPk5zYenXhH6JqgECYgE2w5UEMPj46c975fgwhzEgjMRpPG71zckegNYsb5",
+  "executedAfter": 1,
+  "handStateAfter": 3,
+  "crankValid": true,
+  "closed": true,
+  "crankGoneAfterClose": true
+}

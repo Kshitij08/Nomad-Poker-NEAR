@@ -56,6 +56,10 @@ async function main() {
   await S.ok("create + delegate a 6-seat table (blinds 0.0001 / 0.0002)", async () => { await T.create(params); return T.delegate(); });
   await sleep(4000);
   await S.ok("open (ledger, deck, record, hand log)", () => T.open(prog.deployer, deployer.publicKey));
+  const idle0 = Number((await readTable()).idleSince);
+  await sleep(2000);
+  await S.ok("open again (idempotent)", () => T.open(prog[4], p3.publicKey));
+  S.check("opening again doesn't restart the seed window (no stalling by re-opening)", Number((await readTable()).idleSince) === idle0, { idle0 });
   await S.ok("p1 sits in seat 0 with 2,000,000 (1,900,000 after rake)", () => T.buyIn(prog[0], p1.publicKey, 0, 2_000_000n));
   await S.ok("p2 sits in seat 2 with 4,000,000", () => T.buyIn(prog[2], p2.publicKey, 2, 4_000_000n));
   await S.ok("p3 sits in seat 4 with 6,000,000", () => T.buyIn(prog[4], p3.publicKey, 4, 6_000_000n));
@@ -158,10 +162,13 @@ async function main() {
   S.check("hand A: on-chain final stacks equal the C# engine's replay of the same hand", repA.match, repA);
   S.check("hand A: chips conserved (stacks before = stacks after)", sum(A.stacksBefore) === sum(A.ledgerAfter.seats.map((s: any) => BigInt(s.stack.toString()))), {});
   S.check("hand A: more than one pot paid out (main + side pot)", repA.csharpAwards.length >= 2, { awards: repA.csharpAwards });
+  // Commits: the table pays, so anyone may commit at most every 15 minutes; the creator any time.
+  await S.ok("an outsider (p3) commits the table (its first commit)", () => T.commit(prog[4], p3.publicKey));
   await sleep(8000);
   const l1AfterA = coder.decode("table", (await connection.getAccountInfo(T.table))!.data);
-  S.check("hand A: the table's first hand end committed it to Solana itself (L1 copy shows hand 1, idle)", Number(l1AfterA.handNo) === 1 && l1AfterA.handState === 0,
-    { l1HandNo: Number(l1AfterA.handNo), l1HandState: l1AfterA.handState, lastCommitTs: Number(l1AfterA.lastCommitTs) });
+  S.check("the commit reached Solana: the L1 copy shows hand 1, idle", Number(l1AfterA.handNo) === 1 && l1AfterA.handState === 0, { l1HandNo: Number(l1AfterA.handNo), l1HandState: l1AfterA.handState });
+  await S.err("an outsider can't commit again within 15 minutes (the table pays)", "CommitTooSoon", () => T.commit(prog[4], p3.publicKey));
+  await S.ok("the creator may commit any time", () => T.commit(prog.deployer, deployer.publicKey));
 
   // Anyone left with nothing rebuys between hands.
   for (const s of SEATS) {
@@ -211,8 +218,6 @@ async function main() {
   S.check("hand B: the log a player reads hashes to the public record's log hash, and marks the timeout", h.equals(Buffer.from(B.record.logHash)) && log.len === B.record.logLen && timeoutLogged,
     { entries: log.len, recordLogLen: B.record.logLen, timeoutLogged });
 
-  const l1AfterB = coder.decode("table", (await connection.getAccountInfo(T.table))!.data);
-  S.check("hand B: no commit within 15 minutes of the last one (L1 copy still shows hand 1)", Number(l1AfterB.handNo) === 1, { l1HandNo: Number(l1AfterB.handNo) });
   for (const s of SEATS) {
     const st = BigInt((await readLedger()).seats[s].stack.toString());
     if (st === 0n) await T.buyIn(prog[s], wallets[s].publicKey, s, 2_000_000n);

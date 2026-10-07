@@ -13,12 +13,9 @@
 
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::access_control::structs::PERMISSION_SEED;
-use ephemeral_rollups_sdk::anchor::commit;
-use ephemeral_rollups_sdk::ephem::{FoldableIntentBuilder, MagicIntentBundleBuilder};
 use ephemeral_rollups_sdk::consts::PERMISSION_PROGRAM_ID;
 
-use crate::constants::{MAX_SEATS, TEE_VALIDATOR};
-use crate::instructions::table::DELEGATION_PROGRAM_ID;
+use crate::constants::MAX_SEATS;
 use crate::dealing;
 use crate::engine::{Awards, Cards, EngineError, Game, DONE, PREFLOP};
 use crate::errors::PokerError;
@@ -26,11 +23,10 @@ use crate::instructions::money::*;
 use crate::private::Sponsor;
 use crate::table::{
     Deck, HandLog, HandRecord, Ledger, Table, DECK_SEED, HAND_DEALT, HAND_IDLE, HAND_PLAYING, LEDGER_SEED, LOG_BIG_BLIND,
-    COMMIT_EVERY_SECS, LOG_SEED, LOG_SMALL_BLIND, LOG_TIMEOUT, RECORD_SEED, TABLE_SEED, TURN_SECS,
+    LOG_SEED, LOG_SMALL_BLIND, LOG_TIMEOUT, RECORD_SEED, TABLE_SEED, TURN_SECS,
 };
 
 /// The table's hand accounts, shared by every instruction that plays a hand.
-#[commit]
 #[derive(Accounts)]
 pub struct HandAccounts<'info> {
     #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
@@ -44,10 +40,6 @@ pub struct HandAccounts<'info> {
     pub record: Box<Account<'info, HandRecord>>,
     #[account(mut, seeds = [LOG_SEED, table.key().as_ref()], bump)]
     pub log: AccountLoader<'info, HandLog>,
-    /// CHECK: the TEE validator's magic fee vault; the table pays its periodic commits (see
-    /// money.rs `commit_table`).
-    #[account(mut, seeds = [MAGIC_FEE_VAULT_SEED, TEE_VALIDATOR.as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
-    pub magic_fee_vault: UncheckedAccount<'info>,
 }
 
 /// `act` and `timeout`: someone acting.
@@ -213,24 +205,9 @@ fn finish_hand(a: &mut HandAccounts, now: i64) -> Result<()> {
     table.idle_since = now;
     table.turn_deadline = 0;
     emit!(HandEnded { table: table.key(), hand_no: table.hand_no });
-    stamp(table, ledger, now)?;
-    if now.saturating_sub(table.last_commit_ts) >= COMMIT_EVERY_SECS {
-        table.last_commit_ts = now;
-        commit_paid_by_table(table, &a.magic_context, &a.magic_program, &a.magic_fee_vault)?;
-    }
-    Ok(())
-}
-
-/// Commits the table to L1, the table paying the fee (see money.rs `commit_table`).
-fn commit_paid_by_table<'info>(table: &mut Box<Account<'info, Table>>, magic_context: &AccountInfo<'info>, magic_program: &AccountInfo<'info>, fee_vault: &AccountInfo<'info>) -> Result<()> {
-    table.exit(&crate::ID)?;
-    let (id, bump) = (table.table_id.to_le_bytes(), [table.bump]);
-    let ts = table_seeds(table, &id, &bump);
-    MagicIntentBundleBuilder::new(table.to_account_info(), magic_context.clone(), magic_program.clone())
-        .magic_fee_vault(fee_vault.clone())
-        .commit(&[table.to_account_info()])
-        .build_and_invoke_signed(&[&ts])?;
-    Ok(())
+    // No commit here: settlement must never depend on a commit succeeding. The table is committed
+    // by `commit_table` (rate-limited, table-paid), which clients or a keeper call.
+    stamp(table, ledger, now)
 }
 
 /// Hole cards and board of the current hand, from the private deck (M4's dealing order).

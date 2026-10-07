@@ -6,7 +6,7 @@ import { randomBytes } from "crypto";
 import fs from "fs";
 import path from "path";
 import { loadKey, programFor, programOn, teeConnection, randomTableId } from "./lib";
-import { BN, errName, sleep, tableApi, tokenOf, HYDRA_EPHEMERAL, MAGIC_FEE_VAULT, MAGIC_CONTEXT_ID, rollup } from "../tests/helpers";
+import { BN, errName, sleep, tableApi, tokenOf, HYDRA_EPHEMERAL, rollup } from "../tests/helpers";
 import { MAGIC_PROGRAM_ID, permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
 
 async function main() {
@@ -28,7 +28,7 @@ async function main() {
   const executed = async () => Number((await er.d.getAccountInfo(T.crank))!.data.readBigUInt64LE(32 + 32 + 8 + 8 + 8 + 8));
   const out: any = { table: T.table.toBase58(), crank: T.crank.toBase58(), executedBefore: await executed() };
   const tickIx = await prog.d.methods.tick().accountsPartial({
-    hand: { table: T.table, ledger: T.ledger, deck: T.deck, record: T.record, log: T.log, magicFeeVault: MAGIC_FEE_VAULT, magicProgram: MAGIC_PROGRAM_ID, magicContext: MAGIC_CONTEXT_ID },
+    hand: { table: T.table, ledger: T.ledger, deck: T.deck, record: T.record, log: T.log },
     logPermission: permissionPdaFromAccount(T.log), rollup,
   } as any).instruction();
   const trigger = new TransactionInstruction({ programId: HYDRA_EPHEMERAL, keys: [
@@ -42,10 +42,13 @@ async function main() {
   out.executedAfter = await executed();
   out.handStateAfter = t.handState; // 3 = PLAYING: tick began the hand
   out.crankValid = out.executedAfter === out.executedBefore + 1 && t.handState === 3;
-  await T.cancelKeeper(prog.d, deployer.publicKey).catch(() => {});
+  // No explicit cancel: close_table must cancel the keeper itself.
   for (let i = 0; i < 20 && coder.decode("table", (await er.d.getAccountInfo(T.table))!.data).handState !== 0; i++) { await T.tick(prog.d).catch(() => {}); await sleep(3000); }
   await T.cashOut(prog.p1, p1.publicKey, 0).catch(() => {}); await T.cashOut(prog.p2, p2.publicKey, 2).catch(() => {});
-  await T.collectRake(prog.d, tokenOf(deployer.publicKey)).catch(() => {}); await T.close(prog.d, deployer.publicKey).catch(() => {});
+  await T.collectRake(prog.d, tokenOf(deployer.publicKey)).catch(() => {});
+  try { await T.close(prog.d, deployer.publicKey); out.closed = true; } catch (e) { out.closed = "FAILED " + errName(e); }
+  await sleep(3000);
+  out.crankGoneAfterClose = (await er.d.getAccountInfo(T.crank)) === null;
   const file = path.join(__dirname, "../results", `keeper-manual-${Date.now()}.json`);
   fs.writeFileSync(file, JSON.stringify(out, null, 2));
   console.log(JSON.stringify(out, null, 2));

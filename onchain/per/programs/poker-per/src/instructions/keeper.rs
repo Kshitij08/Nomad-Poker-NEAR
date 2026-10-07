@@ -11,22 +11,24 @@ use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
 use anchor_lang::solana_program::program::invoke_signed;
 use anchor_lang::Discriminator;
 use ephemeral_rollups_sdk::access_control::structs::PERMISSION_SEED;
-use ephemeral_rollups_sdk::consts::{EPHEMERAL_VAULT_ID, MAGIC_CONTEXT_ID, MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID};
+use ephemeral_rollups_sdk::consts::{EPHEMERAL_VAULT_ID, MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID};
 
-use crate::constants::TEE_VALIDATOR;
 use crate::errors::PokerError;
-use crate::instructions::money::{table_seeds, MAGIC_FEE_VAULT_SEED};
-use crate::instructions::table::DELEGATION_PROGRAM_ID;
+use crate::instructions::money::table_seeds;
 use crate::table::{Table, DECK_SEED, LEDGER_SEED, LOG_SEED, RECORD_SEED, STATUS_OPEN, TABLE_SEED};
 
 /// Hydra's ephemeral-rollup program.
 pub const HYDRA_EPHEMERAL_ID: Pubkey = pubkey!("eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf");
 const HYDRA_CREATE: u8 = 0;
 const HYDRA_CANCEL: u8 = 2;
-const CRANK_SEED: &[u8] = b"crank";
+pub(crate) const CRANK_SEED: &[u8] = b"crank";
 const WRITABLE: u8 = 0b10;
-/// Compute limit the cranker sets for each tick (covers a showdown and a commit).
+/// Compute limit the cranker sets for each tick (covers a showdown).
 pub const KEEPER_CU_LIMIT: u32 = 400_000;
+/// Most lamports `schedule_keeper` may move from the table to the crank for tips.
+pub const MAX_KEEPER_FUND: u64 = 1_000_000;
+/// Lamports the table keeps above its rent after funding the keeper (sponsoring seats).
+pub const KEEPER_RESERVE: u64 = 1_000_000;
 
 #[derive(Accounts)]
 pub struct ScheduleKeeper<'info> {
@@ -34,8 +36,9 @@ pub struct ScheduleKeeper<'info> {
     pub creator: Signer<'info>,
     #[account(mut, has_one = creator @ PokerError::NotCreator, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
     pub table: Box<Account<'info, Table>>,
-    /// CHECK: the table's crank (Hydra PDA, seeded by the table's address).
-    #[account(mut, seeds = [CRANK_SEED, table.key().as_ref()], bump, seeds::program = HYDRA_EPHEMERAL_ID)]
+    /// CHECK: the table's crank: Hydra's payer-bound PDA [b"crank", payer, seed], with the table as
+    /// both payer and seed, so nobody else can create a crank at this address first.
+    #[account(mut, seeds = [CRANK_SEED, table.key().as_ref(), table.key().as_ref()], bump, seeds::program = HYDRA_EPHEMERAL_ID)]
     pub crank: UncheckedAccount<'info>,
     /// CHECK: fixed id
     #[account(address = HYDRA_EPHEMERAL_ID)]
@@ -59,15 +62,12 @@ pub fn schedule_keeper(ctx: Context<ScheduleKeeper>, interval_slots: u64, tip: u
     let ledger = pda(&[LEDGER_SEED, table_key.as_ref()], &crate::ID);
     let log = pda(&[LOG_SEED, table_key.as_ref()], &crate::ID);
     // `tick`'s accounts, in its order (BeginHand: hand accounts, log permission, rollup programs).
-    let metas: [(Pubkey, bool); 12] = [
+    let metas: [(Pubkey, bool); 9] = [
         (table_key, true),
         (ledger, true),
         (pda(&[DECK_SEED, table_key.as_ref()], &crate::ID), true),
         (pda(&[RECORD_SEED, table_key.as_ref()], &crate::ID), true),
         (log, true),
-        (pda(&[MAGIC_FEE_VAULT_SEED, TEE_VALIDATOR.as_ref()], &DELEGATION_PROGRAM_ID), true),
-        (MAGIC_PROGRAM_ID, false),
-        (MAGIC_CONTEXT_ID, true),
         (pda(&[PERMISSION_SEED, log.as_ref()], &PERMISSION_PROGRAM_ID), true),
         (MAGIC_PROGRAM_ID, false),
         (EPHEMERAL_VAULT_ID, true),
@@ -112,9 +112,10 @@ pub fn schedule_keeper(ctx: Context<ScheduleKeeper>, interval_slots: u64, tip: u
         &[&ts],
     )?;
     if fund > 0 {
+        // The table's lamports also sponsor new seats' private accounts: keep a reserve for them.
         let table_info = ctx.accounts.table.to_account_info();
-        let keep = Rent::get()?.minimum_balance(table_info.data_len());
-        require!(table_info.lamports().saturating_sub(fund) >= keep, PokerError::MathOverflow);
+        let keep = Rent::get()?.minimum_balance(table_info.data_len()).saturating_add(KEEPER_RESERVE);
+        require!(fund <= MAX_KEEPER_FUND && table_info.lamports().saturating_sub(fund) >= keep, PokerError::InsufficientTableBalance);
         **table_info.try_borrow_mut_lamports()? -= fund;
         **ctx.accounts.crank.to_account_info().try_borrow_mut_lamports()? += fund;
     }
@@ -124,21 +125,27 @@ pub fn schedule_keeper(ctx: Context<ScheduleKeeper>, interval_slots: u64, tip: u
 /// The creator cancels the table's keeper (its rent goes back to the table).
 pub fn cancel_keeper(ctx: Context<ScheduleKeeper>) -> Result<()> {
     let a = &ctx.accounts;
-    let (id, bump) = (a.table.table_id.to_le_bytes(), [a.table.bump]);
-    let ts = table_seeds(&a.table, &id, &bump);
+    cancel_crank(&a.table, &a.crank, &a.vault, &a.magic_program, &a.hydra_program)
+}
+
+/// Hydra Cancel, signed by the table as the crank's authority; the crank's balance and rent go back
+/// to the table.
+pub(crate) fn cancel_crank<'info>(table: &Account<'info, Table>, crank: &AccountInfo<'info>, vault: &AccountInfo<'info>, magic_program: &AccountInfo<'info>, hydra: &AccountInfo<'info>) -> Result<()> {
+    let (id, bump) = (table.table_id.to_le_bytes(), [table.bump]);
+    let ts = table_seeds(table, &id, &bump);
     invoke_signed(
         &Instruction {
             program_id: HYDRA_EPHEMERAL_ID,
             accounts: vec![
-                AccountMeta::new(a.table.key(), true),
-                AccountMeta::new(a.crank.key(), false),
-                AccountMeta::new(a.table.key(), false),
+                AccountMeta::new(table.key(), true),
+                AccountMeta::new(crank.key(), false),
+                AccountMeta::new(table.key(), false),
                 AccountMeta::new(EPHEMERAL_VAULT_ID, false),
                 AccountMeta::new_readonly(MAGIC_PROGRAM_ID, false),
             ],
             data: vec![HYDRA_CANCEL],
         },
-        &[a.table.to_account_info(), a.crank.to_account_info(), a.vault.to_account_info(), a.magic_program.to_account_info(), a.hydra_program.to_account_info()],
+        &[table.to_account_info(), crank.clone(), vault.clone(), magic_program.clone(), hydra.clone()],
         &[&ts],
     )?;
     Ok(())

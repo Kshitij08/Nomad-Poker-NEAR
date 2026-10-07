@@ -235,120 +235,6 @@
                   }
                 ]
               }
-            },
-            {
-              "name": "magic_fee_vault",
-              "docs": [
-                "money.rs `commit_table`)."
-              ],
-              "writable": true,
-              "pda": {
-                "seeds": [
-                  {
-                    "kind": "const",
-                    "value": [
-                      109,
-                      97,
-                      103,
-                      105,
-                      99,
-                      45,
-                      102,
-                      101,
-                      101,
-                      45,
-                      118,
-                      97,
-                      117,
-                      108,
-                      116
-                    ]
-                  },
-                  {
-                    "kind": "const",
-                    "value": [
-                      5,
-                      61,
-                      71,
-                      26,
-                      133,
-                      158,
-                      115,
-                      46,
-                      104,
-                      11,
-                      201,
-                      88,
-                      248,
-                      65,
-                      7,
-                      43,
-                      143,
-                      63,
-                      188,
-                      25,
-                      115,
-                      155,
-                      230,
-                      151,
-                      196,
-                      198,
-                      129,
-                      18,
-                      111,
-                      140,
-                      31,
-                      116
-                    ]
-                  }
-                ],
-                "program": {
-                  "kind": "const",
-                  "value": [
-                    181,
-                    183,
-                    0,
-                    225,
-                    242,
-                    87,
-                    58,
-                    192,
-                    204,
-                    6,
-                    34,
-                    1,
-                    52,
-                    74,
-                    207,
-                    151,
-                    184,
-                    53,
-                    6,
-                    235,
-                    140,
-                    229,
-                    25,
-                    152,
-                    204,
-                    98,
-                    126,
-                    24,
-                    147,
-                    128,
-                    167,
-                    62
-                  ]
-                }
-              }
-            },
-            {
-              "name": "magic_program",
-              "address": "Magic11111111111111111111111111111111111111"
-            },
-            {
-              "name": "magic_context",
-              "writable": true,
-              "address": "MagicContext1111111111111111111111111111111"
             }
           ]
         }
@@ -505,120 +391,6 @@
                   }
                 ]
               }
-            },
-            {
-              "name": "magic_fee_vault",
-              "docs": [
-                "money.rs `commit_table`)."
-              ],
-              "writable": true,
-              "pda": {
-                "seeds": [
-                  {
-                    "kind": "const",
-                    "value": [
-                      109,
-                      97,
-                      103,
-                      105,
-                      99,
-                      45,
-                      102,
-                      101,
-                      101,
-                      45,
-                      118,
-                      97,
-                      117,
-                      108,
-                      116
-                    ]
-                  },
-                  {
-                    "kind": "const",
-                    "value": [
-                      5,
-                      61,
-                      71,
-                      26,
-                      133,
-                      158,
-                      115,
-                      46,
-                      104,
-                      11,
-                      201,
-                      88,
-                      248,
-                      65,
-                      7,
-                      43,
-                      143,
-                      63,
-                      188,
-                      25,
-                      115,
-                      155,
-                      230,
-                      151,
-                      196,
-                      198,
-                      129,
-                      18,
-                      111,
-                      140,
-                      31,
-                      116
-                    ]
-                  }
-                ],
-                "program": {
-                  "kind": "const",
-                  "value": [
-                    181,
-                    183,
-                    0,
-                    225,
-                    242,
-                    87,
-                    58,
-                    192,
-                    204,
-                    6,
-                    34,
-                    1,
-                    52,
-                    74,
-                    207,
-                    151,
-                    184,
-                    53,
-                    6,
-                    235,
-                    140,
-                    229,
-                    25,
-                    152,
-                    204,
-                    98,
-                    126,
-                    24,
-                    147,
-                    128,
-                    167,
-                    62
-                  ]
-                }
-              }
-            },
-            {
-              "name": "magic_program",
-              "address": "Magic11111111111111111111111111111111111111"
-            },
-            {
-              "name": "magic_context",
-              "writable": true,
-              "address": "MagicContext1111111111111111111111111111111"
             }
           ]
         },
@@ -1062,6 +834,9 @@
         },
         {
           "name": "crank",
+          "docs": [
+            "both payer and seed, so nobody else can create a crank at this address first."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -1074,6 +849,10 @@
                   110,
                   107
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
               },
               {
                 "kind": "account",
@@ -1708,6 +1487,79 @@
               ]
             }
           }
+        },
+        {
+          "name": "crank",
+          "docs": [
+            "loaded writable in the rollup); cancelled here, since once the table leaves the rollup it",
+            "could no longer cancel it."
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  97,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                9,
+                141,
+                175,
+                94,
+                62,
+                38,
+                45,
+                106,
+                31,
+                231,
+                193,
+                37,
+                229,
+                238,
+                178,
+                89,
+                200,
+                202,
+                82,
+                70,
+                56,
+                177,
+                52,
+                125,
+                239,
+                164,
+                240,
+                139,
+                173,
+                185,
+                238,
+                142
+              ]
+            }
+          }
+        },
+        {
+          "name": "hydra_program",
+          "optional": true,
+          "address": "eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf"
         },
         {
           "name": "vault",
@@ -4487,6 +4339,9 @@
         },
         {
           "name": "crank",
+          "docs": [
+            "both payer and seed, so nobody else can create a crank at this address first."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -4499,6 +4354,10 @@
                   110,
                   107
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
               },
               {
                 "kind": "account",
@@ -4958,120 +4817,6 @@
                   }
                 ]
               }
-            },
-            {
-              "name": "magic_fee_vault",
-              "docs": [
-                "money.rs `commit_table`)."
-              ],
-              "writable": true,
-              "pda": {
-                "seeds": [
-                  {
-                    "kind": "const",
-                    "value": [
-                      109,
-                      97,
-                      103,
-                      105,
-                      99,
-                      45,
-                      102,
-                      101,
-                      101,
-                      45,
-                      118,
-                      97,
-                      117,
-                      108,
-                      116
-                    ]
-                  },
-                  {
-                    "kind": "const",
-                    "value": [
-                      5,
-                      61,
-                      71,
-                      26,
-                      133,
-                      158,
-                      115,
-                      46,
-                      104,
-                      11,
-                      201,
-                      88,
-                      248,
-                      65,
-                      7,
-                      43,
-                      143,
-                      63,
-                      188,
-                      25,
-                      115,
-                      155,
-                      230,
-                      151,
-                      196,
-                      198,
-                      129,
-                      18,
-                      111,
-                      140,
-                      31,
-                      116
-                    ]
-                  }
-                ],
-                "program": {
-                  "kind": "const",
-                  "value": [
-                    181,
-                    183,
-                    0,
-                    225,
-                    242,
-                    87,
-                    58,
-                    192,
-                    204,
-                    6,
-                    34,
-                    1,
-                    52,
-                    74,
-                    207,
-                    151,
-                    184,
-                    53,
-                    6,
-                    235,
-                    140,
-                    229,
-                    25,
-                    152,
-                    204,
-                    98,
-                    126,
-                    24,
-                    147,
-                    128,
-                    167,
-                    62
-                  ]
-                }
-              }
-            },
-            {
-              "name": "magic_program",
-              "address": "Magic11111111111111111111111111111111111111"
-            },
-            {
-              "name": "magic_context",
-              "writable": true,
-              "address": "MagicContext1111111111111111111111111111111"
             }
           ]
         },
@@ -5306,120 +5051,6 @@
                   }
                 ]
               }
-            },
-            {
-              "name": "magic_fee_vault",
-              "docs": [
-                "money.rs `commit_table`)."
-              ],
-              "writable": true,
-              "pda": {
-                "seeds": [
-                  {
-                    "kind": "const",
-                    "value": [
-                      109,
-                      97,
-                      103,
-                      105,
-                      99,
-                      45,
-                      102,
-                      101,
-                      101,
-                      45,
-                      118,
-                      97,
-                      117,
-                      108,
-                      116
-                    ]
-                  },
-                  {
-                    "kind": "const",
-                    "value": [
-                      5,
-                      61,
-                      71,
-                      26,
-                      133,
-                      158,
-                      115,
-                      46,
-                      104,
-                      11,
-                      201,
-                      88,
-                      248,
-                      65,
-                      7,
-                      43,
-                      143,
-                      63,
-                      188,
-                      25,
-                      115,
-                      155,
-                      230,
-                      151,
-                      196,
-                      198,
-                      129,
-                      18,
-                      111,
-                      140,
-                      31,
-                      116
-                    ]
-                  }
-                ],
-                "program": {
-                  "kind": "const",
-                  "value": [
-                    181,
-                    183,
-                    0,
-                    225,
-                    242,
-                    87,
-                    58,
-                    192,
-                    204,
-                    6,
-                    34,
-                    1,
-                    52,
-                    74,
-                    207,
-                    151,
-                    184,
-                    53,
-                    6,
-                    235,
-                    140,
-                    229,
-                    25,
-                    152,
-                    204,
-                    98,
-                    126,
-                    24,
-                    147,
-                    128,
-                    167,
-                    62
-                  ]
-                }
-              }
-            },
-            {
-              "name": "magic_program",
-              "address": "Magic11111111111111111111111111111111111111"
-            },
-            {
-              "name": "magic_context",
-              "writable": true,
-              "address": "MagicContext1111111111111111111111111111111"
             }
           ]
         }
@@ -6026,6 +5657,16 @@
       "code": 6048,
       "name": "HandNotPlaying",
       "msg": "No hand is being played"
+    },
+    {
+      "code": 6049,
+      "name": "CommitTooSoon",
+      "msg": "The table was committed recently; only the creator may commit again this soon"
+    },
+    {
+      "code": 6050,
+      "name": "InsufficientTableBalance",
+      "msg": "Not enough lamports left on the table for that"
     }
   ],
   "types": [

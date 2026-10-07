@@ -113,10 +113,10 @@ export function tableApi(creator: Keypair, tableId: bigint) {
   const escrow = escrowOf(table);
   const [escrowEata] = PublicKey.findProgramAddressSync([table.toBuffer(), NATIVE_MINT.toBuffer()], ESPL);
   const ledger = ledgerOf(table), deck = deckOf(table), record = recordOf(table), log = logOf(table);
-  const hand = { table, ledger, deck, record, log, magicFeeVault: MAGIC_FEE_VAULT, magicProgram: MAGIC_PROGRAM_ID, magicContext: MAGIC_CONTEXT_ID };
+  const hand = { table, ledger, deck, record, log };
   const play = (signer: PublicKey) => ({ signer, hand } as any);
   const begin = () => ({ hand, logPermission: permissionPdaFromAccount(log), rollup } as any);
-  const crank = PublicKey.findProgramAddressSync([Buffer.from("crank"), table.toBuffer()], HYDRA_EPHEMERAL)[0];
+  const crank = PublicKey.findProgramAddressSync([Buffer.from("crank"), table.toBuffer(), table.toBuffer()], HYDRA_EPHEMERAL)[0];
   return {
     table, escrow, escrowEata, ledger, deck, record, log,
     // create_table uses 124k-202k compute units depending on the id (PDA bump searches), so it always
@@ -174,10 +174,15 @@ export function tableApi(creator: Keypair, tableId: bigint) {
     collectRake: (prog: anchor.Program, devToken: PublicKey) => prog.methods.collectRake()
       .accountsPartial({ config: CONFIG_PDA, table, ledger, escrow, devToken, magicProgram: MAGIC_PROGRAM_ID }).rpc(),
     commit: (prog: anchor.Program, payer: PublicKey) => prog.methods.commitTable().accountsPartial({ payer, table }).rpc(),
-    close: (prog: anchor.Program, signer: PublicKey) => prog.methods.closeTable().accountsPartial({
-      creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, log, logPermission: permissionPdaFromAccount(log),
-      vault: EPHEMERAL_VAULT, permissionProgram: PERMISSION_PROGRAM_ID,
-    }).rpc(),
+    // The keeper's crank is passed only if it exists (the rollup can't load a missing account writable).
+    close: async (prog: anchor.Program, signer: PublicKey) => {
+      const hasKeeper = (await prog.provider.connection.getAccountInfo(crank)) !== null;
+      return prog.methods.closeTable().accountsPartial({
+        creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, log, logPermission: permissionPdaFromAccount(log),
+        crank: hasKeeper ? crank : null, hydraProgram: hasKeeper ? HYDRA_EPHEMERAL : null,
+        vault: EPHEMERAL_VAULT, permissionProgram: PERMISSION_PROGRAM_ID,
+      }).rpc();
+    },
     request: (signer: Keypair) => programFor(signer).methods.requestTableUndelegation(BN(tableId), creator.publicKey).accountsPartial({
       requester: signer.publicKey, config: CONFIG_PDA, table, escapePayer: escapePayerOf(table), ownerProgram: PROGRAM_ID,
       undelegationRequest: dlpPda("undelegation-request", table), delegationRecord: dlpPda("delegation", table), delegationMetadata: dlpPda("delegation-metadata", table), delegationProgram: DLP,

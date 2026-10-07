@@ -100,4 +100,8 @@ pub enum PokerError {
     TurnNotOver,
     #[msg("No hand is being played")]
     HandNotPlaying,
+    #[msg("The table was committed recently; only the creator may commit again this soon")]
+    CommitTooSoon,
+    #[msg("Not enough lamports left on the table for that")]
+    InsufficientTableBalance,
 }

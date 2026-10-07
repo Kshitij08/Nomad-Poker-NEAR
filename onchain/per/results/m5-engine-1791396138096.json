@@ -1,0 +1,1552 @@
+{
+  "suite": "m5-engine",
+  "program": "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv",
+  "ranAt": "2026-10-07T18:02:18.095Z",
+  "pass": 52,
+  "fail": 2,
+  "knownPlatformIssues": 0,
+  "table": "4iGMrzGRQtWh9DdpfmeUvHpEY9WzNRm9ds9dPsDZ6tvM",
+  "hands": [
+    {
+      "label": "A: side pots",
+      "handNo": 1,
+      "button": 2,
+      "dealtMask": 21,
+      "actions": [
+        [
+          2,
+          5,
+          "0"
+        ],
+        [
+          4,
+          2,
+          "0"
+        ],
+        [
+          0,
+          5,
+          "0"
+        ]
+      ]
+    },
+    {
+      "label": "B: rules and timeout",
+      "handNo": 2,
+      "button": 4,
+      "dealtMask": 21,
+      "actions": [
+        [
+          4,
+          4,
+          "400000"
+        ],
+        [
+          0,
+          0,
+          "0"
+        ],
+        [
+          2,
+          2,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          4,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          4,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          4,
+          1,
+          "0"
+        ]
+      ]
+    },
+    {
+      "label": "C: heads-up after the seed window",
+      "handNo": 3,
+      "button": 0,
+      "dealtMask": 5,
+      "actions": [
+        [
+          0,
+          2,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ]
+      ]
+    },
+    {
+      "label": "D1: p3 sitting out",
+      "handNo": 4,
+      "button": 2,
+      "dealtMask": 5,
+      "actions": [
+        [
+          2,
+          2,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ]
+      ]
+    },
+    {
+      "label": "D2: p3 back",
+      "handNo": 5,
+      "button": 4,
+      "dealtMask": 21,
+      "actions": [
+        [
+          4,
+          2,
+          "0"
+        ],
+        [
+          0,
+          2,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          4,
+          1,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          4,
+          1,
+          "0"
+        ],
+        [
+          0,
+          1,
+          "0"
+        ],
+        [
+          2,
+          1,
+          "0"
+        ],
+        [
+          4,
+          1,
+          "0"
+        ]
+      ]
+    }
+  ],
+  "replays": {
+    "A": {
+      "match": true,
+      "onChain": [
+        0,
+        -1,
+        0,
+        -1,
+        11400000,
+        -1
+      ],
+      "csharp": [
+        0,
+        -1,
+        0,
+        -1,
+        11400000,
+        -1
+      ],
+      "problem": null,
+      "csharpAwards": [
+        [
+          4,
+          5700000
+        ],
+        [
+          4,
+          3800000
+        ]
+      ],
+      "board": [
+        "9s",
+        "Td",
+        "4s",
+        "Qd",
+        "Js"
+      ],
+      "holes": {
+        "0": [
+          "Qh",
+          "9d"
+        ],
+        "2": [
+          "6s",
+          "Jd"
+        ],
+        "4": [
+          "8h",
+          "Ad"
+        ]
+      }
+    },
+    "B": {
+      "match": true,
+      "onChain": [
+        1800000,
+        -1,
+        1500000,
+        -1,
+        11900000,
+        -1
+      ],
+      "csharp": [
+        1800000,
+        -1,
+        1500000,
+        -1,
+        11900000,
+        -1
+      ],
+      "problem": null,
+      "csharpAwards": [
+        [
+          4,
+          300000
+        ],
+        [
+          4,
+          600000
+        ]
+      ],
+      "board": [
+        "4d",
+        "8s",
+        "7c",
+        "9h",
+        "8h"
+      ],
+      "holes": {
+        "0": [
+          "9s",
+          "Kh"
+        ],
+        "2": [
+          "Kc",
+          "2d"
+        ],
+        "4": [
+          "6d",
+          "7s"
+        ]
+      }
+    },
+    "C": {
+      "match": true,
+      "onChain": [
+        2000000,
+        -1,
+        1300000,
+        -1,
+        -1,
+        -1
+      ],
+      "csharp": [
+        2000000,
+        -1,
+        1300000,
+        -1,
+        -1,
+        -1
+      ],
+      "problem": null,
+      "csharpAwards": [
+        [
+          0,
+          400000
+        ]
+      ],
+      "board": [
+        "5c",
+        "2d",
+        "5s",
+        "6s",
+        "6h"
+      ],
+      "holes": {
+        "0": [
+          "7h",
+          "9d"
+        ],
+        "2": [
+          "2c",
+          "8s"
+        ]
+      }
+    },
+    "D1": {
+      "match": true,
+      "onChain": [
+        1800000,
+        -1,
+        1500000,
+        -1,
+        -1,
+        -1
+      ],
+      "csharp": [
+        1800000,
+        -1,
+        1500000,
+        -1,
+        -1,
+        -1
+      ],
+      "problem": null,
+      "csharpAwards": [
+        [
+          2,
+          400000
+        ]
+      ],
+      "board": [
+        "Js",
+        "4s",
+        "6d",
+        "2c",
+        "5h"
+      ],
+      "holes": {
+        "0": [
+          "7c",
+          "Qc"
+        ],
+        "2": [
+          "Qd",
+          "9h"
+        ]
+      }
+    },
+    "D2": {
+      "match": true,
+      "onChain": [
+        2200000,
+        -1,
+        1300000,
+        -1,
+        12650000,
+        -1
+      ],
+      "csharp": [
+        2200000,
+        -1,
+        1300000,
+        -1,
+        12650000,
+        -1
+      ],
+      "problem": null,
+      "csharpAwards": [
+        [
+          0,
+          600000
+        ]
+      ],
+      "board": [
+        "2s",
+        "Js",
+        "3h",
+        "Ad",
+        "3s"
+      ],
+      "holes": {
+        "0": [
+          "5s",
+          "3c"
+        ],
+        "2": [
+          "8s",
+          "2c"
+        ],
+        "4": [
+          "6d",
+          "Th"
+        ]
+      }
+    }
+  },
+  "computeUnits": [
+    {
+      "hand": "A: side pots",
+      "seat": -1,
+      "kind": -1,
+      "units": 50585,
+      "endsHand": false,
+      "what": "begin_hand"
+    },
+    {
+      "hand": "A: side pots",
+      "seat": 2,
+      "kind": 5,
+      "units": 39648,
+      "endsHand": false
+    },
+    {
+      "hand": "A: side pots",
+      "seat": 4,
+      "kind": 2,
+      "units": 39648,
+      "endsHand": false
+    },
+    {
+      "hand": "A: side pots",
+      "seat": 0,
+      "kind": 5,
+      "units": 86132,
+      "endsHand": true
+    },
+    {
+      "hand": "B: rules and timeout",
+      "seat": -1,
+      "kind": -1,
+      "units": 50585,
+      "endsHand": false,
+      "what": "begin_hand"
+    },
+    {
+      "hand": "B: rules and timeout",
+      "seat": 0,
+      "kind": -1,
+      "units": 39648,
+      "endsHand": false,
+      "what": "timeout"
+    },
+    {
+      "hand": "B: rules and timeout",
+      "seat": 2,
+      "kind": 2,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "B: rules and timeout",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "B: rules and timeout",
+      "seat": 4,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "B: rules and timeout",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "B: rules and timeout",
+      "seat": 4,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "B: rules and timeout",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "B: rules and timeout",
+      "seat": 4,
+      "kind": 1,
+      "units": 72460,
+      "endsHand": true
+    },
+    {
+      "hand": "C: heads-up after the seed window",
+      "seat": -1,
+      "kind": -1,
+      "units": 50585,
+      "endsHand": false,
+      "what": "begin_hand"
+    },
+    {
+      "hand": "C: heads-up after the seed window",
+      "seat": 0,
+      "kind": 2,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "C: heads-up after the seed window",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "C: heads-up after the seed window",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "C: heads-up after the seed window",
+      "seat": 0,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "C: heads-up after the seed window",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "C: heads-up after the seed window",
+      "seat": 0,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "C: heads-up after the seed window",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "C: heads-up after the seed window",
+      "seat": 0,
+      "kind": 1,
+      "units": 71093,
+      "endsHand": true
+    },
+    {
+      "hand": "D1: p3 sitting out",
+      "seat": -1,
+      "kind": -1,
+      "units": 50585,
+      "endsHand": false,
+      "what": "begin_hand"
+    },
+    {
+      "hand": "D1: p3 sitting out",
+      "seat": 2,
+      "kind": 2,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D1: p3 sitting out",
+      "seat": 0,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D1: p3 sitting out",
+      "seat": 0,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D1: p3 sitting out",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D1: p3 sitting out",
+      "seat": 0,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D1: p3 sitting out",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D1: p3 sitting out",
+      "seat": 0,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D1: p3 sitting out",
+      "seat": 2,
+      "kind": 1,
+      "units": 71093,
+      "endsHand": true
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": -1,
+      "kind": -1,
+      "units": 50585,
+      "endsHand": false,
+      "what": "begin_hand"
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 4,
+      "kind": 2,
+      "units": 39648,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 0,
+      "kind": 2,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 0,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 4,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 0,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 4,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 0,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 2,
+      "kind": 1,
+      "units": 41015,
+      "endsHand": false
+    },
+    {
+      "hand": "D2: p3 back",
+      "seat": 4,
+      "kind": 1,
+      "units": 86132,
+      "endsHand": true
+    }
+  ],
+  "outcomes": [
+    {
+      "name": "create + delegate a 6-seat table (blinds 0.0001 / 0.0002)",
+      "status": "PASS",
+      "detail": {
+        "sig": "65GwNemY9ceaLMQaFK5PybwV6ZY6BzgceAqfuoCRrVaUrTUHXeeTNx1vcdjGMbR9g5iAM3eAwRMEiKBXCDXQyaEA",
+        "problem": null
+      }
+    },
+    {
+      "name": "open (ledger, deck, record, hand log)",
+      "status": "PASS",
+      "detail": {
+        "sig": "242HQ8U59Y2bC3vnsrz7J75iJBQcHwEKup6zwxgDwjE22AQcJvwfy3H5YCcGHumqCALJQXvvcuRTKDRgZGMphfKe",
+        "problem": null
+      }
+    },
+    {
+      "name": "open again (idempotent)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3NweYY2x95UQy6kT1eU8D2pqRFuPYfVuJtmWJ5JXV7HUiJvnXMWgG96XwAeaME6TfbwcRLHWh82CuyBwnEj85Z31",
+        "problem": null
+      }
+    },
+    {
+      "name": "opening again doesn't restart the seed window (no stalling by re-opening)",
+      "status": "PASS",
+      "detail": {
+        "idle0": 1791395885
+      }
+    },
+    {
+      "name": "p1 sits in seat 0 with 2,000,000 (1,900,000 after rake)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5DQrs8wwRZuBpriKptY5NSBVtRvbfH8uU118Q23GkXtdLvoQiSCTJmSGaJPQ3mqs7ERt5UuRuKAYPRdGD1kTN4bd",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 sits in seat 2 with 4,000,000",
+      "status": "PASS",
+      "detail": {
+        "sig": "2DLJJowoWPeUgHCx2mGzUNizgzmV1vbhcqyvWFSnCbfazVDfG3zshmT7sjHBTwbFABVwxMEwyoMBq8vq87suSxJE",
+        "problem": null
+      }
+    },
+    {
+      "name": "p3 sits in seat 4 with 6,000,000",
+      "status": "PASS",
+      "detail": {
+        "sig": "jY41RiGaWE38jNVNbaz3mRUPYPiUGSuPfuhLGVMYYSyfte4uoeXfFXmqtrbfNvrmiEEG7CUcWvNW4VSgjeFTXjz",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand A: blinds and first actor follow the C# rules (SB, BB left of the button; first to act left of the BB)",
+      "status": "PASS",
+      "detail": {
+        "button": 2,
+        "sb": 4,
+        "bb": 0,
+        "firstToAct": 2
+      }
+    },
+    {
+      "name": "hand A: went to showdown with the full board",
+      "status": "PASS",
+      "detail": {
+        "boardLen": 5,
+        "actions": [
+          [
+            2,
+            5,
+            "0"
+          ],
+          [
+            4,
+            2,
+            "0"
+          ],
+          [
+            0,
+            5,
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "hand A: on-chain final stacks equal the C# engine's replay of the same hand",
+      "status": "PASS",
+      "detail": {
+        "match": true,
+        "onChain": [
+          0,
+          -1,
+          0,
+          -1,
+          11400000,
+          -1
+        ],
+        "csharp": [
+          0,
+          -1,
+          0,
+          -1,
+          11400000,
+          -1
+        ],
+        "problem": null,
+        "csharpAwards": [
+          [
+            4,
+            5700000
+          ],
+          [
+            4,
+            3800000
+          ]
+        ],
+        "board": [
+          "9s",
+          "Td",
+          "4s",
+          "Qd",
+          "Js"
+        ],
+        "holes": {
+          "0": [
+            "Qh",
+            "9d"
+          ],
+          "2": [
+            "6s",
+            "Jd"
+          ],
+          "4": [
+            "8h",
+            "Ad"
+          ]
+        }
+      }
+    },
+    {
+      "name": "hand A: chips conserved (stacks before = stacks after)",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "hand A: more than one pot paid out (main + side pot)",
+      "status": "PASS",
+      "detail": {
+        "awards": [
+          [
+            4,
+            5700000
+          ],
+          [
+            4,
+            3800000
+          ]
+        ]
+      }
+    },
+    {
+      "name": "an outsider (p3) commits the table (its first commit)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2zxYdqmW1BDFyT87gBemrWM7LZhGHKtf3mNcDGa9h2hJuhp8GwUpwunLnKtuYXHn2Kb3d4sksEf3bvxYhzAWBPCw",
+        "problem": null
+      }
+    },
+    {
+      "name": "the commit reached Solana: the L1 copy shows hand 1, idle",
+      "status": "PASS",
+      "detail": {
+        "l1HandNo": 1,
+        "l1HandState": 0
+      }
+    },
+    {
+      "name": "an outsider can't commit again within 15 minutes (the table pays)",
+      "status": "PASS",
+      "detail": {
+        "expected": "CommitTooSoon",
+        "got": "CommitTooSoon (6049)"
+      }
+    },
+    {
+      "name": "the creator may commit any time",
+      "status": "PASS",
+      "detail": {
+        "sig": "2SjJEwCDhmxwPtPabXif97wP1S7d7mzBfsw8aoJLcmQUdMBSGfmuXiufLGFW8BgNGbdFYvXkPzQi8QTL5aGvLQpw",
+        "problem": null
+      }
+    },
+    {
+      "name": "seat 0 busted in hand A and rebuys 2,000,000 between hands",
+      "status": "PASS",
+      "detail": {
+        "sig": "4rfBa1ZctTG6qeBU7mdw1Rn3K2VtzEYgXL26Bk7ZgcHXyTrPhnN8nEW1rsAu7XdChDLhpeGmRZVSkYz49WYyo8Wo",
+        "problem": null
+      }
+    },
+    {
+      "name": "seat 2 busted in hand A and rebuys 2,000,000 between hands",
+      "status": "PASS",
+      "detail": {
+        "sig": "2J1xgH7uLZezkV12kWsjwyjS7Mb2wdyzx2rpKoMaZEbXikDySwFa3nYXED1dK35hcFsL6wBPUWCQPPraqKW1QvQa",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand B: a wallet can't act for a seat it doesn't hold",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeated",
+        "got": "NotSeated (6018)"
+      }
+    },
+    {
+      "name": "hand B: acting out of turn is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotYourTurn",
+        "got": "NotYourTurn (6045)"
+      }
+    },
+    {
+      "name": "hand B: checking when facing the big blind is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "IllegalAction",
+        "got": "IllegalAction (6046)"
+      }
+    },
+    {
+      "name": "hand B: a raise below the minimum is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "IllegalAction",
+        "got": "IllegalAction (6046)"
+      }
+    },
+    {
+      "name": "hand B: rebuy during a hand is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "HandInProgress",
+        "got": "HandInProgress (6037)"
+      }
+    },
+    {
+      "name": "hand B: cash-out during a hand is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "HandInProgress",
+        "got": "HandInProgress (6037)"
+      }
+    },
+    {
+      "name": "hand B: timeout before the 15 s turn is up is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "TurnNotOver",
+        "got": "TurnNotOver (6047)"
+      }
+    },
+    {
+      "name": "hand B: the action log is readable by a player dealt in, not by an outsider or without login",
+      "status": "PASS",
+      "detail": {
+        "dealtPlayer": true,
+        "outsider": false,
+        "noLogin": false
+      }
+    },
+    {
+      "name": "hand B: seat 4 makes a minimum raise to 400000",
+      "status": "PASS",
+      "detail": {
+        "sig": "chxL4WuYjVJ6ksaz4bQVnMhMBWXuUNri8nuuV2tLuoZX9nXQkTr2JmDRaRQuEgixiML4c5JSHbFhVQsCbtekkTo",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand B: after 15 s anyone (the creator, not seated) times out seat 0",
+      "status": "PASS",
+      "detail": {
+        "sig": "4MbvYNS24G4KJ1nX5F9cTdVcCrCzG3LVHKXKtzWbph8dNKQwzuJCuh8YcZC9eyXckHVx5twNB5uatVdtH1Fusci8",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand B: the timed-out seat 0 was folded (it faced a raise)",
+      "status": "PASS",
+      "detail": {
+        "status": 3
+      }
+    },
+    {
+      "name": "hand B: on-chain final stacks equal the C# engine's replay (including the timeout fold)",
+      "status": "PASS",
+      "detail": {
+        "match": true,
+        "onChain": [
+          1800000,
+          -1,
+          1500000,
+          -1,
+          11900000,
+          -1
+        ],
+        "csharp": [
+          1800000,
+          -1,
+          1500000,
+          -1,
+          11900000,
+          -1
+        ],
+        "problem": null,
+        "csharpAwards": [
+          [
+            4,
+            300000
+          ],
+          [
+            4,
+            600000
+          ]
+        ],
+        "board": [
+          "4d",
+          "8s",
+          "7c",
+          "9h",
+          "8h"
+        ],
+        "holes": {
+          "0": [
+            "9s",
+            "Kh"
+          ],
+          "2": [
+            "Kc",
+            "2d"
+          ],
+          "4": [
+            "6d",
+            "7s"
+          ]
+        }
+      }
+    },
+    {
+      "name": "hand B: the log a player reads hashes to the public record's log hash, and marks the timeout",
+      "status": "PASS",
+      "detail": {
+        "entries": 11,
+        "recordLogLen": 11,
+        "timeoutLogged": true
+      }
+    },
+    {
+      "name": "hand C: with p3's seed missing the hand can't start inside the seed window",
+      "status": "PASS",
+      "detail": {
+        "expected": "MissingSeeds",
+        "got": "MissingSeeds (6042)"
+      }
+    },
+    {
+      "name": "hand C: dealt to seats 0 and 2 only (p3 sat out)",
+      "status": "PASS",
+      "detail": {
+        "dealtMask": 5
+      }
+    },
+    {
+      "name": "hand C: heads-up rule: the button posts the small blind",
+      "status": "PASS",
+      "detail": {
+        "button": 0,
+        "sb": 0
+      }
+    },
+    {
+      "name": "hand C: on-chain final stacks equal the C# engine's replay",
+      "status": "PASS",
+      "detail": {
+        "match": true,
+        "onChain": [
+          2000000,
+          -1,
+          1300000,
+          -1,
+          -1,
+          -1
+        ],
+        "csharp": [
+          2000000,
+          -1,
+          1300000,
+          -1,
+          -1,
+          -1
+        ],
+        "problem": null,
+        "csharpAwards": [
+          [
+            0,
+            400000
+          ]
+        ],
+        "board": [
+          "5c",
+          "2d",
+          "5s",
+          "6s",
+          "6h"
+        ],
+        "holes": {
+          "0": [
+            "7h",
+            "9d"
+          ],
+          "2": [
+            "2c",
+            "8s"
+          ]
+        }
+      }
+    },
+    {
+      "name": "hand C: p3's stack is untouched",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "hand C: p3, who missed the seed window, is now marked sitting out",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "hand D1: p3 (not dealt in) rebuys 1,000,000 while the hand runs",
+      "status": "PASS",
+      "detail": {
+        "sig": "4pGjSozcLRpjdYZ9p8zUs3YN9BdwCdednAvqQks3sFwa4k9owBcVDmdz2nWKyjqQALSGZAY2d1m7dkT8zvZ1fDfF",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand D1: started straight away (no seed window) and dealt seats 0 and 2 only",
+      "status": "PASS",
+      "detail": {
+        "dealtMask": 5
+      }
+    },
+    {
+      "name": "hand D1: begun by tick (the crank's instruction, no signer needed), not begin_hand",
+      "status": "PASS",
+      "detail": {
+        "street": 1
+      }
+    },
+    {
+      "name": "hand D1: p1's reader key acted for seat 0 (no wallet signature needed)",
+      "status": "PASS",
+      "detail": {
+        "readerActed": [
+          {
+            "hand": "D1: p3 sitting out",
+            "seat": 0,
+            "kind": 1
+          },
+          {
+            "hand": "D1: p3 sitting out",
+            "seat": 0,
+            "kind": 1
+          },
+          {
+            "hand": "D1: p3 sitting out",
+            "seat": 0,
+            "kind": 1
+          },
+          {
+            "hand": "D1: p3 sitting out",
+            "seat": 0,
+            "kind": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "hand D1: on-chain final stacks equal the C# engine's replay",
+      "status": "PASS",
+      "detail": {
+        "match": true,
+        "onChain": [
+          1800000,
+          -1,
+          1500000,
+          -1,
+          -1,
+          -1
+        ],
+        "csharp": [
+          1800000,
+          -1,
+          1500000,
+          -1,
+          -1,
+          -1
+        ],
+        "problem": null,
+        "csharpAwards": [
+          [
+            2,
+            400000
+          ]
+        ],
+        "board": [
+          "Js",
+          "4s",
+          "6d",
+          "2c",
+          "5h"
+        ],
+        "holes": {
+          "0": [
+            "7c",
+            "Qc"
+          ],
+          "2": [
+            "Qd",
+            "9h"
+          ]
+        }
+      }
+    },
+    {
+      "name": "hand D2: p3 committed a seed and was dealt in again",
+      "status": "PASS",
+      "detail": {
+        "dealtMask": 21
+      }
+    },
+    {
+      "name": "hand D2: on-chain final stacks equal the C# engine's replay",
+      "status": "PASS",
+      "detail": {
+        "match": true,
+        "onChain": [
+          2200000,
+          -1,
+          1300000,
+          -1,
+          12650000,
+          -1
+        ],
+        "csharp": [
+          2200000,
+          -1,
+          1300000,
+          -1,
+          12650000,
+          -1
+        ],
+        "problem": null,
+        "csharpAwards": [
+          [
+            0,
+            600000
+          ]
+        ],
+        "board": [
+          "2s",
+          "Js",
+          "3h",
+          "Ad",
+          "3s"
+        ],
+        "holes": {
+          "0": [
+            "5s",
+            "3c"
+          ],
+          "2": [
+            "8s",
+            "2c"
+          ],
+          "4": [
+            "6d",
+            "Th"
+          ]
+        }
+      }
+    },
+    {
+      "name": "tick with nothing to do succeeds and changes nothing (so a crank's schedule keeps advancing)",
+      "status": "PASS",
+      "detail": {
+        "sig": "59cWyuCruEMyhxfEdqPFMsNoH2ejbQZhNpSszbgrmgd5skiAbWSQBgMGdmukHFKjo5FGXbGAcoRpGszyupBMpCJ5",
+        "problem": null
+      }
+    },
+    {
+      "name": "...table unchanged by the idle tick",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "compute (bisected, within 2,000 units): begin_hand, every act (incl. showdown + settlement + commit) and timeout fit well under 1.4M",
+      "status": "PASS",
+      "detail": {
+        "maxAny": 86132,
+        "beginHand": [
+          50585,
+          50585,
+          50585,
+          50585,
+          50585
+        ],
+        "timeout": [
+          39648
+        ],
+        "endOfHand": [
+          {
+            "hand": "A: side pots",
+            "units": 86132
+          },
+          {
+            "hand": "B: rules and timeout",
+            "units": 72460
+          },
+          {
+            "hand": "C: heads-up after the seed window",
+            "units": 71093
+          },
+          {
+            "hand": "D1: p3 sitting out",
+            "units": 71093
+          },
+          {
+            "hand": "D2: p3 back",
+            "units": 86132
+          }
+        ],
+        "acts": [
+          39648,
+          39648,
+          86132,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          72460,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          71093,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          71093,
+          39648,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          41015,
+          86132
+        ]
+      }
+    },
+    {
+      "name": "seat 0 cashes out",
+      "status": "PASS",
+      "detail": {
+        "sig": "58hJgG5afyCKkfJZBqQGAVBmNiUVgy3dKE8Fyzh2at9xyJE5zUFZux5vPKiZqa7nc2MMjPyrrrBn3ZiLi3ptVkgp",
+        "problem": null
+      }
+    },
+    {
+      "name": "seat 2 cashes out",
+      "status": "PASS",
+      "detail": {
+        "sig": "5f4juHkYBsAUq3iCguzh7y956qeu8WT4Hogb8aU2FFyFYg4rUNsgMqDwb7SH5LoEBURfffMxVa2VzVWMDQ8ELtTN",
+        "problem": null
+      }
+    },
+    {
+      "name": "seat 4 cashes out",
+      "status": "PASS",
+      "detail": {
+        "sig": "36Xi9BapcAEFMoJ9yfRwZ7gYJwDJu7Ro9pVhLZt1oVEUUmGAstCNwxBoCCCikf19VXTVqcz9KCKgssGy9Cbs5CyL",
+        "problem": null
+      }
+    },
+    {
+      "name": "collect rake",
+      "status": "PASS",
+      "detail": {
+        "sig": "5tkrc6w6D4SfmMDadvytFaqU25tNGtkxZaJ4Y3v8tEXKsTaiiLstiVngA1yBTD1a3WvgZj87bZwZBPx449YjdU1a",
+        "problem": null
+      }
+    },
+    {
+      "name": "creator closes the table (hand log deleted too)",
+      "status": "FAIL",
+      "detail": {
+        "unexpectedError": "Simulation failed. \nMessage: transaction verification error: Transaction loads a writable account that cannot be written. \n\nCatch the `SendTransactionError` and call `getLogs()` on it for full details."
+      }
+    },
+    {
+      "name": "after close the hand log and ledger are gone",
+      "status": "FAIL",
+      "detail": {}
+    },
+    {
+      "name": "after the table closes, bet sizes in its act transactions are readable with no login (bets are meant to stay private)",
+      "status": "PASS",
+      "detail": {
+        "listed": 94,
+        "actTxs": 0,
+        "actWithAmountVisible": 0,
+        "hidden": 90
+      }
+    }
+  ]
+}

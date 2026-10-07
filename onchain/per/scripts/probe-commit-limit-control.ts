@@ -1,9 +1,11 @@
 // Control for probe-commit-fee-payer.ts: does the devnet TEE actually enforce MagicBlock's 10-commit
 // limit for an account with NO delegated fee payer? Uses the M0 spike program (its commit_table is
-// paid by a wallet): a fresh spike table is changed (tick) and committed 12 times.
+// paid by a wallet): a fresh spike table is changed (tick) and committed 12 times. The tick and the
+// commit are separate steps, each commit's error logs are kept, and the table's L1 copy is read
+// after each round to see whether the change arrived.
 // Writes results/commit-limit-control-<ts>.json.
 import * as anchor from "@coral-xyz/anchor";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey, SendTransactionError } from "@solana/web3.js";
 import fs from "fs";
 import path from "path";
 import { connection, loadKey, teeConnection, TEE_VALIDATOR } from "./lib";
@@ -27,16 +29,23 @@ async function main() {
   const out: any = { program: spikeIdl.address, table: table.toBase58(), commits: [] };
   for (let i = 1; i <= 12; i++) {
     const r: any = { n: i };
+    try { await er.methods.tick().accountsPartial({ table }).rpc(); r.ticked = true; } catch (e) { r.ticked = false; r.tickError = errName(e); }
+    r.rollupTicks = Number((await er.account.table.fetch(table) as any).ticks);
     try {
-      await er.methods.tick().accountsPartial({ table }).rpc();
       r.sig = await er.methods.commitTable().accountsPartial({ payer: deployer.publicKey, table, magicProgram: MAGIC_PROGRAM, magicContext: MAGIC_CONTEXT }).rpc();
       r.ok = true;
-    } catch (e) { r.ok = false; r.error = errName(e); r.raw = String((e as any)?.message ?? e).slice(0, 300); }
+    } catch (e: any) {
+      r.ok = false; r.error = errName(e); r.raw = String(e?.message ?? e).slice(0, 300);
+      r.logs = e instanceof SendTransactionError ? await e.getLogs(er.provider.connection).catch(() => e.logs) : e?.logs;
+      if (!r.logs && e?.signature) r.logs = (await er.provider.connection.getTransaction(e.signature, { maxSupportedTransactionVersion: 0 }))?.meta?.logMessages;
+    }
+    for (let w = 0; w < 10; w++) { await sleep(2000); r.l1Ticks = Number((await l1.account.table.fetch(table) as any).ticks); if (r.l1Ticks === r.rollupTicks) break; }
+    r.reachedL1 = r.l1Ticks === r.rollupTicks;
     out.commits.push(r);
-    await sleep(2500);
+    console.log(JSON.stringify({ n: i, ok: r.ok, rollupTicks: r.rollupTicks, l1Ticks: r.l1Ticks, reachedL1: r.reachedL1, error: r.error }));
   }
   out.okCount = out.commits.filter((c: any) => c.ok).length;
-  out.limitEnforced = !out.commits[10].ok;
+  out.limitEnforced = !out.commits[10].ok && !out.commits[11].ok && !out.commits[10].reachedL1 && !out.commits[11].reachedL1;
   const file = path.join(__dirname, "../results", `commit-limit-control-${Date.now()}.json`);
   fs.writeFileSync(file, JSON.stringify(out, null, 2));
   console.log(JSON.stringify({ ...out, commits: out.commits.map((c: any) => (c.ok ? "ok" : `${c.error} ${c.raw}`)) }, null, 2));
