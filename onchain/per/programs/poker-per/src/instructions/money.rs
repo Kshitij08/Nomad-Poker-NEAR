@@ -265,7 +265,7 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
         if hand_info.data_is_empty() {
             sp.create_account(&hand_info, hand_seeds, 8 + Hand::INIT_SPACE)?;
         }
-        write(&hand_info, &Hand { table: table_key, seat, owner: player, hand_no: 0, cards: [u8::MAX; 2] })?;
+        write(&hand_info, &Hand { table: table_key, seat, owner: player, hand_no: 0, cards: [u8::MAX; 2], reader })?;
         if !a.hand_permission.data_is_empty() {
             sp.set_readers(&hand_info, hand_seeds, &a.hand_permission.to_account_info(), &[reader])?;
         } else {

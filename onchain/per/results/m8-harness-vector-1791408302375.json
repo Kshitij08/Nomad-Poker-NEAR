@@ -1,0 +1,28 @@
+{
+  "suite": "m8-harness-vector",
+  "ranAt": "2026-10-07T21:25:02.3767879Z",
+  "pass": 4,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "C# shuffle seed equals the program's fixed vector",
+      "status": "PASS",
+      "detail": "D12346B4BF0787F377276F2DF1ED63464DE16F3A0352A6A3E956F59B299FC540"
+    },
+    {
+      "name": "C# shuffle equals the program's fixed deck",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "C# first button equals the program's (seat 3)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "card encoding: index 0 = 2 of clubs, 51 = ace of spades",
+      "status": "PASS",
+      "detail": null
+    }
+  ]
+}

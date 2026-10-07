@@ -353,6 +353,9 @@ pub struct Hand {
     pub owner: Pubkey,
     pub hand_no: u64,
     pub cards: [u8; 2],
+    /// The seat's reader key (M8): it may commit the seat's seeds, as it may act, so a client plays
+    /// without a wallet prompt per hand.
+    pub reader: Pubkey,
 }
 
 /// Invite list for an invite-only table. Lives on L1 (not delegated); the rollup reads a copy.

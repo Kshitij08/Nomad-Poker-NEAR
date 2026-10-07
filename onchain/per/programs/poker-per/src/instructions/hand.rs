@@ -30,6 +30,7 @@ use crate::table::{
 #[derive(Accounts)]
 #[instruction(seat: u8)]
 pub struct CommitSeed<'info> {
+    /// The seat's wallet or its reader key.
     pub player: Signer<'info>,
     #[account(seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
     pub table: Box<Account<'info, Table>>,
@@ -37,7 +38,8 @@ pub struct CommitSeed<'info> {
     pub deck: Box<Account<'info, Deck>>,
     /// The seat's private hand: proves the signer sits there without touching the ledger, so the
     /// transaction (and the seed in it) concerns no other player's readable accounts.
-    #[account(seeds = [HAND_SEED, table.key().as_ref(), &[seat]], bump, constraint = hand.owner == player.key() @ PokerError::NotSeated)]
+    #[account(seeds = [HAND_SEED, table.key().as_ref(), &[seat]], bump,
+        constraint = hand.owner == player.key() || hand.reader == player.key() @ PokerError::NotSeated)]
     pub hand: Box<Account<'info, Hand>>,
 }
 
@@ -47,7 +49,8 @@ pub fn commit_seed(ctx: Context<CommitSeed>, seat: u8, seed: [u8; 32]) -> Result
     require!(ctx.accounts.table.hand_state == HAND_IDLE, PokerError::HandInProgress);
     let deck = &mut ctx.accounts.deck;
     deck.seeds[seat as usize] = seed;
-    deck.seed_owners[seat as usize] = ctx.accounts.player.key();
+    // The seed belongs to the seat's occupant (its wallet), whichever of its keys signed.
+    deck.seed_owners[seat as usize] = ctx.accounts.hand.owner;
     deck.seed_mask |= 1 << seat;
     Ok(())
 }

@@ -1,0 +1,196 @@
+// M8 harness: the Unity client's private-table core, run headless against devnet.
+//   dotnet run -- vector                      verifier port vs the program's fixed vector
+//   dotnet run -- play <table> [hands]        two players (p1 seat 0, p2 seat 3) play real hands
+// Keys come from POKER_PER_KEYS (p1.json, p2.json), as for the TypeScript suites.
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Poker.Core;
+using Poker.Per;
+using Poker.Per.Generated;
+using Solana.Unity.Wallet;
+
+sealed class Http : IPerHttp
+{
+    static readonly HttpClient C = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    public async Task<(int, string)> Get(string url) { var r = await C.GetAsync(url); return ((int)r.StatusCode, await r.Content.ReadAsStringAsync()); }
+    public async Task<(int, string)> Post(string url, string json) { var r = await C.PostAsync(url, new StringContent(json, Encoding.UTF8, "application/json")); return ((int)r.StatusCode, await r.Content.ReadAsStringAsync()); }
+}
+
+static class Program
+{
+    const string Tee = "https://devnet-tee.magicblock.app";
+    static readonly List<object> Outcomes = new List<object>();
+    static int _fail;
+    static void Check(string name, bool pass, object detail = null)
+    {
+        Outcomes.Add(new { name, status = pass ? "PASS" : "FAIL", detail });
+        if (!pass) _fail++;
+        Console.WriteLine($"{(pass ? "PASS" : "FAIL")}  {name}{(pass || detail == null ? "" : "  " + JsonConvert.SerializeObject(detail))}");
+    }
+
+    static async Task<int> Main(string[] args)
+    {
+        switch (args.FirstOrDefault())
+        {
+            case "vector": Vector(); break;
+            case "play": await Play(new PublicKey(args[1]), args.Length > 2 ? int.Parse(args[2]) : 2); break;
+            default: Console.WriteLine("usage: vector | play <table> [hands]"); return 2;
+        }
+        Directory.CreateDirectory("../results");
+        var file = $"../results/m8-harness-{args[0]}-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.json";
+        File.WriteAllText(file, JsonConvert.SerializeObject(new { suite = $"m8-harness-{args[0]}", ranAt = DateTime.UtcNow, pass = Outcomes.Count - _fail, fail = _fail, outcomes = Outcomes }, Formatting.Indented));
+        Console.WriteLine($"\n{Outcomes.Count - _fail} passed, {_fail} failed -> {file}");
+        return _fail == 0 ? 0 : 1;
+    }
+
+    // ---- the verifier port against dealing.rs `known_vector` (also checked by tests/verifier.ts)
+    static void Vector()
+    {
+        var table = Enumerable.Repeat((byte)7, 32).ToArray();
+        var seeds = Enumerable.Range(0, 9).Select(_ => new byte[32]).ToArray();
+        seeds[0] = Enumerable.Repeat((byte)1, 32).ToArray(); seeds[3] = Enumerable.Repeat((byte)2, 32).ToArray();
+        byte[] entropy;
+        using (var h = SHA256.Create()) entropy = h.ComputeHash(Encoding.ASCII.GetBytes("poker-per/entropy/v1").Concat(Enumerable.Repeat((byte)9, 32)).ToArray());
+        var seed = PerVerifier.ShuffleSeed(table, 5, entropy, 0b1001, seeds);
+        var deck = PerVerifier.Shuffle(seed);
+        const string KnownSeed = "d12346b4bf0787f377276f2df1ed63464de16f3a0352a6a3e956f59b299fc540";
+        var knownDeck = new[] { 14, 22, 24, 23, 15, 17, 13, 49, 35, 11, 34, 10, 25, 39, 42, 33, 6, 40, 26, 21, 20, 28, 31, 32, 27, 48, 47, 38, 41, 46, 45, 4, 36, 18, 43, 44, 9, 30, 19, 37, 7, 0, 8, 16, 50, 3, 29, 51, 2, 5, 12, 1 };
+        Check("C# shuffle seed equals the program's fixed vector", Convert.ToHexString(seed).ToLowerInvariant() == KnownSeed, Convert.ToHexString(seed));
+        Check("C# shuffle equals the program's fixed deck", deck.SequenceEqual(knownDeck));
+        Check("C# first button equals the program's (seat 3)", PerVerifier.FirstButton(seed, 0b1001) == 3);
+        Check("card encoding: index 0 = 2 of clubs, 51 = ace of spades", Card.FromIndex(0) == new Card(Rank.Two, Suit.Clubs) && Card.FromIndex(51) == new Card(Rank.Ace, Suit.Spades));
+    }
+
+    // ---- two players at one table
+    sealed class Player
+    {
+        public string Name; public Account Wallet; public Account SessionKey; public int Seat;
+        public PerTableSession Session; public PerRpc WalletRpc;
+        public readonly List<PokerEvent> Events = new List<PokerEvent>();
+        public readonly List<string> Leaks = new List<string>();
+        public bool Raised;
+    }
+
+    static Account LoadKey(string name)
+    {
+        var dir = Environment.GetEnvironmentVariable("POKER_PER_KEYS") ?? throw new Exception("set POKER_PER_KEYS");
+        var bytes = JArray.Parse(File.ReadAllText(Path.Combine(dir, name + ".json"))).Select(t => (byte)t).ToArray();
+        return new Account(bytes, bytes.Skip(32).ToArray());
+    }
+
+    static async Task<PerRpc> Login(Http http, Account key) => new PerRpc(http, $"{Tee}?token={await TeeAuth.Login(http, Tee, new LocalSigner(key))}");
+
+    static async Task Play(PublicKey table, int hands)
+    {
+        var http = new Http();
+        var publicRpc = new PerRpc(http, Tee);
+        var players = new List<Player>();
+        foreach (var (name, seat) in new[] { ("p1", 0), ("p2", 3) })
+        {
+            var p = new Player { Name = name, Wallet = LoadKey(name), SessionKey = new Account(), Seat = seat };
+            p.WalletRpc = await Login(http, p.Wallet);
+            p.Session = new PerTableSession(table, publicRpc, await Login(http, p.SessionKey), new LocalSigner(p.SessionKey));
+            var pl = p;
+            p.Session.Events += e => { pl.Events.Add(e); if (e is HoleCardsDealtEvent h && h.Seat != pl.Seat && h.Card0.Rank != 0) pl.Leaks.Add($"saw seat {h.Seat}'s cards live"); };
+            players.Add(p);
+        }
+        var addrs = new PerTableAddresses(table);
+        Check("session keys are fresh and differ from the wallets", players.All(p => p.SessionKey.PublicKey.Key != p.Wallet.PublicKey.Key));
+
+        // A seat left from an earlier run keeps that run's reader (rebuys keep it), so leave first.
+        foreach (var p in players)
+        {
+            try { await p.WalletRpc.Send(new[] { PerIx.CashOut(addrs, p.Wallet.PublicKey, p.Seat) }, new LocalSigner(p.Wallet)); Console.WriteLine($"{p.Name}: left a seat from an earlier run"); }
+            catch (PerTxException e) when (e.ErrorName == "NotSeated" || e.ErrorName == "InvalidSeat") { }
+        }
+        // Sit down: the wallet signs the buy-in (Phantom's job in the game), naming the session key as reader.
+        foreach (var p in players)
+        {
+            var sig = await p.WalletRpc.Send(new[] { PerIx.BuyIn(addrs, p.Wallet.PublicKey, p.Seat, 2_000_000, p.SessionKey.PublicKey) }, new LocalSigner(p.Wallet));
+            Check($"{p.Name} buys in at seat {p.Seat} (wallet signs; session key becomes the reader)", sig != null, sig);
+        }
+        foreach (var p in players) await p.Session.Poll();
+        Check("each session finds its own seat through its reader key", players.All(p => p.Session.MySeat == p.Seat), players.Select(p => p.Session.MySeat));
+
+        var verified = 0;
+        var started = DateTime.UtcNow;
+        var lastEnded = 0;
+        // Play until `hands` have ended, then stop starting new ones and finish any hand in play.
+        while (DateTime.UtcNow - started < TimeSpan.FromMinutes(8))
+        {
+            bool wantMore = lastEnded < hands;
+            if (!wantMore && players.All(p => p.Session.Table?.HandState == PerGame.HandIdle)) break;
+            foreach (var p in players)
+            {
+                try
+                {
+                    await p.Session.Poll();
+                    var t = p.Session.Table;
+                    if (t.HandState == PerGame.HandIdle && wantMore) await p.Session.PrepareNextHand();
+                    var turn = p.Events.OfType<TurnStartedEvent>().LastOrDefault();
+                    var game = p.Session.Ledger?.Game;
+                    if (t.HandState == PerGame.HandPlaying && game != null && game.ToAct == p.Seat && turn != null && turn.ForYou && turn.Seat == p.Seat)
+                    {
+                        var legal = PerGame.Legal(game);
+                        // p1 raises once per hand preflop (when it can), everyone else checks or calls.
+                        if (p.Seat == 0 && !p.Raised && legal.CanRaise) { p.Raised = true; await p.Session.Act(ActionType.Raise, legal.MinRaiseTo); }
+                        else if (legal.CanCheck) await p.Session.Act(ActionType.Check, 0);
+                        else await p.Session.Act(ActionType.Call, 0);
+                    }
+                }
+                catch (PerTxException e) when (e.ErrorName == "NotYourTurn" || e.ErrorName == "HandNotPlaying") { /* raced the other player's poll */ }
+            }
+            // A hand both sessions have seen end.
+            var ended = players.Min(p => p.Events.OfType<HandEndedEvent>().Count());
+            if (ended > lastEnded)
+            {
+                lastEnded = ended;
+                foreach (var p in players) p.Raised = false;
+                foreach (var p in players)
+                {
+                    var s = p.Session;
+                    var v = PerVerifier.Verify(s.LastRecord, s.LastPrevButton, p.Seat, s.LastMySeed, s.LastMyCards);
+                    Check($"hand {s.LastRecord.HandNo}, {p.Name}: 'Verify this hand' recomputes the deck, button, its own seed and cards", v.Ok, new { v.Problems, v.Notes });
+                    var vl = s.LastLog != null ? PerVerifier.VerifyLog(s.LastRecord, s.LastLog) : null;
+                    Check($"hand {s.LastRecord.HandNo}, {p.Name}: the action log it read hashes to the public record", vl != null && vl.Ok, vl?.Problems);
+                    if (v.Ok && vl != null && vl.Ok) verified++;
+                }
+            }
+            await Task.Delay(400);
+        }
+        Check($"{hands} hands played to the end through the client core", lastEnded >= hands, new { lastEnded });
+
+        foreach (var p in players)
+        {
+            Check($"{p.Name} never saw another seat's cards during a hand", p.Leaks.Count == 0, p.Leaks);
+            var other = players.First(o => o != p);
+            var peek = await (await Login(http, p.SessionKey)).GetAccount(addrs.Hand(other.Seat));
+            Check($"{p.Name}'s session key can't read {other.Name}'s hand account", peek == null);
+            var kinds = p.Events.Select(e => e.GetType().Name).Distinct().ToArray();
+            Check($"{p.Name}'s event stream has the full hand cycle", new[] { "HandStartedEvent", "BlindPostedEvent", "HoleCardsDealtEvent", "TurnStartedEvent", "PlayerActedEvent", "HandEndedEvent" }.All(kinds.Contains), kinds);
+            var showdowns = p.Events.OfType<ShowdownEvent>().ToList();
+            Check($"{p.Name}: showdowns show both players' cards only after the hand", showdowns.All(sd => sd.Entries.Length == 2), showdowns.Count);
+        }
+        // Both views agree, and match the settled ledger.
+        var stacks = players.Select(p => p.Session.Ledger?.Seats[p.Seat].Stack ?? 0).ToArray();
+        Check("both players' views agree on the actions", players[0].Events.OfType<PlayerActedEvent>().Count() == players[1].Events.OfType<PlayerActedEvent>().Count(),
+            players.Select(p => p.Events.OfType<PlayerActedEvent>().Count()));
+
+        foreach (var p in players)
+        {
+            await p.Session.Poll();
+            if (p.Session.Table.HandState != PerGame.HandIdle) await Task.Delay(3000);
+            var sig = await p.WalletRpc.Send(new[] { PerIx.CashOut(addrs, p.Wallet.PublicKey, p.Seat) }, new LocalSigner(p.Wallet));
+            Check($"{p.Name} cashes out (wallet signs)", sig != null, sig);
+        }
+        Outcomes.Add(new { table = table.Key, handsVerifiedByBothPlayers = verified / 2, finalStacks = stacks });
+    }
+}

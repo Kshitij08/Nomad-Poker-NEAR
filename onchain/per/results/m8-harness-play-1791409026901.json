@@ -1,0 +1,232 @@
+{
+  "suite": "m8-harness-play",
+  "ranAt": "2026-10-07T21:37:06.9015243Z",
+  "pass": 33,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "session keys are fresh and differ from the wallets",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "p1 buys in at seat 0 (wallet signs; session key becomes the reader)",
+      "status": "PASS",
+      "detail": "2Cm8HBc3SJPBaRkdEDpT89qoVVdSMUBmovZqYHvDtUoRDH8AvfCUZFrKZWwNEnhLKnM2b2xo9XMDaqSK2hiNQV5f"
+    },
+    {
+      "name": "p2 buys in at seat 3 (wallet signs; session key becomes the reader)",
+      "status": "PASS",
+      "detail": "2W78kUNM5NZhsZtSAmEquoKAX9SHbrAdJm6XccK5PcJJ6ZSHmCxw3T6YMouYdYqVZfVesd9Zoj24vkcSMxuSG53"
+    },
+    {
+      "name": "each session finds its own seat through its reader key",
+      "status": "PASS",
+      "detail": [
+        0,
+        3
+      ]
+    },
+    {
+      "name": "hand 4, p1: 'Verify this hand' recomputes the deck, button, its own seed and cards",
+      "status": "PASS",
+      "detail": {
+        "Problems": [],
+        "Notes": []
+      }
+    },
+    {
+      "name": "hand 4, p1: the action log it read hashes to the public record",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "hand 4, p2: 'Verify this hand' recomputes the deck, button, its own seed and cards",
+      "status": "PASS",
+      "detail": {
+        "Problems": [],
+        "Notes": []
+      }
+    },
+    {
+      "name": "hand 4, p2: the action log it read hashes to the public record",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "hand 5, p1: 'Verify this hand' recomputes the deck, button, its own seed and cards",
+      "status": "PASS",
+      "detail": {
+        "Problems": [],
+        "Notes": []
+      }
+    },
+    {
+      "name": "hand 5, p1: the action log it read hashes to the public record",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "hand 5, p2: 'Verify this hand' recomputes the deck, button, its own seed and cards",
+      "status": "PASS",
+      "detail": {
+        "Problems": [],
+        "Notes": []
+      }
+    },
+    {
+      "name": "hand 5, p2: the action log it read hashes to the public record",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "hand 6, p1: 'Verify this hand' recomputes the deck, button, its own seed and cards",
+      "status": "PASS",
+      "detail": {
+        "Problems": [],
+        "Notes": []
+      }
+    },
+    {
+      "name": "hand 6, p1: the action log it read hashes to the public record",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "hand 6, p2: 'Verify this hand' recomputes the deck, button, its own seed and cards",
+      "status": "PASS",
+      "detail": {
+        "Problems": [],
+        "Notes": []
+      }
+    },
+    {
+      "name": "hand 6, p2: the action log it read hashes to the public record",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "hand 7, p1: 'Verify this hand' recomputes the deck, button, its own seed and cards",
+      "status": "PASS",
+      "detail": {
+        "Problems": [],
+        "Notes": []
+      }
+    },
+    {
+      "name": "hand 7, p1: the action log it read hashes to the public record",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "hand 7, p2: 'Verify this hand' recomputes the deck, button, its own seed and cards",
+      "status": "PASS",
+      "detail": {
+        "Problems": [],
+        "Notes": []
+      }
+    },
+    {
+      "name": "hand 7, p2: the action log it read hashes to the public record",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "3 hands played to the end through the client core",
+      "status": "PASS",
+      "detail": {
+        "lastEnded": 4
+      }
+    },
+    {
+      "name": "p1 never saw another seat's cards during a hand",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "p1's session key can't read p2's hand account",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "p1's event stream has the full hand cycle",
+      "status": "PASS",
+      "detail": [
+        "TableRosterEvent",
+        "HandStartedEvent",
+        "HoleCardsDealtEvent",
+        "BlindPostedEvent",
+        "TurnStartedEvent",
+        "PlayerActedEvent",
+        "BettingRoundChangedEvent",
+        "CommunityDealtEvent",
+        "ShowdownEvent",
+        "PotAwardedEvent",
+        "HandEndedEvent"
+      ]
+    },
+    {
+      "name": "p1: showdowns show both players' cards only after the hand",
+      "status": "PASS",
+      "detail": 4
+    },
+    {
+      "name": "p2 never saw another seat's cards during a hand",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "name": "p2's session key can't read p1's hand account",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "p2's event stream has the full hand cycle",
+      "status": "PASS",
+      "detail": [
+        "TableRosterEvent",
+        "HandStartedEvent",
+        "HoleCardsDealtEvent",
+        "BlindPostedEvent",
+        "TurnStartedEvent",
+        "PlayerActedEvent",
+        "BettingRoundChangedEvent",
+        "CommunityDealtEvent",
+        "ShowdownEvent",
+        "PotAwardedEvent",
+        "HandEndedEvent"
+      ]
+    },
+    {
+      "name": "p2: showdowns show both players' cards only after the hand",
+      "status": "PASS",
+      "detail": 4
+    },
+    {
+      "name": "both players' views agree on the actions",
+      "status": "PASS",
+      "detail": [
+        32,
+        32
+      ]
+    },
+    {
+      "name": "p1 cashes out (wallet signs)",
+      "status": "PASS",
+      "detail": "jtjS71NkcWGhs4qDHAnm9S7zGKB94EjwiZQ7F8aCphRZ9eNzxwWxFwjGcH4KwAgiLinJ4jN1kZuo8J2PYzLi66x"
+    },
+    {
+      "name": "p2 cashes out (wallet signs)",
+      "status": "PASS",
+      "detail": "4dfbwdAyPrT4QLKbbBJnNvtUwo3gPzRWVhcDN7e6HSLYWdmoJdGoXmfT96ypPCPwh8Rh6yEfVRqqJYUQrnGcE8HM"
+    },
+    {
+      "table": "EebjK8rDsGbTFxTaLZE575BHnVtq82dY1HyFAgr9vDep",
+      "handsVerifiedByBothPlayers": 4,
+      "finalStacks": [
+        2300000,
+        1500000
+      ]
+    }
+  ]
+}
