@@ -19,7 +19,7 @@ async function main() {
   console.log("current config", { len: v1.len, version: v1.version, lamports: v1.lamports });
   if (process.argv.includes("--dry")) return;
 
-  const args = { devWallet: deployer.publicKey, rakeBps: 500, maxBuyIn: new (require("@coral-xyz/anchor").BN)(1_000_000_000), paused: false };
+  const args = { devWallet: deployer.publicKey, rakeBps: 500, maxBuyIn: new (require("@coral-xyz/anchor").BN)(1_000_000_000), paused: false, escapeIdleSecs: 0 };
   try {
     await asDeployer.methods.updateConfig(args).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc();
     out.push({ name: "update on the v1 layout is refused before migration", status: "FAIL", detail: "update succeeded" });

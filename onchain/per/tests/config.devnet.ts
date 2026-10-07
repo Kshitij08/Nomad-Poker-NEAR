@@ -47,7 +47,7 @@ async function main() {
   const [programData] = PublicKey.findProgramAddressSync([PROGRAM_ID.toBuffer()], new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"));
   const fetchCfg = () => (asDeployer.account as any).config.fetch(CONFIG_PDA);
   const args = (o: Partial<{ devWallet: PublicKey; rakeBps: number; maxBuyIn: bigint; paused: boolean }> = {}) => ({
-    devWallet: o.devWallet ?? deployer.publicKey, rakeBps: o.rakeBps ?? 500, maxBuyIn: BN(o.maxBuyIn ?? 1_000_000_000n), paused: o.paused ?? false,
+    devWallet: o.devWallet ?? deployer.publicKey, rakeBps: o.rakeBps ?? 500, maxBuyIn: BN(o.maxBuyIn ?? 1_000_000_000n), paused: o.paused ?? false, escapeIdleSecs: 0,
   });
   const initAccts = (authority: PublicKey) => ({ authority, config: CONFIG_PDA, program: PROGRAM_ID, programData });
 
@@ -93,6 +93,8 @@ async function main() {
     () => asDeployer.methods.updateConfig(args({ rakeBps: 1001 })).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc());
   await expectErr("update with a zero stake cap is rejected", "InvalidStakeCap",
     () => asDeployer.methods.updateConfig(args({ maxBuyIn: 0n })).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc());
+  await expectErr("update with an escape delay under 60 s is rejected", "InvalidEscapeDelay",
+    () => asDeployer.methods.updateConfig({ ...args(), escapeIdleSecs: 59 }).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc());
   await expectErr("update with the all-zeros dev wallet is rejected", "InvalidDevWallet",
     () => asDeployer.methods.updateConfig(args({ devWallet: PublicKey.default })).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc());
   await expectErr("migrate on an already-current config is rejected", "AlreadyMigrated",

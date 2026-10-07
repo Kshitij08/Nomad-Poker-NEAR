@@ -4,12 +4,15 @@
   "type": "commonjs",
   "scripts": {
     "test:devnet": "tsx tests/config.devnet.ts",
-    "inspect": "tsx scripts/devnet-per-inspect.ts"
+    "inspect": "tsx scripts/devnet-per-inspect.ts",
+    "test:money": "tsx tests/money.devnet.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
     "@magicblock-labs/ephemeral-rollups-sdk": "0.17.3",
-    "@solana/web3.js": "1.98.4"
+    "@solana/web3.js": "1.98.4",
+    "@solana/spl-token": "0.4.14",
+    "tweetnacl": "1.0.3"
   },
   "devDependencies": {
     "tsx": "4.20.6",

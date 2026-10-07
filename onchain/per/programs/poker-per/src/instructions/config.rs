@@ -12,6 +12,8 @@ pub struct ConfigArgs {
     pub rake_bps: u16,
     pub max_buy_in: u64,
     pub paused: bool,
+    /// 0 = default (1 hour).
+    pub escape_idle_secs: u32,
 }
 
 /// Creates the config. Only the program's upgrade authority may call it, so nobody can front-run
@@ -30,7 +32,7 @@ pub struct InitializeConfig<'info> {
 }
 
 pub fn initialize_config(ctx: Context<InitializeConfig>, args: ConfigArgs) -> Result<()> {
-    check_settings(&args.dev_wallet, args.rake_bps, args.max_buy_in)?;
+    check_settings(&args.dev_wallet, args.rake_bps, args.max_buy_in, args.escape_idle_secs)?;
     let config = &mut ctx.accounts.config;
     config.version = CONFIG_VERSION;
     config.bump = ctx.bumps.config;
@@ -40,6 +42,7 @@ pub fn initialize_config(ctx: Context<InitializeConfig>, args: ConfigArgs) -> Re
     config.rake_bps = args.rake_bps;
     config.max_buy_in = args.max_buy_in;
     config.paused = args.paused;
+    config.escape_idle_secs = args.escape_idle_secs;
     config.reserved = [0; CONFIG_RESERVED];
     emit_changed(config);
     Ok(())
@@ -59,12 +62,13 @@ pub struct AdminOnly<'info> {
 }
 
 pub fn update_config(ctx: Context<AdminOnly>, args: ConfigArgs) -> Result<()> {
-    check_settings(&args.dev_wallet, args.rake_bps, args.max_buy_in)?;
+    check_settings(&args.dev_wallet, args.rake_bps, args.max_buy_in, args.escape_idle_secs)?;
     let config = &mut ctx.accounts.config;
     config.dev_wallet = args.dev_wallet;
     config.rake_bps = args.rake_bps;
     config.max_buy_in = args.max_buy_in;
     config.paused = args.paused;
+    config.escape_idle_secs = args.escape_idle_secs;
     emit_changed(config);
     Ok(())
 }
@@ -147,6 +151,7 @@ pub fn migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
         rake_bps: old.rake_bps,
         max_buy_in: old.max_buy_in,
         paused: old.paused,
+        escape_idle_secs: 0,
         reserved: [0; CONFIG_RESERVED],
     };
     let mut data = info.try_borrow_mut_data()?;

@@ -4,7 +4,12 @@ use crate::constants::MAX_RAKE_BPS;
 use crate::errors::PokerError;
 
 /// Bytes kept free at the end of Config so later modules can add fields without a realloc.
-pub const CONFIG_RESERVED: usize = 128;
+pub const CONFIG_RESERVED: usize = 124;
+
+/// Default and bounds for `escape_idle_secs` (0 in the account means the default).
+pub const DEFAULT_ESCAPE_IDLE_SECS: u32 = 3_600;
+pub const MIN_ESCAPE_IDLE_SECS: u32 = 60;
+pub const MAX_ESCAPE_IDLE_SECS: u32 = 7 * 24 * 3_600;
 
 /// Program-wide settings. One per program, at PDA ["config"]. Lives on L1 and is never delegated,
 /// so rollup instructions read a cloned, read-only copy.
@@ -27,7 +32,16 @@ pub struct Config {
     pub max_buy_in: u64,
     /// When true, no new tables or buy-ins. Existing players can still leave.
     pub paused: bool,
+    /// How long a table's last L1 commit must be idle before an emergency undelegation request.
+    /// Carved from the old reserved bytes, so existing v2 accounts read 0 = default.
+    pub escape_idle_secs: u32,
     pub reserved: [u8; CONFIG_RESERVED],
+}
+
+impl Config {
+    pub fn escape_idle_secs(&self) -> i64 {
+        if self.escape_idle_secs == 0 { DEFAULT_ESCAPE_IDLE_SECS as i64 } else { self.escape_idle_secs as i64 }
+    }
 }
 
 /// The v1 layout, used only to read an old account during migration.
@@ -44,8 +58,12 @@ pub struct ConfigV1 {
 }
 
 /// Validated settings shared by `initialize_config` and `update_config`.
-pub fn check_settings(dev_wallet: &Pubkey, rake_bps: u16, max_buy_in: u64) -> Result<()> {
+pub fn check_settings(dev_wallet: &Pubkey, rake_bps: u16, max_buy_in: u64, escape_idle_secs: u32) -> Result<()> {
     require!(*dev_wallet != Pubkey::default(), PokerError::InvalidDevWallet);
+    require!(
+        escape_idle_secs == 0 || (MIN_ESCAPE_IDLE_SECS..=MAX_ESCAPE_IDLE_SECS).contains(&escape_idle_secs),
+        PokerError::InvalidEscapeDelay
+    );
     require!(rake_bps <= MAX_RAKE_BPS, PokerError::RakeTooHigh);
     require!(max_buy_in > 0, PokerError::InvalidStakeCap);
     Ok(())
@@ -58,11 +76,14 @@ mod tests {
     #[test]
     fn settings_bounds() {
         let w = Pubkey::new_unique();
-        assert!(check_settings(&w, 0, 1).is_ok());
-        assert!(check_settings(&w, MAX_RAKE_BPS, u64::MAX).is_ok());
-        assert!(check_settings(&w, MAX_RAKE_BPS + 1, 1).is_err());
-        assert!(check_settings(&w, 500, 0).is_err());
-        assert!(check_settings(&Pubkey::default(), 500, 1).is_err());
+        assert!(check_settings(&w, 0, 1, 0).is_ok());
+        assert!(check_settings(&w, MAX_RAKE_BPS, u64::MAX, 0).is_ok());
+        assert!(check_settings(&w, MAX_RAKE_BPS + 1, 1, 0).is_err());
+        assert!(check_settings(&w, 500, 0, 0).is_err());
+        assert!(check_settings(&Pubkey::default(), 500, 1, 0).is_err());
+        assert!(check_settings(&w, 500, 1, 59).is_err());
+        assert!(check_settings(&w, 500, 1, 60).is_ok());
+        assert!(check_settings(&w, 500, 1, MAX_ESCAPE_IDLE_SECS + 1).is_err());
     }
 
     #[test]
@@ -88,12 +109,14 @@ mod tests {
             rake_bps: v1.rake_bps,
             max_buy_in: v1.max_buy_in,
             paused: v1.paused,
+            escape_idle_secs: 0,
             reserved: [0; CONFIG_RESERVED],
         };
         let mut v2_bytes = Vec::new();
         AnchorSerialize::serialize(&v2, &mut v2_bytes).unwrap();
-        // Same bytes after the version byte, then the reserved tail.
+        // Same bytes after the version byte, then a zero tail: escape_idle_secs + reserved.
         assert_eq!(&v2_bytes[1..v1_bytes.len()], &v1_bytes[1..]);
-        assert_eq!(v2_bytes.len(), v1_bytes.len() + CONFIG_RESERVED);
+        assert_eq!(v2_bytes.len(), v1_bytes.len() + 4 + CONFIG_RESERVED);
+        assert!(v2_bytes[v1_bytes.len()..].iter().all(|b| *b == 0));
     }
 }

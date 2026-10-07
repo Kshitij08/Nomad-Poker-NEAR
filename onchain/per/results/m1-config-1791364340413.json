@@ -1,0 +1,164 @@
+{
+  "program": "6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR",
+  "config": "8obiB15ExJ8DMxovMfgZjjYGjeq7mXBXQ646FG42zvmj",
+  "ranAt": "2026-10-07T09:12:20.412Z",
+  "pass": 16,
+  "fail": 0,
+  "skipped": 4,
+  "outcomes": [
+    {
+      "name": "init by a key that is not the upgrade authority is rejected",
+      "status": "SKIPPED",
+      "detail": "config already initialized by an earlier run"
+    },
+    {
+      "name": "init with rake above 10% is rejected",
+      "status": "SKIPPED",
+      "detail": "config already initialized by an earlier run"
+    },
+    {
+      "name": "init with a zero stake cap is rejected",
+      "status": "SKIPPED",
+      "detail": "config already initialized by an earlier run"
+    },
+    {
+      "name": "init by the upgrade authority succeeds",
+      "status": "SKIPPED",
+      "detail": "config already initialized by an earlier run"
+    },
+    {
+      "name": "a second init is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "already in use",
+        "got": "Allocate: account Address { address: 8obiB15ExJ8DMxovMfgZjjYGjeq7mXBXQ646FG42zvmj, base: None } already in use"
+      }
+    },
+    {
+      "name": "update by a non-admin is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotAdmin",
+        "got": "NotAdmin (6001)"
+      }
+    },
+    {
+      "name": "update with rake above 10% is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "RakeTooHigh",
+        "got": "RakeTooHigh (6002)"
+      }
+    },
+    {
+      "name": "update with a zero stake cap is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidStakeCap",
+        "got": "InvalidStakeCap (6003)"
+      }
+    },
+    {
+      "name": "update with the all-zeros dev wallet is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidDevWallet",
+        "got": "InvalidDevWallet (6006)"
+      }
+    },
+    {
+      "name": "migrate on an already-current config is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "AlreadyMigrated",
+        "got": "AlreadyMigrated (6008)"
+      }
+    },
+    {
+      "name": "admin updates rake, cap, dev wallet and pause flag",
+      "status": "PASS",
+      "detail": {
+        "sig": "5RXBm97y1qrQsxZ5Jpq4ysCs1QteSrZubpXR2vE682Akn8JoZCt2Btdh5uyGV4QCZkrofPBYCTYqHAmhh6sBmxUi",
+        "explorer": "https://explorer.solana.com/tx/5RXBm97y1qrQsxZ5Jpq4ysCs1QteSrZubpXR2vE682Akn8JoZCt2Btdh5uyGV4QCZkrofPBYCTYqHAmhh6sBmxUi?cluster=devnet",
+        "problem": null
+      }
+    },
+    {
+      "name": "admin restores the default settings",
+      "status": "PASS",
+      "detail": {
+        "sig": "4RJ5hkHycTqBQERR4fgaqQABMA7tVWmdCpNH3dYkS72bhDi7P3znwFeg9B37TXve5WNyiLsCZbyoGwknbVMqczzh",
+        "explorer": "https://explorer.solana.com/tx/4RJ5hkHycTqBQERR4fgaqQABMA7tVWmdCpNH3dYkS72bhDi7P3znwFeg9B37TXve5WNyiLsCZbyoGwknbVMqczzh?cluster=devnet",
+        "problem": null
+      }
+    },
+    {
+      "name": "accept with no pending admin is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NoPendingAdmin",
+        "got": "NoPendingAdmin (6005)"
+      }
+    },
+    {
+      "name": "propose by a non-admin is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotAdmin",
+        "got": "NotAdmin (6001)"
+      }
+    },
+    {
+      "name": "admin proposes p1",
+      "status": "PASS",
+      "detail": {
+        "sig": "2KrQNWWQXSW7Vr8BSfwpJBNUTRLfgnaNoYm86jB39obaiLv6nfLyTLGmouu4oWcBg588at23XKXCeB2SszmTaSTS",
+        "explorer": "https://explorer.solana.com/tx/2KrQNWWQXSW7Vr8BSfwpJBNUTRLfgnaNoYm86jB39obaiLv6nfLyTLGmouu4oWcBg588at23XKXCeB2SszmTaSTS?cluster=devnet",
+        "problem": null
+      }
+    },
+    {
+      "name": "accept by someone other than the proposed key is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotPendingAdmin",
+        "got": "NotPendingAdmin (6004)"
+      }
+    },
+    {
+      "name": "p1 accepts and becomes admin",
+      "status": "PASS",
+      "detail": {
+        "sig": "333vp3RCKD7DKKvTfjcxUyZCBJXTP16dz6i1VwvJ91hbbAyurpefPM57WfNSzwVqy7Ns3XZTe6f9ckCfku9n1RsC",
+        "explorer": "https://explorer.solana.com/tx/333vp3RCKD7DKKvTfjcxUyZCBJXTP16dz6i1VwvJ91hbbAyurpefPM57WfNSzwVqy7Ns3XZTe6f9ckCfku9n1RsC?cluster=devnet",
+        "problem": null
+      }
+    },
+    {
+      "name": "old admin can no longer update",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotAdmin",
+        "got": "NotAdmin (6001)"
+      }
+    },
+    {
+      "name": "p1 hands admin back to the deployer (propose)",
+      "status": "PASS",
+      "detail": {
+        "sig": "z9qj6vMH7U2YTMrpTq2xoipgLxVEjCvLXW4YDXJzSWe5FEXwUFRbt8XEAT3jmbJDVVjJjEHgaAH5HTkTVopk5A4",
+        "explorer": "https://explorer.solana.com/tx/z9qj6vMH7U2YTMrpTq2xoipgLxVEjCvLXW4YDXJzSWe5FEXwUFRbt8XEAT3jmbJDVVjJjEHgaAH5HTkTVopk5A4?cluster=devnet",
+        "problem": null
+      }
+    },
+    {
+      "name": "deployer accepts and is admin again",
+      "status": "PASS",
+      "detail": {
+        "sig": "DY5EkZGizfAXRvFwXusZ6GjFsb717TNpqzSubcEh5x93825Kms4xNygHjCWxqwhAmorHVBNqFjfq1FHAr2pzYo2",
+        "explorer": "https://explorer.solana.com/tx/DY5EkZGizfAXRvFwXusZ6GjFsb717TNpqzSubcEh5x93825Kms4xNygHjCWxqwhAmorHVBNqFjfq1FHAr2pzYo2?cluster=devnet",
+        "problem": null
+      }
+    }
+  ]
+}

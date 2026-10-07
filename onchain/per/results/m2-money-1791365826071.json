@@ -1,0 +1,522 @@
+{
+  "program": "6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR",
+  "table": "AdHvfsuZvjHq9Cisjq1jneXnun27mog81fuUgzhiKZwn",
+  "tableId": "4234922069336042417",
+  "tableB": "J2fbFPS6AM2RonWjVRM9suPEmm3ccbFS41z2sEmVbbng",
+  "escrow": "3YubPruxNhkcHjgBF137Eyz8a8WxiTJWWjw9qYsL9BXq",
+  "ranAt": "2026-10-07T09:37:06.068Z",
+  "pass": 63,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "create: small blind 0 rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidBlinds",
+        "got": "InvalidBlinds (6010)"
+      }
+    },
+    {
+      "name": "create: small blind > big blind rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidBlinds",
+        "got": "InvalidBlinds (6010)"
+      }
+    },
+    {
+      "name": "create: min buy-in under 10 big blinds rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidBuyInRange",
+        "got": "InvalidBuyInRange (6011)"
+      }
+    },
+    {
+      "name": "create: min > max rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidBuyInRange",
+        "got": "InvalidBuyInRange (6011)"
+      }
+    },
+    {
+      "name": "create: max above program stake cap rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "AboveStakeCap",
+        "got": "AboveStakeCap (6012)"
+      }
+    },
+    {
+      "name": "create: 1 seat rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidSeatCount",
+        "got": "InvalidSeatCount (6013)"
+      }
+    },
+    {
+      "name": "create: 10 seats rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidSeatCount",
+        "got": "InvalidSeatCount (6013)"
+      }
+    },
+    {
+      "name": "create: a non-wSOL mint (devnet USDC) rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "UnsupportedMint",
+        "got": "UnsupportedMint (6027)"
+      }
+    },
+    {
+      "name": "admin pauses the program",
+      "status": "PASS",
+      "detail": {
+        "sig": "5XY4exv777RJSrcsEhejqr9QRgRhsyy6N8GpKVd5p94Y79YC23gxFix3LHToMZnpgjMkcxQLNSVhDy1MYTCg1QR8",
+        "problem": null
+      }
+    },
+    {
+      "name": "create while paused rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "Paused",
+        "got": "Paused (6009)"
+      }
+    },
+    {
+      "name": "admin unpauses",
+      "status": "PASS",
+      "detail": {
+        "sig": "38D4H75UC9vuoNneXgwAH9MUwp8Nd1e5A7QJ8PTTamwKytNHE1oqjQTRgau77uMZDFLJgGsVeueUr1BVZvCq1uxU",
+        "problem": null
+      }
+    },
+    {
+      "name": "attacker (p3) pre-delegates a known future table's escrow to a non-TEE validator",
+      "status": "PASS",
+      "detail": {
+        "sig": "3XL6GXtvvqMyZtQfkaa64FJMLHoEg9LyVR8kqo9P2EAZFCuizsZJZ5h8BDCuGYjBz2i6f83SZsCbURRVyW6H5cYF",
+        "problem": null
+      }
+    },
+    {
+      "name": "creating that exact table then fails, nothing is created (attack only works on a known id)",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "Program log: Ephemeral ATA is already delegated to validator MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57, requested validator MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo"
+      }
+    },
+    {
+      "name": "...and no table account exists for that id",
+      "status": "PASS",
+      "detail": {
+        "table": "8rFDK5AABCqFCsj3bdJjeupPaj1D6sx1N3BxnYJpiUWV"
+      }
+    },
+    {
+      "name": "create table; program creates the escrow and delegates it to the TEE",
+      "status": "PASS",
+      "detail": {
+        "sig": "2e1J5qbHjovuhCD5m9gBSA2GT8SUkYfRJr5p2VbuGM6E1ggX2hpT6PANkW31vHDTj9gJxsi5vigGYAU9j6dBwRSt",
+        "problem": null
+      }
+    },
+    {
+      "name": "money refused on L1 (table created, not delegated)",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInRollup",
+        "got": "NotInRollup (6024)"
+      }
+    },
+    {
+      "name": "delegate a new table by someone other than the creator rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotCreator",
+        "got": "NotCreator (6021)"
+      }
+    },
+    {
+      "name": "delegate to a non-TEE validator rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintAddress",
+        "got": "ConstraintAddress (2012)"
+      }
+    },
+    {
+      "name": "creator delegates the table to the TEE",
+      "status": "PASS",
+      "detail": {
+        "sig": "4SNz8mwobZDxM8XFxL8cuWm6Kyx3CttTRPtttcpGJjeaked35R9116h1HNg2FiTKYb115sfjWQQKtUfkAAiWv5qR",
+        "problem": null
+      }
+    },
+    {
+      "name": "top-up p1: wrap 30000000 lamports + deposit to rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "3gUk1hzBRMi16ZFHNbpGaTGck8B3RA3mDvRQRRXnHg5EjqN8ipe2fxzQyB28MAJhytDmVBdXcMygGMdCZHm8H2Lk",
+        "problem": null
+      }
+    },
+    {
+      "name": "top-up p2: wrap 12000000 lamports + deposit to rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "F7xLwk4hwq8n98wzvtem9RoxdULWeXQTeftfmgawWJAg9gqeBxfPywaEXfD8EjLQd16Gt2NrBEnsGZWAuw5qUYs",
+        "problem": null
+      }
+    },
+    {
+      "name": "top-up p3: wrap 5000000 lamports + deposit to rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "4MUBhACLDGZ933GpU1kbNFTKjHix7tL11KazYKT35XP7tBtWJgwvCh8Dos3DKEahjcBuvJrUBWUcm3aUUDMupF2x",
+        "problem": null
+      }
+    },
+    {
+      "name": "top-up deployer: wrap 1000 lamports + deposit to rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "3nY1gqQPqJ3HCCGMCKbeM7utJMTpYcme8BpNKrYuAGZ8csAzyehtE3MqU2zG6JXN4uyz4Cq1JG6DvDbb8aKCZMaJ",
+        "problem": null
+      }
+    },
+    {
+      "name": "rollup balances before play (each wallet reading its own)",
+      "status": "PASS",
+      "detail": {
+        "p1": "30000000",
+        "p2": "81879997",
+        "dev": "7127003"
+      }
+    },
+    {
+      "name": "buy-in below the table minimum rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "BuyInTooSmall",
+        "got": "BuyInTooSmall (6015)"
+      }
+    },
+    {
+      "name": "buy-in above the table maximum rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "BuyInTooLarge",
+        "got": "BuyInTooLarge (6016)"
+      }
+    },
+    {
+      "name": "buy-in paying from someone else's token account rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintTokenOwner",
+        "got": "ConstraintTokenOwner (2015)"
+      }
+    },
+    {
+      "name": "buy-in into a fake escrow rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintAddress",
+        "got": "ConstraintAddress (2012)"
+      }
+    },
+    {
+      "name": "buy-in with a fake 'in rollup' account rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintAddress",
+        "got": "ConstraintAddress (2012)"
+      }
+    },
+    {
+      "name": "p1 buys in 0.01 (rake 5%)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5BhnVtZcp5S6ZNTFWERgVEWxT5L7oHeQge1UnnK4DrbMpUouXUmKNJ9RNTiDjcfuGjBtjbhAf8PL9gzABRFdAXwr",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 buys in 0.008",
+      "status": "PASS",
+      "detail": {
+        "sig": "2fB37rVUu4xmsVWah4SFp9Ts6oqxbudorsPhwjxS7L6N5JaV8NbEjZKX7GHwkXyPRWGPbnKuTAjzHczHZi1bVgNC",
+        "problem": null
+      }
+    },
+    {
+      "name": "p3 cannot sit at a full 2-seat table",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableFull",
+        "got": "TableFull (6017)"
+      }
+    },
+    {
+      "name": "rebuy below one big blind rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "RebuyTooSmall",
+        "got": "RebuyTooSmall (6028)"
+      }
+    },
+    {
+      "name": "rebuy of 200,001 rounds rake up to 10,001",
+      "status": "PASS",
+      "detail": {
+        "sig": "29uHTRzh32BjHrD29GR8zeLpTLQXt7mcRU5ACLrhLEUHF3TYFAywbZqutz2FEe8xB8DyDHNaYWbxh8Sf3vcgwf42",
+        "problem": null
+      }
+    },
+    {
+      "name": "p1 rebuys 0.01 (stack 19M, under the 20M max)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5tKRgj7Xp13jcLsiL3LNx446c8gEYnr9dbBvwk6ToF6rLTZ3v1jKRcXADasCaRrRBCeagAsXpMrCUwGPYL97PJCN",
+        "problem": null
+      }
+    },
+    {
+      "name": "rebuy that would exceed the table max rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "BuyInTooLarge",
+        "got": "BuyInTooLarge (6016)"
+      }
+    },
+    {
+      "name": "cash-out by a wallet with no seat rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeated",
+        "got": "NotSeated (6018)"
+      }
+    },
+    {
+      "name": "cash-out to someone else's token account rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintTokenOwner",
+        "got": "ConstraintTokenOwner (2015)"
+      }
+    },
+    {
+      "name": "commit table ledger to L1 (2 players seated)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3Jyear32PmTwoRpMVR5i6DeDRSp2J79nuo83QV2m3TdkS5ZgFD843cJNcCbgQmztwnvVtDWX1jbJ9qGrvXfwArW9",
+        "problem": null
+      }
+    },
+    {
+      "name": "emergency undelegation of a busy, recently active table rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableActive",
+        "got": "TableActive (6029)"
+      }
+    },
+    {
+      "name": "close by someone other than the creator rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotCreator",
+        "got": "NotCreator (6021)"
+      }
+    },
+    {
+      "name": "close with players seated rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableNotEmpty",
+        "got": "TableNotEmpty (6022)"
+      }
+    },
+    {
+      "name": "admin pauses on L1",
+      "status": "PASS",
+      "detail": {
+        "sig": "2VsM969Umf3byPoJ2GtSUrzSYLuDAyLtU1iavnJrp3S8ETgr7b4JshtoQoyC8otWw9SZt2fhkiEDMhv93A17Y83e",
+        "problem": null
+      }
+    },
+    {
+      "name": "rollup sees the L1 pause and rejects buy-ins",
+      "status": "PASS",
+      "detail": {
+        "got": "Paused (6009)"
+      }
+    },
+    {
+      "name": "p1 cashes out 0.019 while paused",
+      "status": "PASS",
+      "detail": {
+        "sig": "61umNzcFATfGcq3yvCUjYJ8pefnwpSACi4cKexDCCrAMkCLsjF5T662rLHfHekpMGWKyYSMEBTKd3WRuqHX545Jh",
+        "problem": null
+      }
+    },
+    {
+      "name": "admin unpauses",
+      "status": "PASS",
+      "detail": {
+        "sig": "4Rex92UZTqWx43A9cz7nJMV7oKy68kd3jKeNGGpng53pYjYpQ4CzzoBku6YvR6gTyqV3PVRHTM7mvyaAPyAbHY2w",
+        "problem": null
+      }
+    },
+    {
+      "name": "double cash-out rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeated",
+        "got": "NotSeated (6018)"
+      }
+    },
+    {
+      "name": "rake to a token account that isn't the dev wallet's rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintTokenOwner",
+        "got": "ConstraintTokenOwner (2015)"
+      }
+    },
+    {
+      "name": "collect rake to the dev wallet (1,410,001: 5% of 10M + 8M + 10M, rounded up on 200,001)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5cEvXwEtt3FQdf1dbrn2EShYPCqMpv2eHTkYZfSNFnx1e5AW8gCH5JdSzWbUakJzJxJ8SuuaRW8PnGngmLFCyTG3",
+        "problem": null
+      }
+    },
+    {
+      "name": "collecting again with nothing accrued rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NothingToCollect",
+        "got": "NothingToCollect (6023)"
+      }
+    },
+    {
+      "name": "commit table ledger to L1",
+      "status": "PASS",
+      "detail": {
+        "sig": "54yx7aA1kJMV9REbJLUQFfVpgQbLk2D8q1SKXMLsQaPwK91PHHEpr6L1ebp7bv3is272wDdRDWmqKUyzWegzmo9k",
+        "problem": null
+      }
+    },
+    {
+      "name": "reconciliation: deposited - rake - paid out = owed = escrow balance; L1 copy matches",
+      "status": "PASS",
+      "detail": {
+        "totalDeposited": "28200001",
+        "totalPaidOut": "19000000",
+        "totalRakeCollected": "1410001",
+        "escrowOwed": "7790000",
+        "escrowBalance": "7790000",
+        "stacks": [
+          "7790000"
+        ],
+        "l1CopyMatches": true
+      }
+    },
+    {
+      "name": "p2 cashes out; table empty",
+      "status": "PASS",
+      "detail": {
+        "sig": "2dSA6KUWgDKbiJFP4JPmHpEogwjHDqPE3CjmAUASnnHhYa978TbRE7yGPYPMzPThLjWbNcLqR1pBrvAxeRk2Db8",
+        "problem": null
+      }
+    },
+    {
+      "name": "creator closes the empty table (commit + undelegate)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3fpRMiz15TQwnxRKi12B622utXHWEEUoco4yv8i7ywc7HQU3ifLpheNonWfUF58gqN9qL4gugZtMQm5iz1YrVySf",
+        "problem": null
+      }
+    },
+    {
+      "name": "closed table is back on L1, owned by the program, status CLOSED",
+      "status": "PASS",
+      "detail": {
+        "status": 2
+      }
+    },
+    {
+      "name": "a closed table can't be delegated again",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableNotOpen",
+        "got": "TableNotOpen (6014)"
+      }
+    },
+    {
+      "name": "table B: create + delegate",
+      "status": "PASS",
+      "detail": {
+        "sig": "4hsBeGMVMozKh7yFAg69EYgotNkJQL7pcZQkZnF6xQ3mWeACfgMVkcQqF4Hr1pDJV1ZP6Fr4aWxmaqmBeq59inkN",
+        "problem": null
+      }
+    },
+    {
+      "name": "emergency request by a non-creator rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintSeeds",
+        "got": "ConstraintSeeds (2006)"
+      }
+    },
+    {
+      "name": "creator requests emergency undelegation of empty table B",
+      "status": "PASS",
+      "detail": {
+        "sig": "26QyMEGxmHLEuMjxfXcVEzFkyBCq4uQNaPBZLNrWAMYH4MY4gzo7rWUt7UMUwTp7zbTeB2vDjrYj1W4efK5LxELY",
+        "problem": null
+      }
+    },
+    {
+      "name": "TEE validator honours the request; table B back on L1 (still OPEN)",
+      "status": "PASS",
+      "detail": {
+        "requestSig": "26QyMEGxmHLEuMjxfXcVEzFkyBCq4uQNaPBZLNrWAMYH4MY4gzo7rWUt7UMUwTp7zbTeB2vDjrYj1W4efK5LxELY",
+        "secondsWaited": 5
+      }
+    },
+    {
+      "name": "anyone (p1) can re-delegate a returned open table",
+      "status": "PASS",
+      "detail": {
+        "sig": "3ECacV352EoSAbKb9AMBpDcZCsqSD49WQgPwCyQMJKuB1vC9iakb1mJh5H8zV5GXXKwyjqUGnvLy3EjTHtJPj1Mk",
+        "problem": null
+      }
+    },
+    {
+      "name": "p1 withdraws whole rollup balance",
+      "status": "PASS",
+      "detail": {
+        "sig": "j9Tw4ySE2nQdSd3W9YDu2t7JPeCKEi6E3h57sQVZudzeCb6xznxBPwzPrS3ojK7YZzhJ3WS6Wb9DqPLMRvEXLpP",
+        "problem": null
+      }
+    },
+    {
+      "name": "withdrawal arrives as plain SOL",
+      "status": "PASS",
+      "detail": {
+        "withdrawSig": "j9Tw4ySE2nQdSd3W9YDu2t7JPeCKEi6E3h57sQVZudzeCb6xznxBPwzPrS3ojK7YZzhJ3WS6Wb9DqPLMRvEXLpP",
+        "amount": "29000000",
+        "solDelta": 28495000
+      }
+    }
+  ]
+}

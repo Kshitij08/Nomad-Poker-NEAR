@@ -1,6 +1,6 @@
 //! Private poker tables on a MagicBlock Private Ephemeral Rollup (TEE), dealt with MagicBlock VRF.
-//! M1 is the skeleton: program-wide config only. Tables, money, privacy and the game engine land
-//! in M2 to M6 (see docs/proofs).
+//! M1: program config. M2: tables and money (L1 create/delegate/escape hatch, rollup buy-in,
+//! cash-out, rake, commit). Privacy and the game engine land in M3 to M6 (see docs/proofs).
 
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::ephemeral;
@@ -9,6 +9,7 @@ pub mod constants;
 pub mod errors;
 pub mod instructions;
 pub mod state;
+pub mod table;
 
 use instructions::*;
 
@@ -37,5 +38,45 @@ pub mod poker_per {
 
     pub fn migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
         instructions::config::migrate_config(ctx)
+    }
+
+    // ---- L1: tables
+
+    pub fn create_table(ctx: Context<CreateTable>, table_id: u64, params: table::TableParams) -> Result<()> {
+        instructions::table::create_table(ctx, table_id, params)
+    }
+
+    pub fn delegate_table(ctx: Context<DelegateTable>, table_id: u64, creator: Pubkey) -> Result<()> {
+        instructions::table::delegate_table(ctx, table_id, creator)
+    }
+
+    pub fn request_table_undelegation(ctx: Context<RequestTableUndelegation>, table_id: u64, creator: Pubkey) -> Result<()> {
+        instructions::table::request_table_undelegation(ctx, table_id, creator)
+    }
+
+    pub fn rollback_table(ctx: Context<RollbackTable>, table_id: u64, creator: Pubkey) -> Result<()> {
+        instructions::table::rollback_table(ctx, table_id, creator)
+    }
+
+    // ---- Rollup: money
+
+    pub fn buy_in(ctx: Context<BuyIn>, amount: u64) -> Result<()> {
+        instructions::money::buy_in(ctx, amount)
+    }
+
+    pub fn cash_out(ctx: Context<CashOut>) -> Result<()> {
+        instructions::money::cash_out(ctx)
+    }
+
+    pub fn collect_rake(ctx: Context<CollectRake>) -> Result<()> {
+        instructions::money::collect_rake(ctx)
+    }
+
+    pub fn commit_table(ctx: Context<CommitTable>) -> Result<()> {
+        instructions::money::commit_table(ctx)
+    }
+
+    pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
+        instructions::money::close_table(ctx)
     }
 }

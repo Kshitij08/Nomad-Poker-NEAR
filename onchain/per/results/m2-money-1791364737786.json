@@ -1,0 +1,388 @@
+{
+  "program": "6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR",
+  "table": "GCQ9y1HAUc9k3sEfGhxHYi2kVkKR69RGa3FDECHvvQif",
+  "tableId": "1791364682572",
+  "escrow": "DHJhSZXXq6cYn2aNWckXVCxrQCYQ7aCLwBpSLBD2dmDN",
+  "ranAt": "2026-10-07T09:18:57.785Z",
+  "pass": 46,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "create: small blind 0 rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidBlinds",
+        "got": "InvalidBlinds (6010)"
+      }
+    },
+    {
+      "name": "create: small blind > big blind rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidBlinds",
+        "got": "InvalidBlinds (6010)"
+      }
+    },
+    {
+      "name": "create: min buy-in under 10 big blinds rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidBuyInRange",
+        "got": "InvalidBuyInRange (6011)"
+      }
+    },
+    {
+      "name": "create: min > max rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidBuyInRange",
+        "got": "InvalidBuyInRange (6011)"
+      }
+    },
+    {
+      "name": "create: max above program stake cap rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "AboveStakeCap",
+        "got": "AboveStakeCap (6012)"
+      }
+    },
+    {
+      "name": "create: 1 seat rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidSeatCount",
+        "got": "InvalidSeatCount (6013)"
+      }
+    },
+    {
+      "name": "create: 10 seats rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidSeatCount",
+        "got": "InvalidSeatCount (6013)"
+      }
+    },
+    {
+      "name": "admin pauses the program",
+      "status": "PASS",
+      "detail": {
+        "sig": "3bP84YpnAXLmP6MH6guoDFZftvURWATptqhE31YcyzeBBzakoQJhn456ES9H84NJep3QnXHjqx8CS73zZQNDVhiP",
+        "problem": null
+      }
+    },
+    {
+      "name": "create while paused rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "Paused",
+        "got": "Paused (6009)"
+      }
+    },
+    {
+      "name": "admin unpauses",
+      "status": "PASS",
+      "detail": {
+        "sig": "3ar6MF5eikQBXabVnSTtFnbdbpnZdsyCHPY34djydvLHvJvqpDnx33qW1ACphhc7DtGLVw3Fr3bB26are7tRL8WY",
+        "problem": null
+      }
+    },
+    {
+      "name": "create table + escrow + delegate to TEE in one L1 transaction",
+      "status": "PASS",
+      "detail": {
+        "sig": "2fZy2RjqEdFVdkL82rVoduBTC8QMdhh13CD72dtBaTcGzZouJTdym7JAW3ZfrZBsysPKsAv9hGB4DzvSpMaY26KC",
+        "problem": null
+      }
+    },
+    {
+      "name": "create a second table (by deployer)",
+      "status": "PASS",
+      "detail": {
+        "sig": "4bBBXbsqHxSj9n5LSecssRNqhnng9wCDm4x1n7S9SNpsHL3SjHUVb4M5chQhPWi7Wrr5hLzN5zTrdqPXcUzMV6yf",
+        "problem": null
+      }
+    },
+    {
+      "name": "delegate by someone other than the creator rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotCreator",
+        "got": "NotCreator (6021)"
+      }
+    },
+    {
+      "name": "delegate to a non-TEE validator rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintAddress",
+        "got": "ConstraintAddress (2012)"
+      }
+    },
+    {
+      "name": "top-up p1: wrap 30000000 lamports + deposit to rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "J3Q78gvhisDvVK5WJ16KG6rAhJXBAMKzr6Wh73JL6ng55qHWA3KsGYbV6tPMiHcV1NjTpYwoPX5Rki1shLmCqz5",
+        "problem": null
+      }
+    },
+    {
+      "name": "top-up p2: wrap 12000000 lamports + deposit to rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "3hMNTR1eL7RVHCGj2u1LxetTUSiLAKUTmJJPt9pexcV7zuS1SsgMFe5jmfrhFvWNSNC3cmk7zsfYa329YKW4TR28",
+        "problem": null
+      }
+    },
+    {
+      "name": "top-up p3: wrap 5000000 lamports + deposit to rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "3YDYUebSyxgqBDPeB3aUfH6JfwaqnpeLbwHhEM7oMGh7eLFgWFD31rrwyzPgnzQmWFjxVeh18SJDdoNdFUagSy7M",
+        "problem": null
+      }
+    },
+    {
+      "name": "top-up deployer: wrap 1000 lamports + deposit to rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "3EhP4AaS1Y6jxDDDyye5aSc58doAUYHx4f38TDB1yYCGTo6KnrcqxKDoGqKE9azs76bAaAeCYdFdNQqPQjbAqWS1",
+        "problem": null
+      }
+    },
+    {
+      "name": "rollup balances before play (each wallet reading its own)",
+      "status": "PASS",
+      "detail": {
+        "p1": "30000000",
+        "p2": "35200000",
+        "p3": "15000000",
+        "dev": "2803000"
+      }
+    },
+    {
+      "name": "buy-in below the table minimum rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "BuyInTooSmall",
+        "got": "BuyInTooSmall (6015)"
+      }
+    },
+    {
+      "name": "buy-in above the table maximum rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "BuyInTooLarge",
+        "got": "BuyInTooLarge (6016)"
+      }
+    },
+    {
+      "name": "buy-in paying from someone else's token account rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintTokenOwner",
+        "got": "ConstraintTokenOwner (2015)"
+      }
+    },
+    {
+      "name": "buy-in into a fake escrow rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintAddress",
+        "got": "ConstraintAddress (2012)"
+      }
+    },
+    {
+      "name": "p1 buys in 0.01 (rake 5%)",
+      "status": "PASS",
+      "detail": {
+        "sig": "4jgrRqXBpuDQB5SSGuBKXcuAysESYeM6MGb6oUcRRNuDJbSKcbDQuhCEfLtg3qoNVFxyjsAeB6VnxQX7c3cihWQ9",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 buys in 0.008",
+      "status": "PASS",
+      "detail": {
+        "sig": "4CZXGnSG99ct6oWt94jhxn4bR5Pgr2uDbRJLkZ5baUgThomKTE4tLvdbrXKptvxyLK5g8XHicbnomBHnkkU7NDVt",
+        "problem": null
+      }
+    },
+    {
+      "name": "p3 cannot sit at a full 2-seat table",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableFull",
+        "got": "TableFull (6017)"
+      }
+    },
+    {
+      "name": "p1 rebuys 0.01 (stack 19M, under the 20M max)",
+      "status": "PASS",
+      "detail": {
+        "sig": "24n6HkbiS8z8BXkWQQKBKqei4TiHvAkz2qYqA9F9gTexfHrgWmTAG6QrV6AZJXLy43bTwFMSwCbRedxxscsq2t44",
+        "problem": null
+      }
+    },
+    {
+      "name": "rebuy that would exceed the table max rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "BuyInTooLarge",
+        "got": "BuyInTooLarge (6016)"
+      }
+    },
+    {
+      "name": "cash-out by a wallet with no seat rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeated",
+        "got": "NotSeated (6018)"
+      }
+    },
+    {
+      "name": "cash-out to someone else's token account rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintTokenOwner",
+        "got": "ConstraintTokenOwner (2015)"
+      }
+    },
+    {
+      "name": "admin pauses on L1",
+      "status": "PASS",
+      "detail": {
+        "sig": "35XDrmo6YLf3SmviFzwyMZ4vMJeUeDoY4Hsz9Tx2PoDHGuBw7UCoKWPDFEJikvNzXiz2P86tMGViA6zBNY98t598",
+        "problem": null
+      }
+    },
+    {
+      "name": "rollup sees the L1 pause and rejects buy-ins",
+      "status": "PASS",
+      "detail": {
+        "got": "Paused (6009)"
+      }
+    },
+    {
+      "name": "admin unpauses",
+      "status": "PASS",
+      "detail": {
+        "sig": "4og2Ws1nXsj9Hkn7a5QeG9yYj12YV4vD4nuqnWwiiNvba8nA5TaADjyx8NyXjmkrKVKXFxcwii8eCP8NCUvyKHci",
+        "problem": null
+      }
+    },
+    {
+      "name": "rake to a token account that isn't the dev wallet's rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintTokenOwner",
+        "got": "ConstraintTokenOwner (2015)"
+      }
+    },
+    {
+      "name": "collect rake to the dev wallet (1.4M = 5% of 28M)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3QmSEutNyGjuHMWqJZH8v8Rt9KhdmDT37MCUroBTDWAqNEoHtVd7TzhK3irK1qmwriaUQCnjL2EcrKLuAxStpiDi",
+        "problem": null
+      }
+    },
+    {
+      "name": "collecting again with nothing accrued rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NothingToCollect",
+        "got": "NothingToCollect (6023)"
+      }
+    },
+    {
+      "name": "p1 cashes out 0.019",
+      "status": "PASS",
+      "detail": {
+        "sig": "66YBE8aWBKR5sKtZrqpdKUVD3RPcwhjjEBsPKzdtYQmG5wrCMuEdbgopK3HdgX9yjXW1pAhCnHX9kxgLCZryDWR8",
+        "problem": null
+      }
+    },
+    {
+      "name": "double cash-out rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeated",
+        "got": "NotSeated (6018)"
+      }
+    },
+    {
+      "name": "commit table ledger to L1",
+      "status": "PASS",
+      "detail": {
+        "sig": "5rX1acbyQeRv5iVnbQ1UcknNYc7h35hqBhXGh5EhtNjwtGSsgDEsgbQj1qcSZkGQ289VWdrFwe4eqWkC7MNrnJ7K",
+        "problem": null
+      }
+    },
+    {
+      "name": "reconciliation: deposited - rake collected - paid out = owed = escrow balance; L1 copy matches",
+      "status": "PASS",
+      "detail": {
+        "totalDeposited": "28000000",
+        "totalPaidOut": "19000000",
+        "totalRakeCollected": "1400000",
+        "escrowOwed": "7600000",
+        "escrowBalance": "7600000",
+        "stacks": [
+          "7600000"
+        ],
+        "l1CopyMatches": true
+      }
+    },
+    {
+      "name": "p2 cashes out; table empty",
+      "status": "PASS",
+      "detail": {
+        "sig": "sPPVaZyUVa2oyCT4nHXU8yzDqEjg188JqxZa4HDkzs6X6L2KFexxW4nBJL8fdAJH1sQKQGtsqFw9r9vb84TDX8S",
+        "problem": null
+      }
+    },
+    {
+      "name": "undelegation request by someone other than the rent payer rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "Program log: require_eq_keys!(&delegation_metadata.rent_payer, payer.address()) failed: "
+      }
+    },
+    {
+      "name": "creator requests undelegation (escape hatch step 1)",
+      "status": "PASS",
+      "detail": {
+        "sig": "QN8NEdKxPnxwEqNwy6yvtdMJWcYra8z43bUi1KMrjapwTqhTdFMefXWEU1a3Mz3QLDgD3vxJuFUCEyYDojm73wS",
+        "problem": null
+      }
+    },
+    {
+      "name": "TEE validator honours the request and returns the table to the program",
+      "status": "PASS",
+      "detail": {
+        "requestSig": "QN8NEdKxPnxwEqNwy6yvtdMJWcYra8z43bUi1KMrjapwTqhTdFMefXWEU1a3Mz3QLDgD3vxJuFUCEyYDojm73wS",
+        "secondsWaited": 5
+      }
+    },
+    {
+      "name": "p1 withdraws whole rollup balance",
+      "status": "PASS",
+      "detail": {
+        "sig": "5DEki6FqaXpTkehEfxbHRqzzGpmpTTR4ev4LRcyRsMfeBXx16gKzGTgDPDs7Noh16LquhfwFvZywFV2ENdgdUmLo",
+        "problem": null
+      }
+    },
+    {
+      "name": "withdrawal arrives as plain SOL",
+      "status": "PASS",
+      "detail": {
+        "withdrawSig": "5DEki6FqaXpTkehEfxbHRqzzGpmpTTR4ev4LRcyRsMfeBXx16gKzGTgDPDs7Noh16LquhfwFvZywFV2ENdgdUmLo",
+        "amount": "29000000",
+        "solDelta": 28495000
+      }
+    }
+  ]
+}

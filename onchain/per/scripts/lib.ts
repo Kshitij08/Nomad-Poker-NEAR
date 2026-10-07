@@ -23,3 +23,29 @@ export function programFor(payer: Keypair) {
 }
 
 export const explorer = (sig: string) => `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
+
+// ---- MagicBlock private rollup (TEE) access
+import { getAuthToken } from "@magicblock-labs/ephemeral-rollups-sdk";
+import nacl from "tweetnacl";
+
+export const TEE_URL = "https://devnet-tee.magicblock.app";
+export const TEE_VALIDATOR = new PublicKey("MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo");
+
+/** Signs MagicBlock's login challenge and returns a connection to the TEE rollup for that wallet. */
+export async function teeConnection(kp: Keypair): Promise<Connection> {
+  const { token } = await getAuthToken(TEE_URL, kp.publicKey, (m: Uint8Array) => Promise.resolve(nacl.sign.detached(m, kp.secretKey)));
+  return new Connection(`${TEE_URL}?token=${token}`, { commitment: "confirmed", wsEndpoint: `${TEE_URL.replace("https", "wss")}?token=${token}` });
+}
+
+export function programOn(conn: Connection, payer: Keypair) {
+  return new anchor.Program(idl, new anchor.AnchorProvider(conn, new anchor.Wallet(payer), { commitment: "confirmed" }));
+}
+
+/** Table PDA: ["table", creator, table_id (u64 LE)]. */
+export const tablePda = (creator: PublicKey, tableId: bigint) => {
+  const b = Buffer.alloc(8); b.writeBigUInt64LE(tableId);
+  return PublicKey.findProgramAddressSync([Buffer.from("table"), creator.toBuffer(), b], PROGRAM_ID)[0];
+};
+
+/** A random u64 table id, so table addresses can't be predicted and claimed in advance. */
+export const randomTableId = () => BigInt.asUintN(64, BigInt("0x" + Buffer.from(Keypair.generate().secretKey.subarray(0, 8)).toString("hex")));
