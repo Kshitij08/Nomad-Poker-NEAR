@@ -1,0 +1,657 @@
+{
+  "address": "6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR",
+  "metadata": {
+    "name": "poker_per",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Private poker tables on a MagicBlock Private Ephemeral Rollup"
+  },
+  "instructions": [
+    {
+      "name": "accept_admin",
+      "discriminator": [
+        112,
+        42,
+        45,
+        90,
+        116,
+        181,
+        13,
+        170
+      ],
+      "accounts": [
+        {
+          "name": "new_admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_config",
+      "discriminator": [
+        208,
+        127,
+        21,
+        1,
+        194,
+        190,
+        196,
+        70
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program",
+          "address": "6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR"
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "ConfigArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "migrate_config",
+      "discriminator": [
+        92,
+        131,
+        58,
+        105,
+        210,
+        154,
+        224,
+        193
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "docs": [
+            "version and admin are all checked in the handler."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "process_undelegation",
+      "discriminator": [
+        196,
+        28,
+        41,
+        206,
+        48,
+        37,
+        51,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "base_account",
+          "writable": true
+        },
+        {
+          "name": "buffer",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  110,
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101,
+                  45,
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "base_account"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                181,
+                183,
+                0,
+                225,
+                242,
+                87,
+                58,
+                192,
+                204,
+                6,
+                34,
+                1,
+                52,
+                74,
+                207,
+                151,
+                184,
+                53,
+                6,
+                235,
+                140,
+                229,
+                25,
+                152,
+                204,
+                98,
+                126,
+                24,
+                147,
+                128,
+                167,
+                62
+              ]
+            }
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "account_seeds",
+          "type": {
+            "vec": "bytes"
+          }
+        }
+      ]
+    },
+    {
+      "name": "propose_admin",
+      "discriminator": [
+        121,
+        214,
+        199,
+        212,
+        87,
+        39,
+        117,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_admin",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_config",
+      "discriminator": [
+        29,
+        158,
+        252,
+        191,
+        10,
+        83,
+        219,
+        99
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "ConfigArgs"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "AdminChanged",
+      "discriminator": [
+        232,
+        34,
+        31,
+        226,
+        62,
+        18,
+        19,
+        114
+      ]
+    },
+    {
+      "name": "AdminProposed",
+      "discriminator": [
+        129,
+        249,
+        226,
+        227,
+        199,
+        82,
+        110,
+        243
+      ]
+    },
+    {
+      "name": "ConfigChanged",
+      "discriminator": [
+        147,
+        25,
+        86,
+        98,
+        98,
+        77,
+        78,
+        192
+      ]
+    },
+    {
+      "name": "ConfigMigrated",
+      "discriminator": [
+        115,
+        69,
+        99,
+        100,
+        192,
+        77,
+        40,
+        50
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotUpgradeAuthority",
+      "msg": "Only the program's upgrade authority can initialize the config"
+    },
+    {
+      "code": 6001,
+      "name": "NotAdmin",
+      "msg": "Only the config admin can do this"
+    },
+    {
+      "code": 6002,
+      "name": "RakeTooHigh",
+      "msg": "Rake is above the 10% ceiling"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidStakeCap",
+      "msg": "Stake cap must be greater than zero"
+    },
+    {
+      "code": 6004,
+      "name": "NotPendingAdmin",
+      "msg": "Only the proposed admin can accept"
+    },
+    {
+      "code": 6005,
+      "name": "NoPendingAdmin",
+      "msg": "There is no pending admin to accept"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidDevWallet",
+      "msg": "Dev wallet cannot be the default (all zeros) address"
+    },
+    {
+      "code": 6007,
+      "name": "ConfigOutdated",
+      "msg": "Config is on an older layout; run migrate_config first"
+    },
+    {
+      "code": 6008,
+      "name": "AlreadyMigrated",
+      "msg": "Config is already on the current layout"
+    }
+  ],
+  "types": [
+    {
+      "name": "AdminChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "previous_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "admin",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AdminProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_admin",
+            "type": {
+              "option": "pubkey"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Config",
+      "docs": [
+        "Program-wide settings. One per program, at PDA [\"config\"]. Lives on L1 and is never delegated,",
+        "so rollup instructions read a cloned, read-only copy.",
+        "",
+        "Layout history: v1 (M1 first deploy) had no `reserved` tail. v2 appends it. `migrate_config`",
+        "upgrades a v1 account in place."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_admin",
+            "docs": [
+              "Two-step admin handover: set by `propose_admin`, cleared by `accept_admin`."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "dev_wallet",
+            "docs": [
+              "Receives rake."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "rake_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_buy_in",
+            "docs": [
+              "Largest buy-in any table may accept, in the table token's base units. This is the per-table",
+              "stake cap from the M0 custody decision."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "When true, no new tables or buy-ins. Existing players can still leave."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "dev_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "rake_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_buy_in",
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "rake_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_buy_in",
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigMigrated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "from_version",
+            "type": "u8"
+          },
+          {
+            "name": "to_version",
+            "type": "u8"
+          },
+          {
+            "name": "new_len",
+            "type": "u32"
+          }
+        ]
+      }
+    }
+  ]
+}
