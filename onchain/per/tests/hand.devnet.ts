@@ -7,7 +7,7 @@ import { NATIVE_MINT, createAssociatedTokenAccountIdempotentInstruction, createS
 import { delegateSpl } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { randomBytes } from "crypto";
 import { programFor, programOn, loadKey, teeConnection, TEE_URL, TEE_VALIDATOR, randomTableId } from "../scripts/lib";
-import { BN, Suite, errName, sleep, tableApi, handOf, rawRead, readerFor, sendL1, sha256, tokenOf, connUrl } from "./helpers";
+import { BN, KIND, Suite, errName, sleep, tableApi, handOf, rawRead, readerFor, sendL1, sha256, tokenOf, connUrl } from "./helpers";
 import { verify, holeCards, dealOrder, nextButton, cardName, NO_CARD, Record } from "./verifier";
 import { recoverHand } from "./attack";
 
@@ -60,6 +60,11 @@ async function main() {
     const x = coder.decode("handRecord", r.data);
     return { table: x.table, handNo: BigInt(x.handNo.toString()), button: x.button, dealtMask: x.dealtMask, seedMask: x.seedMask,
       seeds: x.seeds.map((s: number[]) => Buffer.from(s)), entropy: Buffer.from(x.entropy), shuffleSeed: Buffer.from(x.shuffleSeed), cards: Array.from(x.cards) };
+  };
+  const bySeat: Record<number, [any, PublicKey]> = { 0: [prog.p1, p1.publicKey], 3: [prog.p2, p2.publicKey] };
+  const foldToAct = async () => {
+    const seat = coder.decode("ledger", (await rawRead(url.p1, T.ledger)).data!).game.toAct;
+    return T.act(bySeat[seat][0], bySeat[seat][1], seat, KIND.fold);
   };
   const waitDealt = async (hand: number) => {
     const start = Date.now();
@@ -151,8 +156,9 @@ async function main() {
     { deckReturned: leakDeck.length, handReturned: leakHand.length, leakedDeckMatchesP1Cards: !!leakedDeck && h0 && holeCards(Array.from(leakedDeck.cards), dealOrder(t1.button, 0b1001))[0].join() === Array.from(h0.cards).join() });
 
   // ---- end hand 1 and verify it from the public record
-  await S.err("an outsider can't end the hand", "NotSeated", () => T.endHand(prog.p3, p3.publicKey));
-  await S.ok("p2 ends hand 1 (M4 stand-in for showdown)", () => T.endHand(prog.p2, p2.publicKey));
+  await S.ok("begin the betting (blinds posted)", () => T.beginHand(prog.p3, p3.publicKey));
+  await S.err("an outsider can't act in the hand", "NotSeated", () => T.act(prog.p3, p3.publicKey, 0, KIND.fold));
+  await S.ok("the player to act folds, ending hand 1 (heads-up)", () => foldToAct());
   const r1 = await readRecord();
   const v1a = r1 ? verify(r1, { seat: 0, seed: seed1, cards: h0?.cards }) : { ok: false, problems: ["no record"], deck: [] };
   const v1b = r1 ? verify(r1, { seat: 3, seed: seed2, cards: h3?.cards }) : { ok: false, problems: ["no record"], deck: [] };
@@ -179,7 +185,7 @@ async function main() {
   const t2 = await readTable();
   S.check("hand 2 dealt; the button moved to the next seated seat", lat2 >= 0 && t2.button === nextButton(t1.button, 0b1001), { msFromRequestToDealt: lat2, button1: t1.button, button2: t2.button });
   const h0b = await readHand(url.p1, 0);
-  await S.ok("the creator ends hand 2", () => T.endHand(prog.deployer, deployer.publicKey));
+  await S.ok("begin hand 2 and the player to act folds", async () => { await T.beginHand(prog.deployer, deployer.publicKey); return foldToAct(); });
   const r2 = await readRecord();
   const v2 = r2 ? verify(r2, { seat: 0, seed: seed1b, cards: h0b?.cards }, r1?.button) : { ok: false, problems: ["no record"], deck: [] as number[] };
   S.check("verifier: hand 2 recomputes, including the button rotation", v2.ok && r2?.handNo === 2n && verify(r2!, { seat: 3, seed: seed2b }).ok, { problems: v2.problems });

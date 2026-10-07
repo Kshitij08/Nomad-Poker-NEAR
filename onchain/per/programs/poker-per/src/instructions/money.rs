@@ -18,10 +18,10 @@ use crate::constants::{CONFIG_SEED, CONFIG_VERSION};
 use crate::errors::PokerError;
 use crate::private::{write, Sponsor};
 use crate::state::Config;
-use crate::deal::NO_CARD;
+use crate::dealing::NO_CARD;
 use crate::table::{
-    rake_for, Deck, Hand, HandRecord, Invites, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, INVITES_SEED,
-    LEDGER_SEED, RECORD_SEED, STATUS_CLOSED, STATUS_OPEN, TABLE_SEED,
+    rake_for, Deck, Hand, HandLog, HandRecord, Invites, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, INVITES_SEED,
+    LEDGER_SEED, LOG_SEED, RECORD_SEED, STATUS_CLOSED, STATUS_OPEN, TABLE_SEED,
 };
 
 /// MagicBlock programs every private-account operation needs.
@@ -40,7 +40,7 @@ pub struct RollupPrograms<'info> {
 }
 
 /// Signer seeds of a table PDA. The caller keeps `id` and `bump` alive for as long as the seeds.
-fn table_seeds<'a>(table: &'a Table, id: &'a [u8; 8], bump: &'a [u8; 1]) -> [&'a [u8]; 4] {
+pub(crate) fn table_seeds<'a>(table: &'a Table, id: &'a [u8; 8], bump: &'a [u8; 1]) -> [&'a [u8]; 4] {
     [TABLE_SEED, table.creator.as_ref(), &id[..], &bump[..]]
 }
 
@@ -66,6 +66,12 @@ pub struct OpenTable<'info> {
     /// CHECK: rollup-only public hand record PDA, created here (no permission: anyone may read it).
     #[account(mut, seeds = [RECORD_SEED, table.key().as_ref()], bump)]
     pub record: UncheckedAccount<'info>,
+    /// CHECK: rollup-only hand log PDA, created here (readers: set per hand by begin_hand).
+    #[account(mut, seeds = [LOG_SEED, table.key().as_ref()], bump)]
+    pub log: UncheckedAccount<'info>,
+    /// CHECK: permission PDA of the hand log.
+    #[account(mut, seeds = [PERMISSION_SEED, log.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub log_permission: UncheckedAccount<'info>,
     pub rollup: RollupPrograms<'info>,
 }
 
@@ -86,10 +92,11 @@ pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
     let ledger_info = a.ledger.to_account_info();
     if ledger_info.data_is_empty() {
         sp.create_account(&ledger_info, ledger_seeds, 8 + Ledger::INIT_SPACE)?;
-        write(&ledger_info, &Ledger {
-            table: table_key, seats: Default::default(), escrow_owed: 0, rake_accrued: 0, escrow_balance: 0,
-            total_deposited: 0, total_paid_out: 0, total_rake_collected: 0, salt: [0; 32],
-        })?;
+        // A new ledger is all zeros except its discriminator and table (building the ~3 KB value
+        // on the stack would overflow it), and a fresh rollup-only account is already zeroed.
+        let mut data = ledger_info.try_borrow_mut_data()?;
+        data[..8].copy_from_slice(Ledger::DISCRIMINATOR);
+        data[8..40].copy_from_slice(table_key.as_ref());
     }
     sp.create_permission(&ledger_info, ledger_seeds, &a.ledger_permission.to_account_info(), &[])?;
 
@@ -112,15 +119,27 @@ pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
         sp.create_account(&record_info, record_seeds, 8 + HandRecord::INIT_SPACE)?;
         write(&record_info, &HandRecord {
             table: table_key, hand_no: 0, button: 0, dealt_mask: 0, seed_mask: 0, seeds: Default::default(),
-            entropy: [0; 32], shuffle_seed: [0; 32], cards: [NO_CARD; 52],
+            entropy: [0; 32], shuffle_seed: [0; 32], cards: [NO_CARD; 52], board_len: 0, log_hash: [0; 32], log_len: 0,
         })?;
     }
+
+    let log_bump = [ctx.bumps.log];
+    let log_seeds: &[&[u8]] = &[LOG_SEED, table_key.as_ref(), &log_bump];
+    let log_info = a.log.to_account_info();
+    if log_info.data_is_empty() {
+        sp.create_account(&log_info, log_seeds, 8 + std::mem::size_of::<HandLog>())?;
+        let mut data = log_info.try_borrow_mut_data()?;
+        data[..8].copy_from_slice(HandLog::DISCRIMINATOR);
+        data[8..40].copy_from_slice(table_key.as_ref());
+    }
+    sp.create_permission(&log_info, log_seeds, &a.log_permission.to_account_info(), &[])?;
 
     let fp = {
         let data = ledger_info.try_borrow_data()?;
         Ledger::try_deserialize(&mut &data[..])?.fingerprint()?
     };
     ctx.accounts.table.ledger_hash = fp;
+    ctx.accounts.table.idle_since = Clock::get()?.unix_timestamp;
     Ok(())
 }
 
@@ -177,11 +196,14 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
     let (min_buy_in, big_blind, invite_only, taken) = (table.min_buy_in, table.big_blind, table.invite_only, table.seat_taken(idx));
     let table_key = table.key();
 
+    let hand_idle = table.hand_state == HAND_IDLE;
     let ledger = &mut ctx.accounts.ledger;
     let sitting_down = match ledger.seat_of(&player) {
         Some(i) => {
             require!(i == idx, PokerError::InvalidSeat);
             require!(amount >= big_blind, PokerError::RebuyTooSmall);
+            // Live stacks are in the engine during a hand; a rebuy waits until it ends.
+            require!(hand_idle, PokerError::HandInProgress);
             false
         }
         None => {
@@ -244,6 +266,10 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
     let table = &mut ctx.accounts.table;
     if sitting_down {
         table.seat_mask |= 1 << idx;
+        // A new player gets the full seed window before the next hand can start without them.
+        if table.hand_state == HAND_IDLE {
+            table.idle_since = Clock::get()?.unix_timestamp;
+        }
     }
     stamp(table, fp)?;
     emit!(BoughtIn { table: table_key, seat, amount, rake, stack });
@@ -405,6 +431,12 @@ pub struct CloseTable<'info> {
     /// CHECK: public hand record PDA; closed here.
     #[account(mut, seeds = [RECORD_SEED, table.key().as_ref()], bump)]
     pub record: UncheckedAccount<'info>,
+    /// CHECK: hand log PDA; closed here.
+    #[account(mut, seeds = [LOG_SEED, table.key().as_ref()], bump)]
+    pub log: UncheckedAccount<'info>,
+    /// CHECK: permission PDA of the hand log; closed here.
+    #[account(mut, seeds = [PERMISSION_SEED, log.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub log_permission: UncheckedAccount<'info>,
     /// CHECK: MagicBlock's rent vault for rollup-only accounts.
     #[account(mut, address = EPHEMERAL_VAULT_ID)]
     pub vault: UncheckedAccount<'info>,
@@ -438,6 +470,15 @@ pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
         let record_info = a.record.to_account_info();
         if !record_info.data_is_empty() {
             sp.close_account(&record_info)?;
+        }
+        let log_bump = [ctx.bumps.log];
+        let log_seeds: &[&[u8]] = &[LOG_SEED, table_key.as_ref(), &log_bump];
+        let log_info = a.log.to_account_info();
+        if !a.log_permission.data_is_empty() {
+            sp.close_permission(&log_info, log_seeds, &a.log_permission.to_account_info())?;
+        }
+        if !log_info.data_is_empty() {
+            sp.close_account(&log_info)?;
         }
     }
     let table = &mut ctx.accounts.table;

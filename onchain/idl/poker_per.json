@@ -95,6 +95,395 @@
       "args": []
     },
     {
+      "name": "act",
+      "discriminator": [
+        114,
+        158,
+        229,
+        112,
+        242,
+        50,
+        227,
+        5
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          },
+          "relations": [
+            "deck",
+            "record"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deck",
+          "docs": [
+            "The private deck: hole cards and the board come from it when the engine needs them."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "log",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "seat",
+          "type": "u8"
+        },
+        {
+          "name": "kind",
+          "type": "u8"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "begin_hand",
+      "discriminator": [
+        19,
+        15,
+        219,
+        133,
+        26,
+        18,
+        31,
+        192
+      ],
+      "accounts": [
+        {
+          "name": "play",
+          "accounts": [
+            {
+              "name": "signer",
+              "signer": true
+            },
+            {
+              "name": "table",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      116,
+                      97,
+                      98,
+                      108,
+                      101
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table.creator",
+                    "account": "Table"
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table.table_id",
+                    "account": "Table"
+                  }
+                ]
+              },
+              "relations": [
+                "deck",
+                "record"
+              ]
+            },
+            {
+              "name": "ledger",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      108,
+                      101,
+                      100,
+                      103,
+                      101,
+                      114
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "deck",
+              "docs": [
+                "The private deck: hole cards and the board come from it when the engine needs them."
+              ],
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      100,
+                      101,
+                      99,
+                      107
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "record",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      114,
+                      101,
+                      99,
+                      111,
+                      114,
+                      100
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "log",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      108,
+                      111,
+                      103
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "log_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "play.log",
+                "account": "Play"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "rollup",
+          "accounts": [
+            {
+              "name": "magic_program",
+              "docs": [
+                "keeps these instructions off L1."
+              ],
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "vault",
+              "writable": true,
+              "address": "MagicVau1t999999999999999999999999999999999"
+            },
+            {
+              "name": "permission_program",
+              "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+            }
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "buy_in",
       "discriminator": [
         126,
@@ -880,6 +1269,91 @@
                 "path": "table"
               }
             ]
+          }
+        },
+        {
+          "name": "log",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "log_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "log"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
           }
         },
         {
@@ -2129,124 +2603,6 @@
       ]
     },
     {
-      "name": "end_hand",
-      "discriminator": [
-        252,
-        75,
-        51,
-        58,
-        72,
-        237,
-        183,
-        58
-      ],
-      "accounts": [
-        {
-          "name": "signer",
-          "signer": true
-        },
-        {
-          "name": "table",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.creator",
-                "account": "Table"
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "Table"
-              }
-            ]
-          },
-          "relations": [
-            "deck",
-            "record"
-          ]
-        },
-        {
-          "name": "deck",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "ledger",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  108,
-                  101,
-                  100,
-                  103,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "record",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  114,
-                  101,
-                  99,
-                  111,
-                  114,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
-    },
-    {
       "name": "initialize_config",
       "discriminator": [
         208,
@@ -2593,6 +2949,91 @@
                 "path": "table"
               }
             ]
+          }
+        },
+        {
+          "name": "log",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "log_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "log"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
           }
         },
         {
@@ -3784,6 +4225,148 @@
       "args": []
     },
     {
+      "name": "timeout",
+      "discriminator": [
+        9,
+        54,
+        46,
+        169,
+        156,
+        189,
+        80,
+        247
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          },
+          "relations": [
+            "deck",
+            "record"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deck",
+          "docs": [
+            "The private deck: hole cards and the board come from it when the engine needs them."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "log",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "update_config",
       "discriminator": [
         29,
@@ -3873,6 +4456,19 @@
         199,
         104,
         242
+      ]
+    },
+    {
+      "name": "HandLog",
+      "discriminator": [
+        43,
+        50,
+        73,
+        96,
+        33,
+        162,
+        102,
+        254
       ]
     },
     {
@@ -4350,6 +4946,26 @@
       "code": 6044,
       "name": "NotShuffling",
       "msg": "No hand is waiting for randomness"
+    },
+    {
+      "code": 6045,
+      "name": "NotYourTurn",
+      "msg": "It isn't this seat's turn"
+    },
+    {
+      "code": 6046,
+      "name": "IllegalAction",
+      "msg": "That action isn't allowed now"
+    },
+    {
+      "code": 6047,
+      "name": "TurnNotOver",
+      "msg": "The player still has time to act"
+    },
+    {
+      "code": 6048,
+      "name": "HandNotPlaying",
+      "msg": "No hand is being played"
     }
   ],
   "types": [
@@ -4646,7 +5262,7 @@
           {
             "name": "entropy",
             "docs": [
-              "Public stand-in for the VRF output (see deal.rs)."
+              "Public stand-in for the VRF output (see dealing.rs)."
             ],
             "type": {
               "array": [
@@ -4672,6 +5288,138 @@
                 52
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Game",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seat_count",
+            "type": "u8"
+          },
+          {
+            "name": "small_blind",
+            "type": "u64"
+          },
+          {
+            "name": "big_blind",
+            "type": "u64"
+          },
+          {
+            "name": "seats",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "GameSeat"
+                  }
+                },
+                9
+              ]
+            }
+          },
+          {
+            "name": "button",
+            "type": "u8"
+          },
+          {
+            "name": "sb_seat",
+            "type": "u8"
+          },
+          {
+            "name": "bb_seat",
+            "type": "u8"
+          },
+          {
+            "name": "current_seat",
+            "docs": [
+              "Reference seat for turn order (C# `CurrentSeat`)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "to_act",
+            "docs": [
+              "Seat whose decision is awaited, or NONE."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "street",
+            "type": "u8"
+          },
+          {
+            "name": "high_bet",
+            "type": "u64"
+          },
+          {
+            "name": "min_raise",
+            "type": "u64"
+          },
+          {
+            "name": "pot",
+            "type": "u64"
+          },
+          {
+            "name": "runout",
+            "docs": [
+              "Every remaining opponent is all-in or folded: no more betting, the board runs out."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "board",
+            "type": {
+              "array": [
+                "u8",
+                5
+              ]
+            }
+          },
+          {
+            "name": "board_len",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameSeat",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "stack",
+            "docs": [
+              "Chips behind (not yet committed this hand)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "current_bet",
+            "docs": [
+              "Committed in the current betting round."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total",
+            "docs": [
+              "Committed across the whole hand (drives side pots)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "has_acted",
+            "type": "bool"
           }
         ]
       }
@@ -4766,6 +5514,68 @@
       }
     },
     {
+      "name": "HandLog",
+      "docs": [
+        "A hand's action log: rollup-only, readable by the players dealt into the current hand (set by",
+        "`begin_hand`). Holds the entries (up to LOG_CAPACITY) and a hash chain over all of them: it",
+        "starts at sha256(table, hand number) and becomes sha256(previous, street, seat, kind, committed)",
+        "per action. The final hash is published in the hand record, so each player can check the log",
+        "they were shown. Zero-copy: read in place, never copied onto the stack."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "hand_no",
+            "type": "u64"
+          },
+          {
+            "name": "hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "len",
+            "type": "u32"
+          },
+          {
+            "name": "pad",
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          },
+          {
+            "name": "entries",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "LogEntry"
+                  }
+                },
+                256
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "HandRecord",
       "docs": [
         "The last finished hand, readable by anyone so anyone can recompute its deck (tests/verifier.ts).",
@@ -4834,6 +5644,32 @@
                 52
               ]
             }
+          },
+          {
+            "name": "board_len",
+            "docs": [
+              "Board cards reached (0, 3, 4 or 5); every card in the deck is public after the hand anyway."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "log_hash",
+            "docs": [
+              "Final hash of the hand's action log (see `HandLog`). Bets themselves stay private."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "log_len",
+            "docs": [
+              "Actions in the hand (the log may hold fewer, see LOG_CAPACITY)."
+            ],
+            "type": "u32"
           }
         ]
       }
@@ -4954,6 +5790,65 @@
               "array": [
                 "u8",
                 32
+              ]
+            }
+          },
+          {
+            "name": "game",
+            "docs": [
+              "The current (or last) hand's betting state. Seat stacks above are the stacks between hands;",
+              "during a hand the live stacks are in `game` and are written back when it ends."
+            ],
+            "type": {
+              "defined": {
+                "name": "Game"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "LogEntry",
+      "docs": [
+        "One action in a hand's log (16 bytes, zero-copy)."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "committed",
+            "docs": [
+              "The seat's total chips committed this hand after the action."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "street",
+            "type": "u8"
+          },
+          {
+            "name": "seat",
+            "type": "u8"
+          },
+          {
+            "name": "kind",
+            "docs": [
+              "engine action kind (FOLD..ALL_IN), or LOG_SMALL_BLIND / LOG_BIG_BLIND; LOG_TIMEOUT is or-ed",
+              "in when the program acted for a player whose time ran out."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "pad",
+            "type": {
+              "array": [
+                "u8",
+                5
               ]
             }
           }
@@ -5165,11 +6060,25 @@
             "type": "i64"
           },
           {
+            "name": "turn_deadline",
+            "docs": [
+              "While a hand is played: when the awaited player's turn runs out."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "idle_since",
+            "docs": [
+              "When the table last became idle (a hand ended); the seed window counts from here."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                60
+                44
               ]
             }
           }

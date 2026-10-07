@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use solana_sha256_hasher::hashv;
 
 use crate::constants::MAX_SEATS;
+use crate::engine::Game;
 use crate::errors::PokerError;
 
 pub const TABLE_SEED: &[u8] = b"table";
@@ -10,9 +11,11 @@ pub const DECK_SEED: &[u8] = b"deck";
 pub const HAND_SEED: &[u8] = b"hand";
 pub const INVITES_SEED: &[u8] = b"invites";
 pub const RECORD_SEED: &[u8] = b"record";
+pub const LOG_SEED: &[u8] = b"log";
 pub const TABLE_VERSION: u8 = 2;
-/// M4 took 36 of the original 96 reserved bytes for the hand fields; the account size is unchanged.
-pub const TABLE_RESERVED: usize = 60;
+/// M4 and M5 took 52 of the original 96 reserved bytes for the hand fields; the account size is
+/// unchanged.
+pub const TABLE_RESERVED: usize = 44;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -26,13 +29,23 @@ pub const STATUS_CLOSED: u8 = 2;
 pub const HAND_IDLE: u8 = 0;
 /// VRF requested; waiting for the callback to shuffle and deal.
 pub const HAND_SHUFFLING: u8 = 1;
-/// Cards dealt. (M5 plays the hand from here.)
+/// Cards dealt; `begin_hand` posts the blinds next.
 pub const HAND_DEALT: u8 = 2;
+/// Betting under way (play.rs).
+pub const HAND_PLAYING: u8 = 3;
 /// If the VRF callback hasn't arrived after this long, anyone may request again.
 pub const VRF_RETRY_SECS: i64 = 20;
 /// If it still hasn't arrived this long after the hand started shuffling (retries don't reset this),
 /// anyone may abandon the hand, so players can leave.
 pub const VRF_ABORT_SECS: i64 = 300;
+
+/// Seconds a player has to act; after that anyone may check-or-fold for them (`timeout`).
+pub const TURN_SECS: i64 = 15;
+/// Seconds after a hand ends during which every seated player with chips must commit a seed before
+/// the next hand can start. After that, seats without a seed sit the next hand out.
+pub const SEED_WINDOW_SECS: i64 = 20;
+/// Actions kept in a hand's log. The hash chain covers every action even past this.
+pub const LOG_CAPACITY: usize = 256;
 
 /// What `start_hand` does in a given state.
 #[derive(Debug, PartialEq)]
@@ -138,6 +151,10 @@ pub struct Table {
     pub vrf_nonce: u64,
     /// Rollup clock when the current hand started shuffling (the abort deadline counts from here).
     pub shuffle_started_ts: i64,
+    /// While a hand is played: when the awaited player's turn runs out.
+    pub turn_deadline: i64,
+    /// When the table last became idle (a hand ended); the seed window counts from here.
+    pub idle_since: i64,
     pub reserved: [u8; TABLE_RESERVED],
 }
 
@@ -168,6 +185,66 @@ pub struct Ledger {
     /// Secret salt, refreshed from the VRF every hand, so the public fingerprint can't be guessed
     /// from likely wallets and amounts. All zeros until the first hand is dealt.
     pub salt: [u8; 32],
+    /// The current (or last) hand's betting state. Seat stacks above are the stacks between hands;
+    /// during a hand the live stacks are in `game` and are written back when it ends.
+    pub game: Game,
+}
+
+/// One action in a hand's log (16 bytes, zero-copy).
+#[zero_copy]
+#[derive(Default, PartialEq, Debug)]
+pub struct LogEntry {
+    /// The seat's total chips committed this hand after the action.
+    pub committed: u64,
+    pub street: u8,
+    pub seat: u8,
+    /// engine action kind (FOLD..ALL_IN), or LOG_SMALL_BLIND / LOG_BIG_BLIND; LOG_TIMEOUT is or-ed
+    /// in when the program acted for a player whose time ran out.
+    pub kind: u8,
+    pub pad: [u8; 5],
+}
+
+pub const LOG_SMALL_BLIND: u8 = 6;
+pub const LOG_BIG_BLIND: u8 = 7;
+pub const LOG_TIMEOUT: u8 = 0x80;
+
+/// A hand's action log: rollup-only, readable by the players dealt into the current hand (set by
+/// `begin_hand`). Holds the entries (up to LOG_CAPACITY) and a hash chain over all of them: it
+/// starts at sha256(table, hand number) and becomes sha256(previous, street, seat, kind, committed)
+/// per action. The final hash is published in the hand record, so each player can check the log
+/// they were shown. Zero-copy: read in place, never copied onto the stack.
+#[account(zero_copy)]
+pub struct HandLog {
+    pub table: Pubkey,
+    pub hand_no: u64,
+    pub hash: [u8; 32],
+    pub len: u32,
+    pub pad: [u8; 4],
+    pub entries: [LogEntry; LOG_CAPACITY],
+}
+
+impl HandLog {
+    pub fn reset(&mut self, table: &Pubkey, hand_no: u64) {
+        self.hand_no = hand_no;
+        self.len = 0;
+        self.hash = log_start(table, hand_no);
+    }
+
+    pub fn push(&mut self, street: u8, seat: u8, kind: u8, committed: u64) {
+        self.hash = log_step(&self.hash, street, seat, kind, committed);
+        if (self.len as usize) < LOG_CAPACITY {
+            self.entries[self.len as usize] = LogEntry { committed, street, seat, kind, pad: [0; 5] };
+        }
+        self.len = self.len.saturating_add(1);
+    }
+}
+
+pub fn log_start(table: &Pubkey, hand_no: u64) -> [u8; 32] {
+    hashv(&[table.as_ref(), &hand_no.to_le_bytes()]).to_bytes()
+}
+
+pub fn log_step(prev: &[u8; 32], street: u8, seat: u8, kind: u8, committed: u64) -> [u8; 32] {
+    hashv(&[prev, &[street, seat, kind], &committed.to_le_bytes()]).to_bytes()
 }
 
 impl Ledger {
@@ -204,7 +281,7 @@ pub struct Deck {
     pub seeds: [[u8; 32]; MAX_SEATS as usize],
     /// Who committed each seed. A seed counts only while its committer still holds the seat.
     pub seed_owners: [Pubkey; MAX_SEATS as usize],
-    /// Public stand-in for the VRF output (see deal.rs).
+    /// Public stand-in for the VRF output (see dealing.rs).
     pub entropy: [u8; 32],
     pub shuffle_seed: [u8; 32],
     pub cards: [u8; 52],
@@ -224,6 +301,12 @@ pub struct HandRecord {
     pub entropy: [u8; 32],
     pub shuffle_seed: [u8; 32],
     pub cards: [u8; 52],
+    /// Board cards reached (0, 3, 4 or 5); every card in the deck is public after the hand anyway.
+    pub board_len: u8,
+    /// Final hash of the hand's action log (see `HandLog`). Bets themselves stay private.
+    pub log_hash: [u8; 32],
+    /// Actions in the hand (the log may hold fewer, see LOG_CAPACITY).
+    pub log_len: u32,
 }
 
 /// One seat's hole cards. Rollup-only and readable only by the seat's current owner. Created when a
@@ -360,6 +443,7 @@ mod tests {
         let mut l = Ledger {
             table: Pubkey::new_unique(), seats: [Seat::default(); MAX_SEATS as usize], escrow_owed: 0, rake_accrued: 5,
             escrow_balance: 0, total_deposited: 0, total_paid_out: 0, total_rake_collected: 0, salt: [0; 32],
+            game: Game::default(),
         };
         let a = Pubkey::new_unique();
         let r = Pubkey::new_unique();
@@ -373,6 +457,22 @@ mod tests {
         assert_ne!(f1, f2, "any change moves the fingerprint");
         l.salt = [1; 32];
         assert_ne!(f2, l.fingerprint().unwrap(), "the salt is part of the fingerprint");
+    }
+
+    #[test]
+    fn action_log_hash_chain() {
+        let t = Pubkey::new_unique();
+        let chain = |change: Option<u64>, hand: u64| {
+            let mut h = log_start(&t, hand);
+            for i in 0..(LOG_CAPACITY as u64 + 5) {
+                h = log_step(&h, 1, (i % 9) as u8, 2, if Some(i) == change { 99 } else { i });
+            }
+            h
+        };
+        assert_eq!(chain(None, 1), chain(None, 1));
+        assert_ne!(chain(None, 1), chain(Some(3), 1), "changing any entry changes the final hash");
+        assert_ne!(chain(None, 1), chain(None, 2), "the chain is bound to the hand number");
+        assert_eq!(std::mem::size_of::<LogEntry>(), 16);
     }
 
     #[test]

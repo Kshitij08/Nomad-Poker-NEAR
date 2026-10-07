@@ -92,4 +92,12 @@ pub enum PokerError {
     TooEarlyToAbort,
     #[msg("No hand is waiting for randomness")]
     NotShuffling,
+    #[msg("It isn't this seat's turn")]
+    NotYourTurn,
+    #[msg("That action isn't allowed now")]
+    IllegalAction,
+    #[msg("The player still has time to act")]
+    TurnNotOver,
+    #[msg("No hand is being played")]
+    HandNotPlaying,
 }

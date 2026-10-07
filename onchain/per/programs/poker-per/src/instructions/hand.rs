@@ -1,14 +1,12 @@
 //! Rollup: a hand's randomness. Every seated player commits a hidden seed, anyone starts the hand
-//! (a VRF request), the VRF callback shuffles and deals into each player's private hand, and the
-//! hand's shuffle inputs and deck are published in the table's public `HandRecord` when it ends.
+//! (a VRF request), and the VRF callback shuffles and deals into each player's private hand. The
+//! betting itself is in play.rs.
 //!
 //! Why every seat must commit: the VRF oracle's fulfillment transaction carries the VRF output,
 //! and the platform's transaction visibility can't be fully relied on (M3). With a seed from every
 //! dealt player, nobody short of all players together plus the oracle can compute the deck.
 //!
-//! M4 has no betting yet: `end_hand` stands in for M5's showdown, so a seated player (or the
-//! creator) ends the hand by hand. M5 replaces that with the engine, and adds timeouts for players
-//! who don't commit a seed.
+//! A player who doesn't commit a seed within the seed window sits the next hand out.
 
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{vrf, vrf_callback};
@@ -18,13 +16,13 @@ use ephemeral_rollups_sdk::vrf::types::SerializableAccountMeta;
 use solana_sha256_hasher::hashv;
 
 use crate::constants::{CONFIG_SEED, CONFIG_VERSION};
-use crate::deal::{self, NO_CARD};
+use crate::dealing;
 use crate::errors::PokerError;
 use crate::private::write;
 use crate::state::Config;
 use crate::table::{
-    abort_rule, deal_rule, start_rule, Deck, Hand, HandRecord, Ledger, StartKind, Table, DECK_SEED, HAND_DEALT, HAND_IDLE,
-    HAND_SEED, HAND_SHUFFLING, LEDGER_SEED, RECORD_SEED, STATUS_OPEN, TABLE_SEED,
+    abort_rule, deal_rule, start_rule, Deck, Hand, Ledger, StartKind, Table, DECK_SEED, HAND_DEALT, HAND_IDLE, HAND_SEED,
+    HAND_SHUFFLING, LEDGER_SEED, SEED_WINDOW_SECS, STATUS_OPEN, TABLE_SEED,
 };
 
 // ---------------------------------------------------------------------------------------- seeds
@@ -76,8 +74,10 @@ pub struct StartHand<'info> {
     pub oracle_queue: UncheckedAccount<'info>,
 }
 
-/// Anyone may start the next hand once two or more players are seated and every one of them has
-/// committed a seed: it requests randomness, and the VRF program calls `deal` with it. If that
+/// Anyone may start the next hand once two or more seated players with chips have committed seeds:
+/// straight away if every seated player with chips has, otherwise once `SEED_WINDOW_SECS` have
+/// passed since the table became idle (those without a seed sit the hand out). It requests
+/// randomness, and the VRF program calls `deal` with it. If that
 /// callback hasn't come after `VRF_RETRY_SECS`, anyone may call this again; the new request
 /// replaces the old one, which can then no longer deal.
 pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
@@ -87,23 +87,39 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
     require!(table.status == STATUS_OPEN, PokerError::TableNotOpen);
     match start_rule(table.hand_state, now, table.vrf_requested_ts)? {
         StartKind::NewHand => {
-            require!(table.seated() >= 2, PokerError::NotEnoughPlayers);
             let deck = &mut ctx.accounts.deck;
             let ledger = &ctx.accounts.ledger;
-            for seat in deal::seats_in(table.seat_mask) {
-                let i = seat as usize;
-                require!(deck.seed_mask & (1 << seat) != 0 && deck.seed_owners[i] == ledger.seats[i].player, PokerError::MissingSeeds);
+            // Seats with chips, and those of them whose current occupant committed a seed.
+            let (mut funded, mut seeded) = (0u16, 0u16);
+            for seat in dealing::seats_in(table.seat_mask) {
+                let (i, bit) = (seat as usize, 1u16 << seat);
+                if ledger.seats[i].stack > 0 {
+                    funded |= bit;
+                    if deck.seed_mask & bit != 0 && deck.seed_owners[i] == ledger.seats[i].player {
+                        seeded |= bit;
+                    }
+                }
             }
-            // Seeds of seats that emptied since they were committed don't count.
+            require!(funded.count_ones() >= 2, PokerError::NotEnoughPlayers);
+            // Everyone with chips plays once they've all committed. Otherwise wait out the seed
+            // window, then deal only the seats that committed (the rest sit this hand out).
+            let dealt = if seeded == funded {
+                funded
+            } else {
+                require!(now.saturating_sub(table.idle_since) >= SEED_WINDOW_SECS, PokerError::MissingSeeds);
+                seeded
+            };
+            require!(dealt.count_ones() >= 2, PokerError::NotEnoughPlayers);
+            // Only dealt seats' seeds count; the rest are dropped.
             for i in 0..deck.seeds.len() {
-                if table.seat_mask & (1 << i) == 0 {
+                if dealt & (1 << i) == 0 {
                     deck.seeds[i] = [0; 32];
                     deck.seed_owners[i] = Pubkey::default();
                 }
             }
-            deck.seed_mask &= table.seat_mask;
+            deck.seed_mask &= dealt;
             table.hand_no = table.hand_no.checked_add(1).ok_or(PokerError::MathOverflow)?;
-            table.dealt_mask = table.seat_mask;
+            table.dealt_mask = dealt;
             table.hand_state = HAND_SHUFFLING;
             table.shuffle_started_ts = now;
             deck.hand_no = table.hand_no;
@@ -119,7 +135,7 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
         SerializableAccountMeta { pubkey: ctx.accounts.deck.key(), is_signer: false, is_writable: true },
         SerializableAccountMeta { pubkey: ctx.accounts.ledger.key(), is_signer: false, is_writable: true },
     ];
-    for seat in deal::seats_in(dealt_mask) {
+    for seat in dealing::seats_in(dealt_mask) {
         let (hand, _) = Pubkey::find_program_address(&[HAND_SEED, table_key.as_ref(), &[seat]], &crate::ID);
         metas.push(SerializableAccountMeta { pubkey: hand, is_signer: false, is_writable: true });
     }
@@ -153,7 +169,9 @@ pub struct AbortHand<'info> {
 /// first). Outstanding requests become invalid; the committed seeds stay for the next attempt.
 pub fn abort_hand(ctx: Context<AbortHand>) -> Result<()> {
     let table = &mut ctx.accounts.table;
-    abort_rule(table.hand_state, Clock::get()?.unix_timestamp, table.shuffle_started_ts)?;
+    let now = Clock::get()?.unix_timestamp;
+    abort_rule(table.hand_state, now, table.shuffle_started_ts)?;
+    table.idle_since = now;
     table.vrf_nonce = table.vrf_nonce.checked_add(1).ok_or(PokerError::MathOverflow)?;
     table.hand_state = HAND_IDLE;
     table.dealt_mask = 0;
@@ -186,16 +204,16 @@ pub fn deal<'info>(ctx: Context<'info, Deal<'info>>, randomness: [u8; 32], nonce
     let deck = &mut ctx.accounts.deck;
     require!(deck.hand_no == table.hand_no, PokerError::StaleRandomness);
 
-    let entropy = deal::entropy_of(&randomness);
-    let seed = deal::shuffle_seed(&table_key, table.hand_no, &entropy, deck.seed_mask, &deck.seeds);
-    let cards = deal::shuffle(seed);
-    let button = if table.hand_no == 1 { deal::first_button(seed, table.dealt_mask) } else { deal::next_button(table.button, table.dealt_mask) };
-    let holes = deal::hole_cards(&cards, &deal::deal_order(button, table.dealt_mask));
+    let entropy = dealing::entropy_of(&randomness);
+    let seed = dealing::shuffle_seed(&table_key, table.hand_no, &entropy, deck.seed_mask, &deck.seeds);
+    let cards = dealing::shuffle(seed);
+    let button = if table.hand_no == 1 { dealing::first_button(seed, table.dealt_mask) } else { dealing::next_button(table.button, table.dealt_mask) };
+    let holes = dealing::hole_cards(&cards, &dealing::deal_order(button, table.dealt_mask));
     deck.entropy = entropy;
     deck.shuffle_seed = seed;
     deck.cards = cards;
 
-    let seats = deal::seats_in(table.dealt_mask);
+    let seats = dealing::seats_in(table.dealt_mask);
     require!(ctx.remaining_accounts.len() == seats.len(), PokerError::StaleRandomness);
     for (info, &seat) in ctx.remaining_accounts.iter().zip(seats.iter()) {
         require!(info.is_writable && *info.owner == crate::ID, PokerError::StaleRandomness);
@@ -210,57 +228,13 @@ pub fn deal<'info>(ctx: Context<'info, Deal<'info>>, randomness: [u8; 32], nonce
     }
 
     let ledger = &mut ctx.accounts.ledger;
-    ledger.salt = deal::salt_of(&randomness);
+    ledger.salt = dealing::salt_of(&randomness);
     table.ledger_hash = ledger.fingerprint()?;
     table.ledger_seq = table.ledger_seq.checked_add(1).ok_or(PokerError::MathOverflow)?;
     table.last_activity_ts = Clock::get()?.unix_timestamp;
     table.button = button;
     table.hand_state = HAND_DEALT;
     emit!(HandDealt { table: table_key, hand_no: table.hand_no, button });
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------------------- end
-
-#[derive(Accounts)]
-pub struct EndHand<'info> {
-    pub signer: Signer<'info>,
-    #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
-    pub table: Box<Account<'info, Table>>,
-    #[account(mut, seeds = [DECK_SEED, table.key().as_ref()], bump, has_one = table)]
-    pub deck: Box<Account<'info, Deck>>,
-    #[account(seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
-    pub ledger: Box<Account<'info, Ledger>>,
-    #[account(mut, seeds = [RECORD_SEED, table.key().as_ref()], bump, has_one = table)]
-    pub record: Box<Account<'info, HandRecord>>,
-}
-
-/// M4 stand-in for M5's showdown: a seated player or the creator ends the dealt hand. Its seeds,
-/// entropy, shuffle seed and deck go into the public record, and the deck is cleared for the next
-/// hand. The VRF output itself (and so the ledger salt) isn't published.
-pub fn end_hand(ctx: Context<EndHand>) -> Result<()> {
-    let signer = ctx.accounts.signer.key();
-    let table = &mut ctx.accounts.table;
-    require!(table.hand_state == HAND_DEALT, PokerError::HandNotDealt);
-    require!(ctx.accounts.ledger.seat_of(&signer).is_some() || signer == table.creator, PokerError::NotSeated);
-    let deck = &mut ctx.accounts.deck;
-    let record = &mut ctx.accounts.record;
-    record.hand_no = table.hand_no;
-    record.button = table.button;
-    record.dealt_mask = table.dealt_mask;
-    record.seed_mask = deck.seed_mask;
-    record.seeds = deck.seeds;
-    record.entropy = deck.entropy;
-    record.shuffle_seed = deck.shuffle_seed;
-    record.cards = deck.cards;
-    deck.seed_mask = 0;
-    deck.seeds = Default::default();
-    deck.seed_owners = Default::default();
-    deck.entropy = [0; 32];
-    deck.shuffle_seed = [0; 32];
-    deck.cards = [NO_CARD; 52];
-    table.hand_state = HAND_IDLE;
-    emit!(HandEnded { table: table.key(), hand_no: table.hand_no });
     Ok(())
 }
 
@@ -279,12 +253,6 @@ pub struct HandDealt {
 
 #[event]
 pub struct HandAborted {
-    pub table: Pubkey,
-    pub hand_no: u64,
-}
-
-#[event]
-pub struct HandEnded {
     pub table: Pubkey,
     pub hand_no: u64,
 }

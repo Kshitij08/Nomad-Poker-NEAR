@@ -1,5 +1,5 @@
 // Off-chain hand verifier: recomputes a hand's deck from its public record, independently of the
-// program. Mirrors programs/poker-per/src/deal.rs; keep the two in step (the domain strings carry a
+// program. Mirrors programs/poker-per/src/dealing.rs; keep the two in step (the domain strings carry a
 // version). Run directly for the fixed-vector self-test: npx tsx tests/verifier.ts
 import { PublicKey } from "@solana/web3.js";
 import { createHash } from "crypto";
@@ -58,6 +58,9 @@ export function holeCards(deck: number[], order: number[]): number[][] {
   return out;
 }
 
+/** Board cards after n players' hole cards: burn, flop 3, burn, turn, burn, river (dealing.rs `board`). */
+export const boardOf = (deck: number[], dealt: number) => { const b = 2 * dealt; return [deck[b + 1], deck[b + 2], deck[b + 3], deck[b + 5], deck[b + 7]]; };
+
 const RANKS = "23456789TJQKA", SUITS = "cdhs";
 export const cardName = (c: number) => (c === NO_CARD ? "--" : RANKS[c % 13] + SUITS[Math.floor(c / 13)]);
 
@@ -90,7 +93,7 @@ export function verify(r: Record, mine?: { seat: number; seed: Buffer; cards?: n
   return { ok: problems.length === 0, problems, deck };
 }
 
-// Self-test against the fixed vector in deal.rs (known_vector).
+// Self-test against the fixed vector in dealing.rs (known_vector).
 if (require.main === module) {
   const table = new PublicKey(Buffer.alloc(32, 7));
   const seeds = Array.from({ length: SEATS }, () => Buffer.alloc(32));

@@ -1,13 +1,14 @@
 //! Private poker tables on a MagicBlock Private Ephemeral Rollup (TEE), dealt with MagicBlock VRF.
 //! M1: program config. M2: tables and money (L1 create/delegate/escape hatch, rollup buy-in,
 //! cash-out, rake, commit). M3: private ledger, hands and deck. M4: VRF shuffle and deal.
-//! The game engine and hand records land in M5 and M6 (see docs/proofs).
+//! M5: the Hold'em engine (betting, timers, side pots, showdown). Hand records land in M6.
 
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::ephemeral;
 
 pub mod constants;
-pub mod deal;
+pub mod dealing;
+pub mod engine;
 pub mod errors;
 pub mod instructions;
 pub mod private;
@@ -109,7 +110,17 @@ pub mod poker_per {
         instructions::hand::abort_hand(ctx)
     }
 
-    pub fn end_hand(ctx: Context<EndHand>) -> Result<()> {
-        instructions::hand::end_hand(ctx)
+    // ---- Rollup: playing a hand (M5)
+
+    pub fn begin_hand(ctx: Context<BeginHand>) -> Result<()> {
+        instructions::play::begin_hand(ctx)
+    }
+
+    pub fn act(ctx: Context<Play>, seat: u8, kind: u8, amount: u64) -> Result<()> {
+        instructions::play::act(ctx, seat, kind, amount)
+    }
+
+    pub fn timeout(ctx: Context<Play>) -> Result<()> {
+        instructions::play::timeout(ctx)
     }
 }

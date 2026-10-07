@@ -23,6 +23,11 @@ export const deckOf = (t: PublicKey) => pda([Buffer.from("deck"), t.toBuffer()])
 export const handOf = (t: PublicKey, seat: number) => pda([Buffer.from("hand"), t.toBuffer(), Buffer.from([seat])]);
 export const invitesOf = (t: PublicKey) => pda([Buffer.from("invites"), t.toBuffer()]);
 export const recordOf = (t: PublicKey) => pda([Buffer.from("record"), t.toBuffer()]);
+export const logOf = (t: PublicKey) => pda([Buffer.from("log"), t.toBuffer()]);
+/** Engine action kinds (engine.rs; same order as the C# ActionType). */
+export const KIND = { fold: 0, check: 1, call: 2, bet: 3, raise: 4, allIn: 5 } as const;
+/** act/timeout may run a showdown (every remaining hand evaluated), so they get a large budget. */
+export const PLAY_CU = 1_400_000;
 export const EPHEMERAL_QUEUE = new PublicKey("5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc");
 export const escapePayerOf = (t: PublicKey) => pda([Buffer.from("escape-payer"), t.toBuffer()]);
 export const escrowOf = (t: PublicKey) => getAssociatedTokenAddressSync(NATIVE_MINT, t, true);
@@ -90,9 +95,10 @@ export function tableApi(creator: Keypair, tableId: bigint) {
   const table = tablePda(creator.publicKey, tableId);
   const escrow = escrowOf(table);
   const [escrowEata] = PublicKey.findProgramAddressSync([table.toBuffer(), NATIVE_MINT.toBuffer()], ESPL);
-  const ledger = ledgerOf(table), deck = deckOf(table), record = recordOf(table);
+  const ledger = ledgerOf(table), deck = deckOf(table), record = recordOf(table), log = logOf(table);
+  const play = (signer: PublicKey) => ({ signer, table, ledger, deck, record, log });
   return {
-    table, escrow, escrowEata, ledger, deck, record,
+    table, escrow, escrowEata, ledger, deck, record, log,
     // create_table uses 124k-202k compute units depending on the id (PDA bump searches), so it always
     // gets an explicit limit above the 200k default. Measured by scripts/cu-create-table.ts.
     create: (params: any, signer = creator, mint = NATIVE_MINT) => programFor(signer).methods.createTable(BN(tableId), params)
@@ -103,14 +109,21 @@ export function tableApi(creator: Keypair, tableId: bigint) {
     delegate: (payer: Keypair = creator, validator = TEE_VALIDATOR) => programFor(payer).methods.delegateTable(BN(tableId), creator.publicKey)
       .accountsPartial({ payer: payer.publicKey, table, escapePayer: escapePayerOf(table), validator }).rpc(),
     open: (prog: anchor.Program, payer: PublicKey) => prog.methods.openTable()
-      .accountsPartial({ payer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, rollup }).rpc(),
+      .accountsPartial({ payer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, log, logPermission: permissionPdaFromAccount(log), rollup }).rpc(),
     commitSeed: (prog: anchor.Program, player: PublicKey, seat: number, seed: Buffer) => prog.methods.commitSeed(seat, Array.from(seed))
       .accountsPartial({ player, table, deck, hand: handOf(table, seat) }).rpc(),
     startHand: (prog: anchor.Program, payer: PublicKey) => prog.methods.startHand()
       .accountsPartial({ payer, config: CONFIG_PDA, table, deck, ledger, oracleQueue: EPHEMERAL_QUEUE }).rpc(),
     abortHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.abortHand().accountsPartial({ signer, table }).rpc(),
-    endHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.endHand()
-      .accountsPartial({ signer, table, deck, ledger, record }).rpc(),
+    beginHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.beginHand()
+      .accountsPartial({ play: play(signer), logPermission: permissionPdaFromAccount(log), rollup } as any)
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc(),
+    act: (prog: anchor.Program, signer: PublicKey, seat: number, kind: number, amount: bigint | number = 0) => prog.methods.act(seat, kind, BN(amount))
+      .accountsPartial(play(signer)).preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc(),
+    actTx: (prog: anchor.Program, signer: PublicKey, seat: number, kind: number, amount: bigint | number = 0, units = PLAY_CU) => prog.methods.act(seat, kind, BN(amount))
+      .accountsPartial(play(signer)).preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units })]).transaction(),
+    timeout: (prog: anchor.Program, signer: PublicKey) => prog.methods.timeout()
+      .accountsPartial(play(signer)).preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc(),
     buyIn: (prog: anchor.Program, player: PublicKey, seat: number, amount: bigint, overrides: any = {}) => {
       const hand = handOf(table, seat);
       const { reader = readerFor(player).publicKey, ...accounts } = overrides;
@@ -130,7 +143,7 @@ export function tableApi(creator: Keypair, tableId: bigint) {
       .accountsPartial({ config: CONFIG_PDA, table, ledger, escrow, devToken, magicProgram: MAGIC_PROGRAM_ID }).rpc(),
     commit: (prog: anchor.Program, payer: PublicKey) => prog.methods.commitTable().accountsPartial({ payer, table }).rpc(),
     close: (prog: anchor.Program, signer: PublicKey) => prog.methods.closeTable().accountsPartial({
-      creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record,
+      creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, log, logPermission: permissionPdaFromAccount(log),
       vault: EPHEMERAL_VAULT, permissionProgram: PERMISSION_PROGRAM_ID,
     }).rpc(),
     request: (signer: Keypair) => programFor(signer).methods.requestTableUndelegation(BN(tableId), creator.publicKey).accountsPartial({

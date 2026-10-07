@@ -38,7 +38,9 @@ async function main() {
   const out: any = { ranAt: new Date().toISOString(), table: T.table.toBase58(), note: "`live` and `afterClose` used the TEE RPC with no login", truth };
   out.live = await recover(T.table, 30_000);
   out.live.cardsRecovered = matches(out.live);
-  await T.endHand(prog.p1, p1.publicKey);
+  await T.beginHand(prog.d, deployer.publicKey);
+  const toAct = coder.decode("ledger", (await rawRead(connUrl(await teeConnection(readerFor(p1.publicKey))), T.ledger)).data!).game.toAct;
+  await T.act(toAct === 0 ? prog.p1 : prog.p2, toAct === 0 ? p1.publicKey : p2.publicKey, toAct, 0);
   await T.cashOut(prog.p1, p1.publicKey, 0); await T.cashOut(prog.p2, p2.publicKey, 3);
   await T.collectRake(prog.d, tokenOf(deployer.publicKey)); await T.close(prog.d, deployer.publicKey);
   out.afterClose = await recover(T.table, 60_000);

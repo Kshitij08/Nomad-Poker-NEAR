@@ -1,0 +1,487 @@
+{
+  "suite": "m4-hand",
+  "program": "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv",
+  "ranAt": "2026-10-07T16:30:53.459Z",
+  "pass": 50,
+  "fail": 1,
+  "knownPlatformIssues": 2,
+  "table": "BczYks9Zb5Dp6Lqhb2UwGGtdVVJSaiXnMWXLNSKDuDDo",
+  "latenciesMs": [
+    60,
+    55
+  ],
+  "hand1": {
+    "button": 0,
+    "deck": "Kh Qh 9c As 2h 2c 6s 8d 4c Qc 2d 3h Ah Ks Jc 5d Js 9s 4s 7s 4d Jd 9h Kc 7d Kd Ac Tc 8s 6c 8c Th Ts 5h 7h 3c 3d 5s Qd 3s 6h 2s 6d Ad 7c Td 8h 5c 4h Qs Jh 9d"
+  },
+  "outcomes": [
+    {
+      "name": "create + delegate a 6-seat table",
+      "status": "PASS",
+      "detail": {
+        "sig": "4gNgVWoafagTuSZcQfvrUtZiPsbpJ5SPFh9k6p13fZgZqZVoEwffMarQr1BiL44pRSS6E7MstAwnXShyz3ULnX8X",
+        "problem": null
+      }
+    },
+    {
+      "name": "open: ledger, deck and the public hand record",
+      "status": "PASS",
+      "detail": {
+        "sig": "3FCq4SLLBDYw5nYQY46rCTGNcuja8LiZvNA4syz3EEVz3dTtCrr17GFWEcT2ysW2mW3AgPbsEVXSQ9CXYqdy5mMt",
+        "problem": null
+      }
+    },
+    {
+      "name": "the hand record is readable with no login (public)",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "p1 sits in seat 0",
+      "status": "PASS",
+      "detail": {
+        "sig": "3rbUKEAQH4UvPBhRKoj5BxYNcAzJb8FVGWqQ6VBeLCWKhrLbzYi97u3r82jsHrKr3csaCkoVsu5jZyXiifemsEea",
+        "problem": null
+      }
+    },
+    {
+      "name": "a hand can't start with one player",
+      "status": "FAIL",
+      "detail": {
+        "expected": "NotEnoughPlayers",
+        "got": "MissingSeeds (6042)"
+      }
+    },
+    {
+      "name": "p2 sits in seat 3",
+      "status": "PASS",
+      "detail": {
+        "sig": "4aMrY4spMjqYjkEzhCunnvE8qPVCRJETycwP7yb28FBXjjRvPexeKej9mfWkHebqead2F1m5y66WVRNwnKmwqdt4",
+        "problem": null
+      }
+    },
+    {
+      "name": "p1 commits a hidden seed for seat 0",
+      "status": "PASS",
+      "detail": {
+        "sig": "28D9DN5Nzr6rRXCmN9C5LcD5q4aoVytS1McYoWxhfKj55pyd26mUAUbfNZPHbUVGtxErrqmM2iwWhpdxS5rNwiLS",
+        "problem": null
+      }
+    },
+    {
+      "name": "a hand can't start until every seated player has committed a seed",
+      "status": "PASS",
+      "detail": {
+        "expected": "MissingSeeds",
+        "got": "MissingSeeds (6042)"
+      }
+    },
+    {
+      "name": "an outsider can't commit a seed for a seat",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeated",
+        "got": "NotSeated (6018)"
+      }
+    },
+    {
+      "name": "p1 can't commit a seed for p2's seat",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeated",
+        "got": "NotSeated (6018)"
+      }
+    },
+    {
+      "name": "p3 sits in seat 5 and commits a seed",
+      "status": "PASS",
+      "detail": {
+        "sig": "SgAJVM8m33WYSAo94efBpvu57AjbDuGaQxrMg6naqneGALWMoL9PAtA6nC2qzTPQYuKrawSJaTQNwQ2RKJtVBgP",
+        "problem": null
+      }
+    },
+    {
+      "name": "p3 leaves; the creator takes seat 5 without committing",
+      "status": "PASS",
+      "detail": {
+        "sig": "4WyAh7k7WguXtmLNy2Piv5sey3CShCPcxa1gyQhmnFy8wuLLCMj8VuWcoMJEM5fKU5QUcfwmYSukpXsiLVhfe2FC",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 commits a hidden seed for seat 3",
+      "status": "PASS",
+      "detail": {
+        "sig": "3qcbE3SSnK2o8iRs426rH5T7FukS3kCTydAk6P2F9TAE67Xq8oUUAzvjSEmCE7pFmXJbZdWBcrTmXpqCYCrbwSPU",
+        "problem": null
+      }
+    },
+    {
+      "name": "seat 5 still holds p3's old seed, which doesn't count for the creator",
+      "status": "PASS",
+      "detail": {
+        "expected": "MissingSeeds",
+        "got": "MissingSeeds (6042)"
+      }
+    },
+    {
+      "name": "the creator leaves seat 5",
+      "status": "PASS",
+      "detail": {
+        "sig": "2tYMfWC9DcdEKTT6MkrrbYbcFGjea7K7kXoFQEGSew8UL2MybEJm4EDrTxucZ4tqFHHKyGpb2aCKhASd9bEXrbcf",
+        "problem": null
+      }
+    },
+    {
+      "name": "p1's seed can't be read from its transaction by the other player, an outsider or without login (contents withheld even from p1)",
+      "status": "PASS",
+      "detail": {
+        "p1WalletControl": {
+          "found": true,
+          "seedVisible": false
+        },
+        "p2Reader": {
+          "found": true,
+          "seedVisible": false
+        },
+        "outsider": {
+          "found": true,
+          "seedVisible": false
+        },
+        "noLogin": {
+          "found": true,
+          "seedVisible": false
+        }
+      }
+    },
+    {
+      "name": "a fake VRF callback signed by an outsider is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintAddress",
+        "got": "ConstraintAddress (2012)"
+      }
+    },
+    {
+      "name": "abort with no hand running is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotShuffling",
+        "got": "NotShuffling (6044)"
+      }
+    },
+    {
+      "name": "an outsider (p3) starts hand 1: VRF requested",
+      "status": "PASS",
+      "detail": {
+        "sig": "5Ye82zBXkBzWAHgNXtMR8fUxYSJH2twtewGZQVGzVHYApfUJRrFXRDS4SAhh3C5bmJQyXeaqYNNXHmNPGTp6QtMG",
+        "problem": null
+      }
+    },
+    {
+      "name": "a second request straight away is refused (still shuffling, or already dealt)",
+      "status": "PASS",
+      "detail": {
+        "result": "HandInProgress (6037)"
+      }
+    },
+    {
+      "name": "the VRF callback dealt hand 1",
+      "status": "PASS",
+      "detail": {
+        "msFromRequestToDealt": 60
+      }
+    },
+    {
+      "name": "no second start while dealt",
+      "status": "PASS",
+      "detail": {
+        "expected": "HandInProgress",
+        "got": "HandInProgress (6037)"
+      }
+    },
+    {
+      "name": "no seed commits during a hand",
+      "status": "PASS",
+      "detail": {
+        "expected": "HandInProgress",
+        "got": "HandInProgress (6037)"
+      }
+    },
+    {
+      "name": "no cash-out during a hand",
+      "status": "PASS",
+      "detail": {
+        "expected": "HandInProgress",
+        "got": "HandInProgress (6037)"
+      }
+    },
+    {
+      "name": "abort of a dealt hand is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotShuffling",
+        "got": "NotShuffling (6044)"
+      }
+    },
+    {
+      "name": "each player reads their own two cards (dealt, hand 1)",
+      "status": "PASS",
+      "detail": {
+        "p1": [
+          "Qh",
+          "As"
+        ],
+        "p2": [
+          "Kh",
+          "9c"
+        ],
+        "button": 0
+      }
+    },
+    {
+      "name": "players can't read each other's cards; outsiders read neither; nobody reads the deck",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "the ledger got a salt from the VRF, and the table's fingerprint covers it",
+      "status": "PASS",
+      "detail": {
+        "ledgerReadable": true
+      }
+    },
+    {
+      "name": "while the hand is live, nobody else can rebuild p1's cards from transaction data, or see any seed or the VRF output (no login, outsider, the other player)",
+      "status": "PASS",
+      "detail": {
+        "noLogin": {
+          "listed": 25,
+          "hidden": 22,
+          "seeds": 0,
+          "vrf": false
+        },
+        "outsider": {
+          "listed": 25,
+          "hidden": 22,
+          "seeds": 0,
+          "vrf": false
+        },
+        "p2Reader": {
+          "listed": 25,
+          "hidden": 22,
+          "seeds": 0,
+          "vrf": false
+        }
+      }
+    },
+    {
+      "name": "MagicBlock leak 2: simulateTransaction returns the live deck and hands with no login",
+      "status": "KNOWN",
+      "detail": {
+        "deckReturned": 1,
+        "handReturned": 1,
+        "leakedDeckMatchesP1Cards": true
+      }
+    },
+    {
+      "name": "begin the betting (blinds posted)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2deM7tE19VByvJuomzncViGKwAtdm8rBageVPbMz4i69kB1LnosEdo41NAywwk3QgoVtDwoHinTzLYCkut3sSpnj",
+        "problem": null
+      }
+    },
+    {
+      "name": "an outsider can't act in the hand",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeated",
+        "got": "NotSeated (6018)"
+      }
+    },
+    {
+      "name": "the player to act folds, ending hand 1 (heads-up)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5TTZMuUK3HixKoPKxC95GMjMB8aYfiybU9gkYf2WKGKRqHpVQzSduGTyuFZdCkbwbUE3CF1GwB2VKZvXumHM2Vp4",
+        "problem": null
+      }
+    },
+    {
+      "name": "verifier (no login): hand 1's deck and button recompute from entropy + both seeds, and match both players' cards",
+      "status": "PASS",
+      "detail": {
+        "p1": [],
+        "p2": [],
+        "button": 0,
+        "seedMask": 9,
+        "first10": [
+          "Kh",
+          "Qh",
+          "9c",
+          "As",
+          "2h",
+          "2c",
+          "6s",
+          "8d",
+          "4c",
+          "Qc"
+        ]
+      }
+    },
+    {
+      "name": "the public record contains neither the ledger salt nor the departed player's seat-5 seed",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "tampered records fail verification (swapped cards, a changed seed, changed entropy, moved button)",
+      "status": "PASS",
+      "detail": {
+        "card": [
+          "deck doesn't match the shuffle seed"
+        ],
+        "seed": [
+          "shuffle seed doesn't match entropy + seeds"
+        ],
+        "entropy": [
+          "shuffle seed doesn't match entropy + seeds"
+        ],
+        "button": [
+          "button should be seat 0, record says 3"
+        ]
+      }
+    },
+    {
+      "name": "table back to idle after the hand",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "p1 commits a fresh seed for hand 2",
+      "status": "PASS",
+      "detail": {
+        "sig": "2h4nN4vXcF1UUx9dxK2CMaTjhyxxcvcGjJHK6mgagLFH7XuX9UuDqphtMVUT4yVSDpHr9DgttGMEt9ptijXnvaGe",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 2 can't start on p2's hand-1 seed",
+      "status": "PASS",
+      "detail": {
+        "expected": "MissingSeeds",
+        "got": "MissingSeeds (6042)"
+      }
+    },
+    {
+      "name": "p2 commits a fresh seed for hand 2",
+      "status": "PASS",
+      "detail": {
+        "sig": "5Evzg59y9ViFJeQcwjL4MD99VxKqyUTDQ726iN9E4aAs7ETK5yuMKwCrb8mmnAVWX1z6jQ278GsHUiU83qcQjB8i",
+        "problem": null
+      }
+    },
+    {
+      "name": "p1 starts hand 2",
+      "status": "PASS",
+      "detail": {
+        "sig": "oMJDAwqhtN4HiWHiKevJULSMhf2vFAxCh7UHoL6x1rZpGyeVAuJzaCbkuSnonsbVjaUC1pk2kFthbXYbwhwpcgM",
+        "problem": null
+      }
+    },
+    {
+      "name": "hand 2 dealt; the button moved to the next seated seat",
+      "status": "PASS",
+      "detail": {
+        "msFromRequestToDealt": 55,
+        "button1": 0,
+        "button2": 3
+      }
+    },
+    {
+      "name": "begin hand 2 and the player to act folds",
+      "status": "PASS",
+      "detail": {
+        "sig": "2kGCCmozDrbgmb7VENbpbq8bEt8hB7e6phxpvFqhXKrmSn3GBR4PJLUxjRCzpnqoDPaU6mhreMhjQUpZxdVBW1J3",
+        "problem": null
+      }
+    },
+    {
+      "name": "verifier: hand 2 recomputes, including the button rotation",
+      "status": "PASS",
+      "detail": {
+        "problems": []
+      }
+    },
+    {
+      "name": "hand 2's deck differs from hand 1's",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "dealing order starts left of the button",
+      "status": "PASS",
+      "detail": {
+        "order": [
+          0,
+          3
+        ]
+      }
+    },
+    {
+      "name": "p1 cashes out",
+      "status": "PASS",
+      "detail": {
+        "sig": "N9hod15YzWBectCvzWMHPHd2Ncd9ztdJhncCu517ucX57bJ8Jwh8edXNy9YYFLwFemutPHJb5NBicZwNv8qcmUW",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 cashes out",
+      "status": "PASS",
+      "detail": {
+        "sig": "aNeBV4EST3CgmEngH8xvTjmM5YDmJVqjVKQvFAutBDQAXz6TJJQio4Rm4szmR6hbuppGuzPgt7btnQNgYXYnUQ8",
+        "problem": null
+      }
+    },
+    {
+      "name": "collect rake",
+      "status": "PASS",
+      "detail": {
+        "sig": "JrnJqsVvtrcj5aNpx4VRvVffVqxwHwCvYBXJEfxWGYYeAxQdQ9UmXz2kbk55c9hsUrxhXnJbKHxik1yfGU7YbLS",
+        "problem": null
+      }
+    },
+    {
+      "name": "creator closes the table (record deleted too)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5es6FU8D3qK2pYvYfV371Uvjh4xvcqYo1LB3SabRcU9VC7bsfTADMLZi2965exFc8tv63NX8w9UDY4ksQo58t1Tz",
+        "problem": null
+      }
+    },
+    {
+      "name": "probe control: after close, the same no-login probe finds p1's seed in its transaction",
+      "status": "PASS",
+      "detail": {
+        "found": true,
+        "seedVisible": true
+      }
+    },
+    {
+      "name": "after the table closes, its seeds and VRF output become readable with no login (cards are public anyway; the ledger salt isn't meant to be: fix in M6)",
+      "status": "KNOWN",
+      "detail": {
+        "seeds": 41,
+        "vrf": true,
+        "hidden": 10
+      }
+    },
+    {
+      "name": "after close the record, deck and ledger are gone from the rollup",
+      "status": "PASS",
+      "detail": {}
+    }
+  ]
+}

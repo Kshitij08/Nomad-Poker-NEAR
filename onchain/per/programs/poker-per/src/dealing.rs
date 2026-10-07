@@ -143,6 +143,14 @@ pub fn hole_cards(deck: &[u8; DECK_SIZE], order: &[u8]) -> [[u8; 2]; SEATS] {
     out
 }
 
+/// The five board cards, as a live dealer takes them after the hole cards: burn one, flop three,
+/// burn one, turn, burn one, river (the C# engine's order). With n players dealt in, the hole cards
+/// use deck[0..2n].
+pub fn board(deck: &[u8; DECK_SIZE], dealt: usize) -> [u8; 5] {
+    let b = 2 * dealt;
+    [deck[b + 1], deck[b + 2], deck[b + 3], deck[b + 5], deck[b + 7]]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,6 +252,10 @@ mod tests {
         assert_eq!(h[6], [0, 4]);
         assert_eq!(h[3], [3, 7]);
         assert_eq!(h[2], [NO_CARD; 2]);
+        // 4 players use deck[0..8]; burn 8, flop 9-11, burn 12, turn 13, burn 14, river 15.
+        assert_eq!(board(&deck, 4), [9, 10, 11, 13, 15]);
+        // 9 players: hole cards 0..18, river at 25, still inside the deck.
+        assert_eq!(board(&deck, 9), [19, 20, 21, 23, 25]);
     }
 
     #[test]
