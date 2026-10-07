@@ -5,7 +5,10 @@
 //! the public hand record. Bets and stacks stay in the ledger (readable by the seated players) and
 //! the action log in its own account (readable by the players dealt into the hand).
 //!
-//! Clients should give `act` and `timeout` a compute budget for a possible showdown (every
+//! `tick` needs no signer and never fails for lack of something to do, so a MagicBlock crank can
+//! call it on a schedule: it times out an awaited player whose 15 s are up, and begins a dealt hand.
+//!
+//! Clients should give `act`, `timeout` and `tick` a compute budget for a possible showdown (every
 //! remaining hand is evaluated then).
 
 use anchor_lang::prelude::*;
@@ -26,10 +29,10 @@ use crate::table::{
     COMMIT_EVERY_SECS, LOG_SEED, LOG_SMALL_BLIND, LOG_TIMEOUT, RECORD_SEED, TABLE_SEED, TURN_SECS,
 };
 
+/// The table's hand accounts, shared by every instruction that plays a hand.
 #[commit]
 #[derive(Accounts)]
-pub struct Play<'info> {
-    pub signer: Signer<'info>,
+pub struct HandAccounts<'info> {
     #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
     pub table: Box<Account<'info, Table>>,
     #[account(mut, seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
@@ -47,11 +50,19 @@ pub struct Play<'info> {
     pub magic_fee_vault: UncheckedAccount<'info>,
 }
 
+/// `act` and `timeout`: someone acting.
+#[derive(Accounts)]
+pub struct Play<'info> {
+    pub signer: Signer<'info>,
+    pub hand: HandAccounts<'info>,
+}
+
+/// `begin_hand` and `tick`: may begin a dealt hand, which sets the hand log's readers.
 #[derive(Accounts)]
 pub struct BeginHand<'info> {
-    pub play: Play<'info>,
+    pub hand: HandAccounts<'info>,
     /// CHECK: permission PDA of the hand log; its readers become the players dealt in.
-    #[account(mut, seeds = [PERMISSION_SEED, play.log.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    #[account(mut, seeds = [PERMISSION_SEED, hand.log.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
     pub log_permission: UncheckedAccount<'info>,
     pub rollup: RollupPrograms<'info>,
 }
@@ -60,30 +71,49 @@ pub struct BeginHand<'info> {
 /// the players dealt in, posts the blinds and starts the first player's turn timer.
 pub fn begin_hand(ctx: Context<BeginHand>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
-    let log_bump = ctx.bumps.play.log;
-    let b = &mut *ctx.accounts;
-    require!(b.play.table.hand_state == HAND_DEALT, PokerError::HandNotDealt);
-    let (table_key, dealt_mask) = (b.play.table.key(), b.play.table.dealt_mask);
+    let log_bump = ctx.bumps.hand.log;
+    require!(ctx.accounts.hand.table.hand_state == HAND_DEALT, PokerError::HandNotDealt);
+    begin(ctx.accounts, log_bump, now)
+}
 
+/// For a crank: no signer, and nothing to do is not an error. Times out the awaited player once
+/// their turn is up (check if possible, otherwise fold), and begins a dealt hand.
+pub fn tick(ctx: Context<BeginHand>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let log_bump = ctx.bumps.hand.log;
+    let b = &mut *ctx.accounts;
+    match b.hand.table.hand_state {
+        HAND_DEALT => begin(b, log_bump, now),
+        HAND_PLAYING if now > b.hand.table.turn_deadline => {
+            let seat = b.hand.ledger.game.to_act;
+            let kind = b.hand.ledger.game.timeout_action();
+            apply(&mut b.hand, seat, kind, 0, true, now)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn begin(b: &mut BeginHand, log_bump: u8, now: i64) -> Result<()> {
+    let (table_key, dealt_mask) = (b.hand.table.key(), b.hand.table.dealt_mask);
     let mut stacks = [None; MAX_SEATS as usize];
     let mut readers = Vec::new();
     for seat in dealing::seats_in(dealt_mask) {
-        let s = &b.play.ledger.seats[seat as usize];
+        let s = &b.hand.ledger.seats[seat as usize];
         stacks[seat as usize] = Some(s.stack);
         readers.push(s.reader);
     }
     {
-        let t = &b.play.table;
+        let t = &b.hand.table;
         let (id, bump) = (t.table_id.to_le_bytes(), [t.bump]);
         let ts = table_seeds(t, &id, &bump);
         let (table_info, magic, vault, perm) = (t.to_account_info(), b.rollup.magic_program.to_account_info(), b.rollup.vault.to_account_info(), b.rollup.permission_program.to_account_info());
         let sp = Sponsor { table: &table_info, table_seeds: &ts, vault: &vault, magic_program: &magic, permission_program: &perm };
         let log_bump = [log_bump];
         let log_seeds: &[&[u8]] = &[LOG_SEED, table_key.as_ref(), &log_bump];
-        sp.set_readers(&b.play.log.to_account_info(), log_seeds, &b.log_permission.to_account_info(), &readers)?;
+        sp.set_readers(&b.hand.log.to_account_info(), log_seeds, &b.log_permission.to_account_info(), &readers)?;
     }
 
-    let a = &mut b.play;
+    let a = &mut b.hand;
     let cards = cards_of(&a.deck, a.table.button, dealt_mask);
     let (game, awards) = Game::start(a.table.max_seats, a.table.small_blind, a.table.big_blind, stacks, a.table.button, &cards)
         .map_err(engine_error)?;
@@ -103,10 +133,10 @@ pub fn begin_hand(ctx: Context<BeginHand>) -> Result<()> {
 /// player's client already holds for reading the table, so play needs no wallet prompt per action.
 pub fn act(ctx: Context<Play>, seat: u8, kind: u8, amount: u64) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
-    let a = &mut *ctx.accounts;
+    let signer = ctx.accounts.signer.key();
+    let a = &mut ctx.accounts.hand;
     require!(a.table.hand_state == HAND_PLAYING, PokerError::HandNotPlaying);
     let i = seat as usize;
-    let signer = a.signer.key();
     require!(i < a.ledger.seats.len() && !a.ledger.seats[i].is_empty() && (a.ledger.seats[i].player == signer || a.ledger.seats[i].reader == signer), PokerError::NotSeated);
     apply(a, seat, kind, amount, false, now)
 }
@@ -114,7 +144,7 @@ pub fn act(ctx: Context<Play>, seat: u8, kind: u8, amount: u64) -> Result<()> {
 /// Anyone may act for the awaited player once their time is up: check if they can, otherwise fold.
 pub fn timeout(ctx: Context<Play>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
-    let a = &mut *ctx.accounts;
+    let a = &mut ctx.accounts.hand;
     require!(a.table.hand_state == HAND_PLAYING, PokerError::HandNotPlaying);
     require!(now > a.table.turn_deadline, PokerError::TurnNotOver);
     let seat = a.ledger.game.to_act;
@@ -122,7 +152,7 @@ pub fn timeout(ctx: Context<Play>) -> Result<()> {
     apply(a, seat, kind, 0, true, now)
 }
 
-fn apply(a: &mut Play, seat: u8, kind: u8, amount: u64, timed_out: bool, now: i64) -> Result<()> {
+fn apply(a: &mut HandAccounts, seat: u8, kind: u8, amount: u64, timed_out: bool, now: i64) -> Result<()> {
     let cards = cards_of(&a.deck, a.table.button, a.table.dealt_mask);
     let mut game = a.ledger.game;
     let street = game.street;
@@ -134,7 +164,7 @@ fn apply(a: &mut Play, seat: u8, kind: u8, amount: u64, timed_out: bool, now: i6
 }
 
 /// After the engine moved: either the next turn starts, or the hand is over and gets settled.
-fn after_move(a: &mut Play, _awards: Awards, now: i64) -> Result<()> {
+fn after_move(a: &mut HandAccounts, _awards: Awards, now: i64) -> Result<()> {
     if a.ledger.game.street != DONE {
         a.table.turn_deadline = now.saturating_add(TURN_SECS);
         return stamp(&mut a.table, &a.ledger, now);
@@ -144,7 +174,7 @@ fn after_move(a: &mut Play, _awards: Awards, now: i64) -> Result<()> {
 
 /// The hand is over: stacks go back to the ledger (chips must be conserved exactly), the public
 /// record gets the hand's cards and log hash, and the table is ready for the next hand.
-fn finish_hand(a: &mut Play, now: i64) -> Result<()> {
+fn finish_hand(a: &mut HandAccounts, now: i64) -> Result<()> {
     let table = &mut a.table;
     let ledger = &mut a.ledger;
     let (mut before, mut after) = (0u64, 0u64);

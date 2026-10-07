@@ -1,0 +1,21 @@
+{
+  "table": "3bWQ4K4P1bm8wavaj5Vqq7sWsFAzbT9QU9wBVxoBqm4J",
+  "crank": "DXQDZMVups3dkNCUpc5rdgorZGaPCQxSFiQdpGKj3mqP",
+  "intervalSlots": 100,
+  "tip": 0,
+  "schedule": "5NASoi5FUEzFvxDoiHgCNEP5cGVzxpxjobLZDcbQwd749hTtaUgxZYFvRagNQ447qj5orveKfnXreWxLSFcMxhfP",
+  "crankAccount": {
+    "owner": "eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf",
+    "bytes": 560,
+    "lamports": 0
+  },
+  "timeline": [
+    {
+      "s": 0,
+      "state": "hand 1 state 2 executed 0"
+    }
+  ],
+  "handFinishedByKeeper": false,
+  "cancel": "hSBEzDaTTZPRzHeFLVPqAhL2CkXicBcfG5EgH2XjZjjuJhkCWuUCV8c75XtEd2YfJacY3feRSmJHLAyAwxZZQ7M",
+  "closed": true
+}

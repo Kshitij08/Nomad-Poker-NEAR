@@ -112,240 +112,245 @@
           "signer": true
         },
         {
-          "name": "table",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
+          "name": "hand",
+          "accounts": [
+            {
+              "name": "table",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      116,
+                      97,
+                      98,
+                      108,
+                      101
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table.creator",
+                    "account": "Table"
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table.table_id",
+                    "account": "Table"
+                  }
                 ]
               },
-              {
-                "kind": "account",
-                "path": "table.creator",
-                "account": "Table"
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "Table"
-              }
-            ]
-          },
-          "relations": [
-            "deck",
-            "record"
-          ]
-        },
-        {
-          "name": "ledger",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  108,
-                  101,
-                  100,
-                  103,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "deck",
-          "docs": [
-            "The private deck: hole cards and the board come from it when the engine needs them."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "record",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  114,
-                  101,
-                  99,
-                  111,
-                  114,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "log",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  108,
-                  111,
-                  103
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "magic_fee_vault",
-          "docs": [
-            "money.rs `commit_table`)."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  109,
-                  97,
-                  103,
-                  105,
-                  99,
-                  45,
-                  102,
-                  101,
-                  101,
-                  45,
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "const",
-                "value": [
-                  5,
-                  61,
-                  71,
-                  26,
-                  133,
-                  158,
-                  115,
-                  46,
-                  104,
-                  11,
-                  201,
-                  88,
-                  248,
-                  65,
-                  7,
-                  43,
-                  143,
-                  63,
-                  188,
-                  25,
-                  115,
-                  155,
-                  230,
-                  151,
-                  196,
-                  198,
-                  129,
-                  18,
-                  111,
-                  140,
-                  31,
-                  116
-                ]
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                181,
-                183,
-                0,
-                225,
-                242,
-                87,
-                58,
-                192,
-                204,
-                6,
-                34,
-                1,
-                52,
-                74,
-                207,
-                151,
-                184,
-                53,
-                6,
-                235,
-                140,
-                229,
-                25,
-                152,
-                204,
-                98,
-                126,
-                24,
-                147,
-                128,
-                167,
-                62
+              "relations": [
+                "deck",
+                "record"
               ]
+            },
+            {
+              "name": "ledger",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      108,
+                      101,
+                      100,
+                      103,
+                      101,
+                      114
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "deck",
+              "docs": [
+                "The private deck: hole cards and the board come from it when the engine needs them."
+              ],
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      100,
+                      101,
+                      99,
+                      107
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "record",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      114,
+                      101,
+                      99,
+                      111,
+                      114,
+                      100
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "log",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      108,
+                      111,
+                      103
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "magic_fee_vault",
+              "docs": [
+                "money.rs `commit_table`)."
+              ],
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      109,
+                      97,
+                      103,
+                      105,
+                      99,
+                      45,
+                      102,
+                      101,
+                      101,
+                      45,
+                      118,
+                      97,
+                      117,
+                      108,
+                      116
+                    ]
+                  },
+                  {
+                    "kind": "const",
+                    "value": [
+                      5,
+                      61,
+                      71,
+                      26,
+                      133,
+                      158,
+                      115,
+                      46,
+                      104,
+                      11,
+                      201,
+                      88,
+                      248,
+                      65,
+                      7,
+                      43,
+                      143,
+                      63,
+                      188,
+                      25,
+                      115,
+                      155,
+                      230,
+                      151,
+                      196,
+                      198,
+                      129,
+                      18,
+                      111,
+                      140,
+                      31,
+                      116
+                    ]
+                  }
+                ],
+                "program": {
+                  "kind": "const",
+                  "value": [
+                    181,
+                    183,
+                    0,
+                    225,
+                    242,
+                    87,
+                    58,
+                    192,
+                    204,
+                    6,
+                    34,
+                    1,
+                    52,
+                    74,
+                    207,
+                    151,
+                    184,
+                    53,
+                    6,
+                    235,
+                    140,
+                    229,
+                    25,
+                    152,
+                    204,
+                    98,
+                    126,
+                    24,
+                    147,
+                    128,
+                    167,
+                    62
+                  ]
+                }
+              }
+            },
+            {
+              "name": "magic_program",
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "magic_context",
+              "writable": true,
+              "address": "MagicContext1111111111111111111111111111111"
             }
-          }
-        },
-        {
-          "name": "magic_program",
-          "address": "Magic11111111111111111111111111111111111111"
-        },
-        {
-          "name": "magic_context",
-          "writable": true,
-          "address": "MagicContext1111111111111111111111111111111"
+          ]
         }
       ],
       "args": [
@@ -377,12 +382,8 @@
       ],
       "accounts": [
         {
-          "name": "play",
+          "name": "hand",
           "accounts": [
-            {
-              "name": "signer",
-              "signer": true
-            },
             {
               "name": "table",
               "writable": true,
@@ -644,8 +645,8 @@
               },
               {
                 "kind": "account",
-                "path": "play.log",
-                "account": "Play"
+                "path": "hand.log",
+                "account": "HandAccounts"
               }
             ],
             "program": {
@@ -1009,6 +1010,130 @@
           "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "cancel_keeper",
+      "discriminator": [
+        247,
+        227,
+        110,
+        58,
+        250,
+        24,
+        185,
+        90
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "table"
+          ]
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "crank",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  97,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                9,
+                141,
+                175,
+                94,
+                62,
+                38,
+                45,
+                106,
+                31,
+                231,
+                193,
+                37,
+                229,
+                238,
+                178,
+                89,
+                200,
+                202,
+                82,
+                70,
+                56,
+                177,
+                52,
+                125,
+                239,
+                164,
+                240,
+                139,
+                173,
+                185,
+                238,
+                142
+              ]
+            }
+          }
+        },
+        {
+          "name": "hydra_program",
+          "address": "eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf"
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "address": "MagicVau1t999999999999999999999999999999999"
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "cash_out",
@@ -4312,6 +4437,143 @@
       ]
     },
     {
+      "name": "schedule_keeper",
+      "discriminator": [
+        33,
+        145,
+        47,
+        233,
+        49,
+        208,
+        164,
+        166
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "table"
+          ]
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "crank",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  97,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                9,
+                141,
+                175,
+                94,
+                62,
+                38,
+                45,
+                106,
+                31,
+                231,
+                193,
+                37,
+                229,
+                238,
+                178,
+                89,
+                200,
+                202,
+                82,
+                70,
+                56,
+                177,
+                52,
+                125,
+                239,
+                164,
+                240,
+                139,
+                173,
+                185,
+                238,
+                142
+              ]
+            }
+          }
+        },
+        {
+          "name": "hydra_program",
+          "address": "eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf"
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "address": "MagicVau1t999999999999999999999999999999999"
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "interval_slots",
+          "type": "u64"
+        },
+        {
+          "name": "tip",
+          "type": "u64"
+        },
+        {
+          "name": "fund",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "set_invites",
       "discriminator": [
         153,
@@ -4560,6 +4822,350 @@
       "args": []
     },
     {
+      "name": "tick",
+      "discriminator": [
+        92,
+        79,
+        44,
+        8,
+        101,
+        80,
+        63,
+        15
+      ],
+      "accounts": [
+        {
+          "name": "hand",
+          "accounts": [
+            {
+              "name": "table",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      116,
+                      97,
+                      98,
+                      108,
+                      101
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table.creator",
+                    "account": "Table"
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table.table_id",
+                    "account": "Table"
+                  }
+                ]
+              },
+              "relations": [
+                "deck",
+                "record"
+              ]
+            },
+            {
+              "name": "ledger",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      108,
+                      101,
+                      100,
+                      103,
+                      101,
+                      114
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "deck",
+              "docs": [
+                "The private deck: hole cards and the board come from it when the engine needs them."
+              ],
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      100,
+                      101,
+                      99,
+                      107
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "record",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      114,
+                      101,
+                      99,
+                      111,
+                      114,
+                      100
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "log",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      108,
+                      111,
+                      103
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "magic_fee_vault",
+              "docs": [
+                "money.rs `commit_table`)."
+              ],
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      109,
+                      97,
+                      103,
+                      105,
+                      99,
+                      45,
+                      102,
+                      101,
+                      101,
+                      45,
+                      118,
+                      97,
+                      117,
+                      108,
+                      116
+                    ]
+                  },
+                  {
+                    "kind": "const",
+                    "value": [
+                      5,
+                      61,
+                      71,
+                      26,
+                      133,
+                      158,
+                      115,
+                      46,
+                      104,
+                      11,
+                      201,
+                      88,
+                      248,
+                      65,
+                      7,
+                      43,
+                      143,
+                      63,
+                      188,
+                      25,
+                      115,
+                      155,
+                      230,
+                      151,
+                      196,
+                      198,
+                      129,
+                      18,
+                      111,
+                      140,
+                      31,
+                      116
+                    ]
+                  }
+                ],
+                "program": {
+                  "kind": "const",
+                  "value": [
+                    181,
+                    183,
+                    0,
+                    225,
+                    242,
+                    87,
+                    58,
+                    192,
+                    204,
+                    6,
+                    34,
+                    1,
+                    52,
+                    74,
+                    207,
+                    151,
+                    184,
+                    53,
+                    6,
+                    235,
+                    140,
+                    229,
+                    25,
+                    152,
+                    204,
+                    98,
+                    126,
+                    24,
+                    147,
+                    128,
+                    167,
+                    62
+                  ]
+                }
+              }
+            },
+            {
+              "name": "magic_program",
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "magic_context",
+              "writable": true,
+              "address": "MagicContext1111111111111111111111111111111"
+            }
+          ]
+        },
+        {
+          "name": "log_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "hand.log",
+                "account": "HandAccounts"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "rollup",
+          "accounts": [
+            {
+              "name": "magic_program",
+              "docs": [
+                "keeps these instructions off L1."
+              ],
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "vault",
+              "writable": true,
+              "address": "MagicVau1t999999999999999999999999999999999"
+            },
+            {
+              "name": "permission_program",
+              "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+            }
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "timeout",
       "discriminator": [
         9,
@@ -4577,240 +5183,245 @@
           "signer": true
         },
         {
-          "name": "table",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
+          "name": "hand",
+          "accounts": [
+            {
+              "name": "table",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      116,
+                      97,
+                      98,
+                      108,
+                      101
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table.creator",
+                    "account": "Table"
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table.table_id",
+                    "account": "Table"
+                  }
                 ]
               },
-              {
-                "kind": "account",
-                "path": "table.creator",
-                "account": "Table"
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "Table"
-              }
-            ]
-          },
-          "relations": [
-            "deck",
-            "record"
-          ]
-        },
-        {
-          "name": "ledger",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  108,
-                  101,
-                  100,
-                  103,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "deck",
-          "docs": [
-            "The private deck: hole cards and the board come from it when the engine needs them."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "record",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  114,
-                  101,
-                  99,
-                  111,
-                  114,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "log",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  108,
-                  111,
-                  103
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "magic_fee_vault",
-          "docs": [
-            "money.rs `commit_table`)."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  109,
-                  97,
-                  103,
-                  105,
-                  99,
-                  45,
-                  102,
-                  101,
-                  101,
-                  45,
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "const",
-                "value": [
-                  5,
-                  61,
-                  71,
-                  26,
-                  133,
-                  158,
-                  115,
-                  46,
-                  104,
-                  11,
-                  201,
-                  88,
-                  248,
-                  65,
-                  7,
-                  43,
-                  143,
-                  63,
-                  188,
-                  25,
-                  115,
-                  155,
-                  230,
-                  151,
-                  196,
-                  198,
-                  129,
-                  18,
-                  111,
-                  140,
-                  31,
-                  116
-                ]
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                181,
-                183,
-                0,
-                225,
-                242,
-                87,
-                58,
-                192,
-                204,
-                6,
-                34,
-                1,
-                52,
-                74,
-                207,
-                151,
-                184,
-                53,
-                6,
-                235,
-                140,
-                229,
-                25,
-                152,
-                204,
-                98,
-                126,
-                24,
-                147,
-                128,
-                167,
-                62
+              "relations": [
+                "deck",
+                "record"
               ]
+            },
+            {
+              "name": "ledger",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      108,
+                      101,
+                      100,
+                      103,
+                      101,
+                      114
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "deck",
+              "docs": [
+                "The private deck: hole cards and the board come from it when the engine needs them."
+              ],
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      100,
+                      101,
+                      99,
+                      107
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "record",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      114,
+                      101,
+                      99,
+                      111,
+                      114,
+                      100
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "log",
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      108,
+                      111,
+                      103
+                    ]
+                  },
+                  {
+                    "kind": "account",
+                    "path": "table"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "magic_fee_vault",
+              "docs": [
+                "money.rs `commit_table`)."
+              ],
+              "writable": true,
+              "pda": {
+                "seeds": [
+                  {
+                    "kind": "const",
+                    "value": [
+                      109,
+                      97,
+                      103,
+                      105,
+                      99,
+                      45,
+                      102,
+                      101,
+                      101,
+                      45,
+                      118,
+                      97,
+                      117,
+                      108,
+                      116
+                    ]
+                  },
+                  {
+                    "kind": "const",
+                    "value": [
+                      5,
+                      61,
+                      71,
+                      26,
+                      133,
+                      158,
+                      115,
+                      46,
+                      104,
+                      11,
+                      201,
+                      88,
+                      248,
+                      65,
+                      7,
+                      43,
+                      143,
+                      63,
+                      188,
+                      25,
+                      115,
+                      155,
+                      230,
+                      151,
+                      196,
+                      198,
+                      129,
+                      18,
+                      111,
+                      140,
+                      31,
+                      116
+                    ]
+                  }
+                ],
+                "program": {
+                  "kind": "const",
+                  "value": [
+                    181,
+                    183,
+                    0,
+                    225,
+                    242,
+                    87,
+                    58,
+                    192,
+                    204,
+                    6,
+                    34,
+                    1,
+                    52,
+                    74,
+                    207,
+                    151,
+                    184,
+                    53,
+                    6,
+                    235,
+                    140,
+                    229,
+                    25,
+                    152,
+                    204,
+                    98,
+                    126,
+                    24,
+                    147,
+                    128,
+                    167,
+                    62
+                  ]
+                }
+              }
+            },
+            {
+              "name": "magic_program",
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "magic_context",
+              "writable": true,
+              "address": "MagicContext1111111111111111111111111111111"
             }
-          }
-        },
-        {
-          "name": "magic_program",
-          "address": "Magic11111111111111111111111111111111111111"
-        },
-        {
-          "name": "magic_context",
-          "writable": true,
-          "address": "MagicContext1111111111111111111111111111111"
+          ]
         }
       ],
       "args": []

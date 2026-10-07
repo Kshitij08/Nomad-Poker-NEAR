@@ -29,6 +29,8 @@ export const KIND = { fold: 0, check: 1, call: 2, bet: 3, raise: 4, allIn: 5 } a
 /** act/timeout may run a showdown (every remaining hand evaluated), so they get a large budget. */
 export const PLAY_CU = 1_400_000;
 export const MAGIC_CONTEXT_ID = new PublicKey("MagicContext1111111111111111111111111111111");
+/** MagicBlock's Hydra crank program on the rollup. */
+export const HYDRA_EPHEMERAL = new PublicKey("eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf");
 /** The TEE validator's magic fee vault: tables pay their own commits into it. */
 export const MAGIC_FEE_VAULT = PublicKey.findProgramAddressSync([Buffer.from("magic-fee-vault"), TEE_VALIDATOR.toBuffer()], new PublicKey("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"))[0];
 /** Smallest compute limit (to within `step`) at which `build(units)` simulates without error; -1 if none up to 1.4M. */
@@ -111,7 +113,10 @@ export function tableApi(creator: Keypair, tableId: bigint) {
   const escrow = escrowOf(table);
   const [escrowEata] = PublicKey.findProgramAddressSync([table.toBuffer(), NATIVE_MINT.toBuffer()], ESPL);
   const ledger = ledgerOf(table), deck = deckOf(table), record = recordOf(table), log = logOf(table);
-  const play = (signer: PublicKey) => ({ signer, table, ledger, deck, record, log, magicFeeVault: MAGIC_FEE_VAULT, magicProgram: MAGIC_PROGRAM_ID, magicContext: MAGIC_CONTEXT_ID });
+  const hand = { table, ledger, deck, record, log, magicFeeVault: MAGIC_FEE_VAULT, magicProgram: MAGIC_PROGRAM_ID, magicContext: MAGIC_CONTEXT_ID };
+  const play = (signer: PublicKey) => ({ signer, hand } as any);
+  const begin = () => ({ hand, logPermission: permissionPdaFromAccount(log), rollup } as any);
+  const crank = PublicKey.findProgramAddressSync([Buffer.from("crank"), table.toBuffer()], HYDRA_EPHEMERAL)[0];
   return {
     table, escrow, escrowEata, ledger, deck, record, log,
     // create_table uses 124k-202k compute units depending on the id (PDA bump searches), so it always
@@ -131,12 +136,19 @@ export function tableApi(creator: Keypair, tableId: bigint) {
       .accountsPartial({ payer, config: CONFIG_PDA, table, deck, ledger, oracleQueue: EPHEMERAL_QUEUE }).rpc(),
     abortHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.abortHand().accountsPartial({ signer, table }).rpc(),
     beginHandTx: (prog: anchor.Program, signer: PublicKey, units = PLAY_CU) => prog.methods.beginHand()
-      .accountsPartial({ play: play(signer), logPermission: permissionPdaFromAccount(log), rollup } as any)
+      .accountsPartial(begin())
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units })]).transaction(),
     timeoutTx: (prog: anchor.Program, signer: PublicKey, units = PLAY_CU) => prog.methods.timeout()
       .accountsPartial(play(signer)).preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units })]).transaction(),
+    tick: (prog: anchor.Program) => prog.methods.tick().accountsPartial(begin())
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc(),
+    crank,
+    scheduleKeeper: (prog: anchor.Program, creatorKey: PublicKey, intervalSlots: number, tip: number, fund = 0) => prog.methods.scheduleKeeper(BN(intervalSlots), BN(tip), BN(fund))
+      .accountsPartial({ creator: creatorKey, table, crank, hydraProgram: HYDRA_EPHEMERAL, vault: EPHEMERAL_VAULT, magicProgram: MAGIC_PROGRAM_ID }).rpc(),
+    cancelKeeper: (prog: anchor.Program, creatorKey: PublicKey) => prog.methods.cancelKeeper()
+      .accountsPartial({ creator: creatorKey, table, crank, hydraProgram: HYDRA_EPHEMERAL, vault: EPHEMERAL_VAULT, magicProgram: MAGIC_PROGRAM_ID }).rpc(),
     beginHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.beginHand()
-      .accountsPartial({ play: play(signer), logPermission: permissionPdaFromAccount(log), rollup } as any)
+      .accountsPartial(begin())
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc(),
     act: (prog: anchor.Program, signer: PublicKey, seat: number, kind: number, amount: bigint | number = 0) => prog.methods.act(seat, kind, BN(amount))
       .accountsPartial(play(signer)).preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc(),

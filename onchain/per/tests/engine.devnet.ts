@@ -69,7 +69,7 @@ async function main() {
   const readerProg: Record<number, any> = {};
   for (const s of SEATS) readerProg[s] = programOn(await teeConnection(readerKey[s]), readerKey[s]);
   /** Plays one hand: seeds for `seeders`, start, deal, begin, then `policy` until it ends. */
-  async function playHand(label: string, seeders: number[], policy: (seat: number, g: any) => [number, bigint], hooks: { afterBegin?: (g: any) => Promise<void>; readerActsFor?: number } = {}) {
+  async function playHand(label: string, seeders: number[], policy: (seat: number, g: any) => [number, bigint], hooks: { afterBegin?: (g: any) => Promise<void>; readerActsFor?: number; beginWithTick?: boolean } = {}) {
     for (const s of seeders) await T.commitSeed(prog[s], wallets[s].publicKey, s, randomBytes(32));
     const t0 = await readTable();
     const handNo = Number(t0.handNo) + 1;
@@ -77,7 +77,7 @@ async function main() {
     await T.startHand(prog.deployer, deployer.publicKey);
     const dealtT = await waitState(2, handNo);
     cu.push({ hand: label, seat: -1, kind: -1, units: await bisectCompute(er.deployer, deployer, (u) => T.beginHandTx(prog.deployer, deployer.publicKey, u)), endsHand: false, what: "begin_hand" } as any);
-    await T.beginHand(prog.deployer, deployer.publicKey);
+    if (hooks.beginWithTick) await T.tick(prog.deployer); else await T.beginHand(prog.deployer, deployer.publicKey);
     let g = (await readLedger()).game;
     const begun = g;
     if (hooks.afterBegin) await hooks.afterBegin(g);
@@ -242,11 +242,13 @@ async function main() {
   };
   const D1 = await playHand("D1: p3 sitting out", [0, 2], callOrCheck, {
     readerActsFor: 0,
+    beginWithTick: true,
     afterBegin: async () => {
       await S.ok("hand D1: p3 (not dealt in) rebuys 1,000,000 while the hand runs", () => T.buyIn(prog[4], p3.publicKey, 4, 1_000_000n));
     },
   });
   S.check("hand D1: started straight away (no seed window) and dealt seats 0 and 2 only", D1.dealtMask === 0b101, { dealtMask: D1.dealtMask });
+  S.check("hand D1: begun by tick (the crank's instruction, no signer needed), not begin_hand", D1.begun.street === 1 && D1.begun.toAct !== 255, { street: D1.begun.street });
   S.check("hand D1: p1's reader key acted for seat 0 (no wallet signature needed)", readerActed.some((r) => r.hand.startsWith("D1") && r.seat === 0), { readerActed });
   const repD1 = replay(D1);
   S.check("hand D1: on-chain final stacks equal the C# engine's replay", repD1.match, repD1);
@@ -256,6 +258,10 @@ async function main() {
   const repD2 = replay(D2);
   S.check("hand D2: on-chain final stacks equal the C# engine's replay", repD2.match, repD2);
 
+  const idleBefore = await readTable();
+  await S.ok("tick with nothing to do succeeds and changes nothing (so a crank's schedule keeps advancing)", () => T.tick(prog.deployer));
+  const idleAfter = await readTable();
+  S.check("...table unchanged by the idle tick", idleAfter.handState === idleBefore.handState && Number(idleAfter.ledgerSeq) === Number(idleBefore.ledgerSeq), {});
   const showdownCu = cu.filter((c) => c.endsHand);
   const what = (c: any) => c.what ?? "act";
   S.check("compute (bisected, within 2,000 units): begin_hand, every act (incl. showdown + settlement + commit) and timeout fit well under 1.4M",
