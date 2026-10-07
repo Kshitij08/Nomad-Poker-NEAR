@@ -48,7 +48,18 @@ const MIGRATIONS: string[] = [
   // A table is live only while delegated to the rollup. One taken back through the escape hatch
   // leaves a stale "open" copy in the rollup that nobody can play or commit.
   `alter table tables add column if not exists delegated boolean not null default false`,
+  // M7 review: commit state per table, record hash, whether the button rule could be checked
+  // (the previous hand was archived), and rolled-back hands (a rollback replays hand numbers).
+  `alter table tables add column if not exists last_commit_mark text`,
+  `alter table hands add column if not exists record_hash text`,
+  `alter table hands add column if not exists button_checked boolean`,
+  `create table if not exists hands_superseded (like hands)`,
+  `alter table hands_superseded add column if not exists superseded_at timestamptz`,
+  `create index if not exists keeper_events_table on keeper_events (table_address, action, id desc)`,
 ];
+
+// An idle client's error (e.g. the database restarting) must not crash the service.
+pool.on("error", (e) => console.error("postgres pool error:", e.message));
 
 export async function migrate() {
   for (const sql of MIGRATIONS) await pool.query(sql);

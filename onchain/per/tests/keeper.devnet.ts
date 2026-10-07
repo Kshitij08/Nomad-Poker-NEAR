@@ -47,7 +47,7 @@ async function main() {
   const key = T.table.toBase58();
   const readTable = async () => coder.decode("table", (await er.deployer.getAccountInfo(T.table, "processed"))!.data);
   const ledger = async () => coder.decode("ledger", (await rawRead(connUrl(rd1), T.ledger)).data!);
-  const keeperEvents = async () => ((await get("/audit/events?limit=500", true)).body as any[]).filter((e) => e.table_address === key);
+  const keeperEvents = async () => (await get(`/audit/events?limit=1000&table=${key}`, true)).body as any[];
 
   const health = await get("/health");
   S.check("backend health: ok, keeper looping, auditor is the config's", health.status === 200 && health.body.ok && health.body.keeper.auditorMatches === true && health.body.keeper.address === KEEPER.toBase58(),
@@ -69,7 +69,8 @@ async function main() {
   // The keeper logs an action after it confirms, which can be a moment after the rollup shows it.
   const ticks = (n: number) => until(async () => { const t = (await keeperEvents()).filter((e) => e.action === "tick" && e.ok); return t.length >= n ? t : null; }, 20_000);
   const begunBy = (await ticks(1))?.[0];
-  S.check("the keeper began the dealt hand (tick), nobody else did", !!playing && !!begunBy, { tick: begunBy?.detail });
+  // This test never calls begin_hand, so the keeper's tick is what began the hand.
+  S.check("the dealt hand was begun by the keeper's tick (the test never calls begin_hand)", !!playing && !!begunBy, { tick: begunBy?.detail });
   const BET = 512_000n;
   let seat = (await ledger()).game.toAct;
   const bySeat: Record<number, [any, PublicKey]> = { 0: [prog.p1, p1.publicKey], 3: [prog.p2, p2.publicKey] };
@@ -78,8 +79,23 @@ async function main() {
   const t0 = Date.now();
   const ended = await until(async () => { const t = await readTable(); return t.handState === 0 && Number(t.lastRecord.handNo) === 1 ? t : null; }, 60_000, 500);
   const timeoutTick = !!(await ticks(2));
-  S.check(`seat ${awaited} never acts: the keeper times them out (fold) after their 15 s and the hand ends`, !!ended && timeoutTick, { secondsAfterRaise: Math.round((Date.now() - t0) / 1000) });
+  // Nobody in the test calls timeout; the log's timeout flag (checked below) shows it was one.
+  S.check(`seat ${awaited} never acts: a second keeper tick times them out after their 15 s and the hand ends`, !!ended && timeoutTick, { secondsAfterRaise: Math.round((Date.now() - t0) / 1000) });
   const playerLog = await downloadLog(rd1, T.table);
+
+  // ---- hand 2 straight away (fast play): hand 1's log must still be archived before hand 2 begins
+  await S.ok("hand 2 starts at once: p1 and p2 commit seeds, an outsider starts it", async () => {
+    await T.commitSeed(prog.p1, p1.publicKey, 0, randomBytes(32)); await T.commitSeed(prog.p2, p2.publicKey, 3, randomBytes(32));
+    return T.startHand(prog.p3, p3.publicKey);
+  });
+  const playing2 = await until(async () => { const t = await readTable(); return t.handState === 3 && Number(t.handNo) === 2 ? t : null; }, 60_000, 500);
+  S.check("the keeper began hand 2", !!playing2, {});
+  const toAct2 = (await ledger()).game.toAct;
+  await S.ok(`hand 2: seat ${toAct2} folds, the hand ends`, () => T.act(bySeat[toAct2][0], bySeat[toAct2][1], toAct2, KIND.fold));
+  const hand1Log = await until(async () => { const r = await get(`/tables/${key}/hands/1`); return r.status === 200 && r.body.log.status !== "pending" ? r.body.log : null; }, 60_000);
+  S.check("fast play: hand 1's log was archived before hand 2 began (not missed)", hand1Log?.status === "archived" && hand1Log?.verified === true, { hand1Log });
+  const hand2Log = await until(async () => { const r = await get(`/tables/${key}/hands/2`); return r.status === 200 && r.body.log.status !== "pending" ? r.body.log : null; }, 90_000);
+  S.check("hand 2's log archived too", hand2Log?.status === "archived" && hand2Log?.verified === true, { hand2Log });
 
   // ---- archive
   const hand = await until(async () => { const r = await get(`/tables/${key}/hands/1`); return r.status === 200 && r.body.log.status === "archived" ? r.body : null; }, 90_000);

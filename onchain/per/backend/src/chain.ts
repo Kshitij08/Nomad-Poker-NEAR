@@ -7,8 +7,10 @@ import idl from "./shared/poker_per.json";
 import { config } from "./config";
 
 export const PROGRAM_ID = new PublicKey((idl as any).address);
+/** Every RPC call gives up after 20 s, so one hung request can't stall the keeper. */
+const fetchWithTimeout: typeof fetch = (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(20_000) });
 export const CONFIG_PDA = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID)[0];
-export const l1 = new Connection(config.l1Url, "confirmed");
+export const l1 = new Connection(config.l1Url, { commitment: "confirmed", fetch: fetchWithTimeout as any });
 // Anchor's Program converts the IDL's names to camelCase ("table", "handLog", "lastRecord"); the
 // coder is taken from a Program (with a read-only provider) so names match the scripts and tests.
 const readOnly = new anchor.Program(idl as anchor.Idl, new anchor.AnchorProvider(l1, new anchor.Wallet(Keypair.generate()), {}));
@@ -36,7 +38,7 @@ export class TeeSession {
   async get(force = false): Promise<Connection> {
     if (force || !this.conn || Date.now() - this.at > 10 * 60_000) {
       const { token } = await getAuthToken(config.teeUrl, this.kp.publicKey, (m: Uint8Array) => Promise.resolve(nacl.sign.detached(m, this.kp.secretKey)));
-      this.conn = new Connection(`${config.teeUrl}?token=${token}`, { commitment: "confirmed", wsEndpoint: `${config.teeUrl.replace("https", "wss")}?token=${token}` });
+      this.conn = new Connection(`${config.teeUrl}?token=${token}`, { commitment: "confirmed", fetch: fetchWithTimeout as any, wsEndpoint: `${config.teeUrl.replace("https", "wss")}?token=${token}` });
       this.at = Date.now();
     }
     return this.conn;
@@ -47,7 +49,7 @@ export class TeeSession {
 }
 
 /** A public (no login) rollup connection, for public accounts only. */
-export const teePublic = new Connection(config.teeUrl, "confirmed");
+export const teePublic = new Connection(config.teeUrl, { commitment: "confirmed", fetch: fetchWithTimeout as any });
 
 export type PublicTable = {
   address: string; tableId: string; creator: string; status: number; maxSeats: number; seated: number; inviteOnly: boolean;

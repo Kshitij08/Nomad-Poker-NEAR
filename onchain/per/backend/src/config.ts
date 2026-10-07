@@ -10,7 +10,8 @@ function required(name: string): string {
 
 /** A Solana secret key given as a JSON byte array (the format of a solana-keygen file). */
 function keypair(name: string): Keypair {
-  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(required(name))));
+  try { return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(required(name)))); }
+  catch { throw new Error(`${name} is not a valid secret key (expected a JSON byte array)`); }
 }
 
 export const config = {
