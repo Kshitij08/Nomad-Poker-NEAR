@@ -1,0 +1,102 @@
+{
+  "suite": "escrow-freeze",
+  "program": "6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR",
+  "ranAt": "2026-10-07T13:31:32.190Z",
+  "pass": 11,
+  "fail": 0,
+  "knownPlatformIssues": 0,
+  "table": "7o1UxxKjU1jRoDEochkgVxj3GXVWw2Qtxauv3N3CctpN",
+  "escrowEata": "GN7EPe3J4tQxi43ZYimF2kffhLovXpQENgC54LKYTw3w",
+  "escrowPermission": "CP54wNZ4C3ryfQVWesuEhrZND1EF5WdLAtMGWJSCqidp",
+  "outcomes": [
+    {
+      "name": "create table",
+      "status": "PASS",
+      "detail": {
+        "sig": "3PuGb1md9zGzKHDB8MGqkxdtdfFQ8CdqaCo1iPUuUtArE7RGsAXcZqoZBV8qfEiJndgB4snjaghDAKrCfMTvtt6m",
+        "problem": null
+      }
+    },
+    {
+      "name": "escrow permission exists and is delegated (owned by the delegation program)",
+      "status": "PASS",
+      "detail": {
+        "owner": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+      }
+    },
+    {
+      "name": "inside the rollup the escrow permission is public",
+      "status": "PASS",
+      "detail": {
+        "privateFlag": 0,
+        "bytes": 567
+      }
+    },
+    {
+      "name": "outsider create (flags 0), reset, delegate-elsewhere and two direct updates leave the L1 permission unchanged",
+      "status": "PASS",
+      "detail": {
+        "create": "sent",
+        "reset": "rejected: Simulation failed. \nMessage: Transaction simulation failed: Error processing Instruction 0: Incorrect authority provided",
+        "delegateElsewhere": "sent",
+        "updatePrivate": "rejected: Simulation failed. \nMessage: Transaction simulation failed: Error processing Instruction 0: missing required signature f",
+        "updatePublic": "rejected: Simulation failed. \nMessage: Transaction simulation failed: Error processing Instruction 0: missing required signature f"
+      }
+    },
+    {
+      "name": "outsider update inside the rollup leaves it public",
+      "status": "PASS",
+      "detail": {
+        "result": "rejected: Transaction 67L3ZFbYLNqAZfRcDoiY2zZiGmixh7ZEkkpfDt9WACagAJNdvLSLyuJeqW8rqpmQaNkABKDz6hUwH8idT7p3DZox resulted in an erro"
+      }
+    },
+    {
+      "name": "delegate",
+      "status": "PASS",
+      "detail": {
+        "sig": "2DamRo4gf2cd94V8aK2SdhMyuVHNGzd92csyi47crooUamUak6Me23TDjEbFv39wZgFvALyFwnJyrazcuqBbnZ8",
+        "problem": null
+      }
+    },
+    {
+      "name": "open",
+      "status": "PASS",
+      "detail": {
+        "sig": "4XZdY2jBQ6tTSn2fzvR7k3XDRCu9H4iDqH3DYezEnvPjG9MYQ2o1yqpMAWW1UoKFahBVk8MxaJ4Rv269pZyaS55S",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 buys in",
+      "status": "PASS",
+      "detail": {
+        "sig": "RStexYoMDiL2xbB29ELTWwoXpNhRG9EoUGKYGk3BAxyFM3xMLEFLxEyQ2mHGyqWkhGB7XpDDxhrDPyJq6svKDfQ",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 cashes out",
+      "status": "PASS",
+      "detail": {
+        "sig": "27JrPqvXwyuzV1y8PKD7hTuPyp7MfkHBwhbEKj8xqCgaaYdtmm5X3Li2R15SCmWdU2m3gKb1LyKdpFiqJ3S8obTP",
+        "problem": null
+      }
+    },
+    {
+      "name": "collect rake",
+      "status": "PASS",
+      "detail": {
+        "sig": "45qGQ4mVEuwqMUqZKGaFMMaMU9vtaWUqeT6TQB9HcAmV69X5puQqbwTP3s6oNkXmVjWcnoiaFc9t7jPTWEhvWrCB",
+        "problem": null
+      }
+    },
+    {
+      "name": "close",
+      "status": "PASS",
+      "detail": {
+        "sig": "4eYa9zePHr4t9afoEEF3REXDr5ZTDBGkkxDs7R4z8zcvrGLiuzXA4XwmnuSteeo8vBaKQ8H1mJBudEfnT5uqLi4X",
+        "problem": null
+      }
+    }
+  ]
+}

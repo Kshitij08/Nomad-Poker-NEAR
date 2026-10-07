@@ -1,0 +1,136 @@
+{
+  "suite": "escrow-freeze",
+  "program": "6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR",
+  "ranAt": "2026-10-07T13:51:03.973Z",
+  "pass": 15,
+  "fail": 0,
+  "knownPlatformIssues": 0,
+  "table": "B3d6wjZpSnnyGHppP3qmp9o9hYArU5itTtoniA9NKUat",
+  "escrowEata": "GWQbxXQDgzrzS7LUmo1n1UC2zMCPTJGDALHYNiJ3D3cC",
+  "escrowPermission": "GWruhzzvWhFojqjSxXeaRP1N5TtpbMvBvGPRF2NQX59D",
+  "blockedTable": "3PFrH8R97tUi8bsqtcNnYVe7eX5XJYiyWZSXz7iRffhA",
+  "outcomes": [
+    {
+      "name": "create table",
+      "status": "PASS",
+      "detail": {
+        "sig": "4pYwmRKaJiGnNfS4on7Y1TD3T9YEAWA84CKHAMA6Qr7P8VcXXGmJtechRyc5XYCoD1RSbwZ7zshtTSwMMfi7GSWW",
+        "problem": null
+      }
+    },
+    {
+      "name": "escrow permission exists and is delegated (owned by the delegation program)",
+      "status": "PASS",
+      "detail": {
+        "owner": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+      }
+    },
+    {
+      "name": "inside the rollup the escrow permission is public",
+      "status": "PASS",
+      "detail": {
+        "privateFlag": 0,
+        "bytes": 567
+      }
+    },
+    {
+      "name": "outsider create (flags 0), reset, delegate-elsewhere and two direct updates leave the L1 permission unchanged",
+      "status": "PASS",
+      "detail": {
+        "create": "sent",
+        "reset": "rejected: Simulation failed. \nMessage: Transaction simulation failed: Error processing Instruction 0: Incorrect authority provided",
+        "delegateElsewhere": "sent",
+        "updatePrivate": "rejected: Simulation failed. \nMessage: Transaction simulation failed: Error processing Instruction 0: missing required signature f",
+        "updatePublic": "rejected: Simulation failed. \nMessage: Transaction simulation failed: Error processing Instruction 0: missing required signature f"
+      }
+    },
+    {
+      "name": "outsider update inside the rollup leaves it public",
+      "status": "PASS",
+      "detail": {
+        "result": "rejected: Transaction 4jRPjZdPk6moMNnR6PYbGYVS7F28YTPoQytMCd5XkJBBGC854yyHMy5H5yKWpwM9E89GVCJJW3wWX9Bt5V8Z8bSb resulted in an erro"
+      }
+    },
+    {
+      "name": "delegate",
+      "status": "PASS",
+      "detail": {
+        "sig": "3tL4Cw4Byj6deoBpCg2ce29LSpDwL6gFmf2MxwTVViZdoPP55nk6LrH2SPeBwLF283JBrHKeXhpzktgoxUTAoyyt",
+        "problem": null
+      }
+    },
+    {
+      "name": "open",
+      "status": "PASS",
+      "detail": {
+        "sig": "4Ax2EP2NZDwUFmChPKjcUUMeTpeXYcZ834czprQWKu58mH7JaLX1QCrn9Yt1w1PoEYuHUt99padHrvvx6f2u5pDy",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 buys in",
+      "status": "PASS",
+      "detail": {
+        "sig": "53yDAUm5cf95jvtaAibaWQPmPiZVR2vJpf8ZaTzr3bgdfMZaXfm5RHQjsFsF3bRx62TcVmEoUyiaV8t79HNfzLc9",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 cashes out",
+      "status": "PASS",
+      "detail": {
+        "sig": "47B2baSoDz89ZvKk3BbmS2zXLLbH6oYG3uLDCQXAHSXfmBpaom1XZi8VuvGwgiVSY8DAgL2iWNjEqsBh3UGXEM1s",
+        "problem": null
+      }
+    },
+    {
+      "name": "collect rake",
+      "status": "PASS",
+      "detail": {
+        "sig": "3y5zoWDW2TUVPRCkgXxgs1vcwKHdsfDzydxd6JtbfUnyKNts5JnYZ1iz2iKRKB6XTB1U3dYzY4W9RqKH2CfNdasR",
+        "problem": null
+      }
+    },
+    {
+      "name": "close",
+      "status": "PASS",
+      "detail": {
+        "sig": "5aFfYY9bysG22hByLbByk7rLcKDSmNnd4Fg5frEmkc9AqC4m6pNQ7hJdjDxPXkJAJkGt7MqSiUv5mbgKYF82qmkn",
+        "problem": null
+      }
+    },
+    {
+      "name": "measure rent left locked per table by the public escrow permission",
+      "status": "PASS",
+      "detail": {
+        "permission": 3530600,
+        "delegationRecord": 1559040,
+        "delegationMetadata": 1614720,
+        "totalSol": 0.00670436
+      }
+    },
+    {
+      "name": "outsider pre-claims a known future table's escrow: initialise, flags-0 permission, delegate the permission",
+      "status": "PASS",
+      "detail": {
+        "sig": "3hUReKbYJV2RBM5WKtwGDx8FyAnsPWzDLmbqf6uUf7sQfso1qNSNZwcWA5UXAGj7itoExnaYmSsYNr57SW4ZPTL9",
+        "problem": null
+      }
+    },
+    {
+      "name": "creating that exact table then fails as a whole",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "Program ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1 failed: instruction modified data of an account it does not own"
+      }
+    },
+    {
+      "name": "...and no table account exists for that id (creator retries with a fresh id)",
+      "status": "PASS",
+      "detail": {
+        "table": "3PFrH8R97tUi8bsqtcNnYVe7eX5XJYiyWZSXz7iRffhA"
+      }
+    }
+  ]
+}

@@ -139,8 +139,10 @@ pub struct BuyIn<'info> {
 }
 
 /// Sit down in `seat` with `amount`, or add `amount` to your existing seat (rebuy). Rake is taken on
-/// every buy-in. Sitting down adds you to the ledger's readers and creates your private hand.
-pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64) -> Result<()> {
+/// every buy-in. Sitting down adds `reader` (a key from your client, not your wallet) to the
+/// ledger's readers and creates your private hand, readable by `reader` only. A rebuy keeps the
+/// reader chosen at sit-down and ignores `reader`.
+pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Result<()> {
     let config = &ctx.accounts.config;
     require!(!config.paused, PokerError::Paused);
     let table = &ctx.accounts.table;
@@ -170,7 +172,10 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64) -> Result<()> {
                 let inv = ctx.accounts.invites.as_ref().ok_or(PokerError::NotInvited)?;
                 require!(inv.contains(&table_key, &player), PokerError::NotInvited);
             }
-            ledger.seats[idx] = Seat { player, stack: 0, deposited: 0 };
+            require!(reader != Pubkey::default() && reader != player, PokerError::InvalidReader);
+            // A reader key belongs to one seat: never another seat's reader or anyone seated's wallet.
+            require!(!ledger.seats.iter().any(|s| !s.is_empty() && (s.reader == reader || s.player == reader)), PokerError::InvalidReader);
+            ledger.seats[idx] = Seat { player, reader, stack: 0, deposited: 0 };
             true
         }
     };
@@ -199,7 +204,7 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64) -> Result<()> {
         let sp = Sponsor { table: &table_info, table_seeds: &ts, vault: &vault, magic_program: &magic, permission_program: &perm };
         let ledger_bump = [ctx.bumps.ledger];
         let ledger_seeds: &[&[u8]] = &[LEDGER_SEED, table_key.as_ref(), &ledger_bump];
-        sp.set_readers(&a.ledger.to_account_info(), ledger_seeds, &a.ledger_permission.to_account_info(), &a.ledger.players())?;
+        sp.set_readers(&a.ledger.to_account_info(), ledger_seeds, &a.ledger_permission.to_account_info(), &a.ledger.readers())?;
 
         let seat_byte = [seat];
         let hand_bump = [ctx.bumps.hand];
@@ -210,9 +215,9 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64) -> Result<()> {
         }
         write(&hand_info, &Hand { table: table_key, seat, owner: player, hand_no: 0, cards: [u8::MAX; 2] })?;
         if !a.hand_permission.data_is_empty() {
-            sp.set_readers(&hand_info, hand_seeds, &a.hand_permission.to_account_info(), &[player])?;
+            sp.set_readers(&hand_info, hand_seeds, &a.hand_permission.to_account_info(), &[reader])?;
         } else {
-            sp.create_permission(&hand_info, hand_seeds, &a.hand_permission.to_account_info(), &[player])?;
+            sp.create_permission(&hand_info, hand_seeds, &a.hand_permission.to_account_info(), &[reader])?;
         }
     }
 
@@ -279,7 +284,7 @@ pub fn cash_out(ctx: Context<CashOut>, seat: u8) -> Result<()> {
         let table_key = a.table.key();
         let ledger_bump = [ctx.bumps.ledger];
         let ledger_seeds: &[&[u8]] = &[LEDGER_SEED, table_key.as_ref(), &ledger_bump];
-        sp.set_readers(&a.ledger.to_account_info(), ledger_seeds, &a.ledger_permission.to_account_info(), &a.ledger.players())?;
+        sp.set_readers(&a.ledger.to_account_info(), ledger_seeds, &a.ledger_permission.to_account_info(), &a.ledger.readers())?;
         let seat_byte = [seat];
         let hand_bump = [ctx.bumps.hand];
         let hand_seeds: &[&[u8]] = &[HAND_SEED, table_key.as_ref(), &seat_byte, &hand_bump];

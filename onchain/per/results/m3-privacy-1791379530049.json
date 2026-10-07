@@ -1,0 +1,440 @@
+{
+  "suite": "m3-privacy",
+  "program": "6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR",
+  "ranAt": "2026-10-07T13:25:30.047Z",
+  "pass": 43,
+  "fail": 1,
+  "knownPlatformIssues": 2,
+  "tableA": "Cbi6gq1sLTSGF1F78LTfR2DfSR3mRt7yAxCu8iYGoGfq",
+  "tableB": "AUkiAbX4MavoCxzFq5y9CRcYSC8v2H7GTgy8jEB9fapU",
+  "outcomes": [
+    {
+      "name": "top-up p1 to 0.015 wSOL in the rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "22GLGBzTdY5bE4rjkkKFiBvgsA6uL4pfsAWqsHJZebjxirMU5NhHojaHADumbNYRe4RtHzrAsd2oqKnePkrieLtL",
+        "problem": null
+      }
+    },
+    {
+      "name": "create + delegate table A",
+      "status": "PASS",
+      "detail": {
+        "sig": "2guLyBtMsVHoojEXUgcPo6f1WPw9v8CD2PqtmYQpJzXyqfVfjws7FT86Qm8s64WRwuTiTjLQfMDjE21Xy9LfDk9A",
+        "problem": null
+      }
+    },
+    {
+      "name": "buy-in before the private accounts exist is rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "AccountNotInitialized",
+        "got": "AccountNotInitialized (3012)"
+      }
+    },
+    {
+      "name": "anyone (p3) opens the table: creates ledger + deck",
+      "status": "PASS",
+      "detail": {
+        "sig": "4CbRQho3VFHtvB2dUyF3mqJHDwBHYpYcqcjnJATwQCqy9a5SV6hXxKFXwBbELxtHR675ov2yMVKNmW4ikU2PN4YG",
+        "problem": null
+      }
+    },
+    {
+      "name": "opening again is harmless (idempotent)",
+      "status": "PASS",
+      "detail": {
+        "sig": "617w1Xn1rSDggvuaDsaG1MyA1UYxx8L26nPvGKRY2hWsYJuEV7a3SmYxvoofbi5gjMhUJUfXDYXKoR5Jj687boYw",
+        "problem": null
+      }
+    },
+    {
+      "name": "the wallet itself can't be the reader",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidReader",
+        "got": "InvalidReader (6036)"
+      }
+    },
+    {
+      "name": "the default key can't be the reader",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidReader",
+        "got": "InvalidReader (6036)"
+      }
+    },
+    {
+      "name": "p1 sits in seat 0",
+      "status": "PASS",
+      "detail": {
+        "sig": "3w2LDR3h1PhizMBW8mspdggx4BrQopxNGRknTgWFkjiypzk1M5uAMmm1RJny97y4vpPWggHWjt5y4rwQb14FLG6R",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 sits in seat 3",
+      "status": "PASS",
+      "detail": {
+        "sig": "3Nihi3rYxyZjGZZA3nnrrRQWDCcB3N9jagGP5D5MzwW4UnBLkKZRbdzxri65DmiyF6McHkfnASuvxu4r3GWaESC7",
+        "problem": null
+      }
+    },
+    {
+      "name": "p3 can't take an occupied seat",
+      "status": "PASS",
+      "detail": {
+        "expected": "SeatTaken",
+        "got": "SeatTaken (6032)"
+      }
+    },
+    {
+      "name": "seat beyond the table's 6 seats rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidSeat",
+        "got": "InvalidSeat (6033)"
+      }
+    },
+    {
+      "name": "rebuy into a different seat rejected",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvalidSeat",
+        "got": "InvalidSeat (6033)"
+      }
+    },
+    {
+      "name": "access matrix: ledger only for seated players' reader keys, hands only for their owner's reader key, deck for nobody, wallets for nothing",
+      "status": "PASS",
+      "detail": {
+        "table (public settings)": {
+          "p1 reader": "data (265 B)",
+          "p2 reader": "data (265 B)",
+          "p1 wallet": "data (265 B)",
+          "p3 (outsider)": "data (265 B)",
+          "creator (not seated)": "data (265 B)",
+          "no login": "data (265 B)"
+        },
+        "ledger (seats, stacks, money)": {
+          "p1 reader": "data (808 B)",
+          "p2 reader": "data (808 B)",
+          "p1 wallet": "null",
+          "p3 (outsider)": "null",
+          "creator (not seated)": "null",
+          "no login": "null"
+        },
+        "deck": {
+          "p1 reader": "null",
+          "p2 reader": "null",
+          "p1 wallet": "null",
+          "p3 (outsider)": "null",
+          "creator (not seated)": "null",
+          "no login": "null"
+        },
+        "hand seat 0 (p1)": {
+          "p1 reader": "data (83 B)",
+          "p2 reader": "null",
+          "p1 wallet": "null",
+          "p3 (outsider)": "null",
+          "creator (not seated)": "null",
+          "no login": "null"
+        },
+        "hand seat 3 (p2)": {
+          "p1 reader": "null",
+          "p2 reader": "data (83 B)",
+          "p1 wallet": "null",
+          "p3 (outsider)": "null",
+          "creator (not seated)": "null",
+          "no login": "null"
+        }
+      }
+    },
+    {
+      "name": "permission lists (public via MagicBlock's RPC) name only reader keys, never a wallet",
+      "status": "PASS",
+      "detail": {
+        "ledger": {
+          "permissionReadable": true,
+          "walletsListed": [],
+          "readersListed": true,
+          "endpoint": "{\"authorizedUsers\":[\"6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR\",\"DKBQJjYCYdJfD8CN6VNnp8dDbQyBatTvh5VqdQBiWuQ6\",\"8DNDkKbUvKJQG7H8YwbL3uCviNGGXHvwWuupJsuggc3P\"]}"
+        },
+        "hand seat 0": {
+          "permissionReadable": true,
+          "walletsListed": [],
+          "readersListed": true,
+          "endpoint": "{\"authorizedUsers\":[\"6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR\",\"DKBQJjYCYdJfD8CN6VNnp8dDbQyBatTvh5VqdQBiWuQ6\"]}"
+        },
+        "hand seat 3": {
+          "permissionReadable": true,
+          "walletsListed": [],
+          "readersListed": true,
+          "endpoint": "{\"authorizedUsers\":[\"6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR\",\"8DNDkKbUvKJQG7H8YwbL3uCviNGGXHvwWuupJsuggc3P\"]}"
+        }
+      }
+    },
+    {
+      "name": "MagicBlock leak 1: permission lists are readable without a login",
+      "status": "KNOWN",
+      "detail": {
+        "ledger": {
+          "permissionReadable": true,
+          "walletsListed": [],
+          "readersListed": true,
+          "endpoint": "{\"authorizedUsers\":[\"6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR\",\"DKBQJjYCYdJfD8CN6VNnp8dDbQyBatTvh5VqdQBiWuQ6\",\"8DNDkKbUvKJQG7H8YwbL3uCviNGGXHvwWuupJsuggc3P\"]}"
+        },
+        "hand seat 0": {
+          "permissionReadable": true,
+          "walletsListed": [],
+          "readersListed": true,
+          "endpoint": "{\"authorizedUsers\":[\"6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR\",\"DKBQJjYCYdJfD8CN6VNnp8dDbQyBatTvh5VqdQBiWuQ6\"]}"
+        },
+        "hand seat 3": {
+          "permissionReadable": true,
+          "walletsListed": [],
+          "readersListed": true,
+          "endpoint": "{\"authorizedUsers\":[\"6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR\",\"8DNDkKbUvKJQG7H8YwbL3uCviNGGXHvwWuupJsuggc3P\"]}"
+        }
+      }
+    },
+    {
+      "name": "MagicBlock leak 2: simulateTransaction returns the private ledger, hands and deck without a login",
+      "status": "KNOWN",
+      "detail": {
+        "ledgerOrHandReturned": 2,
+        "deckReturned": 1,
+        "ledgerHoldsP1Wallet": true
+      }
+    },
+    {
+      "name": "ledger does not exist on L1",
+      "status": "PASS",
+      "detail": {
+        "account": "5HqR6Q1q5aqDq18dbuhks7pPikC3zyY7e9ZGfkn7gjf2"
+      }
+    },
+    {
+      "name": "deck does not exist on L1",
+      "status": "PASS",
+      "detail": {
+        "account": "2Eq78Es2A1nN75VZkw3yhmFF7TjjnHbSmHCpT79KHdcf"
+      }
+    },
+    {
+      "name": "hand seat 0 does not exist on L1",
+      "status": "PASS",
+      "detail": {
+        "account": "G2qbimc6cgS9JDUZ7agmNweev8g2Fo9cnqXVRqPFeoi3"
+      }
+    },
+    {
+      "name": "commit the public table to L1",
+      "status": "PASS",
+      "detail": {
+        "sig": "4VCJm5aXBLJpKczfqfvz34KnNV4UYxqB5wjBNmBcqXngrU6ef3pX9BVXFQC8NwKFed94Hz2zmxJtL8tgfyfEiUrf",
+        "problem": null
+      }
+    },
+    {
+      "name": "L1 copy of the table holds no player wallets",
+      "status": "PASS",
+      "detail": {
+        "l1Bytes": 265
+      }
+    },
+    {
+      "name": "L1 copy shows only seat occupancy (seats 0 and 3)",
+      "status": "PASS",
+      "detail": {
+        "seatMask": 9
+      }
+    },
+    {
+      "name": "L1 fingerprint equals sha256 of the private ledger a seated player reads",
+      "status": "PASS",
+      "detail": {
+        "ledgerHash": "a713b01dc044ac557b55bdef2911f52c5c55129a34d41a62ff3baee437e0e47d",
+        "ledgerSeq": "2"
+      }
+    },
+    {
+      "name": "an outsider sees no logs of p2's buy-in",
+      "status": "PASS",
+      "detail": {
+        "outsider": {
+          "found": true,
+          "logs": 0
+        },
+        "seatedPlayer": {
+          "found": true,
+          "logs": 0
+        }
+      }
+    },
+    {
+      "name": "p1 cashes out of seat 0",
+      "status": "PASS",
+      "detail": {
+        "sig": "36EYkqtJTSgBWmwA1MDACUEECTMan4y92thra4kr99DzjpHhyXzHm4jNEzEbAn2qS7cQxXXcT95o7aaGRreT4YG",
+        "problem": null
+      }
+    },
+    {
+      "name": "after leaving, p1 can no longer read the ledger and seat 0's hand is gone; p2 still reads the ledger",
+      "status": "PASS",
+      "detail": {
+        "p1ReadsLedger": false,
+        "p2ReadsLedger": true,
+        "hand0ForP1": false
+      }
+    },
+    {
+      "name": "p3 sits in the freed seat 0",
+      "status": "PASS",
+      "detail": {
+        "sig": "5FQsTJ72X5Ghi3wfc4XKcbsy5SgjhfQJ25S4dYuVciAR5NTawcFkxujiFdkWnPyghFcTW5Gg2Xr5njk28Zrku3yd",
+        "problem": null
+      }
+    },
+    {
+      "name": "the new occupant (p3) reads seat 0's hand and the ledger through its reader key",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "p1's old reader key lost access when p3 took seat 0",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "the escrow's permission exists, is delegated to the TEE, and is public",
+      "status": "PASS",
+      "detail": {
+        "l1Owner": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh",
+        "privateFlag": 0
+      }
+    },
+    {
+      "name": "create + delegate invite-only table B",
+      "status": "PASS",
+      "detail": {
+        "sig": "w5Mu7eZP891K2C1iJpTiEcHESefDJxEUAvyvjixqx4V2en6SAufk3BcGwCzVAwP9fWDJz6SkhRHGzW9AtcYm8YG",
+        "problem": null
+      }
+    },
+    {
+      "name": "creator sets B's invite list (p1 only), as hashes",
+      "status": "PASS",
+      "detail": {
+        "sig": "3QrdkreqrPBFC4QSsN9qhdvsUnAMLerrrCXcgPTeyVF5CSwEn9rqRtFxEi7ZR2PrF8S7upJEDqFL1Zxymi8JgDVu",
+        "problem": null
+      }
+    },
+    {
+      "name": "the public invite list doesn't contain p1's wallet",
+      "status": "PASS",
+      "detail": {
+        "bytes": 553
+      }
+    },
+    {
+      "name": "open table B",
+      "status": "PASS",
+      "detail": {
+        "sig": "m8nquLo6aj8Yhc3FNM9MsHj4D5aXAncmE8L5BBPdwwpQBoF6YT5NZupX259bUwTKDTWzmnmpTJ36jZP5uvZdYki",
+        "problem": null
+      }
+    },
+    {
+      "name": "uninvited p2 can't sit",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "leaving out the invite list doesn't help",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "invited p1 sits",
+      "status": "PASS",
+      "detail": {
+        "sig": "5zV2fdsRMn8jBRzm2EZWJpXmd1TaqDNSzcTQduQvN1YMq94WCqZoUBgTBq1ZVrbdLmPFuccq34y56ENDhuTR4eRe",
+        "problem": null
+      }
+    },
+    {
+      "name": "p1 leaves table B",
+      "status": "PASS",
+      "detail": {
+        "sig": "2ngJhD27BoPhGtbN7Ecet5rKAhF8otSzG96FNVDMoo2p4y4CHoXLFLzjVwE88CFDNLzFzz4WA99bvXcK2Ei8gBy8",
+        "problem": null
+      }
+    },
+    {
+      "name": "collect B's rake",
+      "status": "PASS",
+      "detail": {
+        "sig": "mUHhvhWehwJNS7M8qCZWYkc4caAKKPLJxrc4pd9itktSYLKQDSwDpcuLjVnUiQeLZ5Fzs5QSaUMXzUoJxmzz1fp",
+        "problem": null
+      }
+    },
+    {
+      "name": "creator closes table B (private accounts deleted, table back on L1)",
+      "status": "PASS",
+      "detail": {
+        "sig": "ySZfneupZENM5XHXACS4jwiaDLPBzLoRee3RSxzE94NvEZekzFJcrJvoh1aAz1jn5EPybYnbxqmwwLgDmkP1zbB",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 leaves table A",
+      "status": "PASS",
+      "detail": {
+        "sig": "2HcKXzfjhGzmwc59zLGPdvsAoCTSPtVstKwryRP3LyA6i8XpW97Gf49Y2fzAFkP4BHnAz1FhUMLwS3KYYUXQVjwP",
+        "problem": null
+      }
+    },
+    {
+      "name": "p3 leaves table A",
+      "status": "PASS",
+      "detail": {
+        "sig": "4461W2FLqsG3Kj2wvzvjc2KoJatr3BLaqnnHk4skgq1YcAiuMyQXkMFeJ1qYSqFp3Kpjv8PHjAjjcvbXupQo3AVT",
+        "problem": null
+      }
+    },
+    {
+      "name": "collect A's rake",
+      "status": "PASS",
+      "detail": {
+        "sig": "3hicUCZ5mNaKF3KCxGjmTDQgayqvrNAZZ3a7VM2kDRG9CMPXL1Ui8tjhyHaGG9GjMK24Frxe69Rdm531mWeERvRn",
+        "problem": null
+      }
+    },
+    {
+      "name": "creator closes table A",
+      "status": "PASS",
+      "detail": {
+        "sig": "4L51naQfx7Ar4Fx3JDz6LTQ4iXKrhXSGGSULCweXWuuNNrQTEJsgeeQjT8fwWJPxKHb7pxRERRnDoGhKy6stT5pP",
+        "problem": null
+      }
+    },
+    {
+      "name": "after close, A's ledger and deck no longer exist in the rollup",
+      "status": "FAIL",
+      "detail": {}
+    },
+    {
+      "name": "table A is back on L1, CLOSED",
+      "status": "PASS",
+      "detail": {}
+    }
+  ]
+}

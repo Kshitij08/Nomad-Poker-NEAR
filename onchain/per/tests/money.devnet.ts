@@ -8,7 +8,7 @@ import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js"
 import { NATIVE_MINT, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction } from "@solana/spl-token";
 import { delegateSpl, withdrawSpl, deriveEphemeralAta, initEphemeralAtaIx, delegateEphemeralAtaIx } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { connection, CONFIG_PDA, PROGRAM_ID, programFor, programOn, loadKey, teeConnection, TEE_VALIDATOR, randomTableId } from "../scripts/lib";
-import { BN, Suite, sleep, dlpPda, escapePayerOf, tableApi, tokenOf, sendL1, sha256, rawRead, connUrl } from "./helpers";
+import { BN, Suite, sleep, dlpPda, escapePayerOf, tableApi, tokenOf, sendL1, sha256, rawRead, connUrl, readerFor } from "./helpers";
 
 const S = new Suite("m2-money");
 const ASIA_VALIDATOR = new PublicKey("MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57");
@@ -75,7 +75,9 @@ async function main() {
   const er = { deployer: await teeConnection(deployer), p1: await teeConnection(p1), p2: await teeConnection(p2), p3: await teeConnection(p3) };
   const prog = { deployer: programOn(er.deployer, deployer), p1: programOn(er.p1, p1), p2: programOn(er.p2, p2), p3: programOn(er.p3, p3) };
   const readTable = async () => (prog.deployer.account as any).table.fetch(T.table, "confirmed");
-  const readLedger = async (as: "p1" | "p2" | "p3") => (prog[as].account as any).ledger.fetch(T.ledger, "confirmed");
+  // Seated players read the private ledger through their reader key's login, not their wallet's.
+  const rd = { p1: await teeConnection(readerFor(p1.publicKey)), p2: await teeConnection(readerFor(p2.publicKey)), p3: await teeConnection(readerFor(p3.publicKey)) };
+  const readLedger = async (as: "p1" | "p2" | "p3") => (programOn(rd[as], deployer).account as any).ledger.fetch(T.ledger, "confirmed");
   const balance = async (n: keyof typeof er, owner: PublicKey) => { try { return BigInt((await er[n].getTokenAccountBalance(tokenOf(owner))).value.amount); } catch { return -1n; } };
 
   await S.ok("open the table's private accounts", () => T.open(prog.deployer, deployer.publicKey));
@@ -142,7 +144,7 @@ async function main() {
   await S.ok("commit the public table to L1", () => T.commit(prog.deployer, deployer.publicKey));
   await sleep(6000);
   const l = await readLedger("p2");
-  const ledgerRaw = (await rawRead(connUrl(er.p2), T.ledger)).data!;
+  const ledgerRaw = (await rawRead(connUrl(rd.p2), T.ledger)).data!;
   const l1T = decodeTable((await connection.getAccountInfo(T.table))!.data);
   const recon = {
     totalDeposited: l.totalDeposited.toString(), totalRakeCollected: l.totalRakeCollected.toString(), totalPaidOut: l.totalPaidOut.toString(),
@@ -172,7 +174,7 @@ async function main() {
   S.check("TEE honours it: table B back on L1, still OPEN, seat 0 marked taken", backB?.status === 1 && backB?.seatMask === 1, { requestSig: r1, secondsWaited: w1 });
   await S.ok("anyone (p1) re-delegates the returned table so p2 isn't stranded", () => B.delegate(p1));
   await sleep(6000);
-  S.check("the private ledger survived the round trip (p2 still reads it)", (await rawRead(connUrl(er.p2), B.ledger)).visible, {});
+  S.check("the private ledger survived the round trip (p2 still reads it)", (await rawRead(connUrl(rd.p2), B.ledger)).visible, {});
   await S.ok("p2 cashes out of table B inside the rollup", () => B.cashOut(prog.p2, p2.publicKey, 0));
   await S.ok("collect table B's rake", () => B.collectRake(prog.deployer, devToken));
   const md = await connection.getAccountInfo(dlpPda("delegation-metadata", B.table));

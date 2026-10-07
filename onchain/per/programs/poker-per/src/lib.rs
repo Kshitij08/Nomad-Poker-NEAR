@@ -69,8 +69,8 @@ pub mod poker_per {
         instructions::money::open_table(ctx)
     }
 
-    pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64) -> Result<()> {
-        instructions::money::buy_in(ctx, seat, amount)
+    pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Result<()> {
+        instructions::money::buy_in(ctx, seat, amount, reader)
     }
 
     pub fn cash_out(ctx: Context<CashOut>, seat: u8) -> Result<()> {

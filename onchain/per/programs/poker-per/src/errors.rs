@@ -74,4 +74,6 @@ pub enum PokerError {
     TooManyInvites,
     #[msg("Table's private accounts aren't set up yet; call open_table")]
     TableNotOpened,
+    #[msg("Reader must be a fresh key: not the wallet, the default key, or a key already used at this table")]
+    InvalidReader,
 }

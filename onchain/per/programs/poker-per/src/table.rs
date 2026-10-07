@@ -31,6 +31,10 @@ pub const TABLE_SPONSOR_LAMPORTS: u64 = 3_000_000;
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, InitSpace, PartialEq, Debug)]
 pub struct Seat {
     pub player: Pubkey,
+    /// Key that may read the ledger and this seat's hand in the TEE. It is a separate key chosen by
+    /// the player's client, so permission lists (which MagicBlock's RPC shows to anyone) never name
+    /// the wallet.
+    pub reader: Pubkey,
     /// Chips the player has at the table, in the table token's base units.
     pub stack: u64,
     /// Everything this player has put in at this seat (before rake), for the audit trail.
@@ -110,8 +114,9 @@ impl Ledger {
         self.seats.iter().try_fold(self.rake_accrued, |acc, s| acc.checked_add(s.stack))
     }
 
-    pub fn players(&self) -> Vec<Pubkey> {
-        self.seats.iter().filter(|s| !s.is_empty()).map(|s| s.player).collect()
+    /// Reader keys of the occupied seats: the ledger's permission members.
+    pub fn readers(&self) -> Vec<Pubkey> {
+        self.seats.iter().filter(|s| !s.is_empty()).map(|s| s.reader).collect()
     }
 
     pub fn fingerprint(&self) -> Result<[u8; 32]> {
@@ -267,9 +272,10 @@ mod tests {
             escrow_balance: 0, total_deposited: 0, total_paid_out: 0, total_rake_collected: 0,
         };
         let a = Pubkey::new_unique();
-        l.seats[3] = Seat { player: a, stack: 10, deposited: 10 };
+        let r = Pubkey::new_unique();
+        l.seats[3] = Seat { player: a, reader: r, stack: 10, deposited: 10 };
         assert_eq!(l.seat_of(&a), Some(3));
-        assert_eq!(l.players(), vec![a]);
+        assert_eq!(l.readers(), vec![r], "permission members are reader keys, never wallets");
         assert_eq!(l.computed_owed(), Some(15));
         let f1 = l.fingerprint().unwrap();
         l.seats[3].stack = 11;

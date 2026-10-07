@@ -7,7 +7,9 @@ use anchor_lang::solana_program::program::{invoke, invoke_signed};
 use anchor_spl::associated_token::{self, get_associated_token_address, AssociatedToken};
 use anchor_spl::token::Token;
 use anchor_lang::system_program::{transfer, Transfer};
+use ephemeral_rollups_sdk::access_control::structs::PERMISSION_SEED;
 use ephemeral_rollups_sdk::anchor::delegate;
+use ephemeral_rollups_sdk::consts::PERMISSION_PROGRAM_ID;
 use ephemeral_rollups_sdk::cpi::cpi_delegate;
 use ephemeral_rollups_sdk::types::DelegateAccountArgs;
 use ephemeral_rollups_sdk::utils::{close_pda_with_system_transfer, create_pda};
@@ -26,6 +28,11 @@ const DLP_REQUEST_UNDELEGATION: u64 = 26;
 const DLP_UNDELEGATE_WITH_ROLLBACK_AFTER_TIMEOUT: u64 = 27;
 const ESPL_INIT_EPHEMERAL_ATA: u8 = 0;
 const ESPL_DELEGATE_EPHEMERAL_ATA: u8 = 4;
+const ESPL_CREATE_EPHEMERAL_ATA_PERMISSION: u8 = 6;
+const ESPL_DELEGATE_EPHEMERAL_ATA_PERMISSION: u8 = 7;
+/// Permission program `UpdatePermission` (u64 discriminator 1) with `MembersArgs { members: None }`,
+/// which marks the permission public.
+const PERMISSION_UPDATE_PUBLIC: [u8; 9] = [1, 0, 0, 0, 0, 0, 0, 0, 0];
 
 /// Per-table, program-owned (system-account) PDA that pays the table's delegation rent. Because the
 /// delegation program records it as rent payer, and only this program can sign for it, nobody can
@@ -37,8 +44,16 @@ pub const ESCAPE_PAYER_FLOAT: u64 = 10_000_000;
 const DELEGATE_BUFFER_TAG: &[u8] = b"buffer";
 
 /// Creates the table and its escrow in one instruction. The escrow is MagicBlock's ephemeral token
-/// account for (table, wSOL), created and delegated to the TEE validator here, so nobody else can
-/// set it up first or point it at another validator. The table address includes the creator.
+/// account for (table, wSOL), created and delegated to the TEE validator here. Someone who learns a
+/// table id before it's created can still delegate that escrow (or its permission) elsewhere first;
+/// `create_table` then fails as a whole and nothing is created, so clients retry with a fresh random
+/// id and never reuse one. The table address includes the creator.
+///
+/// The escrow's permission account is claimed here too. MagicBlock's token program lets anyone
+/// create a flags-0 permission on any ephemeral token account. On our escrow, whose owner (the table
+/// PDA) can't log in to the TEE, that made every buy-in, cash-out and rake transaction fail with
+/// `403 Access denied` (M3). So this creates the permission first, makes it public (the table signs
+/// as its authority) and delegates it to the TEE. Later attempts by anyone else then do nothing.
 #[derive(Accounts)]
 #[instruction(table_id: u64)]
 pub struct CreateTable<'info> {
@@ -77,12 +92,30 @@ pub struct CreateTable<'info> {
     /// CHECK: delegation program PDA
     #[account(mut, seeds = [b"delegation-metadata", escrow_eata.key().as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
     pub escrow_delegation_metadata: UncheckedAccount<'info>,
+    /// CHECK: the escrow's permission (permission program PDA), created public here.
+    #[account(mut, seeds = [PERMISSION_SEED, escrow_eata.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub escrow_permission: UncheckedAccount<'info>,
+    /// CHECK: permission program's delegation buffer for the escrow permission.
+    #[account(mut, seeds = [b"buffer", escrow_permission.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub escrow_permission_buffer: UncheckedAccount<'info>,
+    /// CHECK: delegation program PDA
+    #[account(mut, seeds = [b"delegation", escrow_permission.key().as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub escrow_permission_delegation_record: UncheckedAccount<'info>,
+    /// CHECK: delegation program PDA
+    #[account(mut, seeds = [b"delegation-metadata", escrow_permission.key().as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub escrow_permission_delegation_metadata: UncheckedAccount<'info>,
     /// CHECK: fixed id
     #[account(address = ESPL_PROGRAM_ID)]
     pub espl_program: UncheckedAccount<'info>,
     /// CHECK: fixed id
     #[account(address = DELEGATION_PROGRAM_ID)]
     pub delegation_program: UncheckedAccount<'info>,
+    /// CHECK: fixed id
+    #[account(address = PERMISSION_PROGRAM_ID)]
+    pub permission_program: UncheckedAccount<'info>,
+    /// CHECK: the TEE validator, the only one the escrow permission is delegated to.
+    #[account(address = TEE_VALIDATOR)]
+    pub validator: UncheckedAccount<'info>,
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -178,8 +211,95 @@ pub fn create_table(ctx: Context<CreateTable>, table_id: u64, params: TableParam
             a.system_program.to_account_info(),
         ],
     )?;
+    claim_escrow_permission(&ctx)?;
     let t = &ctx.accounts.table;
     emit!(TableCreated { table: t.key(), table_id, creator: t.creator, mint: t.mint, max_buy_in: t.max_buy_in, rake_bps: t.rake_bps });
+    Ok(())
+}
+
+/// Creates the escrow's permission, makes it public and delegates it to the TEE (see `CreateTable`).
+fn claim_escrow_permission(ctx: &Context<CreateTable>) -> Result<()> {
+    let a = &ctx.accounts;
+    // 1. Create it with flags 0: the table PDA becomes its authority member. The creator pays rent.
+    invoke(
+        &Instruction {
+            program_id: ESPL_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new(a.escrow_eata.key(), false),
+                AccountMeta::new(a.escrow_permission.key(), false),
+                AccountMeta::new(a.creator.key(), true),
+                AccountMeta::new_readonly(a.system_program.key(), false),
+                AccountMeta::new_readonly(PERMISSION_PROGRAM_ID, false),
+            ],
+            data: vec![ESPL_CREATE_EPHEMERAL_ATA_PERMISSION, 0],
+        },
+        &[
+            a.escrow_eata.to_account_info(),
+            a.escrow_permission.to_account_info(),
+            a.creator.to_account_info(),
+            a.system_program.to_account_info(),
+            a.permission_program.to_account_info(),
+            a.espl_program.to_account_info(),
+        ],
+    )?;
+    // 2. Make it public. As the authority member, the table PDA may sign alone. "Public" means no
+    // member list at all, so afterwards nobody, the table included, can change, undelegate or close
+    // it. Its rent (paid by the creator) stays locked; that's the price of nobody being able to
+    // make the escrow private.
+    let creator = a.creator.key();
+    let id = a.table.table_id.to_le_bytes();
+    let bump = [a.table.bump];
+    invoke_signed(
+        &Instruction {
+            program_id: PERMISSION_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new_readonly(a.table.key(), true),
+                AccountMeta::new_readonly(a.escrow_eata.key(), false),
+                AccountMeta::new(a.escrow_permission.key(), false),
+            ],
+            data: PERMISSION_UPDATE_PUBLIC.to_vec(),
+        },
+        &[
+            a.table.to_account_info(),
+            a.escrow_eata.to_account_info(),
+            a.escrow_permission.to_account_info(),
+            a.permission_program.to_account_info(),
+        ],
+        &[&[TABLE_SEED, creator.as_ref(), &id, &bump]],
+    )?;
+    // 3. Delegate it to the TEE. Anyone may delegate an ephemeral token account's permission, to any
+    // validator, so doing it here leaves nothing for an outsider to redirect.
+    invoke(
+        &Instruction {
+            program_id: ESPL_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new(a.creator.key(), true),
+                AccountMeta::new(a.escrow_eata.key(), false),
+                AccountMeta::new_readonly(PERMISSION_PROGRAM_ID, false),
+                AccountMeta::new(a.escrow_permission.key(), false),
+                AccountMeta::new_readonly(a.system_program.key(), false),
+                AccountMeta::new(a.escrow_permission_buffer.key(), false),
+                AccountMeta::new(a.escrow_permission_delegation_record.key(), false),
+                AccountMeta::new(a.escrow_permission_delegation_metadata.key(), false),
+                AccountMeta::new_readonly(DELEGATION_PROGRAM_ID, false),
+                AccountMeta::new_readonly(a.validator.key(), false),
+            ],
+            data: vec![ESPL_DELEGATE_EPHEMERAL_ATA_PERMISSION],
+        },
+        &[
+            a.creator.to_account_info(),
+            a.escrow_eata.to_account_info(),
+            a.permission_program.to_account_info(),
+            a.escrow_permission.to_account_info(),
+            a.system_program.to_account_info(),
+            a.escrow_permission_buffer.to_account_info(),
+            a.escrow_permission_delegation_record.to_account_info(),
+            a.escrow_permission_delegation_metadata.to_account_info(),
+            a.delegation_program.to_account_info(),
+            a.validator.to_account_info(),
+            a.espl_program.to_account_info(),
+        ],
+    )?;
     Ok(())
 }
 

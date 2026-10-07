@@ -1,7 +1,7 @@
 // Shared helpers for the devnet suites: outcome recording, error naming, and the poker-per account
 // layout (table, ledger, hands, deck, invites, escrow) for building instructions.
 import * as anchor from "@coral-xyz/anchor";
-import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import { ComputeBudgetProgram, Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { NATIVE_MINT, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID, permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { createHash } from "crypto";
@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import { connection, CONFIG_PDA, PROGRAM_ID, idl, programFor, tablePda, TEE_VALIDATOR } from "../scripts/lib";
 
-export type Outcome = { name: string; status: "PASS" | "FAIL"; detail: any };
+export type Outcome = { name: string; status: "PASS" | "FAIL" | "KNOWN"; detail: any };
 export const BN = (n: number | bigint) => new anchor.BN(n.toString());
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const DLP = new PublicKey("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");
@@ -28,6 +28,11 @@ export const tokenOf = (k: PublicKey) => getAssociatedTokenAddressSync(NATIVE_MI
 export const inviteHash = (t: PublicKey, wallet: PublicKey) => Array.from(createHash("sha256").update(t.toBuffer()).update(wallet.toBuffer()).digest());
 export const sha256 = (b: Buffer) => createHash("sha256").update(b).digest();
 export const rollup = { magicProgram: MAGIC_PROGRAM_ID, vault: EPHEMERAL_VAULT, permissionProgram: PERMISSION_PROGRAM_ID };
+// Each wallet's reader key for this run (one per wallet, reused across this run's tables, which is
+// fine for tests). A real client must make a fresh reader per table and seat, so a reader key never
+// links two tables.
+const RUN_SALT = Keypair.generate().publicKey.toBuffer();
+export const readerFor = (player: PublicKey) => Keypair.fromSeed(createHash("sha256").update(RUN_SALT).update(player.toBuffer()).digest());
 
 // The TEE rollup hides transaction logs, so Anchor can't build an AnchorError there and throws a
 // ProgramError with only a numeric code. Map codes back to names from our IDL and Anchor's own list.
@@ -60,18 +65,23 @@ export class Suite {
     catch (e: any) { const got = errName(e); this.outcomes.push({ name, status: got.includes(expected) ? "PASS" : "FAIL", detail: { expected, got } }); }
   }
   check(name: string, pass: boolean, detail: any) { this.outcomes.push({ name, status: pass ? "PASS" : "FAIL", detail }); }
+  /** A platform issue we can't fix ourselves: KNOWN while it still reproduces (doesn't fail the run), PASS once it's fixed. */
+  known(name: string, stillThere: boolean, detail: any) { this.outcomes.push({ name, status: stillThere ? "KNOWN" : "PASS", detail }); }
   finish(extra: any) {
     const failed = this.outcomes.filter((o) => o.status === "FAIL").length;
-    const summary = { suite: this.name, program: PROGRAM_ID.toBase58(), ranAt: new Date().toISOString(), pass: this.outcomes.length - failed, fail: failed, ...extra, outcomes: this.outcomes };
+    const known = this.outcomes.filter((o) => o.status === "KNOWN").length;
+    const summary = { suite: this.name, program: PROGRAM_ID.toBase58(), ranAt: new Date().toISOString(), pass: this.outcomes.length - failed - known, fail: failed, knownPlatformIssues: known, ...extra, outcomes: this.outcomes };
     const out = path.join(__dirname, "../results", `${this.name}-${Date.now()}.json`);
     fs.writeFileSync(out, JSON.stringify(summary, (_, v) => (typeof v === "bigint" ? v.toString() : v), 2));
     for (const o of this.outcomes) console.log(`${o.status.padEnd(5)} ${o.name}${o.status === "FAIL" ? "  " + JSON.stringify(o.detail) : ""}`);
-    console.log(`\n${summary.pass} passed, ${failed} failed -> ${path.relative(process.cwd(), out)}`);
+    console.log(`\n${summary.pass} passed, ${failed} failed${known ? `, ${known} known platform issues` : ""} -> ${path.relative(process.cwd(), out)}`);
     process.exit(failed ? 1 : 0);
   }
 }
 
 export const sendL1 = (tx: Transaction, signers: Keypair[]) => anchor.web3.sendAndConfirmTransaction(connection, tx, signers, { commitment: "confirmed" });
+
+export const CREATE_TABLE_CU = 400_000;
 
 /** Instruction builders for one table. */
 export function tableApi(creator: Keypair, tableId: bigint) {
@@ -81,17 +91,23 @@ export function tableApi(creator: Keypair, tableId: bigint) {
   const ledger = ledgerOf(table), deck = deckOf(table);
   return {
     table, escrow, escrowEata, ledger, deck,
+    // create_table uses 124k-202k compute units depending on the id (PDA bump searches), so it always
+    // gets an explicit limit above the 200k default. Measured by scripts/cu-create-table.ts.
     create: (params: any, signer = creator, mint = NATIVE_MINT) => programFor(signer).methods.createTable(BN(tableId), params)
-      .accountsPartial({ creator: signer.publicKey, config: CONFIG_PDA, table, mint, escrow, escrowEata }).rpc(),
+      .accountsPartial({ creator: signer.publicKey, config: CONFIG_PDA, table, mint, escrow, escrowEata })
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: CREATE_TABLE_CU })]).rpc(),
+    createTx: (params: any, signer = creator, mint = NATIVE_MINT) => programFor(signer).methods.createTable(BN(tableId), params)
+      .accountsPartial({ creator: signer.publicKey, config: CONFIG_PDA, table, mint, escrow, escrowEata }).transaction(),
     delegate: (payer: Keypair = creator, validator = TEE_VALIDATOR) => programFor(payer).methods.delegateTable(BN(tableId), creator.publicKey)
       .accountsPartial({ payer: payer.publicKey, table, escapePayer: escapePayerOf(table), validator }).rpc(),
     open: (prog: anchor.Program, payer: PublicKey) => prog.methods.openTable()
       .accountsPartial({ payer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), rollup }).rpc(),
     buyIn: (prog: anchor.Program, player: PublicKey, seat: number, amount: bigint, overrides: any = {}) => {
       const hand = handOf(table, seat);
-      return prog.methods.buyIn(seat, BN(amount)).accountsPartial({
+      const { reader = readerFor(player).publicKey, ...accounts } = overrides;
+      return prog.methods.buyIn(seat, BN(amount), reader).accountsPartial({
         player, config: CONFIG_PDA, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), hand, handPermission: permissionPdaFromAccount(hand),
-        invites: null, playerToken: tokenOf(player), escrow, rollup, ...overrides,
+        invites: null, playerToken: tokenOf(player), escrow, rollup, ...accounts,
       }).rpc();
     },
     cashOut: (prog: anchor.Program, player: PublicKey, seat: number, overrides: any = {}) => {
