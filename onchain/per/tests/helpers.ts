@@ -29,8 +29,6 @@ export const KIND = { fold: 0, check: 1, call: 2, bet: 3, raise: 4, allIn: 5 } a
 /** act/timeout may run a showdown (every remaining hand evaluated), so they get a large budget. */
 export const PLAY_CU = 1_400_000;
 export const MAGIC_CONTEXT_ID = new PublicKey("MagicContext1111111111111111111111111111111");
-/** MagicBlock's Hydra crank program on the rollup. */
-export const HYDRA_EPHEMERAL = new PublicKey("eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf");
 /** The TEE validator's magic fee vault: tables pay their own commits into it. */
 export const MAGIC_FEE_VAULT = PublicKey.findProgramAddressSync([Buffer.from("magic-fee-vault"), TEE_VALIDATOR.toBuffer()], new PublicKey("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"))[0];
 /** Smallest compute limit (to within `step`) at which `build(units)` simulates without error; -1 if none up to 1.4M. */
@@ -116,7 +114,6 @@ export function tableApi(creator: Keypair, tableId: bigint) {
   const hand = { table, ledger, deck, record, log };
   const play = (signer: PublicKey) => ({ signer, hand } as any);
   const begin = () => ({ hand, logPermission: permissionPdaFromAccount(log), rollup } as any);
-  const crank = PublicKey.findProgramAddressSync([Buffer.from("crank"), table.toBuffer(), table.toBuffer()], HYDRA_EPHEMERAL)[0];
   return {
     table, escrow, escrowEata, ledger, deck, record, log,
     // create_table uses 124k-202k compute units depending on the id (PDA bump searches), so it always
@@ -142,11 +139,6 @@ export function tableApi(creator: Keypair, tableId: bigint) {
       .accountsPartial(play(signer)).preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units })]).transaction(),
     tick: (prog: anchor.Program) => prog.methods.tick().accountsPartial(begin())
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc(),
-    crank,
-    scheduleKeeper: (prog: anchor.Program, creatorKey: PublicKey, intervalSlots: number, tip: number, fund = 0) => prog.methods.scheduleKeeper(BN(intervalSlots), BN(tip), BN(fund))
-      .accountsPartial({ creator: creatorKey, table, crank, hydraProgram: HYDRA_EPHEMERAL, vault: EPHEMERAL_VAULT, magicProgram: MAGIC_PROGRAM_ID }).rpc(),
-    cancelKeeper: (prog: anchor.Program, creatorKey: PublicKey) => prog.methods.cancelKeeper()
-      .accountsPartial({ creator: creatorKey, table, crank, hydraProgram: HYDRA_EPHEMERAL, vault: EPHEMERAL_VAULT, magicProgram: MAGIC_PROGRAM_ID }).rpc(),
     beginHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.beginHand()
       .accountsPartial(begin())
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc(),
@@ -174,15 +166,10 @@ export function tableApi(creator: Keypair, tableId: bigint) {
     collectRake: (prog: anchor.Program, devToken: PublicKey) => prog.methods.collectRake()
       .accountsPartial({ config: CONFIG_PDA, table, ledger, escrow, devToken, magicProgram: MAGIC_PROGRAM_ID }).rpc(),
     commit: (prog: anchor.Program, payer: PublicKey) => prog.methods.commitTable().accountsPartial({ payer, table }).rpc(),
-    // The keeper's crank is passed only if it exists (the rollup can't load a missing account writable).
-    close: async (prog: anchor.Program, signer: PublicKey) => {
-      const hasKeeper = (await prog.provider.connection.getAccountInfo(crank)) !== null;
-      return prog.methods.closeTable().accountsPartial({
-        creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, log, logPermission: permissionPdaFromAccount(log),
-        crank: hasKeeper ? crank : null, hydraProgram: hasKeeper ? HYDRA_EPHEMERAL : null,
-        vault: EPHEMERAL_VAULT, permissionProgram: PERMISSION_PROGRAM_ID,
-      }).rpc();
-    },
+    close: (prog: anchor.Program, signer: PublicKey) => prog.methods.closeTable().accountsPartial({
+      creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, log, logPermission: permissionPdaFromAccount(log),
+      vault: EPHEMERAL_VAULT, permissionProgram: PERMISSION_PROGRAM_ID,
+    }).rpc(),
     request: (signer: Keypair) => programFor(signer).methods.requestTableUndelegation(BN(tableId), creator.publicKey).accountsPartial({
       requester: signer.publicKey, config: CONFIG_PDA, table, escapePayer: escapePayerOf(table), ownerProgram: PROGRAM_ID,
       undelegationRequest: dlpPda("undelegation-request", table), delegationRecord: dlpPda("delegation", table), delegationMetadata: dlpPda("delegation-metadata", table), delegationProgram: DLP,

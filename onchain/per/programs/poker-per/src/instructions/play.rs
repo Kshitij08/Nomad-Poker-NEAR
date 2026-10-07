@@ -5,8 +5,9 @@
 //! the public hand record. Bets and stacks stay in the ledger (readable by the seated players) and
 //! the action log in its own account (readable by the players dealt into the hand).
 //!
-//! `tick` needs no signer and never fails for lack of something to do, so a MagicBlock crank can
-//! call it on a schedule: it times out an awaited player whose 15 s are up, and begins a dealt hand.
+//! `tick` is the one "move this table along" call: it times out an awaited player whose 15 s are up
+//! and begins a dealt hand, needs no signer, and succeeds when there's nothing to do. The backend's
+//! keeper calls it on a schedule; anyone else may too.
 //!
 //! Clients should give `act`, `timeout` and `tick` a compute budget for a possible showdown (every
 //! remaining hand is evaluated then).
@@ -68,8 +69,8 @@ pub fn begin_hand(ctx: Context<BeginHand>) -> Result<()> {
     begin(ctx.accounts, log_bump, now)
 }
 
-/// For a crank: no signer, and nothing to do is not an error. Times out the awaited player once
-/// their turn is up (check if possible, otherwise fold), and begins a dealt hand.
+/// For the keeper (or anyone): no signer, and nothing to do is not an error. Times out the awaited
+/// player once their turn is up (check if possible, otherwise fold), and begins a dealt hand.
 pub fn tick(ctx: Context<BeginHand>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let log_bump = ctx.bumps.hand.log;

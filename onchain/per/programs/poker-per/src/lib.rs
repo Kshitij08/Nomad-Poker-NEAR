@@ -127,12 +127,4 @@ pub mod poker_per {
     pub fn tick(ctx: Context<BeginHand>) -> Result<()> {
         instructions::play::tick(ctx)
     }
-
-    pub fn schedule_keeper(ctx: Context<ScheduleKeeper>, interval_slots: u64, tip: u64, fund: u64) -> Result<()> {
-        instructions::keeper::schedule_keeper(ctx, interval_slots, tip, fund)
-    }
-
-    pub fn cancel_keeper(ctx: Context<ScheduleKeeper>) -> Result<()> {
-        instructions::keeper::cancel_keeper(ctx)
-    }
 }

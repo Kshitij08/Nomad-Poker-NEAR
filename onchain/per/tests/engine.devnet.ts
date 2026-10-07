@@ -253,7 +253,7 @@ async function main() {
     },
   });
   S.check("hand D1: started straight away (no seed window) and dealt seats 0 and 2 only", D1.dealtMask === 0b101, { dealtMask: D1.dealtMask });
-  S.check("hand D1: begun by tick (the crank's instruction, no signer needed), not begin_hand", D1.begun.street === 1 && D1.begun.toAct !== 255, { street: D1.begun.street });
+  S.check("hand D1: begun by tick (the keeper's call, no signer needed), not begin_hand", D1.begun.street === 1 && D1.begun.toAct !== 255, { street: D1.begun.street });
   S.check("hand D1: p1's reader key acted for seat 0 (no wallet signature needed)", readerActed.some((r) => r.hand.startsWith("D1") && r.seat === 0), { readerActed });
   const repD1 = replay(D1);
   S.check("hand D1: on-chain final stacks equal the C# engine's replay", repD1.match, repD1);
@@ -264,7 +264,7 @@ async function main() {
   S.check("hand D2: on-chain final stacks equal the C# engine's replay", repD2.match, repD2);
 
   const idleBefore = await readTable();
-  await S.ok("tick with nothing to do succeeds and changes nothing (so a crank's schedule keeps advancing)", () => T.tick(prog.deployer));
+  await S.ok("tick with nothing to do succeeds and changes nothing (safe for the keeper to call on a timer)", () => T.tick(prog.deployer));
   const idleAfter = await readTable();
   S.check("...table unchanged by the idle tick", idleAfter.handState === idleBefore.handState && Number(idleAfter.ledgerSeq) === Number(idleBefore.ledgerSeq), {});
   const showdownCu = cu.filter((c) => c.endsHand);
