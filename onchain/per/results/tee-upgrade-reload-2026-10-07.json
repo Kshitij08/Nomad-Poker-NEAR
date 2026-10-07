@@ -1,0 +1,25 @@
+{
+  "question": "Does the devnet TEE rollup run the latest upgrade of poker-per (6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR)?",
+  "method": "Simulate, in the TEE and on L1, an instruction whose answer tells which build runs. scripts/tee-runs-m4.ts (commit_seed: 3012 = M4 build, 101 = older build), scripts/probe-ping.ts (ping: 6037 = M3+ping build), scripts/probe-upgrade-reload.ts (throwaway program returning Custom(VERSION)). Simulation only.",
+  "pokerPer": [
+    { "utc": "13:37", "deploy": "M3 final, 54f2dad2...", "slot": null, "teeRanIt": true, "evidence": "m3-privacy-1791381124245.json: rollup-only InvalidReader checks for reader reuse pass (code added in this build)" },
+    { "utc": "14:14", "deploy": "M4, d1bb52b1... (program account extended 686,480 -> 783,600 bytes)", "slot": 508481610, "teeRanIt": false },
+    { "utc": "14:22", "deploy": "M4 again, same bytes, no resize", "slot": 508483858, "teeRanIt": false },
+    { "utc": "14:28", "deploy": "M4 built with opt-level s, de254e06... (666,240 bytes)", "slot": 508484748, "teeRanIt": false },
+    { "utc": "14:33", "deploy": "M4, d1bb52b1...", "slot": 508485989, "teeRanIt": false, "polledUntil": "14:48 (every 15-30 s): always 101" },
+    { "utc": "14:38", "deploy": "per-m3 code + one ping instruction, 3962827c... (673,848 bytes, near-copy of the build the TEE ran at 13:37)", "slot": 508487385, "teeRanIt": false, "l1": 6037, "tee": 101 },
+    { "utc": "14:46", "deploy": "M4, d1bb52b1... (restored)", "slot": 508489351, "teeRanIt": false }
+  ],
+  "teeProgramDataAccount": "getAccountInfo(programdata) through the TEE RPC returned the new deploy slot and bytes at 14:24, while execution stayed on the old build",
+  "control_freshProgram": {
+    "program": "AiXLqfkWu5AjPw6sQ1mzPn6N9dcMPjJoTQBKaMAQo9kG (throwaway, closed afterwards)",
+    "steps": [
+      { "utc": "14:35", "deploy": "v1", "tee": 1 },
+      { "utc": "14:35", "deploy": "v2 upgrade", "tee": 2, "within": "under 10 s" },
+      { "utc": "14:43", "deploy": "v3 upgrade", "tee": 3, "within": "under 20 s" },
+      { "utc": "14:44", "deploy": "extend +10,240 bytes, v4 upgrade", "tee": 4, "within": "about 10 s" },
+      { "utc": "14:45", "deploy": "extend to 783,600 bytes (same as poker-per), v5 upgrade", "tee": 5, "within": "about 10 s" }
+    ]
+  },
+  "conclusion": "The TEE reloads upgrades of a fresh program within seconds, including after a resize to poker-per's exact size, but has not reloaded poker-per since about 13:37 UTC, whatever build is deployed. Not caused by our binary (a near-copy of a build it ran also isn't loaded), its size, or the resize. Looks like the TEE stopped tracking this one program's upgrades."
+}

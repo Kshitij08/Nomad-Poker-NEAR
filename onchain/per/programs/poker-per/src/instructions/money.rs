@@ -18,9 +18,10 @@ use crate::constants::{CONFIG_SEED, CONFIG_VERSION};
 use crate::errors::PokerError;
 use crate::private::{write, Sponsor};
 use crate::state::Config;
+use crate::deal::NO_CARD;
 use crate::table::{
-    rake_for, Deck, Hand, Invites, Ledger, Seat, Table, DECK_SEED, HAND_SEED, INVITES_SEED, LEDGER_SEED,
-    STATUS_CLOSED, STATUS_OPEN, TABLE_SEED,
+    rake_for, Deck, Hand, HandRecord, Invites, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, INVITES_SEED,
+    LEDGER_SEED, RECORD_SEED, STATUS_CLOSED, STATUS_OPEN, TABLE_SEED,
 };
 
 /// MagicBlock programs every private-account operation needs.
@@ -62,11 +63,15 @@ pub struct OpenTable<'info> {
     /// CHECK: permission PDA of the deck.
     #[account(mut, seeds = [PERMISSION_SEED, deck.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
     pub deck_permission: UncheckedAccount<'info>,
+    /// CHECK: rollup-only public hand record PDA, created here (no permission: anyone may read it).
+    #[account(mut, seeds = [RECORD_SEED, table.key().as_ref()], bump)]
+    pub record: UncheckedAccount<'info>,
     pub rollup: RollupPrograms<'info>,
 }
 
-/// Permissionless and idempotent: creates the table's private ledger (readers: none yet) and its
-/// deck (readers: nobody, ever). Runs once after delegation, before anyone can buy in.
+/// Permissionless and idempotent: creates the table's private ledger (readers: none yet), its
+/// deck (readers: nobody, ever) and its public hand record. Runs once after delegation, before
+/// anyone can buy in.
 pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
     let a = &ctx.accounts;
     require!(a.table.status == STATUS_OPEN, PokerError::TableNotOpen);
@@ -83,7 +88,7 @@ pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
         sp.create_account(&ledger_info, ledger_seeds, 8 + Ledger::INIT_SPACE)?;
         write(&ledger_info, &Ledger {
             table: table_key, seats: Default::default(), escrow_owed: 0, rake_accrued: 0, escrow_balance: 0,
-            total_deposited: 0, total_paid_out: 0, total_rake_collected: 0,
+            total_deposited: 0, total_paid_out: 0, total_rake_collected: 0, salt: [0; 32],
         })?;
     }
     sp.create_permission(&ledger_info, ledger_seeds, &a.ledger_permission.to_account_info(), &[])?;
@@ -93,9 +98,23 @@ pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
     let deck_info = a.deck.to_account_info();
     if deck_info.data_is_empty() {
         sp.create_account(&deck_info, deck_seeds, 8 + Deck::INIT_SPACE)?;
-        write(&deck_info, &Deck { table: table_key, hand_no: 0, cards: [u8::MAX; 52], seed: [0; 32] })?;
+        write(&deck_info, &Deck {
+            table: table_key, hand_no: 0, seed_mask: 0, seeds: Default::default(), entropy: [0; 32], shuffle_seed: [0; 32],
+            cards: [NO_CARD; 52],
+        })?;
     }
     sp.create_permission(&deck_info, deck_seeds, &a.deck_permission.to_account_info(), &[])?;
+
+    let record_bump = [ctx.bumps.record];
+    let record_seeds: &[&[u8]] = &[RECORD_SEED, table_key.as_ref(), &record_bump];
+    let record_info = a.record.to_account_info();
+    if record_info.data_is_empty() {
+        sp.create_account(&record_info, record_seeds, 8 + HandRecord::INIT_SPACE)?;
+        write(&record_info, &HandRecord {
+            table: table_key, hand_no: 0, button: 0, dealt_mask: 0, seed_mask: 0, seeds: Default::default(),
+            entropy: [0; 32], shuffle_seed: [0; 32], cards: [NO_CARD; 52],
+        })?;
+    }
 
     let fp = {
         let data = ledger_info.try_borrow_data()?;
@@ -258,9 +277,10 @@ pub struct CashOut<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Leave with the whole stack. Works while paused. Removes you from the ledger's readers and closes
-/// your hand. (From M5 on this will also require that you're not in a hand.)
+/// Leave with the whole stack. Works while paused, but not while a hand is running. Removes you from
+/// the ledger's readers and closes your hand.
 pub fn cash_out(ctx: Context<CashOut>, seat: u8) -> Result<()> {
+    require!(ctx.accounts.table.hand_state == HAND_IDLE, PokerError::HandInProgress);
     let player = ctx.accounts.player.key();
     let idx = seat as usize;
     require!(idx < ctx.accounts.ledger.seats.len(), PokerError::InvalidSeat);
@@ -382,6 +402,9 @@ pub struct CloseTable<'info> {
     /// CHECK: permission PDA of the deck; closed here.
     #[account(mut, seeds = [PERMISSION_SEED, deck.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
     pub deck_permission: UncheckedAccount<'info>,
+    /// CHECK: public hand record PDA; closed here.
+    #[account(mut, seeds = [RECORD_SEED, table.key().as_ref()], bump)]
+    pub record: UncheckedAccount<'info>,
     /// CHECK: MagicBlock's rent vault for rollup-only accounts.
     #[account(mut, address = EPHEMERAL_VAULT_ID)]
     pub vault: UncheckedAccount<'info>,
@@ -412,6 +435,10 @@ pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
         sp.close_permission(&deck_info, deck_seeds, &a.deck_permission.to_account_info())?;
         sp.close_account(&deck_info)?;
         sp.close_account(&ledger_info)?;
+        let record_info = a.record.to_account_info();
+        if !record_info.data_is_empty() {
+            sp.close_account(&record_info)?;
+        }
     }
     let table = &mut ctx.accounts.table;
     table.status = STATUS_CLOSED;

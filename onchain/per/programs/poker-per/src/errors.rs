@@ -76,4 +76,14 @@ pub enum PokerError {
     TableNotOpened,
     #[msg("Reader must be a fresh key: not the wallet, the default key, or a key already used at this table")]
     InvalidReader,
+    #[msg("A hand is in progress")]
+    HandInProgress,
+    #[msg("At least two seated players are needed to start a hand")]
+    NotEnoughPlayers,
+    #[msg("Randomness was requested recently; wait before requesting again")]
+    VrfPending,
+    #[msg("Randomness isn't expected now (replayed or late callback)")]
+    StaleRandomness,
+    #[msg("No dealt hand to end")]
+    HandNotDealt,
 }

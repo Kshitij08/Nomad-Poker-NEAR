@@ -812,6 +812,29 @@
           }
         },
         {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
           "name": "vault",
           "writable": true,
           "address": "MagicVau1t999999999999999999999999999999999"
@@ -932,6 +955,98 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "commit_seed",
+      "discriminator": [
+        115,
+        4,
+        240,
+        226,
+        140,
+        33,
+        78,
+        75
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "signer": true
+        },
+        {
+          "name": "table",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          },
+          "relations": [
+            "deck"
+          ]
+        },
+        {
+          "name": "deck",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "hand",
+          "docs": [
+            "The seat's private hand: proves the signer sits there without touching the ledger, so the",
+            "transaction (and the seed in it) concerns no other player's readable accounts."
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "seat",
+          "type": "u8"
+        },
+        {
+          "name": "seed",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "commit_table",
@@ -1621,6 +1736,115 @@
       ]
     },
     {
+      "name": "deal",
+      "discriminator": [
+        128,
+        0,
+        138,
+        208,
+        72,
+        249,
+        203,
+        239
+      ],
+      "accounts": [
+        {
+          "name": "vrf_program_identity",
+          "docs": [
+            "Scoped VRF identity PDA, bound to this program. Its presence as a signer proves",
+            "the callback was issued by the VRF program for this program."
+          ],
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          },
+          "relations": [
+            "deck"
+          ]
+        },
+        {
+          "name": "deck",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "randomness",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "delegate_table",
       "discriminator": [
         161,
@@ -1851,6 +2075,124 @@
           "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "end_hand",
+      "discriminator": [
+        252,
+        75,
+        51,
+        58,
+        72,
+        237,
+        183,
+        58
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          },
+          "relations": [
+            "deck",
+            "record"
+          ]
+        },
+        {
+          "name": "deck",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
     },
     {
       "name": "initialize_config",
@@ -2176,6 +2518,29 @@
                 82
               ]
             }
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
           }
         },
         {
@@ -3211,6 +3576,138 @@
       ]
     },
     {
+      "name": "start_hand",
+      "discriminator": [
+        50,
+        173,
+        164,
+        52,
+        65,
+        42,
+        197,
+        135
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          },
+          "relations": [
+            "deck"
+          ]
+        },
+        {
+          "name": "deck",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_queue",
+          "writable": true,
+          "address": "5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc"
+        },
+        {
+          "name": "program_identity",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vrf_program",
+          "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
+        },
+        {
+          "name": "slot_hashes",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "update_config",
       "discriminator": [
         29,
@@ -3274,6 +3771,45 @@
         250,
         204,
         130
+      ]
+    },
+    {
+      "name": "Deck",
+      "discriminator": [
+        192,
+        215,
+        78,
+        133,
+        216,
+        161,
+        59,
+        154
+      ]
+    },
+    {
+      "name": "Hand",
+      "discriminator": [
+        51,
+        56,
+        101,
+        152,
+        196,
+        199,
+        104,
+        242
+      ]
+    },
+    {
+      "name": "HandRecord",
+      "discriminator": [
+        178,
+        9,
+        77,
+        152,
+        43,
+        41,
+        230,
+        250
       ]
     },
     {
@@ -3393,6 +3929,45 @@
         77,
         40,
         50
+      ]
+    },
+    {
+      "name": "HandDealt",
+      "discriminator": [
+        251,
+        197,
+        75,
+        167,
+        209,
+        44,
+        197,
+        209
+      ]
+    },
+    {
+      "name": "HandEnded",
+      "discriminator": [
+        4,
+        242,
+        66,
+        254,
+        39,
+        161,
+        129,
+        29
+      ]
+    },
+    {
+      "name": "HandStarted",
+      "discriminator": [
+        92,
+        115,
+        135,
+        103,
+        133,
+        169,
+        143,
+        43
       ]
     },
     {
@@ -3646,6 +4221,31 @@
       "code": 6036,
       "name": "InvalidReader",
       "msg": "Reader must be a fresh key: not the wallet, the default key, or a key already used at this table"
+    },
+    {
+      "code": 6037,
+      "name": "HandInProgress",
+      "msg": "A hand is in progress"
+    },
+    {
+      "code": 6038,
+      "name": "NotEnoughPlayers",
+      "msg": "At least two seated players are needed to start a hand"
+    },
+    {
+      "code": 6039,
+      "name": "VrfPending",
+      "msg": "Randomness was requested recently; wait before requesting again"
+    },
+    {
+      "code": 6040,
+      "name": "StaleRandomness",
+      "msg": "Randomness isn't expected now (replayed or late callback)"
+    },
+    {
+      "code": 6041,
+      "name": "HandNotDealt",
+      "msg": "No dealt hand to end"
     }
   ],
   "types": [
@@ -3890,6 +4490,239 @@
       }
     },
     {
+      "name": "Deck",
+      "docs": [
+        "The current hand's shuffle inputs and deck. Rollup-only and readable by nobody. Seeds are for the",
+        "next hand while the table is idle; `end_hand` copies everything public into the `HandRecord`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "hand_no",
+            "type": "u64"
+          },
+          {
+            "name": "seed_mask",
+            "docs": [
+              "Bit i set = seat i committed a seed."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "seeds",
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                9
+              ]
+            }
+          },
+          {
+            "name": "entropy",
+            "docs": [
+              "Public stand-in for the VRF output (see deal.rs)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "shuffle_seed",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "cards",
+            "type": {
+              "array": [
+                "u8",
+                52
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Hand",
+      "docs": [
+        "One seat's hole cards. Rollup-only and readable only by the seat's current owner. Created when a",
+        "player sits and closed when they leave."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat",
+            "type": "u8"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "hand_no",
+            "type": "u64"
+          },
+          {
+            "name": "cards",
+            "type": {
+              "array": [
+                "u8",
+                2
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "HandDealt",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "hand_no",
+            "type": "u64"
+          },
+          {
+            "name": "button",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "HandEnded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "hand_no",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "HandRecord",
+      "docs": [
+        "The last finished hand, readable by anyone so anyone can recompute its deck (tests/verifier.ts).",
+        "Rollup-only for now, overwritten each hand; M6 publishes each record to Solana."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "hand_no",
+            "type": "u64"
+          },
+          {
+            "name": "button",
+            "type": "u8"
+          },
+          {
+            "name": "dealt_mask",
+            "type": "u16"
+          },
+          {
+            "name": "seed_mask",
+            "type": "u16"
+          },
+          {
+            "name": "seeds",
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                9
+              ]
+            }
+          },
+          {
+            "name": "entropy",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "shuffle_seed",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "cards",
+            "type": {
+              "array": [
+                "u8",
+                52
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "HandStarted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "hand_no",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Invites",
       "docs": [
         "Invite list for an invite-only table. Lives on L1 (not delegated); the rollup reads a copy.",
@@ -3978,6 +4811,19 @@
           {
             "name": "total_rake_collected",
             "type": "u64"
+          },
+          {
+            "name": "salt",
+            "docs": [
+              "Secret salt, refreshed from the VRF every hand, so the public fingerprint can't be guessed",
+              "from likely wallets and amounts. All zeros until the first hand is dealt."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }
@@ -4137,11 +4983,46 @@
             "type": "u64"
           },
           {
+            "name": "hand_no",
+            "docs": [
+              "Hands started at this table (the current one, if one is running)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "hand_state",
+            "docs": [
+              "HAND_IDLE, HAND_SHUFFLING or HAND_DEALT."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "button",
+            "docs": [
+              "Dealer button of the current or last hand (meaningless while `hand_no == 0`)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "dealt_mask",
+            "docs": [
+              "Seats dealt into the current hand."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "vrf_requested_ts",
+            "docs": [
+              "Rollup clock when randomness was last requested."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                96
+                76
               ]
             }
           }

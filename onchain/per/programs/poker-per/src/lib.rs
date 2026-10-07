@@ -1,11 +1,13 @@
 //! Private poker tables on a MagicBlock Private Ephemeral Rollup (TEE), dealt with MagicBlock VRF.
 //! M1: program config. M2: tables and money (L1 create/delegate/escape hatch, rollup buy-in,
-//! cash-out, rake, commit). Privacy and the game engine land in M3 to M6 (see docs/proofs).
+//! cash-out, rake, commit). M3: private ledger, hands and deck. M4: VRF shuffle and deal.
+//! The game engine and hand records land in M5 and M6 (see docs/proofs).
 
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::ephemeral;
 
 pub mod constants;
+pub mod deal;
 pub mod errors;
 pub mod instructions;
 pub mod private;
@@ -87,5 +89,23 @@ pub mod poker_per {
 
     pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
         instructions::money::close_table(ctx)
+    }
+
+    // ---- Rollup: hands (M4: randomness, shuffle and deal)
+
+    pub fn commit_seed(ctx: Context<CommitSeed>, seat: u8, seed: [u8; 32]) -> Result<()> {
+        instructions::hand::commit_seed(ctx, seat, seed)
+    }
+
+    pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
+        instructions::hand::start_hand(ctx)
+    }
+
+    pub fn deal<'info>(ctx: Context<'info, Deal<'info>>, randomness: [u8; 32]) -> Result<()> {
+        instructions::hand::deal(ctx, randomness)
+    }
+
+    pub fn end_hand(ctx: Context<EndHand>) -> Result<()> {
+        instructions::hand::end_hand(ctx)
     }
 }

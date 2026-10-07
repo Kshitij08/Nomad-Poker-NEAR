@@ -9,8 +9,10 @@ pub const LEDGER_SEED: &[u8] = b"ledger";
 pub const DECK_SEED: &[u8] = b"deck";
 pub const HAND_SEED: &[u8] = b"hand";
 pub const INVITES_SEED: &[u8] = b"invites";
+pub const RECORD_SEED: &[u8] = b"record";
 pub const TABLE_VERSION: u8 = 2;
-pub const TABLE_RESERVED: usize = 96;
+/// M4 took 20 of the original 96 reserved bytes for the hand fields; the account size is unchanged.
+pub const TABLE_RESERVED: usize = 76;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -19,6 +21,15 @@ pub const STATUS_CREATED: u8 = 0;
 pub const STATUS_OPEN: u8 = 1;
 /// Closed empty by the creator.
 pub const STATUS_CLOSED: u8 = 2;
+
+/// No hand running: seeds can be committed and players can leave.
+pub const HAND_IDLE: u8 = 0;
+/// VRF requested; waiting for the callback to shuffle and deal.
+pub const HAND_SHUFFLING: u8 = 1;
+/// Cards dealt. (M5 plays the hand from here.)
+pub const HAND_DEALT: u8 = 2;
+/// If the VRF callback hasn't arrived after this long, anyone may request again.
+pub const VRF_RETRY_SECS: i64 = 20;
 
 /// The only token tables accept for now: wrapped SOL. The stake cap is denominated in it.
 pub const WSOL_MINT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
@@ -75,6 +86,16 @@ pub struct Table {
     /// Players' clients keep their own seat record and can check it against this.
     pub ledger_hash: [u8; 32],
     pub ledger_seq: u64,
+    /// Hands started at this table (the current one, if one is running).
+    pub hand_no: u64,
+    /// HAND_IDLE, HAND_SHUFFLING or HAND_DEALT.
+    pub hand_state: u8,
+    /// Dealer button of the current or last hand (meaningless while `hand_no == 0`).
+    pub button: u8,
+    /// Seats dealt into the current hand.
+    pub dealt_mask: u16,
+    /// Rollup clock when randomness was last requested.
+    pub vrf_requested_ts: i64,
     pub reserved: [u8; TABLE_RESERVED],
 }
 
@@ -102,6 +123,9 @@ pub struct Ledger {
     pub total_deposited: u64,
     pub total_paid_out: u64,
     pub total_rake_collected: u64,
+    /// Secret salt, refreshed from the VRF every hand, so the public fingerprint can't be guessed
+    /// from likely wallets and amounts. All zeros until the first hand is dealt.
+    pub salt: [u8; 32],
 }
 
 impl Ledger {
@@ -126,14 +150,36 @@ impl Ledger {
     }
 }
 
-/// The shuffled deck of the current hand. Rollup-only and readable by nobody (M3); M4 fills it.
+/// The current hand's shuffle inputs and deck. Rollup-only and readable by nobody. Seeds are for the
+/// next hand while the table is idle; `end_hand` copies everything public into the `HandRecord`.
 #[account]
 #[derive(InitSpace)]
 pub struct Deck {
     pub table: Pubkey,
     pub hand_no: u64,
+    /// Bit i set = seat i committed a seed.
+    pub seed_mask: u16,
+    pub seeds: [[u8; 32]; MAX_SEATS as usize],
+    /// Public stand-in for the VRF output (see deal.rs).
+    pub entropy: [u8; 32],
+    pub shuffle_seed: [u8; 32],
     pub cards: [u8; 52],
-    pub seed: [u8; 32],
+}
+
+/// The last finished hand, readable by anyone so anyone can recompute its deck (tests/verifier.ts).
+/// Rollup-only for now, overwritten each hand; M6 publishes each record to Solana.
+#[account]
+#[derive(InitSpace)]
+pub struct HandRecord {
+    pub table: Pubkey,
+    pub hand_no: u64,
+    pub button: u8,
+    pub dealt_mask: u16,
+    pub seed_mask: u16,
+    pub seeds: [[u8; 32]; MAX_SEATS as usize],
+    pub entropy: [u8; 32],
+    pub shuffle_seed: [u8; 32],
+    pub cards: [u8; 52],
 }
 
 /// One seat's hole cards. Rollup-only and readable only by the seat's current owner. Created when a
@@ -269,7 +315,7 @@ mod tests {
     fn ledger_seats_owed_and_fingerprint() {
         let mut l = Ledger {
             table: Pubkey::new_unique(), seats: [Seat::default(); MAX_SEATS as usize], escrow_owed: 0, rake_accrued: 5,
-            escrow_balance: 0, total_deposited: 0, total_paid_out: 0, total_rake_collected: 0,
+            escrow_balance: 0, total_deposited: 0, total_paid_out: 0, total_rake_collected: 0, salt: [0; 32],
         };
         let a = Pubkey::new_unique();
         let r = Pubkey::new_unique();
@@ -279,7 +325,10 @@ mod tests {
         assert_eq!(l.computed_owed(), Some(15));
         let f1 = l.fingerprint().unwrap();
         l.seats[3].stack = 11;
-        assert_ne!(f1, l.fingerprint().unwrap(), "any change moves the fingerprint");
+        let f2 = l.fingerprint().unwrap();
+        assert_ne!(f1, f2, "any change moves the fingerprint");
+        l.salt = [1; 32];
+        assert_ne!(f2, l.fingerprint().unwrap(), "the salt is part of the fingerprint");
     }
 
     #[test]

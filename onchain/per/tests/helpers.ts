@@ -22,6 +22,8 @@ export const ledgerOf = (t: PublicKey) => pda([Buffer.from("ledger"), t.toBuffer
 export const deckOf = (t: PublicKey) => pda([Buffer.from("deck"), t.toBuffer()]);
 export const handOf = (t: PublicKey, seat: number) => pda([Buffer.from("hand"), t.toBuffer(), Buffer.from([seat])]);
 export const invitesOf = (t: PublicKey) => pda([Buffer.from("invites"), t.toBuffer()]);
+export const recordOf = (t: PublicKey) => pda([Buffer.from("record"), t.toBuffer()]);
+export const EPHEMERAL_QUEUE = new PublicKey("5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc");
 export const escapePayerOf = (t: PublicKey) => pda([Buffer.from("escape-payer"), t.toBuffer()]);
 export const escrowOf = (t: PublicKey) => getAssociatedTokenAddressSync(NATIVE_MINT, t, true);
 export const tokenOf = (k: PublicKey) => getAssociatedTokenAddressSync(NATIVE_MINT, k);
@@ -88,9 +90,9 @@ export function tableApi(creator: Keypair, tableId: bigint) {
   const table = tablePda(creator.publicKey, tableId);
   const escrow = escrowOf(table);
   const [escrowEata] = PublicKey.findProgramAddressSync([table.toBuffer(), NATIVE_MINT.toBuffer()], ESPL);
-  const ledger = ledgerOf(table), deck = deckOf(table);
+  const ledger = ledgerOf(table), deck = deckOf(table), record = recordOf(table);
   return {
-    table, escrow, escrowEata, ledger, deck,
+    table, escrow, escrowEata, ledger, deck, record,
     // create_table uses 124k-202k compute units depending on the id (PDA bump searches), so it always
     // gets an explicit limit above the 200k default. Measured by scripts/cu-create-table.ts.
     create: (params: any, signer = creator, mint = NATIVE_MINT) => programFor(signer).methods.createTable(BN(tableId), params)
@@ -101,7 +103,13 @@ export function tableApi(creator: Keypair, tableId: bigint) {
     delegate: (payer: Keypair = creator, validator = TEE_VALIDATOR) => programFor(payer).methods.delegateTable(BN(tableId), creator.publicKey)
       .accountsPartial({ payer: payer.publicKey, table, escapePayer: escapePayerOf(table), validator }).rpc(),
     open: (prog: anchor.Program, payer: PublicKey) => prog.methods.openTable()
-      .accountsPartial({ payer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), rollup }).rpc(),
+      .accountsPartial({ payer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, rollup }).rpc(),
+    commitSeed: (prog: anchor.Program, player: PublicKey, seat: number, seed: Buffer) => prog.methods.commitSeed(seat, Array.from(seed))
+      .accountsPartial({ player, table, deck, hand: handOf(table, seat) }).rpc(),
+    startHand: (prog: anchor.Program, payer: PublicKey) => prog.methods.startHand()
+      .accountsPartial({ payer, table, deck, ledger, oracleQueue: EPHEMERAL_QUEUE }).rpc(),
+    endHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.endHand()
+      .accountsPartial({ signer, table, deck, ledger, record }).rpc(),
     buyIn: (prog: anchor.Program, player: PublicKey, seat: number, amount: bigint, overrides: any = {}) => {
       const hand = handOf(table, seat);
       const { reader = readerFor(player).publicKey, ...accounts } = overrides;
@@ -121,7 +129,7 @@ export function tableApi(creator: Keypair, tableId: bigint) {
       .accountsPartial({ config: CONFIG_PDA, table, ledger, escrow, devToken, magicProgram: MAGIC_PROGRAM_ID }).rpc(),
     commit: (prog: anchor.Program, payer: PublicKey) => prog.methods.commitTable().accountsPartial({ payer, table }).rpc(),
     close: (prog: anchor.Program, signer: PublicKey) => prog.methods.closeTable().accountsPartial({
-      creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck),
+      creator: signer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record,
       vault: EPHEMERAL_VAULT, permissionProgram: PERMISSION_PROGRAM_ID,
     }).rpc(),
     request: (signer: Keypair) => programFor(signer).methods.requestTableUndelegation(BN(tableId), creator.publicKey).accountsPartial({
