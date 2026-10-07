@@ -1,0 +1,32 @@
+{
+  "ranAt": "2026-10-07T12:55:44.018Z",
+  "note": "every probe below is made WITHOUT a TEE login token",
+  "table": "3n218u6KqPa39tsMdMiUxiAVRDmmindVyjxg5nEaQ5bs",
+  "ledger": "8wC57sg7NSH22je1qS9qMyGrbUa3Tmw9MiByQn9ahiJL",
+  "p2": "FWepwxztiYE4ZRhX3bFEBJRezZHY4KsZA6Fdx5dHAFtm",
+  "control_getAccountInfo_ledger": "null (hidden, as expected)",
+  "B1_ledgerPermissionAccount": {
+    "bytes": 101,
+    "containsP2Wallet": true
+  },
+  "B1_seat1HandPermissionAccount": {
+    "bytes": 101,
+    "containsP2Wallet": true
+  },
+  "B1_permissionEndpoint": {
+    "http": 200,
+    "containsP2Wallet": true,
+    "body": "{\"authorizedUsers\":[\"6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR\",\"FWepwxztiYE4ZRhX3bFEBJRezZHY4KsZA6Fdx5dHAFtm\"]}"
+  },
+  "B2_simulateTransaction": {
+    "error": {
+      "code": -32602,
+      "message": "invalid request params: Too many accounts provided; max 2"
+    },
+    "ledgerReturned": false,
+    "ledgerDecoded": null,
+    "handReturned": false,
+    "deckReturned": false
+  },
+  "cleanedUp": true
+}

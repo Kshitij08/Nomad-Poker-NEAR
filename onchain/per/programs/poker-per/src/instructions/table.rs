@@ -16,8 +16,8 @@ use crate::constants::{CONFIG_SEED, CONFIG_VERSION, TEE_VALIDATOR};
 use crate::errors::PokerError;
 use crate::state::Config;
 use crate::table::{
-    check_table_params, may_delegate, may_request_escape, Table, TableParams, STATUS_CREATED, STATUS_OPEN,
-    TABLE_RESERVED, TABLE_SEED, TABLE_VERSION, WSOL_MINT,
+    check_table_params, may_delegate, may_request_escape, Invites, Table, TableParams, INVITES_SEED, MAX_INVITES,
+    STATUS_CREATED, STATUS_OPEN, TABLE_RESERVED, TABLE_SEED, TABLE_SPONSOR_LAMPORTS, TABLE_VERSION, WSOL_MINT,
 };
 
 pub const DELEGATION_PROGRAM_ID: Pubkey = pubkey!("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");
@@ -97,7 +97,8 @@ pub fn create_table(ctx: Context<CreateTable>, table_id: u64, params: TableParam
     t.bump = ctx.bumps.table;
     t.status = STATUS_CREATED;
     t.max_seats = params.max_seats;
-    t.seated = 0;
+    t.seat_mask = 0;
+    t.invite_only = params.invite_only;
     t.table_id = table_id;
     t.creator = ctx.accounts.creator.key();
     t.mint = ctx.accounts.mint.key();
@@ -106,17 +107,17 @@ pub fn create_table(ctx: Context<CreateTable>, table_id: u64, params: TableParam
     t.min_buy_in = params.min_buy_in;
     t.max_buy_in = params.max_buy_in;
     t.rake_bps = config.rake_bps;
-    t.escrow_owed = 0;
-    t.rake_accrued = 0;
-    t.escrow_balance = 0;
-    t.total_deposited = 0;
-    t.total_paid_out = 0;
-    t.total_rake_collected = 0;
     t.last_activity_ts = Clock::get()?.unix_timestamp;
-    t.seats = Default::default();
+    t.ledger_hash = [0; 32];
+    t.ledger_seq = 0;
     t.reserved = [0; TABLE_RESERVED];
 
     let a = &ctx.accounts;
+    // The table sponsors the rent of its rollup-only private accounts and their permissions.
+    transfer(
+        CpiContext::new(a.system_program.key(), Transfer { from: a.creator.to_account_info(), to: a.table.to_account_info() }),
+        TABLE_SPONSOR_LAMPORTS,
+    )?;
     associated_token::create_idempotent(CpiContext::new(
         a.associated_token_program.key(),
         associated_token::Create {
@@ -429,6 +430,32 @@ pub fn rollback_table(ctx: Context<RollbackTable>, table_id: u64, creator: Pubke
     table_info.resize(saved.len())?;
     table_info.try_borrow_mut_data()?.copy_from_slice(&saved);
     emit!(TableRolledBack { table: a.table.key(), table_id });
+    Ok(())
+}
+
+/// Sets the invite list of an invite-only table (L1, creator only, any time; the rollup reads a
+/// copy). Clients send sha256(table || wallet), never wallets, so the list stays unreadable even in
+/// the transaction data.
+#[derive(Accounts)]
+#[instruction(table_id: u64)]
+pub struct SetInvites<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
+    /// CHECK: the table's address, derived from the creator; not loaded (it may be delegated).
+    #[account(seeds = [TABLE_SEED, creator.key().as_ref(), &table_id.to_le_bytes()], bump)]
+    pub table: UncheckedAccount<'info>,
+    #[account(init_if_needed, payer = creator, space = 8 + Invites::INIT_SPACE, seeds = [INVITES_SEED, table.key().as_ref()], bump)]
+    pub invites: Account<'info, Invites>,
+    pub system_program: Program<'info, System>,
+}
+
+pub fn set_invites(ctx: Context<SetInvites>, _table_id: u64, hashes: Vec<[u8; 32]>) -> Result<()> {
+    require!(hashes.len() <= MAX_INVITES, PokerError::TooManyInvites);
+    let inv = &mut ctx.accounts.invites;
+    inv.table = ctx.accounts.table.key();
+    inv.count = hashes.len() as u8;
+    inv.hashes = [[0; 32]; MAX_INVITES];
+    inv.hashes[..hashes.len()].copy_from_slice(&hashes);
     Ok(())
 }
 

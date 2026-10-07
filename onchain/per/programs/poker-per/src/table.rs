@@ -1,11 +1,17 @@
 use anchor_lang::prelude::*;
+use solana_sha256_hasher::hashv;
 
 use crate::constants::MAX_SEATS;
 use crate::errors::PokerError;
 
 pub const TABLE_SEED: &[u8] = b"table";
-pub const TABLE_VERSION: u8 = 1;
-pub const TABLE_RESERVED: usize = 120;
+pub const LEDGER_SEED: &[u8] = b"ledger";
+pub const DECK_SEED: &[u8] = b"deck";
+pub const HAND_SEED: &[u8] = b"hand";
+pub const INVITES_SEED: &[u8] = b"invites";
+pub const TABLE_VERSION: u8 = 2;
+pub const TABLE_RESERVED: usize = 96;
+pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
 pub const STATUS_CREATED: u8 = 0;
@@ -17,8 +23,11 @@ pub const STATUS_CLOSED: u8 = 2;
 /// The only token tables accept for now: wrapped SOL. The stake cap is denominated in it.
 pub const WSOL_MINT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
 
-/// One seat. An empty seat has `player == Pubkey::default()`. Fixed size on purpose: no `Option`,
-/// so every field sits at a fixed byte offset for indexers (lesson from M1).
+/// Lamports the creator puts on the table PDA at creation. The table sponsors the rent of its
+/// rollup-only accounts (ledger, deck, 9 hands) and their permissions inside the rollup.
+pub const TABLE_SPONSOR_LAMPORTS: u64 = 3_000_000;
+
+/// One seat. An empty seat has `player == Pubkey::default()`.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, InitSpace, PartialEq, Debug)]
 pub struct Seat {
     pub player: Pubkey,
@@ -34,11 +43,9 @@ impl Seat {
     }
 }
 
-/// A cash-game table. Created on L1, then delegated to the TEE rollup where all money moves.
-///
-/// Money model: the table's escrow is the associated token account of this PDA for `mint`.
-/// `escrow_owed` is what the table owes (sum of stacks + unpaid rake). Every money instruction
-/// checks the real escrow balance still covers it.
+/// The public part of a table. Delegated to the TEE rollup and committed to L1, so everything here
+/// becomes public on L1. Who sits where, stacks and money totals live in the private `Ledger`;
+/// only its fingerprint is here. Fixed layout, no `Option` (M1 lesson).
 #[account]
 #[derive(InitSpace)]
 pub struct Table {
@@ -46,7 +53,9 @@ pub struct Table {
     pub bump: u8,
     pub status: u8,
     pub max_seats: u8,
-    pub seated: u8,
+    /// Bit i set = seat i taken. Lets a new player pick a free seat without reading the ledger.
+    pub seat_mask: u16,
+    pub invite_only: bool,
     pub table_id: u64,
     pub creator: Pubkey,
     pub mint: Pubkey,
@@ -56,31 +65,102 @@ pub struct Table {
     pub max_buy_in: u64,
     /// Copied from config at creation, so later rake changes don't affect open tables.
     pub rake_bps: u16,
-    pub escrow_owed: u64,
-    pub rake_accrued: u64,
-    /// Escrow token balance seen right after the last money instruction.
-    pub escrow_balance: u64,
-    pub total_deposited: u64,
-    pub total_paid_out: u64,
-    pub total_rake_collected: u64,
-    /// Rollup clock at the last money move; part of every commit, used by the escape-hatch rule.
+    /// Rollup clock at the last money move; used by the escape-hatch rule.
     pub last_activity_ts: i64,
-    pub seats: [Seat; MAX_SEATS as usize],
+    /// sha256 of the ledger after the last money move, and how many moves there have been.
+    /// Players' clients keep their own seat record and can check it against this.
+    pub ledger_hash: [u8; 32],
+    pub ledger_seq: u64,
     pub reserved: [u8; TABLE_RESERVED],
 }
 
 impl Table {
+    pub fn seated(&self) -> u32 {
+        self.seat_mask.count_ones()
+    }
+    pub fn seat_taken(&self, i: usize) -> bool {
+        self.seat_mask & (1 << i) != 0
+    }
+}
+
+/// The private part of a table: seats, stacks and money. Rollup-only (never committed, never on
+/// L1); readable only by the players seated at the table.
+#[account]
+#[derive(InitSpace)]
+pub struct Ledger {
+    pub table: Pubkey,
+    pub seats: [Seat; MAX_SEATS as usize],
+    /// What the table owes: sum of stacks + unpaid rake.
+    pub escrow_owed: u64,
+    pub rake_accrued: u64,
+    /// Escrow token balance seen right after the last money move.
+    pub escrow_balance: u64,
+    pub total_deposited: u64,
+    pub total_paid_out: u64,
+    pub total_rake_collected: u64,
+}
+
+impl Ledger {
     pub fn seat_of(&self, player: &Pubkey) -> Option<usize> {
         self.seats.iter().position(|s| !s.is_empty() && s.player == *player)
-    }
-
-    pub fn first_empty_seat(&self) -> Option<usize> {
-        self.seats[..self.max_seats as usize].iter().position(|s| s.is_empty())
     }
 
     /// Sum of stacks + unpaid rake. Must always equal `escrow_owed`.
     pub fn computed_owed(&self) -> Option<u64> {
         self.seats.iter().try_fold(self.rake_accrued, |acc, s| acc.checked_add(s.stack))
+    }
+
+    pub fn players(&self) -> Vec<Pubkey> {
+        self.seats.iter().filter(|s| !s.is_empty()).map(|s| s.player).collect()
+    }
+
+    pub fn fingerprint(&self) -> Result<[u8; 32]> {
+        let mut bytes = Vec::with_capacity(8 + Ledger::INIT_SPACE);
+        self.try_serialize(&mut bytes)?;
+        Ok(hashv(&[&bytes]).to_bytes())
+    }
+}
+
+/// The shuffled deck of the current hand. Rollup-only and readable by nobody (M3); M4 fills it.
+#[account]
+#[derive(InitSpace)]
+pub struct Deck {
+    pub table: Pubkey,
+    pub hand_no: u64,
+    pub cards: [u8; 52],
+    pub seed: [u8; 32],
+}
+
+/// One seat's hole cards. Rollup-only and readable only by the seat's current owner. Created when a
+/// player sits and closed when they leave.
+#[account]
+#[derive(InitSpace)]
+pub struct Hand {
+    pub table: Pubkey,
+    pub seat: u8,
+    pub owner: Pubkey,
+    pub hand_no: u64,
+    pub cards: [u8; 2],
+}
+
+/// Invite list for an invite-only table. Lives on L1 (not delegated); the rollup reads a copy.
+/// Stores sha256(table || wallet), not wallets, so the public account doesn't say who's invited.
+#[account]
+#[derive(InitSpace)]
+pub struct Invites {
+    pub table: Pubkey,
+    pub count: u8,
+    pub hashes: [[u8; 32]; MAX_INVITES],
+}
+
+pub fn invite_hash(table: &Pubkey, wallet: &Pubkey) -> [u8; 32] {
+    hashv(&[table.as_ref(), wallet.as_ref()]).to_bytes()
+}
+
+impl Invites {
+    pub fn contains(&self, table: &Pubkey, wallet: &Pubkey) -> bool {
+        let h = invite_hash(table, wallet);
+        self.hashes[..self.count as usize].iter().any(|x| *x == h)
     }
 }
 
@@ -124,6 +204,7 @@ pub struct TableParams {
     pub min_buy_in: u64,
     pub max_buy_in: u64,
     pub max_seats: u8,
+    pub invite_only: bool,
 }
 
 /// Table settings must be sane and inside the program-wide stake cap.
@@ -141,7 +222,7 @@ mod tests {
     use super::*;
 
     fn params() -> TableParams {
-        TableParams { small_blind: 1, big_blind: 2, min_buy_in: 20, max_buy_in: 200, max_seats: 6 }
+        TableParams { small_blind: 1, big_blind: 2, min_buy_in: 20, max_buy_in: 200, max_seats: 6, invite_only: false }
     }
 
     #[test]
@@ -180,21 +261,33 @@ mod tests {
     }
 
     #[test]
-    fn seats() {
-        let mut t = Table {
-            version: 1, bump: 0, status: STATUS_OPEN, max_seats: 2, seated: 0, table_id: 1,
-            creator: Pubkey::default(), mint: Pubkey::default(), small_blind: 1, big_blind: 2,
-            min_buy_in: 20, max_buy_in: 200, rake_bps: 0, escrow_owed: 0, rake_accrued: 5,
-            escrow_balance: 0, total_deposited: 0, total_paid_out: 0, total_rake_collected: 0, last_activity_ts: 0,
-            seats: [Seat::default(); MAX_SEATS as usize], reserved: [0; TABLE_RESERVED],
+    fn ledger_seats_owed_and_fingerprint() {
+        let mut l = Ledger {
+            table: Pubkey::new_unique(), seats: [Seat::default(); MAX_SEATS as usize], escrow_owed: 0, rake_accrued: 5,
+            escrow_balance: 0, total_deposited: 0, total_paid_out: 0, total_rake_collected: 0,
         };
         let a = Pubkey::new_unique();
-        assert_eq!(t.first_empty_seat(), Some(0));
-        t.seats[0] = Seat { player: a, stack: 10, deposited: 10 };
-        assert_eq!(t.seat_of(&a), Some(0));
-        assert_eq!(t.first_empty_seat(), Some(1));
-        t.seats[1] = Seat { player: Pubkey::new_unique(), stack: 7, deposited: 7 };
-        assert_eq!(t.first_empty_seat(), None, "max_seats=2 caps the search even with 9 slots");
-        assert_eq!(t.computed_owed(), Some(22));
+        l.seats[3] = Seat { player: a, stack: 10, deposited: 10 };
+        assert_eq!(l.seat_of(&a), Some(3));
+        assert_eq!(l.players(), vec![a]);
+        assert_eq!(l.computed_owed(), Some(15));
+        let f1 = l.fingerprint().unwrap();
+        l.seats[3].stack = 11;
+        assert_ne!(f1, l.fingerprint().unwrap(), "any change moves the fingerprint");
+    }
+
+    #[test]
+    fn seat_mask_and_invites() {
+        let mut t_mask: u16 = 0;
+        t_mask |= 1 << 2;
+        t_mask |= 1 << 8;
+        assert_eq!(t_mask.count_ones(), 2);
+        let table = Pubkey::new_unique();
+        let (a, b) = (Pubkey::new_unique(), Pubkey::new_unique());
+        let mut inv = Invites { table, count: 1, hashes: [[0; 32]; MAX_INVITES] };
+        inv.hashes[0] = invite_hash(&table, &a);
+        assert!(inv.contains(&table, &a));
+        assert!(!inv.contains(&table, &b));
+        assert!(!inv.contains(&Pubkey::new_unique(), &a), "a hash is bound to its table");
     }
 }

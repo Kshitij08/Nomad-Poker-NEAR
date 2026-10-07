@@ -8,6 +8,7 @@ use ephemeral_rollups_sdk::anchor::ephemeral;
 pub mod constants;
 pub mod errors;
 pub mod instructions;
+pub mod private;
 pub mod state;
 pub mod table;
 
@@ -58,14 +59,22 @@ pub mod poker_per {
         instructions::table::rollback_table(ctx, table_id, creator)
     }
 
-    // ---- Rollup: money
-
-    pub fn buy_in(ctx: Context<BuyIn>, amount: u64) -> Result<()> {
-        instructions::money::buy_in(ctx, amount)
+    pub fn set_invites(ctx: Context<SetInvites>, table_id: u64, hashes: Vec<[u8; 32]>) -> Result<()> {
+        instructions::table::set_invites(ctx, table_id, hashes)
     }
 
-    pub fn cash_out(ctx: Context<CashOut>) -> Result<()> {
-        instructions::money::cash_out(ctx)
+    // ---- Rollup: private accounts and money
+
+    pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
+        instructions::money::open_table(ctx)
+    }
+
+    pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64) -> Result<()> {
+        instructions::money::buy_in(ctx, seat, amount)
+    }
+
+    pub fn cash_out(ctx: Context<CashOut>, seat: u8) -> Result<()> {
+        instructions::money::cash_out(ctx, seat)
     }
 
     pub fn collect_rake(ctx: Context<CollectRake>) -> Result<()> {

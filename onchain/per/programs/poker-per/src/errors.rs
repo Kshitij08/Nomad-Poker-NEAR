@@ -64,4 +64,14 @@ pub enum PokerError {
     TableActive,
     #[msg("Escape delay must be 0 (default) or between 60 seconds and 7 days")]
     InvalidEscapeDelay,
+    #[msg("This table is invite-only and this wallet isn't invited")]
+    NotInvited,
+    #[msg("That seat is taken")]
+    SeatTaken,
+    #[msg("Invalid seat")]
+    InvalidSeat,
+    #[msg("Too many invites")]
+    TooManyInvites,
+    #[msg("Table's private accounts aren't set up yet; call open_table")]
+    TableNotOpened,
 }

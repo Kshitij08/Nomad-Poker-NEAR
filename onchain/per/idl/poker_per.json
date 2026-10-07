@@ -66,7 +66,7 @@
         {
           "name": "config",
           "docs": [
-            "Read-only clone of the L1 config inside the rollup."
+            "Read-only copy of the L1 config inside the rollup."
           ],
           "pda": {
             "seeds": [
@@ -113,6 +113,190 @@
           }
         },
         {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "hand",
+          "writable": true
+        },
+        {
+          "name": "hand_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "hand"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "invites",
+          "docs": [
+            "Read-only copy of the L1 invite list; required only for invite-only tables."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  105,
+                  116,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
           "name": "player_token",
           "writable": true
         },
@@ -121,11 +305,25 @@
           "writable": true
         },
         {
-          "name": "in_rollup",
-          "docs": [
-            "keeps money moves off L1."
-          ],
-          "address": "Magic11111111111111111111111111111111111111"
+          "name": "rollup",
+          "accounts": [
+            {
+              "name": "magic_program",
+              "docs": [
+                "keeps these instructions off L1."
+              ],
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "vault",
+              "writable": true,
+              "address": "MagicVau1t999999999999999999999999999999999"
+            },
+            {
+              "name": "permission_program",
+              "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+            }
+          ]
         },
         {
           "name": "token_program",
@@ -133,6 +331,10 @@
         }
       ],
       "args": [
+        {
+          "name": "seat",
+          "type": "u8"
+        },
         {
           "name": "amount",
           "type": "u64"
@@ -185,6 +387,163 @@
           }
         },
         {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "hand",
+          "writable": true
+        },
+        {
+          "name": "hand_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "hand"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
           "name": "player_token",
           "writable": true
         },
@@ -193,18 +552,37 @@
           "writable": true
         },
         {
-          "name": "in_rollup",
-          "docs": [
-            "keeps money moves off L1."
-          ],
-          "address": "Magic11111111111111111111111111111111111111"
+          "name": "rollup",
+          "accounts": [
+            {
+              "name": "magic_program",
+              "docs": [
+                "keeps these instructions off L1."
+              ],
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "vault",
+              "writable": true,
+              "address": "MagicVau1t999999999999999999999999999999999"
+            },
+            {
+              "name": "permission_program",
+              "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+            }
+          ]
         },
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "seat",
+          "type": "u8"
+        }
+      ]
     },
     {
       "name": "close_table",
@@ -254,6 +632,189 @@
               }
             ]
           }
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "deck",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deck_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deck"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "address": "MagicVau1t999999999999999999999999999999999"
+        },
+        {
+          "name": "permission_program",
+          "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
         },
         {
           "name": "magic_program",
@@ -327,6 +888,29 @@
           }
         },
         {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
           "name": "escrow",
           "writable": true
         },
@@ -335,10 +919,7 @@
           "writable": true
         },
         {
-          "name": "in_rollup",
-          "docs": [
-            "keeps money moves off L1."
-          ],
+          "name": "magic_program",
           "address": "Magic11111111111111111111111111111111111111"
         },
         {
@@ -1100,6 +1681,249 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "open_table",
+      "discriminator": [
+        251,
+        98,
+        127,
+        54,
+        103,
+        12,
+        106,
+        246
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "deck",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deck_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "deck"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "rollup",
+          "accounts": [
+            {
+              "name": "magic_program",
+              "docs": [
+                "keeps these instructions off L1."
+              ],
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "vault",
+              "writable": true,
+              "address": "MagicVau1t999999999999999999999999999999999"
+            },
+            {
+              "name": "permission_program",
+              "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+            }
+          ]
         }
       ],
       "args": []
@@ -2023,6 +2847,96 @@
       ]
     },
     {
+      "name": "set_invites",
+      "discriminator": [
+        153,
+        1,
+        61,
+        185,
+        159,
+        72,
+        25,
+        11
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "table",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "table_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "invites",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  105,
+                  116,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "table_id",
+          "type": "u64"
+        },
+        {
+          "name": "hashes",
+          "type": {
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "update_config",
       "discriminator": [
         29,
@@ -2086,6 +3000,32 @@
         250,
         204,
         130
+      ]
+    },
+    {
+      "name": "Invites",
+      "discriminator": [
+        71,
+        82,
+        8,
+        3,
+        16,
+        28,
+        16,
+        193
+      ]
+    },
+    {
+      "name": "Ledger",
+      "discriminator": [
+        43,
+        41,
+        21,
+        213,
+        180,
+        176,
+        95,
+        32
       ]
     },
     {
@@ -2402,6 +3342,31 @@
       "code": 6030,
       "name": "InvalidEscapeDelay",
       "msg": "Escape delay must be 0 (default) or between 60 seconds and 7 days"
+    },
+    {
+      "code": 6031,
+      "name": "NotInvited",
+      "msg": "This table is invite-only and this wallet isn't invited"
+    },
+    {
+      "code": 6032,
+      "name": "SeatTaken",
+      "msg": "That seat is taken"
+    },
+    {
+      "code": 6033,
+      "name": "InvalidSeat",
+      "msg": "Invalid seat"
+    },
+    {
+      "code": 6034,
+      "name": "TooManyInvites",
+      "msg": "Too many invites"
+    },
+    {
+      "code": 6035,
+      "name": "TableNotOpened",
+      "msg": "Table's private accounts aren't set up yet; call open_table"
     }
   ],
   "types": [
@@ -2449,10 +3414,6 @@
             "type": "pubkey"
           },
           {
-            "name": "player",
-            "type": "pubkey"
-          },
-          {
             "name": "seat",
             "type": "u8"
           },
@@ -2478,10 +3439,6 @@
         "fields": [
           {
             "name": "table",
-            "type": "pubkey"
-          },
-          {
-            "name": "player",
             "type": "pubkey"
           },
           {
@@ -2654,6 +3611,99 @@
       }
     },
     {
+      "name": "Invites",
+      "docs": [
+        "Invite list for an invite-only table. Lives on L1 (not delegated); the rollup reads a copy.",
+        "Stores sha256(table || wallet), not wallets, so the public account doesn't say who's invited."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "count",
+            "type": "u8"
+          },
+          {
+            "name": "hashes",
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                16
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ledger",
+      "docs": [
+        "The private part of a table: seats, stacks and money. Rollup-only (never committed, never on",
+        "L1); readable only by the players seated at the table."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table",
+            "type": "pubkey"
+          },
+          {
+            "name": "seats",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Seat"
+                  }
+                },
+                9
+              ]
+            }
+          },
+          {
+            "name": "escrow_owed",
+            "docs": [
+              "What the table owes: sum of stacks + unpaid rake."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "rake_accrued",
+            "type": "u64"
+          },
+          {
+            "name": "escrow_balance",
+            "docs": [
+              "Escrow token balance seen right after the last money move."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_deposited",
+            "type": "u64"
+          },
+          {
+            "name": "total_paid_out",
+            "type": "u64"
+          },
+          {
+            "name": "total_rake_collected",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "RakeCollected",
       "type": {
         "kind": "struct",
@@ -2676,8 +3726,7 @@
     {
       "name": "Seat",
       "docs": [
-        "One seat. An empty seat has `player == Pubkey::default()`. Fixed size on purpose: no `Option`,",
-        "so every field sits at a fixed byte offset for indexers (lesson from M1)."
+        "One seat. An empty seat has `player == Pubkey::default()`."
       ],
       "type": {
         "kind": "struct",
@@ -2706,11 +3755,9 @@
     {
       "name": "Table",
       "docs": [
-        "A cash-game table. Created on L1, then delegated to the TEE rollup where all money moves.",
-        "",
-        "Money model: the table's escrow is the associated token account of this PDA for `mint`.",
-        "`escrow_owed` is what the table owes (sum of stacks + unpaid rake). Every money instruction",
-        "checks the real escrow balance still covers it."
+        "The public part of a table. Delegated to the TEE rollup and committed to L1, so everything here",
+        "becomes public on L1. Who sits where, stacks and money totals live in the private `Ledger`;",
+        "only its fingerprint is here. Fixed layout, no `Option` (M1 lesson)."
       ],
       "type": {
         "kind": "struct",
@@ -2732,8 +3779,15 @@
             "type": "u8"
           },
           {
-            "name": "seated",
-            "type": "u8"
+            "name": "seat_mask",
+            "docs": [
+              "Bit i set = seat i taken. Lets a new player pick a free seat without reading the ledger."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "invite_only",
+            "type": "bool"
           },
           {
             "name": "table_id",
@@ -2771,58 +3825,35 @@
             "type": "u16"
           },
           {
-            "name": "escrow_owed",
-            "type": "u64"
-          },
-          {
-            "name": "rake_accrued",
-            "type": "u64"
-          },
-          {
-            "name": "escrow_balance",
-            "docs": [
-              "Escrow token balance seen right after the last money instruction."
-            ],
-            "type": "u64"
-          },
-          {
-            "name": "total_deposited",
-            "type": "u64"
-          },
-          {
-            "name": "total_paid_out",
-            "type": "u64"
-          },
-          {
-            "name": "total_rake_collected",
-            "type": "u64"
-          },
-          {
             "name": "last_activity_ts",
             "docs": [
-              "Rollup clock at the last money move; part of every commit, used by the escape-hatch rule."
+              "Rollup clock at the last money move; used by the escape-hatch rule."
             ],
             "type": "i64"
           },
           {
-            "name": "seats",
+            "name": "ledger_hash",
+            "docs": [
+              "sha256 of the ledger after the last money move, and how many moves there have been.",
+              "Players' clients keep their own seat record and can check it against this."
+            ],
             "type": {
               "array": [
-                {
-                  "defined": {
-                    "name": "Seat"
-                  }
-                },
-                9
+                "u8",
+                32
               ]
             }
+          },
+          {
+            "name": "ledger_seq",
+            "type": "u64"
           },
           {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                120
+                96
               ]
             }
           }
@@ -2897,6 +3928,10 @@
           {
             "name": "max_seats",
             "type": "u8"
+          },
+          {
+            "name": "invite_only",
+            "type": "bool"
           }
         ]
       }

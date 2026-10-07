@@ -1,0 +1,34 @@
+{
+  "ranAt": "2026-10-07T12:56:07.819Z",
+  "note": "every probe below is made WITHOUT a TEE login token",
+  "table": "EDzedVak5SfFeaTdMNFwofSyLPNzEXrCdKSDkZWYBivn",
+  "ledger": "3PzJd8nEwNE9iU5eMwswBzRLT9Q4r9RtmWHbV2DVk7Hd",
+  "p2": "FWepwxztiYE4ZRhX3bFEBJRezZHY4KsZA6Fdx5dHAFtm",
+  "control_getAccountInfo_ledger": "null (hidden, as expected)",
+  "B1_ledgerPermissionAccount": {
+    "bytes": 101,
+    "containsP2Wallet": true
+  },
+  "B1_seat1HandPermissionAccount": {
+    "bytes": 101,
+    "containsP2Wallet": true
+  },
+  "B1_permissionEndpoint": {
+    "http": 200,
+    "containsP2Wallet": true,
+    "body": "{\"authorizedUsers\":[\"6Pzbm2QQorrazztVNrXWh2kmCEeukTcsnGDmtPpRjvVR\",\"FWepwxztiYE4ZRhX3bFEBJRezZHY4KsZA6Fdx5dHAFtm\"]}"
+  },
+  "B2_simulateTransaction": {
+    "error": null,
+    "ledgerReturned": true,
+    "ledgerBytes": 520,
+    "ledgerDecoded": {
+      "seat1Player": "FWepwxztiYE4ZRhX3bFEBJRezZHY4KsZA6Fdx5dHAFtm",
+      "seat1Stack": "1900000",
+      "escrowOwed": "2000000"
+    },
+    "handReturned": true,
+    "deckReturned": true
+  },
+  "cleanedUp": true
+}
