@@ -76,7 +76,7 @@ export function app() {
   // The game (a web page on any host) reads the public routes directly, so they allow any origin.
   // The audit routes don't: they're for the operator's own tools, never a browser page.
   a.use((req, res, next) => {
-    if (req.path.startsWith("/audit")) return next();
+    if (req.path.toLowerCase().startsWith("/audit")) return next(); // Express routing ignores case
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.set("Access-Control-Allow-Headers", "content-type");

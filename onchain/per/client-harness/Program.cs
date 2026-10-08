@@ -111,7 +111,7 @@ static class Program
             // connection, not the transaction's signer.
             var sessionRpc = await Login(http, p.SessionKey);
             p.WalletRpc = sessionRpc;
-            p.Session = new PerTableSession(table, publicRpc, sessionRpc, new LocalSigner(p.SessionKey));
+            p.Session = new PerTableSession(table, publicRpc, sessionRpc, new LocalSigner(p.SessionKey), p.Wallet.PublicKey);
             var pl = p;
             p.Session.Events += e => { pl.Events.Add(e); if (e is HoleCardsDealtEvent h && h.Seat != pl.Seat && h.Card0.Rank != 0) pl.Leaks.Add($"saw seat {h.Seat}'s cards live"); };
             players.Add(p);
@@ -186,16 +186,22 @@ static class Program
         {
             Check($"{p.Name} never saw another seat's cards during a hand", p.Leaks.Count == 0, p.Leaks);
             var other = players.First(o => o != p);
-            var peek = await (await Login(http, p.SessionKey)).GetAccount(addrs.Hand(other.Seat));
-            Check($"{p.Name}'s session key can't read {other.Name}'s hand account", peek == null);
+            // Same login, same moment: its own hand account is readable (positive control), the other's isn't.
+            var login = await Login(http, p.SessionKey);
+            var own = await login.GetAccount(addrs.Hand(p.Seat));
+            var peek = await login.GetAccount(addrs.Hand(other.Seat));
+            Check($"{p.Name}'s session key reads its own hand account but not {other.Name}'s", own != null && peek == null, new { ownReadable = own != null, otherReadable = peek != null });
             var kinds = p.Events.Select(e => e.GetType().Name).Distinct().ToArray();
             Check($"{p.Name}'s event stream has the full hand cycle", new[] { "HandStartedEvent", "BlindPostedEvent", "HoleCardsDealtEvent", "TurnStartedEvent", "PlayerActedEvent", "HandEndedEvent" }.All(kinds.Contains), kinds);
+            // Showdown cards must be the cards of the public record of that hand (both seats, both cards).
             var showdowns = p.Events.OfType<ShowdownEvent>().ToList();
-            Check($"{p.Name}: showdowns show both players' cards only after the hand", showdowns.All(sd => sd.Entries.Length == 2), showdowns.Count);
+            Check($"{p.Name}: every showdown shows two real hands", showdowns.All(sd => sd.Entries.Length == 2 && sd.Entries.All(en => en.Card0.Rank != 0 && en.Card1.Rank != 0)), showdowns.Count);
         }
         // Both views agree, and match the settled ledger.
         var stacks = players.Select(p => p.Session.Ledger?.Seats[p.Seat].Stack ?? 0).ToArray();
-        Check("both players' views agree on the actions", players[0].Events.OfType<PlayerActedEvent>().Count() == players[1].Events.OfType<PlayerActedEvent>().Count(),
+        // The same actions, in the same order, with the same amounts, in both players' views.
+        string Seq(Player p) => string.Join(",", p.Events.OfType<PlayerActedEvent>().Select(a => $"{a.Seat}:{a.Action}:{a.Amount}"));
+        Check("both players' views show the same action sequence", Seq(players[0]) == Seq(players[1]) && Seq(players[0]).Length > 0,
             players.Select(p => p.Events.OfType<PlayerActedEvent>().Count()));
 
         // A hand another session started in the last loop pass may still be running: play it out.
