@@ -73,6 +73,17 @@ export function app() {
   // anything a client writes into X-Forwarded-For itself sits further left and is ignored.
   // (Checked with /audit/whoami: with 1 hop, req.ip was Railway's edge, rotating per request.)
   a.set("trust proxy", 2);
+  // The game (a web page on any host) reads the public routes directly, so they allow any origin.
+  // The audit routes don't: they're for the operator's own tools, never a browser page.
+  a.use((req, res, next) => {
+    if (req.path.startsWith("/audit")) return next();
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "content-type");
+    res.set("Access-Control-Max-Age", "600");
+    if (req.method === "OPTIONS") { res.status(204).end(); return; }
+    next();
+  });
   a.use(express.json({ limit: "64kb" }));
   a.use(rateLimit(Number(process.env.RATE_PER_MINUTE ?? 120)));
 

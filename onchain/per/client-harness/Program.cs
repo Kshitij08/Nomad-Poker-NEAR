@@ -198,10 +198,22 @@ static class Program
         Check("both players' views agree on the actions", players[0].Events.OfType<PlayerActedEvent>().Count() == players[1].Events.OfType<PlayerActedEvent>().Count(),
             players.Select(p => p.Events.OfType<PlayerActedEvent>().Count()));
 
+        // A hand another session started in the last loop pass may still be running: play it out.
+        for (var until = DateTime.UtcNow.AddMinutes(3); DateTime.UtcNow < until;)
+        {
+            foreach (var p in players) await p.Session.Poll();
+            if (players.All(p => p.Session.Table.HandState == PerGame.HandIdle)) break;
+            foreach (var p in players)
+            {
+                var g = p.Session.Ledger?.Game;
+                if (p.Session.Table.HandState != PerGame.HandPlaying || g == null || g.ToAct != p.Seat) continue;
+                try { await p.Session.Act(PerGame.Legal(g).CanCheck ? ActionType.Check : ActionType.Fold, 0); }
+                catch (PerTxException) { /* raced */ }
+            }
+            await Task.Delay(1000);
+        }
         foreach (var p in players)
         {
-            await p.Session.Poll();
-            if (p.Session.Table.HandState != PerGame.HandIdle) await Task.Delay(3000);
             var sig = await p.WalletRpc.Send(new[] { PerIx.CashOut(addrs, p.Wallet.PublicKey, p.Seat) }, new WalletLike(p.Wallet));
             Check($"{p.Name} cashes out (wallet signs)", sig != null, sig);
         }
