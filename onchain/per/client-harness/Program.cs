@@ -22,6 +22,16 @@ sealed class Http : IPerHttp
     static readonly HttpClient C = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     public async Task<(int, string)> Get(string url) { var r = await C.GetAsync(url); return ((int)r.StatusCode, await r.Content.ReadAsStringAsync()); }
     public async Task<(int, string)> Post(string url, string json) { var r = await C.PostAsync(url, new StringContent(json, Encoding.UTF8, "application/json")); return ((int)r.StatusCode, await r.Content.ReadAsStringAsync()); }
+    public Task Delay(int ms) => Task.Delay(ms);
+}
+
+/// <summary>Stands in for Phantom: signs whole transactions (WalletBase.SignTransaction's contract).</summary>
+sealed class WalletLike : IPerTransactionSigner
+{
+    readonly Account _a;
+    public WalletLike(Account a) { _a = a; }
+    public PublicKey PublicKey => _a.PublicKey;
+    public Task<Solana.Unity.Rpc.Models.Transaction> SignTransaction(Solana.Unity.Rpc.Models.Transaction tx) { tx.Sign(_a); return Task.FromResult(tx); }
 }
 
 static class Program
@@ -96,8 +106,12 @@ static class Program
         foreach (var (name, seat) in new[] { ("p1", 0), ("p2", 3) })
         {
             var p = new Player { Name = name, Wallet = LoadKey(name), SessionKey = new Account(), Seat = seat };
-            p.WalletRpc = await Login(http, p.Wallet);
-            p.Session = new PerTableSession(table, publicRpc, await Login(http, p.SessionKey), new LocalSigner(p.SessionKey));
+            // The wallet never logs in to the rollup (Phantom would have to sign a login message): its
+            // transactions go through the session key's logged-in connection. The login authenticates the
+            // connection, not the transaction's signer.
+            var sessionRpc = await Login(http, p.SessionKey);
+            p.WalletRpc = sessionRpc;
+            p.Session = new PerTableSession(table, publicRpc, sessionRpc, new LocalSigner(p.SessionKey));
             var pl = p;
             p.Session.Events += e => { pl.Events.Add(e); if (e is HoleCardsDealtEvent h && h.Seat != pl.Seat && h.Card0.Rank != 0) pl.Leaks.Add($"saw seat {h.Seat}'s cards live"); };
             players.Add(p);
@@ -108,14 +122,14 @@ static class Program
         // A seat left from an earlier run keeps that run's reader (rebuys keep it), so leave first.
         foreach (var p in players)
         {
-            try { await p.WalletRpc.Send(new[] { PerIx.CashOut(addrs, p.Wallet.PublicKey, p.Seat) }, new LocalSigner(p.Wallet)); Console.WriteLine($"{p.Name}: left a seat from an earlier run"); }
+            try { await p.WalletRpc.Send(new[] { PerIx.CashOut(addrs, p.Wallet.PublicKey, p.Seat) }, new WalletLike(p.Wallet)); Console.WriteLine($"{p.Name}: left a seat from an earlier run"); }
             catch (PerTxException e) when (e.ErrorName == "NotSeated" || e.ErrorName == "InvalidSeat") { }
         }
         // Sit down: the wallet signs the buy-in (Phantom's job in the game), naming the session key as reader.
         foreach (var p in players)
         {
-            var sig = await p.WalletRpc.Send(new[] { PerIx.BuyIn(addrs, p.Wallet.PublicKey, p.Seat, 2_000_000, p.SessionKey.PublicKey) }, new LocalSigner(p.Wallet));
-            Check($"{p.Name} buys in at seat {p.Seat} (wallet signs; session key becomes the reader)", sig != null, sig);
+            var sig = await p.WalletRpc.Send(new[] { PerIx.BuyIn(addrs, p.Wallet.PublicKey, p.Seat, 2_000_000, p.SessionKey.PublicKey) }, new WalletLike(p.Wallet));
+            Check($"{p.Name} buys in at seat {p.Seat} (the wallet signs the whole transaction and never logs in; the session key's login carries it and becomes the reader)", sig != null, sig);
         }
         foreach (var p in players) await p.Session.Poll();
         Check("each session finds its own seat through its reader key", players.All(p => p.Session.MySeat == p.Seat), players.Select(p => p.Session.MySeat));
@@ -188,7 +202,7 @@ static class Program
         {
             await p.Session.Poll();
             if (p.Session.Table.HandState != PerGame.HandIdle) await Task.Delay(3000);
-            var sig = await p.WalletRpc.Send(new[] { PerIx.CashOut(addrs, p.Wallet.PublicKey, p.Seat) }, new LocalSigner(p.Wallet));
+            var sig = await p.WalletRpc.Send(new[] { PerIx.CashOut(addrs, p.Wallet.PublicKey, p.Seat) }, new WalletLike(p.Wallet));
             Check($"{p.Name} cashes out (wallet signs)", sig != null, sig);
         }
         Outcomes.Add(new { table = table.Key, handsVerifiedByBothPlayers = verified / 2, finalStacks = stacks });
