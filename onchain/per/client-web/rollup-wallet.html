@@ -16,6 +16,7 @@
 <body><main>
   <h1>Rollup wallet (devnet)</h1>
   <p>Private tables play with wSOL held in MagicBlock's TEE rollup. Move devnet SOL in before you buy in, and back out when you're done. Phantom must be on devnet (Settings › Developer settings › Testnet mode). Test build only; in-game deposits come in M9.</p>
+  <p><b>Cost:</b> the first deposit from a wallet also pays about 0.0064 SOL of one-time rent for the accounts it creates (your wSOL account, its rollup copy and delegation records), so 0.005 SOL in costs about 0.0114 SOL. Later deposits and withdrawals cost about 0.0005 SOL each.</p>
   <div class="row"><button id="connect">Connect Phantom</button><span id="who">not connected</span></div>
   <div class="row"><input id="amount" type="number" min="0.003" step="0.001" value="0.005"> SOL <button id="deposit">Deposit into the rollup</button></div>
   <div class="row"><button id="balance" class="secondary">Show rollup balance</button><button id="withdraw" class="secondary">Withdraw everything</button></div>
