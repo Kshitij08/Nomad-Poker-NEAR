@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rollup wallet (devnet)</title>
+<style>
+  :root { --bg:#0f141b; --fg:#e8ecf1; --muted:#9aa5b1; --accent:#2f9e73; --panel:#18202a; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:24px 16px; }
+  h1 { font-size:22px; margin:0 0 4px; } p { color:var(--muted); margin:0 0 16px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:10px 14px; font-size:15px; cursor:pointer; }
+  button.secondary { background:#3a4654; }
+  input { background:var(--panel); color:var(--fg); border:1px solid #2c3742; border-radius:6px; padding:9px; width:90px; font-size:15px; }
+  code, #who { font-family:ui-monospace, monospace; font-size:13px; word-break:break-all; }
+  pre { background:var(--panel); padding:12px; border-radius:6px; white-space:pre-wrap; min-height:120px; font-size:13px; }
+</style></head>
+<body><main>
+  <h1>Rollup wallet (devnet)</h1>
+  <p>Private tables play with wSOL held in MagicBlock's TEE rollup. Move devnet SOL in before you buy in, and back out when you're done. Phantom must be on devnet (Settings › Developer settings › Testnet mode). Test build only; in-game deposits come in M9.</p>
+  <div class="row"><button id="connect">Connect Phantom</button><span id="who">not connected</span></div>
+  <div class="row"><input id="amount" type="number" min="0.003" step="0.001" value="0.005"> SOL <button id="deposit">Deposit into the rollup</button></div>
+  <div class="row"><button id="balance" class="secondary">Show rollup balance</button><button id="withdraw" class="secondary">Withdraw everything</button></div>
+  <pre id="log"></pre>
+  <p><a href="./" style="color:var(--accent)">Back to the game</a></p>
+</main><script src="rollup-wallet.js"></script></body></html>
