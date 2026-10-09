@@ -1,14 +1,20 @@
-// The keeper: keeps every live table moving and archives its hands. It only ever sends three
+// The keeper: keeps every live table moving and archives its hands. It only ever sends four
 // permissionless instructions, each signed by the keeper key:
 //   - `tick`: begins a dealt hand, or times out a player whose turn is up;
 //   - `open_log`: shows a finished hand's action log to the auditor, which then downloads it;
 //   - `commit_table`: copies the table (with its latest hand record) to Solana, at most every
-//     15 minutes and only when it changed.
+//     15 minutes and only when it changed;
+//   - `close_table_keyed` (M9b): closes a table left empty and idle for the config's escape delay. Any
+//     unpaid rake goes to the dev wallet and any leftover to the host's game balance; the host
+//     reclaims the rent.
 // It can't move funds, deal, act for a player or read live cards: the program allows none of that
 // to anyone but the players and the VRF.
 import { createHash } from "crypto";
 import { ComputeBudgetProgram, PublicKey } from "@solana/web3.js";
 import { DELEGATION_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
+import { NATIVE_MINT, getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
+import { MAGIC_CONTEXT_ID, MAGIC_PROGRAM_ID, permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { CONFIG_PDA, MAGIC_FEE_VAULT, PROGRAM_ID, TeeSession, accountsOf, coder, l1, rollupPrograms, toPublic } from "./chain";
 import { config } from "./config";
 import { event, pool } from "./db";
@@ -234,7 +240,45 @@ async function step(address: PublicKey, auditorOurs: boolean) {
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc());
     return; // the table changed: the next loop works from a fresh read
   }
+  if (await maybeCloseAbandoned(key, address, t, program, now)) return;
   await maybeCommit(key, address, t, program);
+}
+
+const HAND_IDLE = 0;
+const DEFAULT_ESCAPE_IDLE_SECS = 3_600;
+let configCache: { at: number; devWallet: PublicKey; idleSecs: number } | null = null;
+async function programConfig() {
+  if (configCache && Date.now() - configCache.at < 300_000) return configCache;
+  const info = await l1.getAccountInfo(CONFIG_PDA);
+  const c = coder.decode("config", info!.data);
+  return (configCache = { at: Date.now(), devWallet: c.devWallet, idleSecs: c.escapeIdleSecs || DEFAULT_ESCAPE_IDLE_SECS });
+}
+
+/** M9b: closes a table nobody sits at that's been idle for the config's escape delay (the program
+ *  checks the same rule; anyone may do it). Returns true when it closed the table. */
+async function maybeCloseAbandoned(key: string, address: PublicKey, t: any, program: any, now: number) {
+  if (!config.closeAbandoned || t.seatMask !== 0 || t.handState !== HAND_IDLE) return false;
+  const cfg = await programConfig();
+  if (now - Number(t.lastActivityTs) < cfg.idleSecs + 30) return false; // a margin for the rollup clock
+  const acc = accountsOf(address);
+  const vault = PublicKey.findProgramAddressSync([Buffer.from("vault"), t.creator.toBuffer()], PROGRAM_ID)[0];
+  const vaultToken = getAssociatedTokenAddressSync(NATIVE_MINT, vault, true);
+  // The host's game balance gets any leftover, if the host has one (an absent optional account would fail).
+  const hasVault = !!(await (await keeperTee.get()).getAccountInfo(vaultToken, "processed").catch(() => null));
+  let closed = false;
+  await attempt(key, "close_table_keyed", async () => {
+    const sig = await program.methods.closeTableKeyed(new (require("@coral-xyz/anchor").BN)(0)).accountsPartial({
+      signer: config.keeper.publicKey, config: CONFIG_PDA, table: address, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), deck: acc.deck,
+      escrow: getAssociatedTokenAddressSync(NATIVE_MINT, address, true), creatorVaultToken: hasVault ? vaultToken : null,
+      devToken: getAssociatedTokenAddressSync(NATIVE_MINT, cfg.devWallet), record: acc.record, log: acc.log, logPermission: acc.logPermission,
+      vault: rollupPrograms.vault, permissionProgram: rollupPrograms.permissionProgram, magicFeeVault: MAGIC_FEE_VAULT,
+      instructions: SYSVAR_INSTRUCTIONS_PUBKEY, magicContext: MAGIC_CONTEXT_ID, magicProgram: MAGIC_PROGRAM_ID,
+    } as any).rpc();
+    closed = true;
+    live.delete(key);
+    return `abandoned (idle ${now - Number(t.lastActivityTs)} s) ${sig}`;
+  });
+  return closed;
 }
 
 let lastPrune = 0;

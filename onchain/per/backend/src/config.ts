@@ -32,6 +32,8 @@ export const config = {
   /** Matches the program's COMMIT_EVERY_SECS: an outsider may commit a table once per 15 minutes. */
   commitEverySecs: Number(process.env.COMMIT_EVERY_SECS ?? 900),
   keeperEnabled: process.env.KEEPER_ENABLED !== "false",
+  /** M9b: close tables left empty and idle for the config's escape delay. */
+  closeAbandoned: process.env.CLOSE_ABANDONED !== "false",
 };
 
 if (config.archiveKey.length !== 32) throw new Error("ARCHIVE_KEY_HEX must be 32 bytes of hex");
