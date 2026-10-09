@@ -21,16 +21,21 @@ use solana_instructions_sysvar::{load_current_index_checked, load_instruction_at
 use anchor_spl::associated_token::{self, get_associated_token_address, AssociatedToken};
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use ephemeral_rollups_sdk::access_control::structs::PERMISSION_SEED;
-use ephemeral_rollups_sdk::consts::{MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID};
+use ephemeral_rollups_sdk::anchor::commit;
+use ephemeral_rollups_sdk::consts::{EPHEMERAL_VAULT_ID, MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID};
+use ephemeral_rollups_sdk::ephem::{FoldableIntentBuilder, MagicIntentBundleBuilder};
 
 use crate::constants::{CONFIG_SEED, CONFIG_VERSION, TEE_VALIDATOR};
 use crate::errors::PokerError;
 use crate::instructions::money::*;
-use crate::instructions::money::{buy_in_flow, cash_out_flow};
+use crate::instructions::money::{buy_in_flow, cash_out_flow, close_flow, MAGIC_FEE_VAULT_SEED};
 use crate::instructions::table::{DELEGATION_PROGRAM_ID, ESPL_PROGRAM_ID};
 use crate::private::{write, Sponsor};
 use crate::state::Config;
-use crate::table::{rake_for, Hand, Invites, Ledger, Seat, Table, HAND_IDLE, HAND_SEED, INVITES_SEED, LEDGER_SEED, STATUS_OPEN, TABLE_SEED, WSOL_MINT};
+use crate::table::{
+    may_request_escape, rake_for, Hand, Invites, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, INVITES_SEED, LEDGER_SEED, LOG_SEED, RECORD_SEED,
+    STATUS_CLOSED, STATUS_OPEN, TABLE_SEED, WSOL_MINT,
+};
 
 pub const VAULT_SEED: &[u8] = b"vault";
 /// A play key's authorization lasts at most this long (the client asks for 7 days).
@@ -481,6 +486,98 @@ pub fn vault_balance(ctx: Context<VaultBalance>, expires: i64) -> Result<()> {
     verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet.key(), &ctx.accounts.play_key.key(), expires)?;
     set_return_data(&ctx.accounts.vault_token.amount.to_le_bytes());
     Ok(())
+}
+
+// ---------------------------------------------------------------------------------------- rollup: closing a hosted table (M9b)
+
+#[commit]
+#[derive(Accounts)]
+pub struct CloseTableKeyed<'info> {
+    /// The creator's play key (with `expires`), or anyone once the table is abandoned (`expires` 0).
+    pub signer: Signer<'info>,
+    #[account(seeds = [CONFIG_SEED], bump = config.bump, constraint = config.version == CONFIG_VERSION @ PokerError::ConfigOutdated)]
+    pub config: Box<Account<'info, Config>>,
+    #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
+    pub table: Box<Account<'info, Table>>,
+    #[account(mut, seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
+    pub ledger: Box<Account<'info, Ledger>>,
+    /// CHECK: permission PDA of the ledger; its readers are removed here.
+    #[account(mut, seeds = [PERMISSION_SEED, ledger.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub ledger_permission: UncheckedAccount<'info>,
+    /// CHECK: deck PDA; kept, its contents erased.
+    #[account(mut, seeds = [DECK_SEED, table.key().as_ref()], bump)]
+    pub deck: UncheckedAccount<'info>,
+    #[account(mut, address = get_associated_token_address(&table.key(), &table.mint))]
+    pub escrow: Box<Account<'info, TokenAccount>>,
+    /// The creator's game vault account: receives any leftover in the escrow. Optional (a creator
+    /// without a game balance leaves the leftover in the escrow).
+    #[account(mut, address = get_associated_token_address(
+        &Pubkey::find_program_address(&[VAULT_SEED, table.creator.as_ref()], &crate::ID).0, &table.mint))]
+    pub creator_vault_token: Option<Box<Account<'info, TokenAccount>>>,
+    /// The dev wallet's token account: unpaid rake is collected into it first. Needed only when there
+    /// is unpaid rake.
+    #[account(mut, token::mint = table.mint, token::authority = config.dev_wallet)]
+    pub dev_token: Option<Box<Account<'info, TokenAccount>>>,
+    /// CHECK: public hand record PDA; closed here.
+    #[account(mut, seeds = [RECORD_SEED, table.key().as_ref()], bump)]
+    pub record: UncheckedAccount<'info>,
+    /// CHECK: hand log PDA; kept.
+    #[account(mut, seeds = [LOG_SEED, table.key().as_ref()], bump)]
+    pub log: UncheckedAccount<'info>,
+    /// CHECK: permission PDA of the hand log; its readers are removed here.
+    #[account(mut, seeds = [PERMISSION_SEED, log.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub log_permission: UncheckedAccount<'info>,
+    /// CHECK: MagicBlock's rent vault for rollup-only accounts.
+    #[account(mut, address = EPHEMERAL_VAULT_ID)]
+    pub vault: UncheckedAccount<'info>,
+    /// CHECK: MagicBlock's permission program.
+    #[account(address = PERMISSION_PROGRAM_ID)]
+    pub permission_program: UncheckedAccount<'info>,
+    /// CHECK: the TEE validator's magic fee vault; the table pays its own commit (see `commit_table`).
+    #[account(mut, seeds = [MAGIC_FEE_VAULT_SEED, TEE_VALIDATOR.as_ref()], bump, seeds::program = crate::instructions::table::DELEGATION_PROGRAM_ID)]
+    pub magic_fee_vault: UncheckedAccount<'info>,
+    /// CHECK: the instructions sysvar (used when a play key signs).
+    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
+    pub instructions: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+/// `close_table` without the creator's wallet in the rollup (M9b). Signed by the creator's play key
+/// (its signed message, `expires` set), or by anyone once the table has been empty and idle for the
+/// config's escape delay (`expires` 0; the backend's keeper closes abandoned tables this way). Unpaid
+/// rake goes to the dev wallet first; any leftover goes to the creator's game balance. The table pays
+/// the commit, so the signer needs no SOL in the rollup. The creator reclaims the rent on L1 as usual.
+pub fn close_table_keyed(ctx: Context<CloseTableKeyed>, expires: i64) -> Result<()> {
+    let creator = ctx.accounts.table.creator;
+    if expires != 0 {
+        verify_play_key(&ctx.accounts.instructions, &creator, &ctx.accounts.signer.key(), expires)?;
+    } else {
+        require!(ctx.accounts.table.seat_mask == 0, PokerError::TableNotEmpty);
+        may_request_escape(ctx.accounts.table.last_activity_ts, Clock::get()?.unix_timestamp, ctx.accounts.config.escape_idle_secs())?;
+    }
+    let rake = ctx.accounts.ledger.rake_accrued;
+    if rake > 0 {
+        let dev = ctx.accounts.dev_token.as_ref().ok_or(PokerError::NothingToCollect)?;
+        pay_from_escrow(&ctx.accounts.escrow, dev, &ctx.accounts.table, &ctx.accounts.token_program, rake)?;
+        let ledger = &mut ctx.accounts.ledger;
+        ledger.rake_accrued = 0;
+        ledger.escrow_owed = ledger.escrow_owed.checked_sub(rake).ok_or(PokerError::MathOverflow)?;
+        ledger.total_rake_collected = ledger.total_rake_collected.checked_add(rake).ok_or(PokerError::MathOverflow)?;
+        ctx.accounts.escrow.reload()?;
+    }
+    close_flow!(ctx, creator_vault_token, {
+        let t = &ctx.accounts.table;
+        let (id, bump) = (t.table_id.to_le_bytes(), [t.bump]);
+        let ts = table_seeds(t, &id, &bump);
+        MagicIntentBundleBuilder::new(
+            ctx.accounts.table.to_account_info(),
+            ctx.accounts.magic_context.to_account_info(),
+            ctx.accounts.magic_program.to_account_info(),
+        )
+        .magic_fee_vault(ctx.accounts.magic_fee_vault.to_account_info())
+        .commit_and_undelegate(&[ctx.accounts.table.to_account_info()])
+        .build_and_invoke_signed(&[&ts])?
+    })
 }
 
 #[event]

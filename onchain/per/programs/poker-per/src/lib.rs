@@ -115,6 +115,10 @@ pub mod poker_per {
         instructions::vault::vault_balance(ctx, expires)
     }
 
+    pub fn close_table_keyed(ctx: Context<CloseTableKeyed>, expires: i64) -> Result<()> {
+        instructions::vault::close_table_keyed(ctx, expires)
+    }
+
     pub fn collect_rake(ctx: Context<CollectRake>) -> Result<()> {
         instructions::money::collect_rake(ctx)
     }

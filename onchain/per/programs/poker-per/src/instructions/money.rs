@@ -18,7 +18,7 @@ use ephemeral_rollups_sdk::ephem::{FoldableIntentBuilder, MagicIntentBundleBuild
 use crate::constants::{CONFIG_SEED, CONFIG_VERSION, TEE_VALIDATOR};
 use crate::instructions::table::DELEGATION_PROGRAM_ID;
 
-pub(crate) const MAGIC_FEE_VAULT_SEED: &[u8] = b"magic-fee-vault";
+pub const MAGIC_FEE_VAULT_SEED: &[u8] = b"magic-fee-vault";
 use crate::errors::PokerError;
 use crate::private::{write, Sponsor};
 use crate::state::Config;
@@ -503,16 +503,16 @@ pub struct CloseTable<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// The normal way out: the creator closes an empty table. Anything left in the escrow goes to the
-/// creator. Its private accounts stay, private and readable by nobody (so its transaction history
-/// stays private), its public record is deleted, then it's committed to L1 as closed and handed
-/// back to this program, where `reclaim_table` returns its rent.
-pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
-    let a = &ctx.accounts;
+/// Close shared by `close_table` (the creator signs and pays the commit) and `close_table_keyed` (the
+/// creator's play key or, for an abandoned table, anyone; the table pays). `$sweep_to` names the
+/// optional account that gets any leftover in the escrow; `$commit` commits and undelegates the table.
+macro_rules! close_flow {
+    ($ctx:ident, $sweep_to:ident, $commit:expr) => {{
+    let a = &$ctx.accounts;
     require!(a.table.status == STATUS_OPEN, PokerError::TableNotOpen);
     require!(a.table.seat_mask == 0 && a.ledger.escrow_owed == 0, PokerError::TableNotEmpty);
     let leftover = a.escrow.amount;
-    if let (true, Some(to)) = (leftover > 0, a.creator_token.as_ref()) {
+    if let (true, Some(to)) = (leftover > 0, a.$sweep_to.as_ref()) {
         pay_from_escrow(&a.escrow, to, &a.table, &a.token_program, leftover)?;
     }
     {
@@ -521,7 +521,7 @@ pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
         let (table_info, magic, vault, perm) = (a.table.to_account_info(), a.magic_program.to_account_info(), a.vault.to_account_info(), a.permission_program.to_account_info());
         let sp = Sponsor { table: &table_info, table_seeds: &ts, vault: &vault, magic_program: &magic, permission_program: &perm };
         let table_key = a.table.key();
-        let ledger_bump = [ctx.bumps.ledger];
+        let ledger_bump = [$ctx.bumps.ledger];
         let ledger_seeds: &[&[u8]] = &[LEDGER_SEED, table_key.as_ref(), &ledger_bump];
         // The ledger, deck and log are kept, private, with no readers at all: while an account's
         // permission exists the TEE withholds the contents of every transaction that touched it, so
@@ -531,7 +531,7 @@ pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
         let ledger_info = a.ledger.to_account_info();
         sp.set_readers(&ledger_info, ledger_seeds, &a.ledger_permission.to_account_info(), &[])?;
         // The deck never had readers.
-        let log_bump = [ctx.bumps.log];
+        let log_bump = [$ctx.bumps.log];
         let log_seeds: &[&[u8]] = &[LOG_SEED, table_key.as_ref(), &log_bump];
         if !a.log_permission.data_is_empty() {
             sp.set_readers(&a.log.to_account_info(), log_seeds, &a.log_permission.to_account_info(), &[])?;
@@ -545,31 +545,41 @@ pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
     // Erase what the kept accounts hold: the deck (last seeds, their committers' wallets, cards,
     // log secret), the hand log (last hand's actions, readers, secret) and the ledger's game,
     // salt and seats. Only each account's discriminator stays.
-    for info in [ctx.accounts.deck.to_account_info(), ctx.accounts.log.to_account_info()] {
+    for info in [$ctx.accounts.deck.to_account_info(), $ctx.accounts.log.to_account_info()] {
         let mut data = info.try_borrow_mut_data()?;
         if data.len() > 8 {
             data[8..].fill(0);
         }
     }
     {
-        let ledger = &mut ctx.accounts.ledger;
+        let ledger = &mut $ctx.accounts.ledger;
         ledger.game = Default::default();
         ledger.salt = [0; 32];
         ledger.seats = Default::default();
     }
-    let table = &mut ctx.accounts.table;
+    let table = &mut $ctx.accounts.table;
     table.status = STATUS_CLOSED;
     table.last_activity_ts = Clock::get()?.unix_timestamp;
     table.exit(&crate::ID)?;
-    MagicIntentBundleBuilder::new(
+    $commit;
+    emit!(TableClosed { table: $ctx.accounts.table.key() });
+    Ok(())
+    }};
+}
+pub(crate) use close_flow;
+
+/// The normal way out: the creator closes an empty table. Anything left in the escrow goes to the
+/// creator. Its private accounts stay, private and readable by nobody (so its transaction history
+/// stays private), its public record is deleted, then it's committed to L1 as closed and handed
+/// back to this program, where `reclaim_table` returns its rent.
+pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
+    close_flow!(ctx, creator_token, MagicIntentBundleBuilder::new(
         ctx.accounts.creator.to_account_info(),
         ctx.accounts.magic_context.to_account_info(),
         ctx.accounts.magic_program.to_account_info(),
     )
     .commit_and_undelegate(&[ctx.accounts.table.to_account_info()])
-    .build_and_invoke()?;
-    emit!(TableClosed { table: ctx.accounts.table.key() });
-    Ok(())
+    .build_and_invoke()?)
 }
 
 // ---------------------------------------------------------------------------------------- helpers
