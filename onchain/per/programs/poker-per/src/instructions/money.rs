@@ -24,7 +24,7 @@ use crate::private::{write, Sponsor};
 use crate::state::Config;
 use crate::dealing::NO_CARD;
 use crate::table::{
-    rake_for, Deck, Hand, HandLog, HandRecord, Invites, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, INVITES_SEED,
+    invite_admits, rake_for, Deck, Hand, HandLog, HandRecord, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED,
     COMMIT_EVERY_SECS, LEDGER_SEED, LOG_SEED, RECORD_SEED, STATUS_CLOSED, STATUS_OPEN, TABLE_SEED,
 };
 
@@ -178,9 +178,10 @@ pub struct BuyIn<'info> {
     /// CHECK: permission PDA of the hand.
     #[account(mut, seeds = [PERMISSION_SEED, hand.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
     pub hand_permission: UncheckedAccount<'info>,
-    /// Read-only copy of the L1 invite list; required only for invite-only tables.
-    #[account(seeds = [INVITES_SEED, table.key().as_ref()], bump)]
-    pub invites: Option<Box<Account<'info, Invites>>>,
+    /// CHECK: the table's invite list, needed only at invite-only tables: its private list in the
+    /// rollup (M9c) or, for tables hosted before, a read-only copy of its L1 list. Address and layout
+    /// are checked in `invite_admits`.
+    pub invites: Option<UncheckedAccount<'info>>,
     #[account(mut, token::mint = table.mint, token::authority = player)]
     pub player_token: Box<Account<'info, TokenAccount>>,
     #[account(mut, address = get_associated_token_address(&table.key(), &table.mint))]
@@ -192,7 +193,7 @@ pub struct BuyIn<'info> {
 /// Buy-in shared by `buy_in` (the wallet signs and pays) and `vault_buy_in` (a play key signs and the
 /// wallet's game vault pays): everything but who pays. `$transfer` moves `amount` into the escrow.
 macro_rules! buy_in_flow {
-    ($ctx:ident, $seat:expr, $amount:expr, $reader:expr, $player:expr, $transfer:expr) => {{
+    ($ctx:ident, $seat:expr, $amount:expr, $reader:expr, $player:expr, $code:expr, $transfer:expr) => {{
     let (seat, amount, reader): (u8, u64, Pubkey) = ($seat, $amount, $reader);
     let config = &$ctx.accounts.config;
     require!(!config.paused, PokerError::Paused);
@@ -226,7 +227,8 @@ macro_rules! buy_in_flow {
             require!(amount >= min_buy_in, PokerError::BuyInTooSmall);
             if invite_only {
                 let inv = $ctx.accounts.invites.as_ref().ok_or(PokerError::NotInvited)?;
-                require!(inv.contains(&table_key, &player), PokerError::NotInvited);
+                let code: Option<&[u8; 16]> = $code;
+                require!(invite_admits(&inv.to_account_info(), &table_key, &player, code)?, PokerError::NotInvited);
             }
             require!(reader != Pubkey::default() && reader != player && reader != auditor, PokerError::InvalidReader);
             // A reader key belongs to one seat: never another seat's reader or anyone seated's wallet.
@@ -289,7 +291,7 @@ pub(crate) use buy_in_flow;
 /// reader chosen at sit-down and ignores `reader`.
 pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Result<()> {
     let player = ctx.accounts.player.key();
-    buy_in_flow!(ctx, seat, amount, reader, player, token::transfer(
+    buy_in_flow!(ctx, seat, amount, reader, player, None, token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.key(),
             Transfer { from: ctx.accounts.player_token.to_account_info(), to: ctx.accounts.escrow.to_account_info(), authority: ctx.accounts.player.to_account_info() },

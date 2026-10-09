@@ -116,4 +116,8 @@ pub enum PokerError {
     NotSeatKey,
     #[msg("This game balance can't be used safely: someone else set up its rollup account first (it isn't public, or isn't handed to the TEE validator)")]
     VaultBlocked,
+    #[msg("Create the private invite list first (a call with no list and no link), then set it: the first call's data wouldn't be withheld")]
+    InvitesNotReady,
+    #[msg("This table still has its Solana invite list; close it first (close_invites)")]
+    OldInviteList,
 }

@@ -185,6 +185,7 @@ static class Program
         var host = await FundedPlayer(http, l1, deployer, 80_000_000, 5_000_000);
         var guest = await FundedPlayer(http, l1, deployer, 40_000_000, 5_000_000);
         var stranger = await FundedPlayer(http, l1, deployer, 40_000_000, 5_000_000);
+        var linked = await FundedPlayer(http, l1, deployer, 40_000_000, 5_000_000);
         var id = PerHost.NewTableId();
         var tableKey = PerHost.TableAddress(host.wallet.PublicKey, id);
         var t = new PerTableAddresses(tableKey);
@@ -193,18 +194,39 @@ static class Program
         Console.WriteLine($"host {host.wallet.PublicKey.Key}, table {tableKey.Key}");
 
         Check("host creates and hands over an invite-only table (one wallet transaction)", await Try(() => l1.Send(PerHost.CreateAndDelegate(host.wallet.PublicKey, id, p), new WalletLike(host.wallet))));
-        Check("host invites the guest (wallet transaction)", await Try(() => l1.Send(new[] { PerHost.SetInvites(host.wallet.PublicKey, id, new[] { guest.wallet.PublicKey }) }, new WalletLike(host.wallet))));
-        var inv = Invites.Decode(await l1.GetAccount(PerHost.InvitesAddress(tableKey), "confirmed"));
-        Check("the invite list holds the guest and not the stranger", PerHost.IsInvited(inv, tableKey, guest.wallet.PublicKey) && !PerHost.IsInvited(inv, tableKey, stranger.wallet.PublicKey));
         await Task.Delay(5000);
         Check("host's play key opens the table (no wallet)", await Try(() => host.er.Send(new[] { PerHost.Open(t, host.key.Key.PublicKey) }, new LocalSigner(host.key.Key))));
-        await Task.Delay(8000);
+        // M9c: the private list (host + guest) and an invite link, by the play key; nothing on Solana.
+        var code = PerHost.NewInviteCode();
+        var steps = PerHost.SetInvitesKeyedSteps(t, host.key, new[] { host.wallet.PublicKey, guest.wallet.PublicKey }, PerHost.InviteCodeHash(tableKey, code));
+        Check("a first call that already carries the list is refused", !await Try(() => host.er.Send(new[] { host.key.Check(), steps[1] }, new LocalSigner(host.key.Key))));
+        Check("host's play key creates the private list, then sets it and the link (no wallet)", await Try(() => host.er.Send(new[] { host.key.Check(), steps[0] }, new LocalSigner(host.key.Key))) && await Try(() => host.er.Send(new[] { host.key.Check(), steps[1] }, new LocalSigner(host.key.Key))));
+        Check("no invite list on Solana", await l1.GetAccount(PerHost.InvitesAddress(tableKey), "confirmed") == null && await l1.GetAccount(PerHost.PrivateInvitesAddress(tableKey), "confirmed") == null);
+        await Task.Delay(3000);
 
-        var invites = PerHost.InvitesAddress(tableKey);
+        var invites = PerHost.PrivateInvitesAddress(tableKey);
         var sReader = new Account();
-        Check("the stranger can't buy in (not invited)", !await Try(() => stranger.er.Send(new[] { stranger.key.Check(), PerVault.BuyIn(t, stranger.key, 0, 2_000_000, sReader.PublicKey, invites) }, new LocalSigner(stranger.key.Key))));
+        Check("the stranger can't buy in (not invited)", !await Try(() => stranger.er.Send(new[] { stranger.key.Check(), PerVault.BuyIn(t, stranger.key, 1, 2_000_000, sReader.PublicKey, invites) }, new LocalSigner(stranger.key.Key))));
+        Check("the stranger can't buy in with a made-up code", !await Try(() => stranger.er.Send(new[] { stranger.key.Check(), PerVault.BuyIn(t, stranger.key, 1, 2_000_000, sReader.PublicKey, invites, PerHost.NewInviteCode()) }, new LocalSigner(stranger.key.Key))));
         var gReader = new Account();
-        Check("the guest buys in from the game balance", await Try(() => guest.er.Send(new[] { guest.key.Check(), PerVault.BuyIn(t, guest.key, 0, 2_000_000, gReader.PublicKey, invites) }, new LocalSigner(guest.key.Key))));
+        Check("the guest buys in from the game balance (private list)", await Try(() => guest.er.Send(new[] { guest.key.Check(), PerVault.BuyIn(t, guest.key, 0, 2_000_000, gReader.PublicKey, invites) }, new LocalSigner(guest.key.Key))));
+        var lReader = new Account();
+        Check("a player with the invite link's code buys in", await Try(() => linked.er.Send(new[] { linked.key.Check(), PerVault.BuyIn(t, linked.key, 1, 2_000_000, lReader.PublicKey, invites, code) }, new LocalSigner(linked.key.Key))));
+        var lRpc = await Login(http, lReader);
+        Check("the link player leaves (table key)", await Try(() => lRpc.Send(new[] { PerVault.CashOut(t, lReader.PublicKey, linked.wallet.PublicKey, 1, 0) }, new LocalSigner(lReader))));
+
+        // A pre-M9c L1 list (set here for an unused id: the instruction only derives the table's address) and
+        // its rent back with close_invites.
+        var oldId = PerHost.NewTableId();
+        Check("legacy: an L1 invite list (wallet transaction)", await Try(() => l1.Send(new[] { PerHost.SetInvites(host.wallet.PublicKey, oldId, new[] { guest.wallet.PublicKey }) }, new WalletLike(host.wallet))));
+        await Task.Delay(4000); // a confirmed read can lag the send by a node
+        var oldInv = Invites.Decode(await l1.GetAccount(PerHost.InvitesAddress(PerHost.TableAddress(host.wallet.PublicKey, oldId)), "confirmed"));
+        Check("legacy: it holds the guest and not the stranger", PerHost.IsInvited(oldInv, PerHost.TableAddress(host.wallet.PublicKey, oldId), guest.wallet.PublicKey) && !PerHost.IsInvited(oldInv, PerHost.TableAddress(host.wallet.PublicKey, oldId), stranger.wallet.PublicKey));
+        var b0 = await SolBalance(l1, host.wallet.PublicKey);
+        Check("legacy: close_invites (C# builder) lands", await Try(() => l1.Send(new[] { PerHost.CloseInvites(host.wallet.PublicKey, oldId) }, new WalletLike(host.wallet))));
+        await Task.Delay(4000);
+        var back0 = (long)(await SolBalance(l1, host.wallet.PublicKey)) - (long)b0;
+        Check("legacy: its rent (less the fee) came back", back0 > 3_000_000, back0);
 
         var config = Config.Decode(await l1.GetAccount(t.Config, "confirmed"));
         var devWallet = new PublicKey(config.DevWallet);
@@ -223,6 +245,7 @@ static class Program
         Check("the closed table is back on Solana", back);
         var before = await SolBalance(l1, host.wallet.PublicKey);
         Check("host reclaims the rent (wallet transaction)", await Try(() => l1.Send(new[] { PerHost.Reclaim(host.wallet.PublicKey, id) }, new WalletLike(host.wallet))));
+        await Task.Delay(4000);
         var got = (long)(await SolBalance(l1, host.wallet.PublicKey)) - (long)before;
         Check("rent came back", got > 10_000_000, got);
         Outcomes.Add(new { host = host.wallet.PublicKey.Key, table = tableKey.Key, reclaimedLamports = got });

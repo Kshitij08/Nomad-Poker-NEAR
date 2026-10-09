@@ -646,6 +646,26 @@ pub fn set_invites(ctx: Context<SetInvites>, _table_id: u64, hashes: Vec<[u8; 32
     Ok(())
 }
 
+/// Closes a table's L1 invite list and returns its rent to the creator (M9c). New tables keep their
+/// invite list privately in the rollup (`set_invites_keyed`); this is for lists made before. Creator
+/// only, any time: without the list nobody new can sit at an invite-only table, which only affects the
+/// creator's own table.
+#[derive(Accounts)]
+#[instruction(table_id: u64)]
+pub struct CloseInvites<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
+    /// CHECK: the table's address, derived from the creator; not loaded (it may be delegated or gone).
+    #[account(seeds = [TABLE_SEED, creator.key().as_ref(), &table_id.to_le_bytes()], bump)]
+    pub table: UncheckedAccount<'info>,
+    #[account(mut, close = creator, seeds = [INVITES_SEED, table.key().as_ref()], bump)]
+    pub invites: Account<'info, Invites>,
+}
+
+pub fn close_invites(_ctx: Context<CloseInvites>, _table_id: u64) -> Result<()> {
+    Ok(())
+}
+
 #[event]
 pub struct TableCreated {
     pub table: Pubkey,

@@ -79,6 +79,10 @@ pub mod poker_per {
         instructions::table::set_invites(ctx, table_id, hashes)
     }
 
+    pub fn close_invites(ctx: Context<CloseInvites>, table_id: u64) -> Result<()> {
+        instructions::table::close_invites(ctx, table_id)
+    }
+
     // ---- Rollup: private accounts and money
 
     pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
@@ -101,6 +105,14 @@ pub mod poker_per {
 
     pub fn vault_buy_in(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64) -> Result<()> {
         instructions::vault::vault_buy_in(ctx, seat, amount, reader, expires)
+    }
+
+    pub fn vault_buy_in_code(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64, code: [u8; 16]) -> Result<()> {
+        instructions::vault::vault_buy_in_code(ctx, seat, amount, reader, expires, code)
+    }
+
+    pub fn set_invites_keyed(ctx: Context<SetInvitesKeyed>, expires: i64, hashes: Option<Vec<[u8; 16]>>, code_hash: Option<[u8; 32]>) -> Result<()> {
+        instructions::vault::set_invites_keyed(ctx, expires, hashes, code_hash)
     }
 
     pub fn vault_cash_out(ctx: Context<VaultCashOut>, seat: u8, expires: i64) -> Result<()> {

@@ -33,8 +33,8 @@ use crate::instructions::table::{DELEGATION_PROGRAM_ID, ESPL_PROGRAM_ID};
 use crate::private::{write, Sponsor};
 use crate::state::Config;
 use crate::table::{
-    rake_for, Hand, Invites, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, INVITES_SEED, LEDGER_SEED, LOG_SEED, RECORD_SEED,
-    STATUS_CLOSED, STATUS_OPEN, TABLE_SEED, WSOL_MINT,
+    invite_admits, rake_for, Hand, Ledger, PrivateInvites, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, LEDGER_SEED,
+    INVITES_SEED, LOG_SEED, MAX_INVITES, PRIVATE_INVITES_SEED, RECORD_SEED, STATUS_CLOSED, STATUS_OPEN, TABLE_SEED, WSOL_MINT,
 };
 
 pub const VAULT_SEED: &[u8] = b"vault";
@@ -352,8 +352,8 @@ pub struct VaultBuyIn<'info> {
     /// CHECK: permission PDA of the hand.
     #[account(mut, seeds = [PERMISSION_SEED, hand.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
     pub hand_permission: UncheckedAccount<'info>,
-    #[account(seeds = [INVITES_SEED, table.key().as_ref()], bump)]
-    pub invites: Option<Box<Account<'info, Invites>>>,
+    /// CHECK: the table's invite list (see `BuyIn::invites`); checked in `invite_admits`.
+    pub invites: Option<UncheckedAccount<'info>>,
     #[account(mut, address = get_associated_token_address(&table.key(), &table.mint))]
     pub escrow: Box<Account<'info, TokenAccount>>,
     pub rollup: RollupPrograms<'info>,
@@ -363,10 +363,21 @@ pub struct VaultBuyIn<'info> {
 /// `buy_in` paid from the wallet's game vault, signed by a play key the wallet authorized. The seat
 /// belongs to the wallet, exactly as if the wallet had signed.
 pub fn vault_buy_in(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64) -> Result<()> {
+    vault_buy_in_with(ctx, seat, amount, reader, expires, None)
+}
+
+/// `vault_buy_in` at an invite-only table with the secret code from the table's invite link (M9c), for
+/// a wallet that isn't on the table's invite list. The code is checked against the table's private
+/// invite list; the TEE withholds this transaction, so the code stays secret.
+pub fn vault_buy_in_code(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64, code: [u8; 16]) -> Result<()> {
+    vault_buy_in_with(ctx, seat, amount, reader, expires, Some(&code))
+}
+
+fn vault_buy_in_with(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64, code: Option<&[u8; 16]>) -> Result<()> {
     let wallet = ctx.accounts.wallet.key();
     verify_play_key(&ctx.accounts.instructions, &wallet, &ctx.accounts.play_key.key(), expires)?;
     let vault_bump = [ctx.bumps.vault];
-    buy_in_flow!(ctx, seat, amount, reader, wallet, token::transfer(
+    buy_in_flow!(ctx, seat, amount, reader, wallet, code, token::transfer(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
             Transfer { from: ctx.accounts.vault_token.to_account_info(), to: ctx.accounts.escrow.to_account_info(), authority: ctx.accounts.vault.to_account_info() },
@@ -589,6 +600,75 @@ pub fn close_table_keyed(ctx: Context<CloseTableKeyed>, expires: i64) -> Result<
         .commit_and_undelegate(&[ctx.accounts.table.to_account_info()])
         .build_and_invoke_signed(&[&ts])?
     })
+}
+
+// ---------------------------------------------------------------------------------------- rollup: private invites (M9c)
+
+#[derive(Accounts)]
+pub struct SetInvitesKeyed<'info> {
+    /// The creator's play key.
+    pub play_key: Signer<'info>,
+    /// The table sponsors the private list's rent in the rollup.
+    #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
+    pub table: Box<Account<'info, Table>>,
+    /// CHECK: the table's rollup-only private invite list, created here the first time.
+    #[account(mut, seeds = [PRIVATE_INVITES_SEED, table.key().as_ref()], bump)]
+    pub invites: UncheckedAccount<'info>,
+    /// CHECK: permission PDA of the invite list (no readers, ever).
+    #[account(mut, seeds = [PERMISSION_SEED, invites.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub invites_permission: UncheckedAccount<'info>,
+    /// CHECK: the table's pre-M9c L1 invite list (the rollup's copy); must not exist, so a table never has
+    /// two lists and an old one can't keep admitting wallets the private list dropped (M9c review).
+    #[account(seeds = [INVITES_SEED, table.key().as_ref()], bump)]
+    pub legacy_invites: UncheckedAccount<'info>,
+    /// CHECK: the instructions sysvar, for the creator's signature check.
+    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
+    pub instructions: UncheckedAccount<'info>,
+    pub rollup: RollupPrograms<'info>,
+}
+
+/// Sets an open table's private invite list (M9c), signed by the creator's play key: no wallet prompt and
+/// no L1 rent. `hashes` (16-byte `private_invite_hash`es) replaces the wallet list and `code_hash`
+/// (`invite_code_hash` of the invite link's code, zeros = no link) replaces the link; `None` keeps
+/// either as it is. The list has no readers, and the TEE withholds every transaction that touches it.
+pub fn set_invites_keyed(ctx: Context<SetInvitesKeyed>, expires: i64, hashes: Option<Vec<[u8; 16]>>, code_hash: Option<[u8; 32]>) -> Result<()> {
+    let a = &ctx.accounts;
+    verify_play_key(&a.instructions, &a.table.creator, &a.play_key.key(), expires)?;
+    require!(a.table.status == STATUS_OPEN, PokerError::TableNotOpen);
+    if let Some(h) = &hashes {
+        require!(h.len() <= MAX_INVITES, PokerError::TooManyInvites);
+    }
+    require!(a.legacy_invites.data_is_empty(), PokerError::OldInviteList);
+    let table_key = a.table.key();
+    let (id, bump) = (a.table.table_id.to_le_bytes(), [a.table.bump]);
+    let ts = table_seeds(&a.table, &id, &bump);
+    let (table_info, magic, vault, perm) = (a.table.to_account_info(), a.rollup.magic_program.to_account_info(), a.rollup.vault.to_account_info(), a.rollup.permission_program.to_account_info());
+    let sp = Sponsor { table: &table_info, table_seeds: &ts, vault: &vault, magic_program: &magic, permission_program: &perm };
+    let inv_bump = [ctx.bumps.invites];
+    let inv_seeds: &[&[u8]] = &[PRIVATE_INVITES_SEED, table_key.as_ref(), &inv_bump];
+    let info = a.invites.to_account_info();
+    let mut inv = if info.data_is_empty() {
+        // The first call only creates the list and its permission. The TEE withholds a transaction
+        // because it touches a permissioned account; this one's account has no permission yet when it
+        // arrives, so it must carry no list and no link (M9c review).
+        require!(hashes.is_none() && code_hash.is_none(), PokerError::InvitesNotReady);
+        sp.create_account(&info, inv_seeds, 8 + PrivateInvites::INIT_SPACE)?;
+        PrivateInvites { table: table_key, count: 0, hashes: [[0; 16]; MAX_INVITES], code_hash: [0; 32] }
+    } else {
+        let data = info.try_borrow_data()?;
+        PrivateInvites::try_deserialize(&mut &data[..])?
+    };
+    sp.create_permission(&info, inv_seeds, &a.invites_permission.to_account_info(), &[])?;
+    if let Some(h) = hashes {
+        inv.count = h.len() as u8;
+        inv.hashes = [[0; 16]; MAX_INVITES];
+        inv.hashes[..h.len()].copy_from_slice(&h);
+    }
+    if let Some(c) = code_hash {
+        inv.code_hash = c;
+    }
+    write(&info, &inv)?;
+    Ok(())
 }
 
 #[event]

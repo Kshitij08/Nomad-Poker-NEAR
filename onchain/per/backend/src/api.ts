@@ -106,7 +106,15 @@ export function app() {
     res.status(ok ? 200 : 503).json({ ok, db: probe.db, l1Slot: probe.l1Slot, rollupSlot: probe.rollupSlot, keeper, auditor: config.auditor.publicKey.toBase58() });
   });
 
-  a.get("/tables", async (_req, res) => {
+  a.get("/tables", async (req, res) => {
+    // M9c: ?creator=<wallet> lists that host's tables in any state (open, closed, not yet live), so a
+    // host sees "Your tables" on any device. The creator is public on every table, on Solana too.
+    if (req.query.creator !== undefined) {
+      if (typeof req.query.creator !== "string" || !isAddress(req.query.creator)) { res.status(400).json({ error: "bad creator address" }); return; }
+      const r = await pool.query("select * from tables where creator = $1 order by first_seen desc limit 100", [req.query.creator]);
+      res.json(r.rows.map(tableRow));
+      return;
+    }
     const r = await pool.query("select * from tables where status = 1 and delegated order by updated_at desc limit 200");
     res.json(r.rows.map(tableRow));
   });

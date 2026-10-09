@@ -10,6 +10,7 @@ pub const LEDGER_SEED: &[u8] = b"ledger";
 pub const DECK_SEED: &[u8] = b"deck";
 pub const HAND_SEED: &[u8] = b"hand";
 pub const INVITES_SEED: &[u8] = b"invites";
+pub const PRIVATE_INVITES_SEED: &[u8] = b"invites_p";
 pub const RECORD_SEED: &[u8] = b"record";
 pub const LOG_SEED: &[u8] = b"log";
 pub const TABLE_VERSION: u8 = 2;
@@ -379,6 +380,62 @@ impl Invites {
     }
 }
 
+/// M9c: the invite list of an invite-only table, kept private in the rollup instead of on L1. It is a
+/// rollup-only account with no readers (only the program sees it), set by the creator's play key, and
+/// every transaction touching it is withheld by the TEE. So nobody can check who's invited, and it
+/// costs the host no L1 rent. Holds 16-byte truncated wallet hashes (a play-key transaction has room
+/// for 16 of them, not 16 full hashes) and the hash of the table's invite-link code, if any.
+#[account]
+#[derive(InitSpace)]
+pub struct PrivateInvites {
+    pub table: Pubkey,
+    pub count: u8,
+    pub hashes: [[u8; 16]; MAX_INVITES],
+    /// sha256(table || code) of the invite link's secret code; all zeros = no link.
+    pub code_hash: [u8; 32],
+}
+
+pub fn private_invite_hash(table: &Pubkey, wallet: &Pubkey) -> [u8; 16] {
+    let h = invite_hash(table, wallet);
+    let mut out = [0u8; 16];
+    out.copy_from_slice(&h[..16]);
+    out
+}
+
+pub fn invite_code_hash(table: &Pubkey, code: &[u8; 16]) -> [u8; 32] {
+    hashv(&[b"invite-code", table.as_ref(), code.as_ref()]).to_bytes()
+}
+
+impl PrivateInvites {
+    pub fn admits(&self, table: &Pubkey, wallet: &Pubkey, code: Option<&[u8; 16]>) -> bool {
+        let h = private_invite_hash(table, wallet);
+        let listed = self.hashes[..(self.count as usize).min(MAX_INVITES)].iter().any(|x| *x == h);
+        let by_code = match code {
+            Some(c) => self.code_hash != [0; 32] && invite_code_hash(table, c) == self.code_hash,
+            None => false,
+        };
+        listed || by_code
+    }
+}
+
+/// Whether `wallet` may sit at an invite-only table. `invites` is the table's private invite list
+/// (M9c) or, for tables hosted before it, the L1 list; anything else admits nobody.
+pub fn invite_admits(invites: &AccountInfo, table: &Pubkey, wallet: &Pubkey, code: Option<&[u8; 16]>) -> Result<bool> {
+    if invites.owner != &crate::ID || invites.data_is_empty() {
+        return Ok(false);
+    }
+    let data = invites.try_borrow_data()?;
+    if *invites.key == Pubkey::find_program_address(&[PRIVATE_INVITES_SEED, table.as_ref()], &crate::ID).0 {
+        let inv = PrivateInvites::try_deserialize(&mut &data[..])?;
+        Ok(inv.table == *table && inv.admits(table, wallet, code))
+    } else if *invites.key == Pubkey::find_program_address(&[INVITES_SEED, table.as_ref()], &crate::ID).0 {
+        let inv = Invites::try_deserialize(&mut &data[..])?;
+        Ok(inv.contains(table, wallet))
+    } else {
+        Ok(false)
+    }
+}
+
 /// Rake on a buy-in, rounded up so small or split buy-ins can't avoid it.
 pub fn rake_for(amount: u64, rake_bps: u16) -> Result<u64> {
     let r = (amount as u128)
@@ -560,5 +617,23 @@ mod tests {
         assert!(inv.contains(&table, &a));
         assert!(!inv.contains(&table, &b));
         assert!(!inv.contains(&Pubkey::new_unique(), &a), "a hash is bound to its table");
+    }
+
+    #[test]
+    fn private_invites_and_codes() {
+        let table = Pubkey::new_unique();
+        let (a, b) = (Pubkey::new_unique(), Pubkey::new_unique());
+        let mut inv = PrivateInvites { table, count: 1, hashes: [[0; 16]; MAX_INVITES], code_hash: [0; 32] };
+        inv.hashes[0] = private_invite_hash(&table, &a);
+        assert!(inv.admits(&table, &a, None));
+        assert!(!inv.admits(&table, &b, None));
+        assert!(!inv.admits(&table, &b, Some(&[0; 16])), "no link set: no code works, not even zeros");
+        let code = [7u8; 16];
+        inv.code_hash = invite_code_hash(&table, &code);
+        assert!(inv.admits(&table, &b, Some(&code)));
+        assert!(!inv.admits(&table, &b, Some(&[8u8; 16])));
+        assert!(!inv.admits(&Pubkey::new_unique(), &b, Some(&code)), "a code is bound to its table");
+        inv.count = 0;
+        assert!(!inv.admits(&table, &a, None), "only the first `count` hashes count");
     }
 }

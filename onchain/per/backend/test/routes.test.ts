@@ -27,6 +27,14 @@ async function main() {
 
   const lobby = await req("GET", "/tables");
   check("GET /tables: 200, an array of live tables", lobby.status === 200 && Array.isArray(lobby.body) && lobby.body.every((t: any) => t.live === true), { status: lobby.status });
+  check("GET /tables?creator=<bad>: 400", (await req("GET", "/tables?creator=not-an-address")).status === 400);
+  check("GET /tables?creator=a&creator=b (array): 400", (await req("GET", "/tables?creator=11111111111111111111111111111111&creator=x")).status === 400);
+  const mine = await req("GET", "/tables?creator=11111111111111111111111111111111");
+  check("GET /tables?creator=<unknown>: 200, empty", mine.status === 200 && Array.isArray(mine.body) && mine.body.length === 0, { status: mine.status });
+  if (process.env.HOST_WALLET) {
+    const h = await req("GET", `/tables?creator=${process.env.HOST_WALLET}`);
+    check("GET /tables?creator=<a host>: only that host's tables, closed ones included", h.status === 200 && h.body.length > 0 && h.body.every((t: any) => t.creator === process.env.HOST_WALLET), { n: h.body?.length, open: h.body?.filter((t: any) => t.open).length });
+  }
   check("GET /tables/<bad address>: 400", (await req("GET", "/tables/not-an-address")).status === 400);
   check("GET /tables/<unknown>: 404", (await req("GET", "/tables/11111111111111111111111111111111")).status === 404);
   check("GET /tables/<unknown>/hands: 200, empty", (await req("GET", "/tables/11111111111111111111111111111111/hands")).body?.length === 0);
