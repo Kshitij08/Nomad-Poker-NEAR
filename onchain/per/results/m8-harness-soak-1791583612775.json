@@ -1,0 +1,158 @@
+{
+  "suite": "m8-harness-soak",
+  "ranAt": "2026-10-09T22:06:52.776035Z",
+  "pass": 4,
+  "fail": 1,
+  "outcomes": [
+    {
+      "name": "5 tables played 502 hands in all (asked 500)",
+      "status": "PASS",
+      "detail": [
+        101,
+        100,
+        101,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "every finished hand verified by every seat (deck, button, own seed and cards, action log)",
+      "status": "FAIL",
+      "detail": {
+        "verified": 1504,
+        "checks": 1506
+      }
+    },
+    {
+      "name": "token reconciliation: the players' game balances changed by exactly minus the rake on every buy-in",
+      "status": "PASS",
+      "detail": {
+        "delta": -3900000,
+        "rake": 3900000
+      }
+    },
+    {
+      "name": "no player saw another seat's cards during a hand",
+      "status": "PASS",
+      "detail": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "tables": 5,
+      "handsPerTable": 100,
+      "playersPerTable": 3,
+      "hands": 502,
+      "minutes": 20.8,
+      "perTable": [
+        {
+          "table": "68qP4ctAm1vAHnkju1w8FCz2XfJV9BAn18jPzh42Rpfj",
+          "hands": 101,
+          "checks": 303,
+          "verified": 303,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 5,
+          "silentTurns": 131,
+          "delta": -2100000,
+          "rake": 2100000,
+          "boughtIn": 42000000,
+          "reclaimed": true,
+          "minutes": 18.3,
+          "fatal": null,
+          "problems": []
+        },
+        {
+          "table": "3J27t9Y7pyHyc3exjA8DKnHyW3Dvsg7BiVGYGrUy2BE8",
+          "hands": 100,
+          "checks": 300,
+          "verified": 299,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 6,
+          "silentTurns": 130,
+          "delta": 0,
+          "rake": 0,
+          "boughtIn": 0,
+          "reclaimed": false,
+          "minutes": 0.0,
+          "fatal": "sendTransaction failed: HandInProgress: A hand is in progress",
+          "problems": [
+            {
+              "hand": 32,
+              "seat": 1,
+              "Problems": [
+                "button should be seat 2, record says 0"
+              ],
+              "log": []
+            }
+          ]
+        },
+        {
+          "table": "Bj1bmrHfwwWs9Fiw8XRp3fJBrHY4K6KJ7L7e1L3HLRwG",
+          "hands": 101,
+          "checks": 303,
+          "verified": 302,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 4,
+          "silentTurns": 131,
+          "delta": -1800000,
+          "rake": 1800000,
+          "boughtIn": 36000000,
+          "reclaimed": true,
+          "minutes": 18.6,
+          "fatal": null,
+          "problems": [
+            {
+              "hand": 42,
+              "seat": 0,
+              "Problems": [
+                "button should be seat 1, record says 2"
+              ],
+              "log": []
+            }
+          ]
+        },
+        {
+          "table": "9UifMcuoUrBSvWBD7HqXPuRJpQkYitUExMWrW8geYksz",
+          "hands": 100,
+          "checks": 300,
+          "verified": 300,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 3,
+          "silentTurns": 92,
+          "delta": 0,
+          "rake": 0,
+          "boughtIn": 0,
+          "reclaimed": false,
+          "minutes": 0.0,
+          "fatal": "sendTransaction failed: HandInProgress: A hand is in progress",
+          "problems": []
+        },
+        {
+          "table": "5UfjtBC3HQyfQCBJkNhLu5ygytn1Cszge7CbnaiWJZiv",
+          "hands": 100,
+          "checks": 300,
+          "verified": 300,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 3,
+          "silentTurns": 110,
+          "delta": 0,
+          "rake": 0,
+          "boughtIn": 0,
+          "reclaimed": false,
+          "minutes": 0.0,
+          "fatal": "sendTransaction failed: HandInProgress: A hand is in progress",
+          "problems": []
+        }
+      ]
+    }
+  ]
+}

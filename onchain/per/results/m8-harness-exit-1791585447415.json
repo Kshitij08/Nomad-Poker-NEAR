@@ -1,0 +1,42 @@
+{
+  "suite": "m8-harness-exit",
+  "ranAt": "2026-10-09T22:37:27.4157389Z",
+  "pass": 7,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "the game balance holds the deposit",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "vault_exit (C# builder) takes 0.007 SOL out of the rollup (wallet signs on Solana)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "it lands on the vault on Solana as SOL",
+      "status": "PASS",
+      "detail": 7000000
+    },
+    {
+      "name": "vault_payout (C# builders: payout + unwrap) pays the wallet",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the wallet gained the 0.007 SOL (less fees)",
+      "status": "PASS",
+      "detail": 8483440
+    },
+    {
+      "name": "0.003 SOL is still the game balance",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "wallet": "68rdnLDb81FAHXFWottcPZ9PCY8wkvnnb7jGA6J6bTTj",
+      "gained": 8483440
+    }
+  ]
+}

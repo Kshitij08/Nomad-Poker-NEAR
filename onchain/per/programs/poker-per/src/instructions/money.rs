@@ -450,8 +450,11 @@ pub fn commit_table(ctx: Context<CommitTable>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     {
         let t = &mut ctx.accounts.table;
-        require!(ctx.accounts.payer.key() == t.creator || now.saturating_sub(t.last_commit_ts) >= COMMIT_EVERY_SECS, PokerError::CommitTooSoon);
+        let changed = t.ledger_seq != t.committed_ledger_seq || t.hand_no != t.committed_hand_no;
+        require!(ctx.accounts.payer.key() == t.creator || (changed && now.saturating_sub(t.last_commit_ts) >= COMMIT_EVERY_SECS), PokerError::CommitTooSoon);
         t.last_commit_ts = now;
+        t.committed_ledger_seq = t.ledger_seq;
+        t.committed_hand_no = t.hand_no;
         t.exit(&crate::ID)?;
     }
     let t = &ctx.accounts.table;

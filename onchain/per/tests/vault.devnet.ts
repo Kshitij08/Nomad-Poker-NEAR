@@ -39,7 +39,7 @@ async function preview(ixs: TransactionInstruction[], feePayer: PublicKey) {
 async function main() {
   const deployer = loadKey("deployer"), p3 = loadKey("p3");
   const A = await newPlayer(deployer, 0.08), B = await newPlayer(deployer, 0.08);
-  const expA = now() + 7 * DAY, expB = now() + 7 * DAY;
+  const expA = now() + DAY, expB = now() + DAY;
   const W = (p: { wallet: Keypair }) => p.wallet.publicKey;
 
   // ---- L1: open the vault and deposit. Both must preview cleanly in a wallet.
@@ -152,7 +152,7 @@ async function main() {
   await S.err("message signed with a different expiry: refused", "BadPlayKeyProof",
     () => buyIn(A, 0, 2_000_000n, readerA.publicKey, expA, { proofIxs: [proof(A.wallet, A.key.publicKey, expA + 60)] }));
   await S.err("expired authorization: refused", "PlayKeyExpired", () => buyIn(A, 0, 2_000_000n, readerA.publicKey, now() - 120));
-  await S.err("authorization beyond 30 days: refused", "PlayKeyExpired", () => buyIn(A, 0, 2_000_000n, readerA.publicKey, now() + 40 * DAY));
+  await S.err("authorization beyond 2 days (M10, was 30): refused", "PlayKeyExpired", () => buyIn(A, 0, 2_000_000n, readerA.publicKey, now() + 3 * DAY));
   await S.err("A's play key, with A's signature, buying in from B's vault: refused", "BadPlayKeyProof",
     () => buyIn(A, 0, 2_000_000n, readerA.publicKey, expA, { wallet: W(B), proofIxs: [proof(A.wallet, A.key.publicKey, expA)] }));
 

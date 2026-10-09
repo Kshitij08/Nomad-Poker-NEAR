@@ -107,7 +107,8 @@ export function app() {
     const keeperLooping = !config.keeperEnabled || Date.now() - Math.max(k.lastLoopAt, k.startedAt) < 60_000;
     // Error text stays in /audit/events; the public page only says when the last one happened.
     const keeper = { enabled: config.keeperEnabled, address: config.keeper.publicKey.toBase58(), startedAt: k.startedAt, lastLoopAt: k.lastLoopAt,
-      loops: k.loops, tablesTracked: k.tablesTracked, lastErrorAt: k.lastErrorAt || null, auditorMatches: k.auditorMatches };
+      loops: k.loops, tablesTracked: k.tablesTracked, lastErrorAt: k.lastErrorAt || null, auditorMatches: k.auditorMatches,
+      delegationProgram: { upgradeSlot: k.dlp.slot, expectedSlot: k.dlp.expected, changed: k.dlp.changed } };
     const ok = probe.db === "ok" && probe.l1Slot !== null && probe.rollupSlot !== null && keeperLooping && k.auditorMatches !== false;
     res.status(ok ? 200 : 503).json({ ok, db: probe.db, l1Slot: probe.l1Slot, rollupSlot: probe.rollupSlot, keeper, auditor: config.auditor.publicKey.toBase58() });
   });

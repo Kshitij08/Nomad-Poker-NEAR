@@ -56,6 +56,7 @@ static class Program
             case "play": await Play(new PublicKey(args[1]), args.Length > 2 ? int.Parse(args[2]) : 2); break;
             case "vault": await Vault(new PublicKey(args[1])); break;
             case "host": await Host(); break;
+            case "exit": await Exit(); break;
             case "soak": await Soak(int.Parse(args[1]), int.Parse(args[2]), args.Length > 3 ? int.Parse(args[3]) : 3); break;
             default: Console.WriteLine("usage: vector | play <table> [hands]"); return 2;
         }
@@ -114,7 +115,7 @@ static class Program
         Console.WriteLine($"wallet {wallet.PublicKey.Key}, vault {PerVault.Vault(wallet.PublicKey).Key}");
 
         // L1, wallet-signed (Phantom in the game): open the vault, deposit into it.
-        Check("open_vault (C# builder) lands on Solana", await Try(() => l1.Send(new[] { PerVault.OpenVault(wallet.PublicKey) }, walletSigner)));
+        Check("open_vault (C# builder) lands on Solana", await Try(() => l1.Send(new[] { PerVault.OpenVaultBudget(), PerVault.OpenVault(wallet.PublicKey) }, walletSigner)));
         Check("deposit 0.01 SOL into the vault (C# port of MagicBlock's shuttle merge)", await Try(() => l1.Send(PerVault.Deposit(wallet.PublicKey, 10_000_000, PerVault.NewShuttleId()), walletSigner)));
 
         // The play key: the wallet signs one message (Phantom "Sign message" in the game).
@@ -169,7 +170,7 @@ static class Program
         await l1.Send(new[] { fund }, new LocalSigner(deployer));
         if (deposit > 0)
         {
-            await l1.Send(new[] { PerVault.OpenVault(wallet.PublicKey) }, new WalletLike(wallet));
+            await l1.Send(new[] { PerVault.OpenVaultBudget(), PerVault.OpenVault(wallet.PublicKey) }, new WalletLike(wallet));
             await l1.Send(PerVault.Deposit(wallet.PublicKey, deposit, PerVault.NewShuttleId()), new WalletLike(wallet));
         }
         var key = new Account();
@@ -295,10 +296,13 @@ static class Program
         var r = new SoakResult { table = "" };
         try
         {
+            // Tables start 40 s apart and every setup step retries: devnet's public RPC answers bursts with 429.
+            await Task.Delay(n * 40_000);
             var seats = new List<SoakSeat>();
             for (int i = 0; i < playersPerTable; i++)
             {
-                var (w, k, rpc) = await FundedPlayer(http, l1, deployer, 60_000_000, 30_000_000);
+                var lamports = i == 0 ? 100_000_000UL : 55_000_000UL;
+                var (w, k, rpc) = await Retry(() => FundedPlayer(http, l1, deployer, lamports, 30_000_000), $"table {n} fund p{i}");
                 seats.Add(new SoakSeat { Name = $"t{n}p{i}", Wallet = w, Key = k, KeyRpc = rpc, Seat = i, Reader = new Account() });
                 await Task.Delay(1500); // devnet's public RPC limits bursts
             }
@@ -309,7 +313,7 @@ static class Program
             var t = new PerTableAddresses(tableKey);
             var stake = PerHost.Stakes[0];
             var p = new TableParams { SmallBlind = stake.Small, BigBlind = stake.Big, MinBuyIn = 10 * stake.Big, MaxBuyIn = 100 * stake.Big, MaxSeats = (byte)playersPerTable, InviteOnly = false };
-            await l1.Send(PerHost.CreateAndDelegate(host.Wallet.PublicKey, id, p), new WalletLike(host.Wallet));
+            await Retry(() => l1.Send(PerHost.CreateAndDelegate(host.Wallet.PublicKey, id, p), new WalletLike(host.Wallet)), $"table {n} create");
             await Task.Delay(12_000); // deposits settle, the rollup picks up the table
             for (int i = 0; ; i++)
             {
@@ -339,6 +343,7 @@ static class Program
                     try
                     {
                         await s.Session.Poll();
+                        await s.Session.KeepMoving();
                         var tb = s.Session.Table;
                         var mySeat = s.Session.Ledger?.Seats[s.Seat];
                         // Busted (or nearly): rebuy from the game balance between hands.
@@ -347,7 +352,11 @@ static class Program
                         if (tb.HandState == PerGame.HandIdle && wantMore) await s.Session.PrepareNextHand();
                         var game = s.Session.Ledger?.Game;
                         var turn = s.Events.OfType<TurnStartedEvent>().LastOrDefault();
-                        if (tb.HandState == PerGame.HandPlaying && game != null && game.ToAct == s.Seat && turn != null && turn.ForYou && turn.Seat == s.Seat)
+                        // Disconnect drill: on every 25th hand seat 1 goes silent; the hand must still finish (the keeper,
+                        // or another player's client, times it out).
+                        bool silent = s.Seat == 1 && tb.HandNo % 25 == 0;
+                        if (silent && tb.HandState == PerGame.HandPlaying && game != null && game.ToAct == s.Seat) r.silentTurns++;
+                        if (!silent && tb.HandState == PerGame.HandPlaying && game != null && game.ToAct == s.Seat && turn != null && turn.ForYou && turn.Seat == s.Seat)
                         {
                             var legal = PerGame.Legal(game);
                             int roll = rng.Next(100);
@@ -382,13 +391,33 @@ static class Program
             }
             r.hands = lastEnded;
             r.leaks = seats.Sum(s => s.Leaks.Count);
+            // A hand someone's seed already started may still be running: play it out (check, else fold) before
+            // anyone leaves; a seat can't leave mid-hand.
+            var drain = DateTime.UtcNow;
+            while (DateTime.UtcNow - drain < TimeSpan.FromMinutes(4))
+            {
+                foreach (var s in seats)
+                {
+                    try
+                    {
+                        await s.Session.Poll();
+                        await s.Session.KeepMoving();
+                        var g = s.Session.Ledger?.Game;
+                        if (s.Session.Table.HandState == PerGame.HandPlaying && g != null && g.ToAct == s.Seat)
+                            await s.Session.Act(PerGame.Legal(g).CanCheck ? ActionType.Check : ActionType.Fold, 0);
+                    }
+                    catch (Exception) { }
+                }
+                if (seats.All(s => s.Session.Table?.HandState == PerGame.HandIdle)) break;
+                await Task.Delay(1000);
+            }
             // Everyone leaves (table key), the host closes (rake collected first) and reclaims.
             foreach (var s in seats)
             {
                 for (int i = 0; ; i++)
                 {
                     try { await s.ReaderRpc.Send(new[] { PerVault.CashOut(t, s.Reader.PublicKey, s.Wallet.PublicKey, s.Seat, 0) }, new LocalSigner(s.Reader)); break; }
-                    catch (Exception) when (i < 5) { await Task.Delay(3000); }
+                    catch (Exception) when (i < 40) { await Task.Delay(3000); }
                 }
             }
             await host.KeyRpc.Send(new[] { host.Key.Check(), PerHost.CloseKeyed(t, host.Key, devWallet) }, new LocalSigner(host.Key.Key));
@@ -414,6 +443,17 @@ static class Program
         return r;
     }
 
+    /// <summary>Retries a setup step through devnet's rate limits (a step that failed with 429 never landed). Not for
+    /// steps that may have landed and can't run twice.</summary>
+    static async Task<T> Retry<T>(Func<Task<T>> f, string what)
+    {
+        for (int i = 0; ; i++)
+        {
+            try { return await f(); }
+            catch (Exception e) when (i < 6 && (e.Message.Contains("429") || e.Message.Contains("Too Many"))) { SoakLog($"{what}: rate-limited, retrying"); await Task.Delay(15_000 * (i + 1)); }
+        }
+    }
+
     static async Task SoakBuyIn(SoakSeat s, PerTableAddresses t, ulong amount, SoakResult r)
     {
         await s.KeyRpc.Send(new[] { s.Key.Check(), PerVault.BuyIn(t, s.Key, s.Seat, amount, s.Reader.PublicKey) }, new LocalSigner(s.Key.Key));
@@ -424,8 +464,30 @@ static class Program
 
     sealed class SoakResult
     {
-        public string table; public int hands, checks, verified, leaks, errors, buyIns; public long delta; public ulong rake, boughtIn;
+        public string table; public int hands, checks, verified, leaks, errors, buyIns, silentTurns; public long delta; public ulong rake, boughtIn;
         public bool reclaimed; public double minutes; public string fatal; public List<object> problems = new List<object>();
+    }
+
+    // ---- M10 (review H1): the exit with the game's builders (PerVault.VaultExit / VaultPayout)
+    static async Task Exit()
+    {
+        var http = new Http();
+        var l1 = new PerRpc(http, Devnet);
+        var deployer = LoadKey("deployer");
+        var (w, k, rpc) = await FundedPlayer(http, l1, deployer, 40_000_000, 10_000_000);
+        await Task.Delay(12_000);
+        Check("the game balance holds the deposit", await VaultBalanceOf(k, rpc) == 10_000_000);
+        Check("vault_exit (C# builder) takes 0.007 SOL out of the rollup (wallet signs on Solana)", await Try(() => l1.Send(new[] { PerVault.VaultExit(w.PublicKey, 7_000_000, PerVault.NewShuttleId()) }, new WalletLike(w))));
+        ulong landed = 0;
+        for (int i = 0; i < 30 && landed < 7_000_000; i++) { await Task.Delay(4000); landed = await SolBalance(l1, PerVault.Vault(w.PublicKey)); }
+        Check("it lands on the vault on Solana as SOL", landed == 7_000_000, landed);
+        var before = await SolBalance(l1, w.PublicKey);
+        Check("vault_payout (C# builders: payout + unwrap) pays the wallet", await Try(() => l1.Send(PerVault.VaultPayout(w.PublicKey), new WalletLike(w))));
+        await Task.Delay(4000);
+        var gained = (long)await SolBalance(l1, w.PublicKey) - (long)before;
+        Check("the wallet gained the 0.007 SOL (less fees)", gained >= 7_000_000 - 20_000, gained);
+        Check("0.003 SOL is still the game balance", await VaultBalanceOf(k, rpc) == 3_000_000);
+        Outcomes.Add(new { wallet = w.PublicKey.Key, gained });
     }
 
     static async Task<bool> Try(Func<Task<string>> f)

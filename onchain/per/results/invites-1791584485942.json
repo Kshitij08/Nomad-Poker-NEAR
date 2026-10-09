@@ -1,0 +1,377 @@
+{
+  "suite": "invites",
+  "program": "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv",
+  "ranAt": "2026-10-09T22:21:25.941Z",
+  "pass": 45,
+  "fail": 0,
+  "knownPlatformIssues": 0,
+  "host": "HGfCM9QbzJ8roNyM7c3iToUDEp6KtRf9fbhW2LMFCW9X",
+  "table": "582BmT3CvLcSu8MTVC9F7p4C7pRhM8VXRALjuPEMYQ3r",
+  "legacyTable": "2xE93RSmQgMBdazzPgrK5X1TWTKz5xvv2t6nF3KiJXFM",
+  "hostCostLamports": 30039680,
+  "reclaimedBothLamports": 26466728,
+  "inviteRentBackLamports": 3454480,
+  "fullListBytes": 1169,
+  "codeBuyInBytes": 1195,
+  "outcomes": [
+    {
+      "name": "host creates and hands over an invite-only table in one transaction (the only wallet approval)",
+      "status": "PASS",
+      "detail": {
+        "sig": "4tbmbXZckyMMwcbmH2j74G6bGmKXiJPpvcYbAEVHoGxQrFxizXr2AisATAFhPuAj7fKA7Z7mCkQ5Y5JxC5HpEpNm",
+        "problem": null
+      }
+    },
+    {
+      "name": "host's play key opens it",
+      "status": "PASS",
+      "detail": {
+        "sig": "96cr719wsxN4ZFTMEN31ZzNDP621Ppk8bddT6FjdbZVSsky6gURwXvbSZsMDzDJ91YYGgdETutuwh1N9qZKJ1FM",
+        "problem": null
+      }
+    },
+    {
+      "name": "a full list (16 wallets) and a link code fit one play-key transaction",
+      "status": "PASS",
+      "detail": {
+        "bytes": 1169
+      }
+    },
+    {
+      "name": "another wallet's play key can't set H's invites",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "BadPlayKeyProof (6053)"
+      }
+    },
+    {
+      "name": "a play key signed for by another wallet can't either",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "BadPlayKeyProof (6053)"
+      }
+    },
+    {
+      "name": "a first call that already carries the list is refused (InvitesNotReady)",
+      "status": "PASS",
+      "detail": {
+        "expected": "InvitesNotReady",
+        "got": "InvitesNotReady (6057)"
+      }
+    },
+    {
+      "name": "host's play key creates the empty private list",
+      "status": "PASS",
+      "detail": {
+        "sig": "4Q1M6isTr2hGXQi63vZFo4SkBbMq7XYWV87EmGJhedEByuBELmF5AAQCgnJsmSNpMV3bAE7uB2aY58ri3ehztxC6",
+        "problem": null
+      }
+    },
+    {
+      "name": "creating it again is harmless",
+      "status": "PASS",
+      "detail": {
+        "sig": "26cqaBzEGM8Qu4PbcCD52MxUsJgNMT63jQvUgXiMPiKayt8gtwcZQgmMLqCG1RY2J4gnEFDKRMLeLWnVQu9bPjh2",
+        "problem": null
+      }
+    },
+    {
+      "name": "host's play key sets the private list (16 wallets incl. H and I) and the link code: no wallet, no L1 rent",
+      "status": "PASS",
+      "detail": {
+        "sig": "3M3RQJsVJKPkhnocGP6PRe16PgFt69GrvFCXVtbYnbn7QFvLNubvYEAAJwFeYCW2SP34ecXwGzFK5SaPmTECnrya",
+        "problem": null
+      }
+    },
+    {
+      "name": "the stranger gets nothing of the transaction that set the list",
+      "status": "PASS",
+      "detail": {
+        "got": {
+          "accounts": 0,
+          "instructions": 0,
+          "logs": 0
+        }
+      }
+    },
+    {
+      "name": "the invited player gets nothing of the transaction that set the list",
+      "status": "PASS",
+      "detail": {
+        "got": {
+          "accounts": 0,
+          "instructions": 0,
+          "logs": 0
+        }
+      }
+    },
+    {
+      "name": "nothing about the list is on Solana",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "the stranger can't read the private invite list from the rollup",
+      "status": "PASS",
+      "detail": {
+        "got": null
+      }
+    },
+    {
+      "name": "the host can't read the private invite list from the rollup",
+      "status": "PASS",
+      "detail": {
+        "got": null
+      }
+    },
+    {
+      "name": "a simulated buy-in with a forged signature fails at the signature check, saying nothing about the list",
+      "status": "PASS",
+      "detail": {
+        "err": {
+          "InstructionError": [
+            0,
+            {
+              "Custom": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "uninvited U can't buy in",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "U can't buy in with a wrong code",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "U can't pass another account as the invite list",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "invited I buys in (private list)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3nG87TSWipyXNcVZCjRq9bjqog9YXAu3gAUM6TknP6UyDR2ESsPKsbxRjkaZMReS1fkGj7vXgYJoAXidbCenLemv",
+        "problem": null
+      }
+    },
+    {
+      "name": "a buy-in with the link code fits one transaction",
+      "status": "PASS",
+      "detail": {
+        "bytes": 1195
+      }
+    },
+    {
+      "name": "U buys in with the invite link's code",
+      "status": "PASS",
+      "detail": {
+        "sig": "45W23Fw2HzN171BRjKcqvA45sXCZZsqmBNu8PmtCbiaFxDtGnkWFyHHKHvwuDmjMqn1BsojqheTEtYrGCh9Z769Q",
+        "problem": null
+      }
+    },
+    {
+      "name": "a stranger gets nothing of the buy-in that carried the code",
+      "status": "PASS",
+      "detail": {
+        "shown": true
+      }
+    },
+    {
+      "name": "host makes a new link (list kept)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2d2sgQEAuCxn1C28ypTmtVWgNipyuFaMikoTUYvmpT3RRrwc21hk2EAsTYFDJxSTWw7ALq32Pu9xUvMcSWGusTKW",
+        "problem": null
+      }
+    },
+    {
+      "name": "another table's private list doesn't admit here (W with code2, naming a random table's list)",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "the old link's code no longer works (L)",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "the new link's code works (L)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5YHGaTcACXA9SvhD2d4Njiqycp1V4tFpg9aYPuFUxkkwiseVah131Zp7Ju5jPCyFQpN9QkADQEViv7vi8KbEKcUZ",
+        "problem": null
+      }
+    },
+    {
+      "name": "host removes the link (zeros)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2Z84Xf39PHrugoTZ3eaDJBTE4sHmiV6s7LGnpKs7WHqeQB2G1MVnQ9T8ofSFmPFafa8jyd4oaxmVBcqKJJGkDA1J",
+        "problem": null
+      }
+    },
+    {
+      "name": "with no link, an all-zero code doesn't work (W)",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "nor the last link's code (W)",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "legacy: host creates an invite-only table",
+      "status": "PASS",
+      "detail": {
+        "sig": "633Zyq7PwrifA7kMWMqifFG7aUsyptR9WGdNsLT6zEjtnDMTgCkDq7EDRuYVPUYcjJKR86K8BXsTjoW8g3pBoJZy",
+        "problem": null
+      }
+    },
+    {
+      "name": "legacy: L1 invite list (I, W) and hand over",
+      "status": "PASS",
+      "detail": {
+        "sig": "5PuiQ1ykwvB9YbVZrQCspcUPHEFj84drLMQK1B431rvSUmkt27XyAzYmyMzkTwJx2Vprjp2PChvKSr88wYyxhSvM",
+        "problem": null
+      }
+    },
+    {
+      "name": "legacy: opened",
+      "status": "PASS",
+      "detail": {
+        "sig": "4Zzg4TQhvD5CesrZ6eyH6YzqUAE2B2CEpHpUNa5pPpueSeS8oJTWNZK64kvWVLiYJfzhacFstSPUT9EazzptaXFh",
+        "problem": null
+      }
+    },
+    {
+      "name": "legacy: I buys in with the L1 list",
+      "status": "PASS",
+      "detail": {
+        "sig": "rkAR3mD3s1jrHnhf12is8TdTJ7XwZYCzh31AxTSJmwR74rvKu8Gq3GS96ywJP2sViJtnB668JV8U1c5CXnCoVh1",
+        "problem": null
+      }
+    },
+    {
+      "name": "legacy: U still refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "legacy: a table with a Solana list can't also get a private one (OldInviteList)",
+      "status": "PASS",
+      "detail": {
+        "expected": "OldInviteList",
+        "got": "OldInviteList (6058)"
+      }
+    },
+    {
+      "name": "another wallet can't close H's invite list",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "Program log: AnchorError caused by account: table. Error Code: ConstraintSeeds. Error Number: 2006. Error Message: A seeds constraint was violated."
+      }
+    },
+    {
+      "name": "close_invites previews cleanly in a wallet",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "host closes the L1 invite list",
+      "status": "PASS",
+      "detail": {
+        "sig": "5VQmFpyYkoMZJSH3rCiLN33Fzwxb8CczYX8VRDGNq8js9zDpHdFr5PF45sSvbz44N1KyJpEL6FekKbZBvDgQTJKv",
+        "problem": null
+      }
+    },
+    {
+      "name": "all of its rent comes back to the host (less the fee)",
+      "status": "PASS",
+      "detail": {
+        "listRent": 3459480,
+        "back": 3454480
+      }
+    },
+    {
+      "name": "legacy: after close_invites the rollup's copy stops admitting (W, on the closed list)",
+      "status": "PASS",
+      "detail": {
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "I, U and L leave",
+      "status": "PASS",
+      "detail": {
+        "sig": "2ppjioDUi11199BYw8jfCpWZVJs3NRZMZKMS9YfLoajJLhFbJgyv1wB8xg5yPd4rtePkp8zDMwrCVXGmMKUZKjXZ",
+        "problem": null
+      }
+    },
+    {
+      "name": "host closes both tables (play key)",
+      "status": "PASS",
+      "detail": {
+        "sig": "4XFzsuZzCTXKUqmf9HeHJocg4zu6fKoG6Hute7wJtpcyi2ffrnPK3RyGGuvf4rQ9LFASthpPECgZec7nQVtH7xuv",
+        "problem": null
+      }
+    },
+    {
+      "name": "the closed table's list can't be changed",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "TableNotOpen (6014)"
+      }
+    },
+    {
+      "name": "both closed tables return to Solana",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "host reclaims both tables' rent",
+      "status": "PASS",
+      "detail": {
+        "sig": "TgEzGkd9jobSUbZ3Naxe6FVGQut7Ac2srcAgpSEoV9onQo7dB2U6CfHVTY4XaRfM2wLXq9riBWBCDD5TcgpAhuf",
+        "problem": null
+      }
+    }
+  ]
+}

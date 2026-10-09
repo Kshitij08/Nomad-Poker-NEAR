@@ -17,7 +17,7 @@ pub const TABLE_VERSION: u8 = 2;
 /// M4 and M5 took 60 of the original 96 reserved bytes for the hand fields. M6 added
 /// `last_record`, which grew the account: tables created before M6 can't be read by this layout
 /// (only `reclaim_table` handles them), so none may be open when this build is deployed.
-pub const TABLE_RESERVED: usize = 36;
+pub const TABLE_RESERVED: usize = 20;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -170,6 +170,11 @@ pub struct Table {
     /// of every hand so each commit of the table publishes the latest hand on L1; the backend
     /// archives every hand from the rollup's `HandRecord`.
     pub last_record: HandRecord,
+    /// M10: `ledger_seq` and `hand_no` at the last commit. Anyone but the creator may commit only after one of
+    /// them changed, so outsiders can't make an idle table pay a commit every 15 minutes (review L4). Taken
+    /// from the reserved bytes, so the account keeps its size and older tables read zeros.
+    pub committed_ledger_seq: u64,
+    pub committed_hand_no: u64,
     pub reserved: [u8; TABLE_RESERVED],
 }
 

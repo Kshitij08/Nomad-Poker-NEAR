@@ -122,4 +122,8 @@ pub enum PokerError {
     OldInviteList,
     #[msg("This game balance isn't blocked; a fresh one is only for a blocked balance")]
     VaultNotBlocked,
+    #[msg("The wallet's state account can't be read")]
+    BadWalletState,
+    #[msg("The old game balance still holds money; withdraw it first")]
+    VaultNotEmpty,
 }

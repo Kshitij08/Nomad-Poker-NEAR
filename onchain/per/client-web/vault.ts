@@ -16,11 +16,15 @@ export const PLAY_KEY_DAYS = 1;
 
 /** M10: the wallet's state (play-key set, which vault is current); may not exist (both 0). */
 export const walletStateOf = (wallet: PublicKey) => PublicKey.findProgramAddressSync([Buffer.from("wallet"), wallet.toBuffer()], PROGRAM_ID)[0];
-/** Reads (key set, vault number) from a WalletState account's data (8 + 32 + 4 + 1 bytes); none = (0, 0). */
-export const decodeWalletState = (data: Buffer | null | undefined) => data && data.length >= 45 ? { keySet: data.readUInt32LE(40), vaultGen: data[44] } : { keySet: 0, vaultGen: 0 };
-/** The wallet's vault `gen` (M10): vault 0 has the M9 address; a fresh vault adds its number as a seed. */
-export const vaultOf = (wallet: PublicKey, gen = 0) => PublicKey.findProgramAddressSync([Buffer.from("vault"), wallet.toBuffer(), Buffer.from(gen ? [gen] : [])], PROGRAM_ID)[0];
-export const vaultTokenOf = (wallet: PublicKey, gen = 0) => getAssociatedTokenAddressSync(NATIVE_MINT, vaultOf(wallet, gen), true);
+/** A vault seed (M10): all zeros (or none) = the wallet's first vault, the M9 address; a fresh vault has 8 random bytes. */
+export type VaultSeed = Uint8Array | number[] | null | undefined;
+const seedBytes = (seed: VaultSeed) => (!seed || Array.from(seed).every((b) => b === 0) ? Buffer.alloc(0) : Buffer.from(Array.from(seed)));
+/** Reads (key set, vault seed) from a WalletState account's data (8 + 32 + 4 + 8 bytes); none = (0, zeros). */
+export const decodeWalletState = (data: Buffer | null | undefined) => data && data.length >= 52
+  ? { keySet: data.readUInt32LE(40), vaultSeed: Array.from(data.subarray(44, 52)) }
+  : { keySet: 0, vaultSeed: [0, 0, 0, 0, 0, 0, 0, 0] };
+export const vaultOf = (wallet: PublicKey, seed?: VaultSeed) => PublicKey.findProgramAddressSync([Buffer.from("vault"), wallet.toBuffer(), seedBytes(seed)], PROGRAM_ID)[0];
+export const vaultTokenOf = (wallet: PublicKey, seed?: VaultSeed) => getAssociatedTokenAddressSync(NATIVE_MINT, vaultOf(wallet, seed), true);
 export const walletTokenOf = (wallet: PublicKey) => getAssociatedTokenAddressSync(NATIVE_MINT, wallet);
 
 /** `keySet` (M10): the wallet's current play-key set; 0 keeps the M9 wording. */
@@ -34,13 +38,13 @@ export const proofIx = (wallet: PublicKey, message: Buffer, signature: Uint8Arra
   Ed25519Program.createInstructionWithPublicKey({ publicKey: wallet.toBytes(), message, signature });
 
 /** Accounts of `open_vault` (L1), in the order the IDL lists them. */
-export function openVaultAccounts(wallet: PublicKey, gen = 0) {
-  const vault = vaultOf(wallet, gen);
+export function openVaultAccounts(wallet: PublicKey, seed?: VaultSeed) {
+  const vault = vaultOf(wallet, seed);
   const vaultEata = PublicKey.findProgramAddressSync([vault.toBuffer(), NATIVE_MINT.toBuffer()], ESPL)[0];
   const permission: PublicKey = s.permissionPdaFromAccount(vaultEata);
   const dlp = (tag: string, k: PublicKey) => PublicKey.findProgramAddressSync([Buffer.from(tag), k.toBuffer()], DLP)[0];
   return {
-    wallet, walletState: walletStateOf(wallet), vault, mint: NATIVE_MINT, vaultToken: vaultTokenOf(wallet, gen), vaultEata,
+    wallet, walletState: walletStateOf(wallet), vault, mint: NATIVE_MINT, vaultToken: vaultTokenOf(wallet, seed), vaultEata,
     vaultBuffer: PublicKey.findProgramAddressSync([Buffer.from("buffer"), vaultEata.toBuffer()], ESPL)[0],
     vaultDelegationRecord: dlp("delegation", vaultEata), vaultDelegationMetadata: dlp("delegation-metadata", vaultEata),
     vaultPermission: permission,
@@ -56,7 +60,7 @@ export function openVaultAccounts(wallet: PublicKey, gen = 0) {
  * wrap into the wallet's wSOL account, then MagicBlock's shuttle merge with the vault's account as the
  * destination. The vault must be open (`open_vault`, which can go in an earlier transaction).
  */
-export function depositToVaultIxs(wallet: PublicKey, lamports: bigint, shuttleId = Math.floor(Math.random() * 2 ** 32), gen = 0): TransactionInstruction[] {
+export function depositToVaultIxs(wallet: PublicKey, lamports: bigint, shuttleId = Math.floor(Math.random() * 2 ** 32), seed?: VaultSeed): TransactionInstruction[] {
   const walletAta = walletTokenOf(wallet);
   const [shuttleEata] = s.deriveShuttleEphemeralAta(wallet, NATIVE_MINT, shuttleId);
   const [shuttleAta] = s.deriveShuttleAta(shuttleEata, NATIVE_MINT);
@@ -65,8 +69,28 @@ export function depositToVaultIxs(wallet: PublicKey, lamports: bigint, shuttleId
     createAssociatedTokenAccountIdempotentInstruction(wallet, walletAta, wallet, NATIVE_MINT),
     SystemProgram.transfer({ fromPubkey: wallet, toPubkey: walletAta, lamports: Number(lamports) }),
     createSyncNativeInstruction(walletAta),
-    s.setupAndDelegateShuttleEphemeralAtaWithMergeIx(wallet, shuttleEata, shuttleAta, wallet, walletAta, vaultTokenOf(wallet, gen), shuttleWalletAta, NATIVE_MINT, shuttleId, lamports, TEE_VALIDATOR),
+    s.setupAndDelegateShuttleEphemeralAtaWithMergeIx(wallet, shuttleEata, shuttleAta, wallet, walletAta, vaultTokenOf(wallet, seed), shuttleWalletAta, NATIVE_MINT, shuttleId, lamports, TEE_VALIDATOR),
   ];
+}
+
+/**
+ * M10 (review H1): accounts of `vault_exit`, MagicBlock's shuttle withdrawal with the vault as the owner. It takes the
+ * game balance to the vault's wSOL account on Solana without the wallet's own rollup account, which an outsider can
+ * block for good. `vault_payout` then moves it to the wallet.
+ */
+export function vaultExitAccounts(wallet: PublicKey, shuttleId: number, seed?: VaultSeed) {
+  const vault = vaultOf(wallet, seed);
+  const [shuttleEata] = s.deriveShuttleEphemeralAta(vault, NATIVE_MINT, shuttleId);
+  const [shuttleAta] = s.deriveShuttleAta(shuttleEata, NATIVE_MINT);
+  const dlp = (tag: string, k: PublicKey) => PublicKey.findProgramAddressSync([Buffer.from(tag), k.toBuffer()], DLP)[0];
+  return {
+    wallet, walletState: walletStateOf(wallet), vault, vaultToken: vaultTokenOf(wallet, seed), rentPda: s.deriveRentPda()[0],
+    shuttleEata, shuttleAta, shuttleWalletAta: s.deriveShuttleWalletAta(NATIVE_MINT, shuttleEata),
+    shuttleBuffer: PublicKey.findProgramAddressSync([Buffer.from("buffer"), shuttleAta.toBuffer()], ESPL)[0],
+    shuttleDelegationRecord: dlp("delegation", shuttleAta), shuttleDelegationMetadata: dlp("delegation-metadata", shuttleAta),
+    mint: NATIVE_MINT, esplProgram: ESPL, delegationProgram: DLP,
+    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+  };
 }
 
 /** Makes sure the wallet's own wSOL account exists in the rollup (needed before a vault withdrawal lands there). */

@@ -42,8 +42,9 @@ pub const VAULT_SEED: &[u8] = b"vault";
 /// key the wallet authorized before) and which game vault is the wallet's (a fresh one replaces a vault an
 /// outsider blocked before its first use).
 pub const WALLET_SEED: &[u8] = b"wallet";
-/// A play key's authorization lasts at most this long (the client asks for 7 days).
-pub const MAX_PLAY_KEY_SECS: i64 = 30 * 24 * 60 * 60;
+/// A play key's authorization lasts at most this long. The client asks for 1 day; a longer one would only
+/// widen what a leaked play key can do (M10 review L2, was 30 days).
+pub const MAX_PLAY_KEY_SECS: i64 = 2 * 24 * 60 * 60;
 /// A table counts as abandoned (anyone may close it) after this many escape delays empty and idle.
 pub const ABANDONED_ESCAPE_DELAYS: i64 = 6;
 pub const ED25519_PROGRAM_ID: Pubkey = pubkey!("Ed25519SigVerify111111111111111111111111111");
@@ -52,6 +53,8 @@ const ESPL_INIT_EPHEMERAL_ATA: u8 = 0;
 const ESPL_DELEGATE_EPHEMERAL_ATA: u8 = 4;
 const ESPL_CREATE_EPHEMERAL_ATA_PERMISSION: u8 = 6;
 const ESPL_DELEGATE_EPHEMERAL_ATA_PERMISSION: u8 = 7;
+/// MagicBlock's withdrawal through a delegated shuttle with merge (`withdrawThroughDelegatedShuttleWithMergeIx`).
+const ESPL_WITHDRAW_THROUGH_SHUTTLE: u8 = 26;
 /// Permission program `UpdatePermission` with no member list: public (see create_table).
 const PERMISSION_UPDATE_PUBLIC: [u8; 9] = [1, 0, 0, 0, 0, 0, 0, 0, 0];
 
@@ -70,31 +73,34 @@ Allow play key {} to use my game balance until {} (unix time). It can buy in to 
     )
 }
 
-/// The wallet's (key set, vault number): (0, 0) until it first revokes or needs a fresh vault. `state` must
-/// be the wallet's WALLET_SEED PDA (the accounts struct checks the address); a PDA of this program is
-/// either empty or owned by it.
-pub fn wallet_state_of(state: &AccountInfo) -> (u32, u8) {
-    if state.data_is_empty() || state.owner != &crate::ID {
-        return (0, 0);
+/// The wallet's (key set, vault seed): (0, none) until it first revokes or needs a fresh vault. `state` must
+/// be the wallet's WALLET_SEED PDA (the accounts struct checks the address). A missing account is the
+/// default; one that exists but doesn't read as a WalletState is refused (M10 review L1), never taken as the
+/// default, which would bring back revoked play keys.
+pub fn wallet_state_of(state: &AccountInfo) -> Result<(u32, [u8; 8])> {
+    if state.data_is_empty() {
+        return Ok((0, [0; 8]));
     }
-    match state.try_borrow_data() {
-        Ok(data) => WalletState::try_deserialize(&mut &data[..]).map(|w| (w.key_set, w.vault_gen)).unwrap_or((0, 0)),
-        Err(_) => (0, 0),
-    }
+    require_keys_eq!(*state.owner, crate::ID, PokerError::BadWalletState);
+    let data = state.try_borrow_data()?;
+    let w = WalletState::try_deserialize(&mut &data[..]).map_err(|_| error!(PokerError::BadWalletState))?;
+    Ok((w.key_set, w.vault_seed))
 }
 
-/// The extra vault seed for the wallet's current vault: none for vault 0 (the address M9 vaults have), its
-/// number after that.
+/// The extra vault seed for the wallet's current vault: none for the first vault (the address M9 vaults have),
+/// the random seed of a fresh one after that (M10 review M1: a counter could be blocked in advance). A wallet
+/// state that can't be read gives a seed no vault has, so every vault instruction fails rather than picking a
+/// default vault.
 pub fn vault_gen_seed(state: &AccountInfo) -> Vec<u8> {
-    match wallet_state_of(state).1 {
-        0 => vec![],
-        g => vec![g],
+    match wallet_state_of(state) {
+        Ok((_, seed)) if seed == [0; 8] => vec![],
+        Ok((_, seed)) => seed.to_vec(),
+        Err(_) => vec![0xff; 9],
     }
 }
 
-pub fn vault_address(wallet: &Pubkey, gen: u8) -> (Pubkey, u8) {
-    let g = [gen];
-    let extra: &[u8] = if gen == 0 { &[] } else { &g };
+pub fn vault_address(wallet: &Pubkey, seed: &[u8; 8]) -> (Pubkey, u8) {
+    let extra: &[u8] = if *seed == [0; 8] { &[] } else { seed };
     Pubkey::find_program_address(&[VAULT_SEED, wallet.as_ref(), extra], &crate::ID)
 }
 
@@ -103,7 +109,8 @@ pub fn vault_address(wallet: &Pubkey, gen: u8) -> (Pubkey, u8) {
 pub struct WalletState {
     pub wallet: Pubkey,
     pub key_set: u32,
-    pub vault_gen: u8,
+    /// The current vault's extra seed; all zeros = the first vault.
+    pub vault_seed: [u8; 8],
 }
 
 /// Checks that the instruction right before this one is Solana's Ed25519 signature check of
@@ -126,7 +133,7 @@ pub fn verify_play_key(instructions: &AccountInfo, state: &AccountInfo, wallet: 
     let pk = d.get(pk_off..pk_off + 32).ok_or(PokerError::BadPlayKeyProof)?;
     require!(pk == wallet.as_ref(), PokerError::BadPlayKeyProof);
     let msg = d.get(msg_off..msg_off + msg_len).ok_or(PokerError::BadPlayKeyProof)?;
-    require!(msg == play_key_message(key, expires, wallet_state_of(state).0).as_bytes(), PokerError::BadPlayKeyProof);
+    require!(msg == play_key_message(key, expires, wallet_state_of(state)?.0).as_bytes(), PokerError::BadPlayKeyProof);
     Ok(())
 }
 
@@ -493,6 +500,170 @@ pub fn vault_cash_out(ctx: Context<VaultCashOut>, seat: u8, expires: i64) -> Res
 
 // ---------------------------------------------------------------------------------------- rollup: withdraw, balance
 
+// ---------------------------------------------------------------------------------------- L1: exit (M10)
+
+/// Accounts of MagicBlock's shuttle withdrawal, with the vault as the owner. The shuttle accounts are
+/// MagicBlock's (checked by its token program); the vault, its token account and the destination are ours.
+#[derive(Accounts)]
+pub struct VaultExit<'info> {
+    #[account(mut)]
+    pub wallet: Signer<'info>,
+    /// CHECK: the wallet's state (M10; may not exist: vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
+    /// CHECK: the wallet's current vault PDA; it signs the withdrawal as the owner.
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref(), &vault_gen_seed(&wallet_state)], bump)]
+    pub vault: UncheckedAccount<'info>,
+    /// The vault's wSOL account on Solana: MagicBlock pays the withdrawal here, `vault_payout` moves it on.
+    #[account(mut, address = get_associated_token_address(&vault.key(), &WSOL_MINT))]
+    pub vault_token: Box<Account<'info, TokenAccount>>,
+    /// CHECK: MagicBlock's rent PDA (its token program checks it).
+    #[account(mut)]
+    pub rent_pda: UncheckedAccount<'info>,
+    /// CHECK: the shuttle (its token program derives and checks these from the vault and `shuttle_id`).
+    #[account(mut)]
+    pub shuttle_eata: UncheckedAccount<'info>,
+    /// CHECK: as above.
+    #[account(mut)]
+    pub shuttle_ata: UncheckedAccount<'info>,
+    /// CHECK: as above.
+    #[account(mut)]
+    pub shuttle_wallet_ata: UncheckedAccount<'info>,
+    /// CHECK: delegation buffer of the shuttle account.
+    #[account(mut)]
+    pub shuttle_buffer: UncheckedAccount<'info>,
+    /// CHECK: delegation record of the shuttle account.
+    #[account(mut)]
+    pub shuttle_delegation_record: UncheckedAccount<'info>,
+    /// CHECK: delegation metadata of the shuttle account.
+    #[account(mut)]
+    pub shuttle_delegation_metadata: UncheckedAccount<'info>,
+    /// CHECK: wrapped SOL only.
+    #[account(address = WSOL_MINT @ PokerError::UnsupportedMint)]
+    pub mint: UncheckedAccount<'info>,
+    /// CHECK: fixed id
+    #[account(address = ESPL_PROGRAM_ID)]
+    pub espl_program: UncheckedAccount<'info>,
+    /// CHECK: fixed id
+    #[account(address = DELEGATION_PROGRAM_ID)]
+    pub delegation_program: UncheckedAccount<'info>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Takes `amount` of the game balance out of the rollup to the vault on Solana (MagicBlock pays the owner in SOL), through
+/// MagicBlock's shuttle withdrawal with the vault (this program) as the owner (M10 review H1). Signed by the
+/// wallet on L1, where it previews cleanly. Unlike the M9 withdrawal it never touches the wallet's own rollup
+/// token account, which an outsider can block for good by handing it to another validator first. The
+/// shuttle lands asynchronously; `vault_payout` then sends what arrived to the wallet.
+pub fn vault_exit(ctx: Context<VaultExit>, shuttle_id: u32, amount: u64) -> Result<()> {
+    require!(amount > 0, PokerError::NothingToCollect);
+    let a = &ctx.accounts;
+    let wallet = a.wallet.key();
+    let bump = [ctx.bumps.vault];
+    let gen_seed = vault_gen_seed(&a.wallet_state);
+    let mut data = vec![ESPL_WITHDRAW_THROUGH_SHUTTLE];
+    data.extend_from_slice(&shuttle_id.to_le_bytes());
+    data.extend_from_slice(&amount.to_le_bytes());
+    data.extend_from_slice(TEE_VALIDATOR.as_ref());
+    invoke_signed(
+        &Instruction {
+            program_id: ESPL_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new(wallet, true),
+                AccountMeta::new(a.rent_pda.key(), false),
+                AccountMeta::new(a.shuttle_eata.key(), false),
+                AccountMeta::new(a.shuttle_ata.key(), false),
+                AccountMeta::new(a.shuttle_wallet_ata.key(), false),
+                AccountMeta::new_readonly(a.vault.key(), true),
+                AccountMeta::new_readonly(ESPL_PROGRAM_ID, false),
+                AccountMeta::new(a.shuttle_buffer.key(), false),
+                AccountMeta::new(a.shuttle_delegation_record.key(), false),
+                AccountMeta::new(a.shuttle_delegation_metadata.key(), false),
+                AccountMeta::new_readonly(DELEGATION_PROGRAM_ID, false),
+                AccountMeta::new_readonly(a.associated_token_program.key(), false),
+                AccountMeta::new_readonly(a.system_program.key(), false),
+                AccountMeta::new(a.vault_token.key(), false),
+                AccountMeta::new_readonly(a.mint.key(), false),
+                AccountMeta::new_readonly(a.token_program.key(), false),
+            ],
+            data,
+        },
+        &[
+            a.wallet.to_account_info(), a.rent_pda.to_account_info(), a.shuttle_eata.to_account_info(), a.shuttle_ata.to_account_info(),
+            a.shuttle_wallet_ata.to_account_info(), a.vault.to_account_info(), a.espl_program.to_account_info(), a.shuttle_buffer.to_account_info(),
+            a.shuttle_delegation_record.to_account_info(), a.shuttle_delegation_metadata.to_account_info(), a.delegation_program.to_account_info(),
+            a.associated_token_program.to_account_info(), a.system_program.to_account_info(), a.vault_token.to_account_info(),
+            a.mint.to_account_info(), a.token_program.to_account_info(),
+        ],
+        &[&[VAULT_SEED, wallet.as_ref(), &gen_seed, &bump]],
+    )?;
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct VaultPayout<'info> {
+    #[account(mut)]
+    pub wallet: Signer<'info>,
+    /// CHECK: the wallet's state (M10; may not exist: vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
+    /// CHECK: the wallet's current vault PDA, a plain system account: MagicBlock's shuttle withdrawal pays the
+    /// owner in SOL, so this is where `vault_exit`'s money lands. It signs the transfers.
+    #[account(mut, seeds = [VAULT_SEED, wallet.key().as_ref(), &vault_gen_seed(&wallet_state)], bump)]
+    pub vault: UncheckedAccount<'info>,
+    #[account(mut, address = get_associated_token_address(&vault.key(), &WSOL_MINT))]
+    pub vault_token: Box<Account<'info, TokenAccount>>,
+    /// The wallet's own wSOL account on Solana, for any wSOL in the vault's token account (the client creates it
+    /// and unwraps it in the same transaction).
+    #[account(mut, address = get_associated_token_address(&wallet.key(), &WSOL_MINT))]
+    pub wallet_token: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Pays out what `vault_exit` brought to Solana, to the wallet (L1, wallet signs; only ever to that wallet):
+/// the SOL MagicBlock's shuttle left on the vault PDA, and any wSOL in the vault's token account.
+pub fn vault_payout(ctx: Context<VaultPayout>) -> Result<()> {
+    let wallet = ctx.accounts.wallet.key();
+    let bump = [ctx.bumps.vault];
+    let gen_seed = vault_gen_seed(&ctx.accounts.wallet_state);
+    let seeds: &[&[u8]] = &[VAULT_SEED, wallet.as_ref(), &gen_seed, &bump];
+    let sol = ctx.accounts.vault.lamports();
+    let wsol = ctx.accounts.vault_token.amount;
+    require!(sol > 0 || wsol > 0, PokerError::NothingToCollect);
+    if sol > 0 {
+        anchor_lang::system_program::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.system_program.key(),
+                anchor_lang::system_program::Transfer { from: ctx.accounts.vault.to_account_info(), to: ctx.accounts.wallet.to_account_info() },
+                &[seeds],
+            ),
+            sol,
+        )?;
+    }
+    if wsol > 0 {
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                Transfer { from: ctx.accounts.vault_token.to_account_info(), to: ctx.accounts.wallet_token.to_account_info(), authority: ctx.accounts.vault.to_account_info() },
+                &[seeds],
+            ),
+            wsol,
+        )?;
+    }
+    emit!(VaultPaidOut { wallet, sol, wsol });
+    Ok(())
+}
+
+#[event]
+pub struct VaultPaidOut {
+    pub wallet: Pubkey,
+    pub sol: u64,
+    pub wsol: u64,
+}
+
 #[derive(Accounts)]
 pub struct VaultWithdraw<'info> {
     pub play_key: Signer<'info>,
@@ -587,7 +758,7 @@ pub struct CloseTableKeyed<'info> {
     /// The creator's game vault account: receives any leftover in the escrow. Optional (a creator
     /// without a game balance leaves the leftover in the escrow).
     #[account(mut, address = get_associated_token_address(
-        &vault_address(&table.creator, wallet_state_of(&wallet_state).1).0, &table.mint))]
+        &vault_address(&table.creator, &wallet_state_of(&wallet_state).map(|s| s.1).unwrap_or([0xff; 8])).0, &table.mint))]
     pub creator_vault_token: Option<Box<Account<'info, TokenAccount>>>,
     /// The dev wallet's token account: unpaid rake is collected into it first. Needed only when there
     /// is unpaid rake.
@@ -776,18 +947,22 @@ pub struct NewVault<'info> {
     pub permission: UncheckedAccount<'info>,
     /// CHECK: delegation record of that permission (checked against its address).
     pub permission_delegation_record: UncheckedAccount<'info>,
+    /// CHECK: the current vault's wSOL account on Solana (checked against its address); must hold nothing.
+    pub old_vault_token: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
-/// Moves the wallet to a fresh game vault when an outsider blocked its current one before its first use
+/// Moves the wallet to a fresh game vault (at a random `seed`) when an outsider blocked its current one before its first use
 /// (MagicBlock lets anyone create a wallet's vault account and hand it to another validator, which
-/// `open_vault` then refuses: M10 probe). Only when the current vault is blocked, so a working vault and the
-/// money in it are never left behind. The client sends this and `open_vault` (for the new vault) in one
-/// transaction, so nobody can get to the new address first.
-pub fn new_vault(ctx: Context<NewVault>) -> Result<()> {
+/// `open_vault` then refuses: M10 probe). Only when the current vault is blocked and its Solana account is
+/// empty, so a working vault and money are never left behind. The new address depends on a seed nobody can
+/// predict, and the client sends this and `open_vault` (for the new vault) in one transaction.
+pub fn new_vault(ctx: Context<NewVault>, seed: [u8; 8]) -> Result<()> {
     let wallet = ctx.accounts.wallet.key();
-    let gen = ctx.accounts.wallet_state.vault_gen;
-    let (vault, _) = vault_address(&wallet, gen);
+    let current = ctx.accounts.wallet_state.vault_seed;
+    // The client picks the new seed at random, in the same transaction as the new vault's `open_vault`.
+    require!(seed != [0; 8] && seed != current, PokerError::VaultNotBlocked);
+    let (vault, _) = vault_address(&wallet, &current);
     let eata = Pubkey::find_program_address(&[vault.as_ref(), WSOL_MINT.as_ref()], &ESPL_PROGRAM_ID).0;
     let permission = Pubkey::find_program_address(&[PERMISSION_SEED, eata.as_ref()], &PERMISSION_PROGRAM_ID).0;
     let record_of = |k: &Pubkey| Pubkey::find_program_address(&[b"delegation", k.as_ref()], &DELEGATION_PROGRAM_ID).0;
@@ -795,6 +970,12 @@ pub fn new_vault(ctx: Context<NewVault>) -> Result<()> {
     require_keys_eq!(a.eata_delegation_record.key(), record_of(&eata), PokerError::VaultBlocked);
     require_keys_eq!(a.permission.key(), permission, PokerError::VaultBlocked);
     require_keys_eq!(a.permission_delegation_record.key(), record_of(&permission), PokerError::VaultBlocked);
+    // Nothing may be left behind in the old vault's Solana account (M10 review L3).
+    require_keys_eq!(a.old_vault_token.key(), get_associated_token_address(&vault, &WSOL_MINT), PokerError::VaultBlocked);
+    {
+        let d = a.old_vault_token.try_borrow_data()?;
+        require!(d.len() < 72 || d[64..72] == [0; 8], PokerError::VaultNotEmpty);
+    }
     // Blocked: the vault account or its permission is handed to a validator other than the TEE, or the
     // permission is handed over while not public. (What `open_vault` refuses.)
     let elsewhere = |record: &UncheckedAccount| -> Result<bool> {
@@ -805,15 +986,15 @@ pub fn new_vault(ctx: Context<NewVault>) -> Result<()> {
     require!(elsewhere(&a.eata_delegation_record)? || elsewhere(&a.permission_delegation_record)? || private_delegated, PokerError::VaultNotBlocked);
     let st = &mut ctx.accounts.wallet_state;
     st.wallet = wallet;
-    st.vault_gen = st.vault_gen.checked_add(1).ok_or(PokerError::MathOverflow)?;
-    emit!(VaultReplaced { wallet, vault_gen: st.vault_gen });
+    st.vault_seed = seed;
+    emit!(VaultReplaced { wallet, vault: vault_address(&wallet, &seed).0 });
     Ok(())
 }
 
 #[event]
 pub struct VaultReplaced {
     pub wallet: Pubkey,
-    pub vault_gen: u8,
+    pub vault: Pubkey,
 }
 
 #[event]

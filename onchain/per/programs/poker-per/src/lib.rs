@@ -111,8 +111,16 @@ pub mod poker_per {
         instructions::vault::revoke_play_keys(ctx)
     }
 
-    pub fn new_vault(ctx: Context<NewVault>) -> Result<()> {
-        instructions::vault::new_vault(ctx)
+    pub fn vault_exit(ctx: Context<VaultExit>, shuttle_id: u32, amount: u64) -> Result<()> {
+        instructions::vault::vault_exit(ctx, shuttle_id, amount)
+    }
+
+    pub fn vault_payout(ctx: Context<VaultPayout>) -> Result<()> {
+        instructions::vault::vault_payout(ctx)
+    }
+
+    pub fn new_vault(ctx: Context<NewVault>, seed: [u8; 8]) -> Result<()> {
+        instructions::vault::new_vault(ctx, seed)
     }
 
     pub fn vault_buy_in_code(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64, code: [u8; 16]) -> Result<()> {

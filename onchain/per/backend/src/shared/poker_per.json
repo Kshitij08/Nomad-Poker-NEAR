@@ -3343,11 +3343,24 @@
           "name": "permission_delegation_record"
         },
         {
+          "name": "old_vault_token"
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "seed",
+          "type": {
+            "array": [
+              "u8",
+              8
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "open_log",
@@ -7457,6 +7470,180 @@
       ]
     },
     {
+      "name": "vault_exit",
+      "discriminator": [
+        181,
+        16,
+        199,
+        191,
+        117,
+        168,
+        91,
+        122
+      ],
+      "accounts": [
+        {
+          "name": "wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "wallet_state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault"
+        },
+        {
+          "name": "vault_token",
+          "docs": [
+            "The vault's wSOL account on Solana: MagicBlock pays the withdrawal here, `vault_payout` moves it on."
+          ],
+          "writable": true
+        },
+        {
+          "name": "rent_pda",
+          "writable": true
+        },
+        {
+          "name": "shuttle_eata",
+          "writable": true
+        },
+        {
+          "name": "shuttle_ata",
+          "writable": true
+        },
+        {
+          "name": "shuttle_wallet_ata",
+          "writable": true
+        },
+        {
+          "name": "shuttle_buffer",
+          "writable": true
+        },
+        {
+          "name": "shuttle_delegation_record",
+          "writable": true
+        },
+        {
+          "name": "shuttle_delegation_metadata",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "address": "So11111111111111111111111111111111111111112"
+        },
+        {
+          "name": "espl_program",
+          "address": "SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "shuttle_id",
+          "type": "u32"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "vault_payout",
+      "discriminator": [
+        133,
+        41,
+        38,
+        198,
+        104,
+        112,
+        148,
+        219
+      ],
+      "accounts": [
+        {
+          "name": "wallet",
+          "signer": true
+        },
+        {
+          "name": "wallet_state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault"
+        },
+        {
+          "name": "vault_token",
+          "writable": true
+        },
+        {
+          "name": "wallet_token",
+          "docs": [
+            "The wallet's own wSOL account on Solana (the client unwraps it to SOL in the same transaction)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "vault_withdraw",
       "discriminator": [
         98,
@@ -8218,6 +8405,16 @@
       "code": 6059,
       "name": "VaultNotBlocked",
       "msg": "This game balance isn't blocked; a fresh one is only for a blocked balance"
+    },
+    {
+      "code": 6060,
+      "name": "BadWalletState",
+      "msg": "The wallet's state account can't be read"
+    },
+    {
+      "code": 6061,
+      "name": "VaultNotEmpty",
+      "msg": "The old game balance still holds money; withdraw it first"
     }
   ],
   "types": [
@@ -9452,11 +9649,24 @@
             }
           },
           {
+            "name": "committed_ledger_seq",
+            "docs": [
+              "M10: `ledger_seq` and `hand_no` at the last commit. Anyone but the creator may commit only after one of",
+              "them changed, so outsiders can't make an idle table pay a commit every 15 minutes (review L4). Taken",
+              "from the reserved bytes, so the account keeps its size and older tables read zeros."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "committed_hand_no",
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                36
+                20
               ]
             }
           }
@@ -9616,8 +9826,8 @@
             "type": "pubkey"
           },
           {
-            "name": "vault_gen",
-            "type": "u8"
+            "name": "vault",
+            "type": "pubkey"
           }
         ]
       }
@@ -9636,8 +9846,16 @@
             "type": "u32"
           },
           {
-            "name": "vault_gen",
-            "type": "u8"
+            "name": "vault_seed",
+            "docs": [
+              "The current vault's extra seed; all zeros = the first vault."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
           }
         ]
       }

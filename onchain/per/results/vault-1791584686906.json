@@ -1,0 +1,438 @@
+{
+  "suite": "vault",
+  "program": "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv",
+  "ranAt": "2026-10-09T22:24:46.904Z",
+  "pass": 53,
+  "fail": 0,
+  "knownPlatformIssues": 1,
+  "table": "87wVW8k1qRUaqvLh4pbSBD9EtwJRuMfQ9MBw6qSbj6wk",
+  "walletA": "3DEcG9V31VREJXr6qUzwkZ9NjmhcdrT4CWtMaUdaNXmA",
+  "walletB": "36yN97akS6m7fs6Ya4vud4YnNQyeENHsDPx9bgta5z6f",
+  "vaultA": "7JLUzTXjtbW5EqPgJ3yrKn1m7hJF2B4AQiED6fbXBJTT",
+  "outcomes": [
+    {
+      "name": "open_vault previews cleanly on Solana (no wallet warning)",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "A opens its vault",
+      "status": "PASS",
+      "detail": {
+        "sig": "5nu4SmnFs7oTuztBLdMA9xwMVueQEcEejgD5gjP9VabmQQskMefAw9vg13YD31sZjjdVE1U1AAK7oviE3eUREGnR",
+        "problem": null
+      }
+    },
+    {
+      "name": "vault's token account and its permission are delegated to the rollup",
+      "status": "PASS",
+      "detail": {
+        "eata": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh",
+        "permission": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+      }
+    },
+    {
+      "name": "open_vault again is harmless (idempotent)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2fHTQHE3qaCPM3PQvjnsuitc4oBzAwB9HyuWJ7V5aMAJ7W3Lkig5A8uNpEWuz8tkzbJxyBJbKpGYqeVKFkCqCigR",
+        "problem": null
+      }
+    },
+    {
+      "name": "B opens its vault",
+      "status": "PASS",
+      "detail": {
+        "sig": "3zhTJGcaKVqj17XRRzkuDA7jxtD6pKP4PbNzKYLZcYEsMGGNTmTkctUyUkSAFe2XnTxQRHDhDMXWekHQpvKEmAmV",
+        "problem": null
+      }
+    },
+    {
+      "name": "deposit into the vault previews cleanly on Solana",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "A deposits 0.02 SOL into its vault",
+      "status": "PASS",
+      "detail": {
+        "sig": "2UTT97uidYzLoG6tYGTV7AW6pDL4HV6TwQCU8BM1CtLjFjFFUBqyRH5hLb2JsRjSTCJdMshEMCkXPBGD9drZwqKW",
+        "problem": null
+      }
+    },
+    {
+      "name": "B deposits 0.02 SOL into its vault",
+      "status": "PASS",
+      "detail": {
+        "sig": "3Sb6gexCHe4TQzxdFiCT6CdiwfNgQ1fmjg6ZVYrrCheVFinT79ixhcaKQ77FoTgT6Gtz5yTACYDv4WPXHuC219gT",
+        "problem": null
+      }
+    },
+    {
+      "name": "the vault's permission was made public before it was handed to the rollup (nobody can make it private)",
+      "status": "PASS",
+      "detail": {
+        "snapshot": 0,
+        "inRollup": 0
+      }
+    },
+    {
+      "name": "the deposit lands in the vault in the rollup (read with the play key)",
+      "status": "PASS",
+      "detail": {
+        "balA": "20000000"
+      }
+    },
+    {
+      "name": "vault balance needs the wallet's signature: B's key with A's wallet but B's signature is refused",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "outsider pre-creates C's vault token account and a flags-0 permission on it",
+      "status": "PASS",
+      "detail": {
+        "sig": "3s3Vo2QzcnSB4jytbGTxSSkLSUsKxs9SiuWFUCGjoybZUhtSGBbHmUXRJfsjYG96vpTtpxhBPR2gVbGPu9cEj7Nv",
+        "problem": null
+      }
+    },
+    {
+      "name": "C opens its vault anyway",
+      "status": "PASS",
+      "detail": {
+        "sig": "4ik2psKtpawzhGrhGN5FQuXZKskX2r9v4qH8rdDRMNZiDTAAm4MecbwPm4wsGjNVAN5wTnBNQRUcadaxWjxbemRg",
+        "problem": null
+      }
+    },
+    {
+      "name": "C's vault permission ends up public and delegated (the vault, its authority, made it public)",
+      "status": "PASS",
+      "detail": {
+        "owner": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh",
+        "byte34": 0
+      }
+    },
+    {
+      "name": "C deposits",
+      "status": "PASS",
+      "detail": {
+        "sig": "m5CXj681FUnUhFH6dRmeLJ3UVu5gASzgX3i3nUM2js9J9ckAjzpdqnESAPs2SvNbfsUkqL1cwKdiAnDcZVyDMyc",
+        "problem": null
+      }
+    },
+    {
+      "name": "C's vault works",
+      "status": "PASS",
+      "detail": {
+        "balance": "5000000"
+      }
+    },
+    {
+      "name": "outsider delegates D's vault permission while it's private",
+      "status": "PASS",
+      "detail": {
+        "r": "sent"
+      }
+    },
+    {
+      "name": "D's open_vault then refuses (VaultBlocked): its preview fails, so the wallet never funds it",
+      "status": "PASS",
+      "detail": {
+        "expected": "VaultBlocked",
+        "got": "Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:245. Error Code: VaultBlocked. Error Number: 6056. Error Message: This game balance can't be used safely: someone else set up its rollup account first (it isn't public, or isn't handed to the TEE validator)."
+      }
+    },
+    {
+      "name": "LIMIT: D's vault stays unusable (MagicBlock lets anyone delegate it first); a fresh vault per wallet is planned for M10",
+      "status": "KNOWN",
+      "detail": {}
+    },
+    {
+      "name": "E's open_vault refuses a vault handed to another validator (VaultBlocked)",
+      "status": "PASS",
+      "detail": {
+        "expected": "VaultBlocked",
+        "got": "Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:245. Error Code: VaultBlocked. Error Number: 6056. Error Message: This game balance can't be used safely: someone else set up its rollup account first (it isn't public, or isn't handed to the TEE validator)."
+      }
+    },
+    {
+      "name": "create, delegate and open a table",
+      "status": "PASS",
+      "detail": {
+        "sig": "zqdmk5QFviG4wqcrXLNxZPHuyjVaCTKU5MhFuMVgGWDCWDnvYZ8bCYA83bHQrx5iopT8qjYFfmAVYhUGnsuJ81j",
+        "problem": null
+      }
+    },
+    {
+      "name": "forged signature (right wallet and message): rejected by Solana's Ed25519 check when sent",
+      "status": "PASS",
+      "detail": {
+        "expected": "0x2",
+        "got": "Simulation failed. \nMessage: transaction verification error: Error processing Instruction 0: custom program error: 0x2. \n\nCatch the `SendTransactionError` and call `getLogs()` on it for full details."
+      }
+    },
+    {
+      "name": "forged signature: also rejected when simulated (no balance read with it)",
+      "status": "PASS",
+      "detail": {
+        "err": {
+          "InstructionError": [
+            0,
+            {
+              "Custom": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "no wallet signature check before the buy-in: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "BadPlayKeyProof (6053)"
+      }
+    },
+    {
+      "name": "signature check not directly before the buy-in: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "BadPlayKeyProof (6053)"
+      }
+    },
+    {
+      "name": "message signed for a different play key: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "BadPlayKeyProof (6053)"
+      }
+    },
+    {
+      "name": "message signed with a different expiry: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "BadPlayKeyProof (6053)"
+      }
+    },
+    {
+      "name": "expired authorization: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "PlayKeyExpired",
+        "got": "PlayKeyExpired (6054)"
+      }
+    },
+    {
+      "name": "authorization beyond 2 days (M10, was 30): refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "PlayKeyExpired",
+        "got": "PlayKeyExpired (6054)"
+      }
+    },
+    {
+      "name": "A's play key, with A's signature, buying in from B's vault: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "BadPlayKeyProof (6053)"
+      }
+    },
+    {
+      "name": "a play-key buy-in fits Solana's 1,232-byte limit with room to spare",
+      "status": "PASS",
+      "detail": {
+        "bytes": 1147,
+        "limit": 1232
+      }
+    },
+    {
+      "name": "only the play key signs the buy-in (the wallet never signs a rollup transaction)",
+      "status": "PASS",
+      "detail": {
+        "signers": [
+          "6ZQm3992SvLAhCjbRAWZn5L64ubENvsddAt99exeFycE"
+        ]
+      }
+    },
+    {
+      "name": "A buys in 0.004 SOL from its vault (play key signs; no wallet)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2Hk1RQLGZdFutqiHx9gAcwQme5cuYuf51FXnmb34q7EkhEUbNRsq9QvbEoqkFaP9gQDPGRY1DwbN61LoVCWbqPwz",
+        "problem": null
+      }
+    },
+    {
+      "name": "B buys in 0.004 SOL from its vault",
+      "status": "PASS",
+      "detail": {
+        "sig": "hyXc3KqkUchinTQ8By6dGLshwTQNTcwGKjWcr6argEejiMCyqKaF4dUWWnAhLhXJhihBmTAGbz6ChjNvGCKXNPd",
+        "problem": null
+      }
+    },
+    {
+      "name": "A's vault went down by the buy-in",
+      "status": "PASS",
+      "detail": {
+        "balA": "16000000"
+      }
+    },
+    {
+      "name": "B's table key cashing out A's seat: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeatKey",
+        "got": "NotSeatKey (6055)"
+      }
+    },
+    {
+      "name": "B's play key (B's signature) cashing out A's seat into A's vault: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeatKey",
+        "got": "NotSeatKey (6055)"
+      }
+    },
+    {
+      "name": "cashing A's seat out into B's vault: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotSeated",
+        "got": "NotSeated (6018)"
+      }
+    },
+    {
+      "name": "A's table key cashes A out into A's vault (no wallet)",
+      "status": "PASS",
+      "detail": {
+        "sig": "38Aoon3Fej1Jtcc2RqUDedmV7BosRi9u9J9HFJemWh3nHm68CGUnUMJQ5iYtNn58A6ecz1TwVS4wfMaKPoxwA7aJ",
+        "problem": null
+      }
+    },
+    {
+      "name": "A's vault got the stack back (buy-in minus rake)",
+      "status": "PASS",
+      "detail": {
+        "before": "16000000",
+        "after": "19800000"
+      }
+    },
+    {
+      "name": "lost table key: B's play key cashes B's seat out",
+      "status": "PASS",
+      "detail": {
+        "sig": "2SY1rFRLiPrkdepVx6kx3G8LzHc1YL14d9Em5QdBLQmphjWhkYZFhgPFonYbLcLZ8uwocVdoJyApRhSineDxVqAi",
+        "problem": null
+      }
+    },
+    {
+      "name": "making the wallet's rollup account previews cleanly",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "A's wallet account is set up in the rollup (L1)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3612BVLVmD4KVF8VpajVFofqW8FfGqLPCLg9e37oH4vzSyMLgeyJcKJ694m2pRdumVKtQZCZmjp9wximAsBQkNS1",
+        "problem": null
+      }
+    },
+    {
+      "name": "withdrawing A's vault to another wallet's account: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "ConstraintAddress",
+        "got": "ConstraintAddress (2012)"
+      }
+    },
+    {
+      "name": "B's play key withdrawing from A's vault: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "BadPlayKeyProof (6053)"
+      }
+    },
+    {
+      "name": "A's play key moves the whole vault to A's rollup balance",
+      "status": "PASS",
+      "detail": {
+        "sig": "3Gx92HD4BF3H8jW7zjRZyY4MSyHM6XYncfVcdR7PYAEUkx3SYFFsSu1hYnnaYrUzWgZk6RDh9cS7BxZB3bwFiQhr",
+        "problem": null
+      }
+    },
+    {
+      "name": "A's vault is empty",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "A's own rollup balance holds it (read with A's login)",
+      "status": "PASS",
+      "detail": {
+        "walletRollup": "19800000",
+        "amount": "19800000"
+      }
+    },
+    {
+      "name": "the withdrawal to Solana previews cleanly",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "A withdraws to Solana (L1)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2U4GyHjJ7AKwgkLw9QgSML7uZRhUV6SXjzf27rshPCXHbWS1GGpVrc6L2u3zUHuMJC72sj6NGWghremWMgdxELWS",
+        "problem": null
+      }
+    },
+    {
+      "name": "the money arrives in A's wallet on Solana as SOL",
+      "status": "PASS",
+      "detail": {
+        "amount": "19800000",
+        "solBefore": 34164640,
+        "solAfter": 53459640,
+        "wsol": "0"
+      }
+    },
+    {
+      "name": "wallet-signed buy-in still works (p3)",
+      "status": "PASS",
+      "detail": {
+        "sig": "54hv3bbwfAdkTxSc6GYzAo8CV7p3nX16EkoG6K9scp23C7nfe55vafC5RDpbvqbY1E59uEgUpfwqEQ4q9ARbWk1F",
+        "problem": null
+      }
+    },
+    {
+      "name": "wallet-signed cash-out still works (p3)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3Fyoh23MKcbUhsRrh9UauzqushuD9MoL7qbUFQs2jFoC5fuxED1nSeoR9mjkEHAQLNQauU97MtsrniaKL4fNXPz2",
+        "problem": null
+      }
+    },
+    {
+      "name": "collect rake and close the table",
+      "status": "PASS",
+      "detail": {
+        "sig": "inoaCqCjcnRSgxoZS3fXPXr6zZK5nad8wWw599aBDtYL1QHyumegM1juuJsrPKSZe9pWi4gD7MVKUiEWk6JzzfF",
+        "problem": null
+      }
+    }
+  ]
+}

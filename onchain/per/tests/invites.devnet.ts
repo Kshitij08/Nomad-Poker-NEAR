@@ -46,7 +46,7 @@ async function main() {
   const deployer = loadKey("deployer");
   const H = await newPlayer(deployer, 0.12), I = await newPlayer(deployer, 0.05), U = await newPlayer(deployer, 0.05), L = await newPlayer(deployer, 0.05), W = await newPlayer(deployer, 0.05);
   for (const p of [H, I, U, L, W]) {
-    await sendL1(new Transaction().add(await programFor(p.wallet).methods.openVault().accountsPartial(openVaultAccounts(p.wallet.publicKey)).instruction()), [p.wallet]);
+    await sendL1(new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }), await programFor(p.wallet).methods.openVault().accountsPartial(openVaultAccounts(p.wallet.publicKey)).instruction()), [p.wallet]);
     await sendL1(new Transaction().add(...depositToVaultIxs(p.wallet.publicKey, 10_000_000n)), [p.wallet]);
   }
   await sleep(12_000);

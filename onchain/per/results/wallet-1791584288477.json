@@ -1,0 +1,366 @@
+{
+  "suite": "wallet",
+  "program": "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv",
+  "ranAt": "2026-10-09T22:18:08.475Z",
+  "pass": 40,
+  "fail": 0,
+  "knownPlatformIssues": 0,
+  "revokedWallet": "shmR2W3dGJ317k42oKQdePuixtt1eWAuvCK28DXydA8",
+  "freshVaultWallet": "DmbvRRVVg33ANcjbgfcBoJDGMbgEyGfFUzShYLtzuaSH",
+  "exitWallet": "6qQj1yYKVkjfVDN7uUZaWAxkR4J6E1VNE4e8ytZn1Ge9",
+  "firstRevokeCostLamports": 919400,
+  "freshVaultCostLamports": 13488760,
+  "exitLamports": 7483440,
+  "outcomes": [
+    {
+      "name": "before any revoke the wallet has no state (key set 0, vault 0)",
+      "status": "PASS",
+      "detail": {
+        "keySet": 0,
+        "vaultSeed": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "name": "a key-set-0 play key (the M9 wording) reads the balance",
+      "status": "PASS",
+      "detail": {
+        "sig": "10000000",
+        "problem": null
+      }
+    },
+    {
+      "name": "revoke_play_keys previews cleanly in a wallet",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "the wallet revokes its play keys (one Solana transaction)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3mpsoze5d4sWPNfrknQkBbx11kUP8wPe53nsGcovFNg3k6e5ENoMLRNAHp6TYMGRxZguTGo14vinHm3ZHLJJsahJ",
+        "problem": null
+      }
+    },
+    {
+      "name": "its key set is now 1",
+      "status": "PASS",
+      "detail": {
+        "keySet": 1,
+        "vaultSeed": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "name": "the old play key no longer works (rollup copy updated)",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "{\"InstructionError\":[1,{\"Custom\":6053}]} Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:136. Error Code: BadPlayKeyProof. Error Number: 6053. Error Message: Missing or invalid wallet signature for this play key (expected an Ed25519 check right before this instruction"
+      }
+    },
+    {
+      "name": "a new key signed with the old wording (key set 0) is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "{\"InstructionError\":[1,{\"Custom\":6053}]} Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:136. Error Code: BadPlayKeyProof. Error Number: 6053. Error Message: Missing or invalid wallet signature for this play key (expected an Ed25519 check right before this instruction"
+      }
+    },
+    {
+      "name": "a new key naming a wrong key set (2) is refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "{\"InstructionError\":[1,{\"Custom\":6053}]} Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:136. Error Code: BadPlayKeyProof. Error Number: 6053. Error Message: Missing or invalid wallet signature for this play key (expected an Ed25519 check right before this instruction"
+      }
+    },
+    {
+      "name": "a new key naming key set 1 works",
+      "status": "PASS",
+      "detail": {
+        "sig": "10000000",
+        "problem": null
+      }
+    },
+    {
+      "name": "someone else's state account can't stand in (an unrevoked wallet's)",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": ""
+      }
+    },
+    {
+      "name": "a second revoke (key set 2)",
+      "status": "PASS",
+      "detail": {
+        "sig": "uufV5XUur4A7WXfBz9QyTRYakDMvxkjr2djZKzGVF6sD8mY3PzdWqW9TjPgFzFngba5e1KXUqNmqZ8mmegn2UHC",
+        "problem": null
+      }
+    },
+    {
+      "name": "the key-set-1 key is cancelled too",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "{\"InstructionError\":[1,{\"Custom\":6053}]} Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:136. Error Code: BadPlayKeyProof. Error Number: 6053. Error Message: Missing or invalid wallet signature for this play key (expected an Ed25519 check right before this instruction"
+      }
+    },
+    {
+      "name": "an outsider blocks Q's game vault before its first use (its account handed to another validator)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5qdZK3XVweNqAYuSqN456MWA5acstocMDKrsJBL99Tvs5HXwi3wpyUeYaYRiLQ1AfGVETwZ95MyFj9LtVEV9shUz",
+        "problem": null
+      }
+    },
+    {
+      "name": "opening the blocked vault is refused (VaultBlocked), so no money can go in",
+      "status": "PASS",
+      "detail": {
+        "err": {
+          "InstructionError": [
+            0,
+            {
+              "Custom": 6056
+            }
+          ]
+        },
+        "logs": [
+          "Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:245. Error Code: VaultBlocked. Error Number: 6056. Error Message: This game balance can't be used safely: someone else set up its rollup account first (it isn't public, or isn't handed to the TEE validator).",
+          "Program 7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv consumed 107366 of 200000 compute units",
+          "Program 7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv failed: custom program error: 0x17a8"
+        ]
+      }
+    },
+    {
+      "name": "a wallet whose vault works can't replace it (VaultNotBlocked)",
+      "status": "PASS",
+      "detail": {
+        "expected": "VaultNotBlocked",
+        "got": "Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:986. Error Code: VaultNotBlocked. Error Number: 6059. Error Message: This game balance isn't blocked; a fresh one is only for a blocked balance."
+      }
+    },
+    {
+      "name": "the record of a different account can't be passed off as the current vault's",
+      "status": "PASS",
+      "detail": {
+        "expected": "VaultBlocked",
+        "got": "Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:970. Error Code: VaultBlocked. Error Number: 6056. Error Message: This game balance can't be used safely: someone else set up its rollup account first (it isn't public, or isn't handed to the TEE validator)."
+      }
+    },
+    {
+      "name": "a fresh vault can't use the all-zero seed (the first vault's)",
+      "status": "PASS",
+      "detail": {
+        "expected": "VaultNotBlocked",
+        "got": "Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:964. Error Code: VaultNotBlocked. Error Number: 6059. Error Message: This game balance isn't blocked; a fresh one is only for a blocked balance."
+      }
+    },
+    {
+      "name": "replace + open the fresh vault previews cleanly in a wallet (one transaction)",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "Q replaces the blocked vault and opens the fresh one in one transaction",
+      "status": "PASS",
+      "detail": {
+        "sig": "4z9dv6dGeom51FnnDmNRHZLPrjLrPyHmjNzHjwxP22sYNqDMTdkVcZHSDUhVxECzCSLvZce7p8xiv4EyL2H5odDA",
+        "problem": null
+      }
+    },
+    {
+      "name": "Q's state now names the fresh vault's random seed",
+      "status": "PASS",
+      "detail": {
+        "keySet": 0,
+        "vaultSeed": [
+          165,
+          46,
+          220,
+          222,
+          52,
+          36,
+          76,
+          81
+        ]
+      }
+    },
+    {
+      "name": "the fresh vault can't be replaced again while it works",
+      "status": "PASS",
+      "detail": {
+        "expected": "VaultNotBlocked",
+        "got": "Program log: AnchorError thrown in programs/poker-per/src/instructions/vault.rs:986. Error Code: VaultNotBlocked. Error Number: 6059. Error Message: This game balance isn't blocked; a fresh one is only for a blocked balance."
+      }
+    },
+    {
+      "name": "Q deposits into the fresh vault",
+      "status": "PASS",
+      "detail": {
+        "sig": "2sPdydYpteH2suSsUbYTmyEgYadtKKnugpBmFKCdEchCymfAuTYxfCYDqjANTPrhPmdcxG1At1zWTx5FDhkejvbU",
+        "problem": null
+      }
+    },
+    {
+      "name": "the fresh vault holds the deposit (read with Q's play key)",
+      "status": "PASS",
+      "detail": {
+        "balance": "10000000"
+      }
+    },
+    {
+      "name": "the blocked first vault can't be used in its place",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "{\"InstructionError\":[1,{\"Custom\":3012}]} Program log: AnchorError caused by account: vault_token. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized."
+      }
+    },
+    {
+      "name": "Q hosts a table",
+      "status": "PASS",
+      "detail": {
+        "sig": "4BpxmUhBLtD944vfsfjaoxv9kniMhsh4QS2sGBuhjedrC16XTQbzWAHZTbeiquR9h3Btz8ybJY112MrVfeqbNcRC",
+        "problem": null
+      }
+    },
+    {
+      "name": "Q's play key opens it",
+      "status": "PASS",
+      "detail": {
+        "sig": "2S5o1eLPRXpyQcwbfY9EqLP5AmhWBgYaVVXYrH9KcoEWxfDPkt3Gs8hf6AbxxjWUCWDwRgUQyZHRgnPsngK6p4Ld",
+        "problem": null
+      }
+    },
+    {
+      "name": "Q buys in from the fresh vault (play key)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2pRsWK5JZPfwFPwQ3EAWpstu76wmad966aFhDGNyqq8g94fW9LSSMu3f8L1JjqXwSwRos2i4WVPXA2ox1sWNKATb",
+        "problem": null
+      }
+    },
+    {
+      "name": "Q leaves (table key) back into the fresh vault",
+      "status": "PASS",
+      "detail": {
+        "sig": "2au52wUGZZ2WNWKnXAdri7F3FLussqMkU9ggpjqyyL7WDXU86zdsSPbv55LBHY38PVvvAeDAdbHxuQPnjrmzjynQ",
+        "problem": null
+      }
+    },
+    {
+      "name": "closing can't name the old (blocked) vault for leftovers",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "AccountNotInitialized (3012)"
+      }
+    },
+    {
+      "name": "Q's play key closes it, naming the fresh vault for leftovers",
+      "status": "PASS",
+      "detail": {
+        "sig": "3WtZVcZrwu7sk7JZdjG4GBT2qbtoz2D9HQjsH7dpw5QMcS9u5oJ54X3HiuXFhSbV7y6wnt34PtUekKZpSYxxo2H3",
+        "problem": null
+      }
+    },
+    {
+      "name": "an outsider blocks R's own rollup wSOL account (the M9 withdrawal can then never pay R)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5qEByS3Q3V1vbuXg1HTKWkXK7wGus3gh5HkNJs5LpQEURxUcYJEBUwSfAiR3WnWHT5MTmavRXvEVibyVAeuA5SPK",
+        "problem": null
+      }
+    },
+    {
+      "name": "vault_exit previews cleanly in a wallet",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "another wallet can't exit with R's vault",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "Program log: AnchorError caused by account: vault. Error Code: ConstraintSeeds. Error Number: 2006. Error Message: A seeds constraint was violated."
+      }
+    },
+    {
+      "name": "R takes 0.006 SOL out of the rollup (vault as the owner; R's blocked account isn't involved)",
+      "status": "PASS",
+      "detail": {
+        "sig": "4xejfjpbStTVAbUnByPw3qvF4g9jUD678dV1jagEokpy1s5yKqnUTvPHpxGWxtE7gm41MqSzNdbGxNv665tL6KEt",
+        "problem": null
+      }
+    },
+    {
+      "name": "the 0.006 SOL arrives on the vault on Solana (MagicBlock pays the owner in SOL)",
+      "status": "PASS",
+      "detail": {
+        "landed": "6000000"
+      }
+    },
+    {
+      "name": "the payout can't go to another wallet's account",
+      "status": "PASS",
+      "detail": {
+        "expected": "",
+        "got": "Program log: AnchorError caused by account: wallet_token. Error Code: ConstraintAddress. Error Number: 2012. Error Message: An address constraint was violated."
+      }
+    },
+    {
+      "name": "payout + unwrap previews cleanly in a wallet",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "R is paid as SOL (payout and unwrap in one transaction)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2jSSSTVvY42NFyN44jycYMXmPM67WUciLcFFSXZvCsHY7dkhvQ2us7Ae4tBQRtSUEM2yrRAL3crK8jDFGnasaLxw",
+        "problem": null
+      }
+    },
+    {
+      "name": "R's wallet gained the 0.006 SOL (less the fee)",
+      "status": "PASS",
+      "detail": {
+        "lamports": 7483440
+      }
+    },
+    {
+      "name": "the rest (0.004 SOL) is still R's game balance in the rollup",
+      "status": "PASS",
+      "detail": {
+        "balance": "4000000"
+      }
+    }
+  ]
+}

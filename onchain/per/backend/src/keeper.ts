@@ -26,7 +26,8 @@ const PLAY_CU = 1_400_000;
 const RETRY_AFTER_MS = 30_000;
 const CONCURRENCY = 4;
 
-export const keeperState = { startedAt: Date.now(), lastLoopAt: 0, lastDiscoverAt: 0, loops: 0, tablesTracked: 0, lastError: "", lastErrorAt: 0, auditorMatches: null as boolean | null };
+export const keeperState = { startedAt: Date.now(), lastLoopAt: 0, lastDiscoverAt: 0, loops: 0, tablesTracked: 0, lastError: "", lastErrorAt: 0, auditorMatches: null as boolean | null,
+  dlp: { slot: null as number | null, expected: null as number | null, changed: false, checkedAt: 0 } };
 
 /** Rollup logins travel as `?token=` in URLs; never let one reach a log, an event or /health. */
 export const redact = (s: string) => s.replace(/token=[^&\s"']+/g, "token=<redacted>");
@@ -268,11 +269,12 @@ async function maybeCloseAbandoned(key: string, address: PublicKey, t: any, prog
   const cfg = await programConfig();
   if (now - Number(t.lastActivityTs) < cfg.idleSecs + 30) return false; // a margin for the rollup clock
   const acc = accountsOf(address);
-  // M10: the host's state on Solana says which game vault is current (vault 0 has the M9 address).
+  // M10: the host's state on Solana says which game vault is current: its 8-byte seed (all zeros = the first
+  // vault, the M9 address). A state that can't be read leaves the vault out (no leftover sweep).
   const walletState = PublicKey.findProgramAddressSync([Buffer.from("wallet"), t.creator.toBuffer()], PROGRAM_ID)[0];
   const st = await l1.getAccountInfo(walletState);
-  const gen = st && st.data.length >= 45 ? st.data[44] : 0;
-  const vault = PublicKey.findProgramAddressSync([Buffer.from("vault"), t.creator.toBuffer(), Buffer.from(gen ? [gen] : [])], PROGRAM_ID)[0];
+  const seed = st && st.data.length >= 52 ? st.data.subarray(44, 52) : Buffer.alloc(8);
+  const vault = PublicKey.findProgramAddressSync([Buffer.from("vault"), t.creator.toBuffer(), seed.every((b) => b === 0) ? Buffer.alloc(0) : Buffer.from(seed)], PROGRAM_ID)[0];
   const vaultToken = getAssociatedTokenAddressSync(NATIVE_MINT, vault, true);
   // The host's game balance gets any leftover, if the host has one (an absent optional account would fail).
   const hasVault = !!(await (await keeperTee.get()).getAccountInfo(vaultToken, "processed").catch(() => null));
@@ -292,6 +294,30 @@ async function maybeCloseAbandoned(key: string, address: PublicKey, t: any, prog
   return closed;
 }
 
+/**
+ * M10: MagicBlock's delegation program holds every table, escrow and vault while they're in the rollup, and
+ * the escape hatch depends on how it behaves. Its program data records the slot it was last upgraded in;
+ * a change from the expected slot (DLP_EXPECTED_SLOT, else the first one this process saw) shows on /health
+ * and as a `dlp_changed` event, so the operator re-runs the escape-hatch suite before trusting it.
+ */
+async function checkDelegationProgram() {
+  if (Date.now() - keeperState.dlp.checkedAt < 600_000) return;
+  keeperState.dlp.checkedAt = Date.now();
+  const prog = await l1.getAccountInfo(DELEGATION_PROGRAM_ID);
+  if (!prog || prog.data.length < 36) return;
+  const programData = new PublicKey(prog.data.subarray(4, 36));
+  const pd = await l1.getAccountInfo(programData, { dataSlice: { offset: 4, length: 8 } } as any);
+  if (!pd) return;
+  const slot = Number(pd.data.readBigUInt64LE(0));
+  const d = keeperState.dlp;
+  d.slot = slot;
+  if (d.expected === null) d.expected = Number(process.env.DLP_EXPECTED_SLOT || slot);
+  if (slot !== d.expected && !d.changed) {
+    d.changed = true;
+    await event(null, "dlp_changed", false, `delegation program upgraded: slot ${d.expected} -> ${slot}; re-run the escape-hatch checks`);
+  }
+}
+
 let lastPrune = 0;
 export async function runKeeper() {
   for (;;) {
@@ -299,6 +325,7 @@ export async function runKeeper() {
     try {
       if (Date.now() - keeperState.lastDiscoverAt > config.discoverEveryMs) await discover();
       const ours = await auditorIsOurs();
+      await checkDelegationProgram().catch((e) => fail("dlp check", e));
       const tables = [...live.values()];
       for (let i = 0; i < tables.length; i += CONCURRENCY) {
         await Promise.all(tables.slice(i, i + CONCURRENCY).map((a) => step(a, ours).catch((e) => fail(`step ${a.toBase58()}`, e))));

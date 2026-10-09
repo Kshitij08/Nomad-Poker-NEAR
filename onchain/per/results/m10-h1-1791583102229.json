@@ -1,0 +1,29 @@
+{
+  "ranAt": "2026-10-09T21:58:22.230Z",
+  "wallet": "8mPHG9gYsc2fE35JemptamXzeUoUiMAq2Wfo2H2952Fg",
+  "outcomes": [
+    {
+      "name": "outsider blocks the wallet's own rollup wSOL account",
+      "ok": true,
+      "sig": "25K1YfSLwVzW45WEfkbEuewgxksE5pCc1mZ78anudtjmgrqijesmjZRnnCqPYqwEMrsqZ6N8axySpbg4JaGBNBey"
+    },
+    {
+      "name": "withdrawal setup (the wallet's rollup account)",
+      "ok": false,
+      "err": "Program log: Ephemeral ATA is already delegated to validator FuWFSADV4hzQhuNvZpUUjMtVTC31hXnACcWY2njx5Py2, requested validator MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo"
+    },
+    {
+      "name": "play key moves the vault's money to the wallet's rollup account",
+      "ok": false,
+      "err": "Simulation failed. \nMessage: transaction verification error: Transaction loads a writable account that cannot be written. \n\nCatch the `SendTransactionError` and call `getLogs()` on it for full details."
+    },
+    {
+      "name": "vault balance afterwards",
+      "amount": "10000000"
+    },
+    {
+      "name": "the wallet's rollup account is delegated to",
+      "validator": "FuWFSADV4hzQhuNvZpUUjMtVTC31hXnACcWY2njx5Py2"
+    }
+  ]
+}
