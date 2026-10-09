@@ -18,7 +18,8 @@
     "e2e:hand": "node --import tsx scripts/e2e-full-hand.mjs",
     "test:agents": "node ../Tools/Tests/AgentSharedLobby.test.js",
     "db:backfill": "node --import tsx src/jobs/backfill-db.ts",
-    "start": "node dist/db/migrate.js && node dist/index.js"
+    "start": "node dist/db/migrate.js && node dist/index.js",
+    "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",

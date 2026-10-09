@@ -9,9 +9,13 @@ import { requireInternalApiKey, warnIfInternalApiKeyMissing } from "./middleware
 import { requirePlayerJwt } from "./middleware/playerAuth.js";
 import { createPool } from "./db/pool.js";
 import { startIndexer } from "./services/indexer.js";
+import { createPlayFabFromEnv } from "./services/playfab.js";
+import { TournamentService } from "./tournaments/service.js";
+import { createTournamentApiRouter, createTournamentInternalRouter } from "./tournaments/routes.js";
 
 const app = express();
 const pool = createPool();
+const tournaments = new TournamentService(pool, createPlayFabFromEnv());
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
@@ -24,6 +28,8 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 app.use("/api", createApiRouter(pool));
+app.use("/api", createTournamentApiRouter(tournaments));
+app.use("/internal/tournaments", requireInternalApiKey, createTournamentInternalRouter(tournaments));
 app.use("/internal", requireInternalApiKey, createInternalRouter(pool));
 app.use("/host", requirePlayerJwt, createHostRouter(pool));
 
@@ -36,6 +42,18 @@ async function main() {
     console.warn(
       "[backend] JWT_SECRET is not set (or too short) — /api/auth/* and /api/me will return 503."
     );
+  }
+
+  // Tournaments: lock at the start time, spawn servers, retry money. TOURNAMENTS_SCHEDULER=0 turns it off
+  // (e.g. a second replica — the scheduler must run in exactly one process).
+  if (process.env.TOURNAMENTS_SCHEDULER !== "0") {
+    tournaments.startScheduler();
+    if (!process.env.PLAYFAB_SECRET_KEY && process.env.PLAYFAB_FAKE !== "1") {
+      console.warn(
+        "[backend] PLAYFAB_TITLE_ID / PLAYFAB_SECRET_KEY not set — tournament sign-in returns 503 and " +
+          "entry fees, refunds and prizes wait until they are."
+      );
+    }
   }
 
   const connection = createConnection();
