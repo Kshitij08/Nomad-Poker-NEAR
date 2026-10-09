@@ -1,0 +1,24 @@
+{
+ "table": {
+  "address": "BPPXRXZw98sEyR4mxGwDWHvLLUjUW3U8ZAV15LFgR2bj",
+  "handNo": "10",
+  "handState": 0,
+  "seatsTaken": [
+   0
+  ],
+  "moneyMoves": "106",
+  "ledgerHash": "7f4b1c67b8ea3ec0233f3a17a0bfadf97dfb5ac45f46246c80ec12372bfb19d7"
+ },
+ "wallets": [
+  {
+   "wallet": "CrprNdijyqQCMVZJdRpsyaD9b4XvxzgzRnz7Ax2vqAiC",
+   "devnetSol": 5.5174746,
+   "wsolAccount": "4wqJ2hDQrurkaDboeRCn4pY24XMuf1bmcK5VgXb6yece",
+   "wsolAccountOnDevnet": {
+    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "inRollup": false
+   },
+   "rollupBalanceSeenByAnotherLogin": "0.0"
+  }
+ ]
+}

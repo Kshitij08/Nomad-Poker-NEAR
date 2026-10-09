@@ -14,7 +14,7 @@ import nacl from "tweetnacl";
 import { sha512 } from "@noble/hashes/sha2";
 const dcap = require("@phala/dcap-qvl");
 
-export type Pins = { mrTd: string; rtMr0: string; rtMr1: string; rtMr2: string; rtMr3: string; mrConfigId: string; mrOwner: string; key: string };
+export type Pins = { mrTd: string; rtMr0: string; rtMr1: string; rtMr2: string; rtMr3: string; mrConfigId: string; mrOwner: string };
 export type Report = { ok: boolean; checks: { name: string; ok: boolean; detail?: string }[]; ms: number };
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
@@ -50,7 +50,8 @@ export async function verify(teeUrl: string, pins: Pins): Promise<Report> {
     for (const [name, got] of [["mrTd", td.mrTd], ["rtMr0", td.rtMr0], ["rtMr1", td.rtMr1], ["rtMr2", td.rtMr2], ["rtMr3", td.rtMr3], ["mrConfigId", td.mrConfigId], ["mrOwner", td.mrOwner]] as [keyof Pins, Uint8Array][])
       add(`${name} matches the pinned measurement`, hex(got) === pins[name], hex(got).slice(0, 16));
     const pk = b64(body.pubkey ?? "");
-    add("enclave key is the pinned key", pk.length === 32 && base58(pk) === pins.key, pk.length === 32 ? base58(pk) : "missing");
+    // Not pinned: the enclave makes a new key at every boot. The two checks below bind it to this quote.
+    add("enclave returned its key", pk.length === 32, pk.length === 32 ? base58(pk) : "missing");
     add("report data commits to that key (sha512)", hex(td.reportData) === hex(sha512(pk)));
     add("the key signed our fresh challenge", nacl.sign.detached.verify(challenge, b64(body.signature ?? ""), pk));
   } catch (e: any) {
