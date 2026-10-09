@@ -33,13 +33,15 @@ use crate::instructions::table::{DELEGATION_PROGRAM_ID, ESPL_PROGRAM_ID};
 use crate::private::{write, Sponsor};
 use crate::state::Config;
 use crate::table::{
-    may_request_escape, rake_for, Hand, Invites, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, INVITES_SEED, LEDGER_SEED, LOG_SEED, RECORD_SEED,
+    rake_for, Hand, Invites, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, INVITES_SEED, LEDGER_SEED, LOG_SEED, RECORD_SEED,
     STATUS_CLOSED, STATUS_OPEN, TABLE_SEED, WSOL_MINT,
 };
 
 pub const VAULT_SEED: &[u8] = b"vault";
 /// A play key's authorization lasts at most this long (the client asks for 7 days).
 pub const MAX_PLAY_KEY_SECS: i64 = 30 * 24 * 60 * 60;
+/// A table counts as abandoned (anyone may close it) after this many escape delays empty and idle.
+pub const ABANDONED_ESCAPE_DELAYS: i64 = 6;
 pub const ED25519_PROGRAM_ID: Pubkey = pubkey!("Ed25519SigVerify111111111111111111111111111");
 
 const ESPL_INIT_EPHEMERAL_ATA: u8 = 0;
@@ -543,8 +545,9 @@ pub struct CloseTableKeyed<'info> {
 }
 
 /// `close_table` without the creator's wallet in the rollup (M9b). Signed by the creator's play key
-/// (its signed message, `expires` set), or by anyone once the table has been empty and idle for the
-/// config's escape delay (`expires` 0; the backend's keeper closes abandoned tables this way). Unpaid
+/// (its signed message, `expires` set), or by anyone once the table has been empty and idle for
+/// ABANDONED_ESCAPE_DELAYS escape delays (`expires` 0; the backend's keeper closes abandoned tables
+/// this way). Unpaid
 /// rake goes to the dev wallet first; any leftover goes to the creator's game balance. The table pays
 /// the commit, so the signer needs no SOL in the rollup. The creator reclaims the rent on L1 as usual.
 pub fn close_table_keyed(ctx: Context<CloseTableKeyed>, expires: i64) -> Result<()> {
@@ -552,8 +555,13 @@ pub fn close_table_keyed(ctx: Context<CloseTableKeyed>, expires: i64) -> Result<
     if expires != 0 {
         verify_play_key(&ctx.accounts.instructions, &creator, &ctx.accounts.signer.key(), expires)?;
     } else {
+        // Abandoned: empty for ABANDONED_ESCAPE_DELAYS escape delays (6 hours by default), so a table
+        // waiting for players isn't closed under its host. Unlike the escape hatch, a timestamp from the
+        // future (a rollup clock behind Solana's) counts as active, not idle (M9b review).
         require!(ctx.accounts.table.seat_mask == 0, PokerError::TableNotEmpty);
-        may_request_escape(ctx.accounts.table.last_activity_ts, Clock::get()?.unix_timestamp, ctx.accounts.config.escape_idle_secs())?;
+        let (now, last) = (Clock::get()?.unix_timestamp, ctx.accounts.table.last_activity_ts);
+        let idle = ctx.accounts.config.escape_idle_secs().saturating_mul(ABANDONED_ESCAPE_DELAYS);
+        require!(now >= last && now - last >= idle, PokerError::TableActive);
     }
     let rake = ctx.accounts.ledger.rake_accrued;
     if rake > 0 {
@@ -563,7 +571,10 @@ pub fn close_table_keyed(ctx: Context<CloseTableKeyed>, expires: i64) -> Result<
         ledger.rake_accrued = 0;
         ledger.escrow_owed = ledger.escrow_owed.checked_sub(rake).ok_or(PokerError::MathOverflow)?;
         ledger.total_rake_collected = ledger.total_rake_collected.checked_add(rake).ok_or(PokerError::MathOverflow)?;
-        ctx.accounts.escrow.reload()?;
+        // As collect_rake: check the escrow covers the ledger, then record the new fingerprint.
+        let fp = settle_check(&mut ctx.accounts.escrow, &mut ctx.accounts.ledger)?;
+        stamp(&mut ctx.accounts.table, fp)?;
+        emit!(RakeCollected { table: ctx.accounts.table.key(), amount: rake, dev_wallet: ctx.accounts.config.dev_wallet });
     }
     close_flow!(ctx, creator_vault_token, {
         let t = &ctx.accounts.table;

@@ -4,7 +4,7 @@
 //   - `open_log`: shows a finished hand's action log to the auditor, which then downloads it;
 //   - `commit_table`: copies the table (with its latest hand record) to Solana, at most every
 //     15 minutes and only when it changed;
-//   - `close_table_keyed` (M9b): closes a table left empty and idle for the config's escape delay. Any
+//   - `close_table_keyed` (M9b): closes a table left empty and idle for 6 escape delays. Any
 //     unpaid rake goes to the dev wallet and any leftover to the host's game balance; the host
 //     reclaims the rent.
 // It can't move funds, deal, act for a player or read live cards: the program allows none of that
@@ -251,12 +251,14 @@ const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
 const getAssociatedTokenAddressSync = (mint: PublicKey, owner: PublicKey, _offCurve = false) =>
   PublicKey.findProgramAddressSync([owner.toBuffer(), TOKEN_PROGRAM.toBuffer(), mint.toBuffer()], ATA_PROGRAM)[0];
 const DEFAULT_ESCAPE_IDLE_SECS = 3_600;
+/** As the program's ABANDONED_ESCAPE_DELAYS: abandoned = empty and idle for 6 escape delays. */
+const ABANDONED_ESCAPE_DELAYS = 6;
 let configCache: { at: number; devWallet: PublicKey; idleSecs: number } | null = null;
 async function programConfig() {
   if (configCache && Date.now() - configCache.at < 300_000) return configCache;
   const info = await l1.getAccountInfo(CONFIG_PDA);
   const c = coder.decode("config", info!.data);
-  return (configCache = { at: Date.now(), devWallet: c.devWallet, idleSecs: c.escapeIdleSecs || DEFAULT_ESCAPE_IDLE_SECS });
+  return (configCache = { at: Date.now(), devWallet: c.devWallet, idleSecs: (c.escapeIdleSecs || DEFAULT_ESCAPE_IDLE_SECS) * ABANDONED_ESCAPE_DELAYS });
 }
 
 /** M9b: closes a table nobody sits at that's been idle for the config's escape delay (the program

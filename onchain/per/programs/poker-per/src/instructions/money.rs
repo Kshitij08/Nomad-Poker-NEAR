@@ -147,7 +147,11 @@ pub fn open_table(ctx: Context<OpenTable>) -> Result<()> {
     // The seed window counts from the first open only: calling open_table again (it's idempotent and
     // permissionless) must not restart it.
     if first_open {
-        ctx.accounts.table.idle_since = Clock::get()?.unix_timestamp;
+        let now = Clock::get()?.unix_timestamp;
+        ctx.accounts.table.idle_since = now;
+        // Rollup time, so the abandoned-table rule (close_table_keyed) counts from the open, not from
+        // the L1 delegation's clock (M9b review).
+        ctx.accounts.table.last_activity_ts = now;
     }
     Ok(())
 }

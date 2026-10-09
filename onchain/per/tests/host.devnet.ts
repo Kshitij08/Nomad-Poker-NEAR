@@ -82,6 +82,8 @@ async function main() {
 
   // ---- Opening is in the rollup and permissionless: the host's play key pays nothing and signs.
   await S.ok("host's play key opens both tables (no wallet)", async () => { await pub.T.open(H.er, H.key.publicKey); return inv.T.open(H.er, H.key.publicKey); });
+  const tFresh: any = await (programOn(await teeConnection(deployer), deployer).account as any).table.fetch(pub.T.table);
+  S.check("opening stamps the table's activity with rollup time (the abandoned rule counts from the open)", Math.abs(Number(tFresh.lastActivityTs) - now()) < 120, { lastActivityTs: Number(tFresh.lastActivityTs), now: now() });
 
   // ---- Buy-ins from game balances; invite-only enforced.
   const buyIn = (p: P, T: ReturnType<typeof tableApi>, seat: number, invites: PublicKey | null) => {
@@ -148,12 +150,26 @@ async function main() {
 
   // ---- The keeper's path: anyone may close a table left empty and idle for the escape delay.
   await S.ok("U leaves the public table", () => cashOut(uSeat.reader, U, pub.T, 0));
+  await S.err("a stranger can't close a freshly emptied table (expires 0)", "TableActive", closeKeyed(Keypair.generate(), pub.T, 0));
   const l1 = programFor(deployer);
   const cfg = (escapeIdleSecs: number) => l1.methods.updateConfig({ devWallet: deployer.publicKey, rakeBps: 500, maxBuyIn: BN(1_000_000_000), paused: false, escapeIdleSecs })
     .accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc();
-  await S.ok("test only: escape delay set to 60 s", () => cfg(60));
-  await sleep(75_000);
-  await S.ok("after 60 s empty and idle, anyone (the keeper) closes it", closeKeyed(Keypair.generate(), pub.T, 0));
+  await S.ok("test only: escape delay set to 60 s (abandoned = 6 delays = 6 minutes)", () => cfg(60));
+  await sleep(60_000);
+  await S.err("after 1 minute (one escape delay) it isn't abandoned yet", "TableActive", closeKeyed(Keypair.generate(), pub.T, 0));
+  await sleep(320_000);
+  // The backend's keeper watches for the same rule and may close it first: either way it must close.
+  await S.ok("after 6 minutes empty and idle, anyone (the keeper) closes it", async () => {
+    try { return await closeKeyed(Keypair.generate(), pub.T, 0)(); }
+    catch (e: any) {
+      for (let i = 0; i < 12; i++) {
+        const info = await connection.getAccountInfo(pub.T.table);
+        if (info && info.owner.equals(programFor(H.wallet).programId)) return "closed by the keeper first";
+        await sleep(5000);
+      }
+      throw e;
+    }
+  });
   await S.ok("escape delay restored to the default", () => cfg(0));
 
   S.finish({ host: H.wallet.publicKey.toBase58(), publicTable: pub.T.table.toBase58(), inviteTable: inv.T.table.toBase58(),
