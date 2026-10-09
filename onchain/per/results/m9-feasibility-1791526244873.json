@@ -1,0 +1,37 @@
+{
+ "ed25519": {
+  "validSignature": {
+   "sig": "5ZsJ2pYQYwmqtxruXtj3opGwwmaywDLhvhB51jFt8tMhyYgmdm82gUyTadChQ4jqxhcJA4cJCiusR5yussimFwQe",
+   "err": null
+  },
+  "tamperedSignature": {
+   "sig": "66CL1Q45tPQ1vS35CxCGXJLvW1jy2L58QY5zoxVCnJSzcpc35YtEq3aVTyD8Q4N6Pa7Rcyt6iGPragtL9cf6jtoB",
+   "err": {
+    "InstructionError": [
+     0,
+     {
+      "Custom": 2
+     }
+    ]
+   }
+  }
+ },
+ "toWallet": {
+  "recipient": "3rUcPtptp1u8SoBBdrv3LMhQCmgDJKjzEhkcwpDiHYuM",
+  "sig": "rgjdVzSiTSmVWcrnpzMbktugNbB51BoETrcSoLt3TThTTsrQ2dbN9nVxf8tkpnsegamkeYLBLNkNddsrq83Ju1P",
+  "previewOk": true,
+  "solSpent": 0.00204428,
+  "rollupBalanceSeenByRecipient": "failed to get token account balance: invalid request params: invalid token account data"
+ },
+ "toProgramAddress": {
+  "recipient": "8RQterr4SRwuY6vYSyRDc1Pc2NdfjiSKXVzvCvCAEMQY",
+  "offCurve": true,
+  "sig": "eXS75BiMheMoKZ8p9McRGPYaus9g8yw1i5TagnJtce4udUxsbVbNTotbXjzeKGmzf9zhHEWRK3v4usAFtj96neE",
+  "previewOk": true,
+  "solSpent": 0.00204428,
+  "rollupAccount": {
+   "address": "BvKthZtna7dWCukWfdZtEnPGiz7K4ZWQguGsshwkoJb3",
+   "exists": false
+  }
+ }
+}

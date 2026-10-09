@@ -1,0 +1,53 @@
+{
+ "wallet": {
+  "recipient": "7JYxmUfZWVHBVJbMxKEQPi2fo8yTbSJL4dSeawsTmk2Z",
+  "ensureInRollup": {
+   "sig": "2Be5CQefRMKXLzab3sL5dXwsM4cdU62RguhukrpYrWVhSBcZAQfJ6NfwHDmqt7ZGVupUQBSrhuHtHS1ktQMqzVx1",
+   "err": {
+    "InstructionError": [
+     0,
+     "InvalidArgument"
+    ]
+   },
+   "logs": [
+    "Program Magic11111111111111111111111111111111111111 invoke [2]",
+    "Program Magic11111111111111111111111111111111111111 failed: invalid program argument",
+    "Program SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2 consumed 2023 of 200000 compute units",
+    "Program SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2 failed: invalid program argument"
+   ]
+  },
+  "depositSig": "3ANca2GJQk3GbJ2gyjqYiXphSss5zVsrP2x38dx8k864MNa4SXAxd7Zt9iCX7dVA3aU14ZdDVUjR5ZfTQ6jiLScM",
+  "rollupAta": {
+   "address": "CQkCSei95mfoxSZYzqwKfFcyBuhXVe6rATX3B8f15FjQ",
+   "exists": false,
+   "amount": null,
+   "after": "60s"
+  },
+  "balanceSeenByRecipient": "failed to get token account balance: invalid request params: invalid token account data"
+ },
+ "programAddress": {
+  "recipient": "36it5cgiidEwTFwcBz2jzAENpnGrh6TzxKA8a31rzXgG",
+  "ensureInRollup": {
+   "sig": "GmBxyQ2Zdqf3QVrQvXurJXpHXo6a75YmBXnriBXAnBvputGUs9FPPDHXYVBQYCnvv4SWkiCxzbUnHujPThwmtmg",
+   "err": {
+    "InstructionError": [
+     0,
+     "InvalidArgument"
+    ]
+   },
+   "logs": [
+    "Program Magic11111111111111111111111111111111111111 invoke [2]",
+    "Program Magic11111111111111111111111111111111111111 failed: invalid program argument",
+    "Program SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2 consumed 2023 of 200000 compute units",
+    "Program SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2 failed: invalid program argument"
+   ]
+  },
+  "depositSig": "mzakqbtX6UNDj6c7EdEczFH7SNV4JM9kmQNVWegbpF6HG5dKeg28ruvHv5MBrnAtyr9GUNGFjHzD9UjBpRxeJCt",
+  "rollupAta": {
+   "address": "9uH42M81dBfAKCnUWCiEZbRWTmLxA3j5QixADAWEu5sW",
+   "exists": false,
+   "amount": null,
+   "after": "60s"
+  }
+ }
+}

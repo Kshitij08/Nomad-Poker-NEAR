@@ -1,7 +1,8 @@
 //! Private poker tables on a MagicBlock Private Ephemeral Rollup (TEE), dealt with MagicBlock VRF.
 //! M1: program config. M2: tables and money (L1 create/delegate/escape hatch, rollup buy-in,
 //! cash-out, rake, commit). M3: private ledger, hands and deck. M4: VRF shuffle and deal.
-//! M5: the Hold'em engine (betting, timers, side pots, showdown). Hand records land in M6.
+//! M5: the Hold'em engine (betting, timers, side pots, showdown). M6: hand records. M9: game vault
+//! and play keys.
 
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::ephemeral;
@@ -90,6 +91,28 @@ pub mod poker_per {
 
     pub fn cash_out(ctx: Context<CashOut>, seat: u8) -> Result<()> {
         instructions::money::cash_out(ctx, seat)
+    }
+
+    // ---- M9: game vault and play keys (the wallet signs only what it can preview)
+
+    pub fn open_vault(ctx: Context<OpenVault>) -> Result<()> {
+        instructions::vault::open_vault(ctx)
+    }
+
+    pub fn vault_buy_in(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64) -> Result<()> {
+        instructions::vault::vault_buy_in(ctx, seat, amount, reader, expires)
+    }
+
+    pub fn vault_cash_out(ctx: Context<VaultCashOut>, seat: u8, expires: i64) -> Result<()> {
+        instructions::vault::vault_cash_out(ctx, seat, expires)
+    }
+
+    pub fn vault_withdraw(ctx: Context<VaultWithdraw>, amount: u64, expires: i64) -> Result<()> {
+        instructions::vault::vault_withdraw(ctx, amount, expires)
+    }
+
+    pub fn vault_balance(ctx: Context<VaultBalance>, expires: i64) -> Result<()> {
+        instructions::vault::vault_balance(ctx, expires)
     }
 
     pub fn collect_rake(ctx: Context<CollectRake>) -> Result<()> {

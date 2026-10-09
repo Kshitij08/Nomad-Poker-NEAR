@@ -108,4 +108,10 @@ pub enum PokerError {
     NoAuditor,
     #[msg("This table hasn't finished a hand yet")]
     NoFinishedHand,
+    #[msg("Missing or invalid wallet signature for this play key (expected an Ed25519 check right before this instruction)")]
+    BadPlayKeyProof,
+    #[msg("The play key's authorization has expired or runs too far ahead")]
+    PlayKeyExpired,
+    #[msg("Only the seat's table key or the wallet's play key can do this")]
+    NotSeatKey,
 }

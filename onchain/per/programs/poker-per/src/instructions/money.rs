@@ -185,18 +185,18 @@ pub struct BuyIn<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Sit down in `seat` with `amount`, or add `amount` to your existing seat (rebuy). Rake is taken on
-/// every buy-in. Sitting down adds `reader` (a key from your client, not your wallet) to the
-/// ledger's readers and creates your private hand, readable by `reader` only. A rebuy keeps the
-/// reader chosen at sit-down and ignores `reader`.
-pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Result<()> {
-    let config = &ctx.accounts.config;
+/// Buy-in shared by `buy_in` (the wallet signs and pays) and `vault_buy_in` (a play key signs and the
+/// wallet's game vault pays): everything but who pays. `$transfer` moves `amount` into the escrow.
+macro_rules! buy_in_flow {
+    ($ctx:ident, $seat:expr, $amount:expr, $reader:expr, $player:expr, $transfer:expr) => {{
+    let (seat, amount, reader): (u8, u64, Pubkey) = ($seat, $amount, $reader);
+    let config = &$ctx.accounts.config;
     require!(!config.paused, PokerError::Paused);
-    let table = &ctx.accounts.table;
+    let table = &$ctx.accounts.table;
     require!(table.status == STATUS_OPEN, PokerError::TableNotOpen);
     require!(amount > 0, PokerError::BuyInTooSmall);
     require!(seat < table.max_seats, PokerError::InvalidSeat);
-    let player = ctx.accounts.player.key();
+    let player: Pubkey = $player;
     let idx = seat as usize;
 
     let rake = rake_for(amount, table.rake_bps)?;
@@ -206,8 +206,8 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
     let table_key = table.key();
 
     let (hand_idle, dealt_mask) = (table.hand_state == HAND_IDLE, table.dealt_mask);
-    let auditor = ctx.accounts.config.auditor;
-    let ledger = &mut ctx.accounts.ledger;
+    let auditor = $ctx.accounts.config.auditor;
+    let ledger = &mut $ctx.accounts.ledger;
     let sitting_down = match ledger.seat_of(&player) {
         Some(i) => {
             require!(i == idx, PokerError::InvalidSeat);
@@ -221,7 +221,7 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
             require!(!taken && ledger.seats[idx].is_empty(), PokerError::SeatTaken);
             require!(amount >= min_buy_in, PokerError::BuyInTooSmall);
             if invite_only {
-                let inv = ctx.accounts.invites.as_ref().ok_or(PokerError::NotInvited)?;
+                let inv = $ctx.accounts.invites.as_ref().ok_or(PokerError::NotInvited)?;
                 require!(inv.contains(&table_key, &player), PokerError::NotInvited);
             }
             require!(reader != Pubkey::default() && reader != player && reader != auditor, PokerError::InvalidReader);
@@ -240,26 +240,20 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
     ledger.escrow_owed = ledger.escrow_owed.checked_add(amount).ok_or(PokerError::MathOverflow)?;
     ledger.total_deposited = ledger.total_deposited.checked_add(amount).ok_or(PokerError::MathOverflow)?;
 
-    token::transfer(
-        CpiContext::new(
-            ctx.accounts.token_program.key(),
-            Transfer { from: ctx.accounts.player_token.to_account_info(), to: ctx.accounts.escrow.to_account_info(), authority: ctx.accounts.player.to_account_info() },
-        ),
-        amount,
-    )?;
+    $transfer;
 
     if sitting_down {
-        let a = &ctx.accounts;
+        let a = &$ctx.accounts;
         let (id, bump) = (a.table.table_id.to_le_bytes(), [a.table.bump]);
         let ts = table_seeds(&a.table, &id, &bump);
         let (table_info, magic, vault, perm) = (a.table.to_account_info(), a.rollup.magic_program.to_account_info(), a.rollup.vault.to_account_info(), a.rollup.permission_program.to_account_info());
         let sp = Sponsor { table: &table_info, table_seeds: &ts, vault: &vault, magic_program: &magic, permission_program: &perm };
-        let ledger_bump = [ctx.bumps.ledger];
+        let ledger_bump = [$ctx.bumps.ledger];
         let ledger_seeds: &[&[u8]] = &[LEDGER_SEED, table_key.as_ref(), &ledger_bump];
         sp.set_readers(&a.ledger.to_account_info(), ledger_seeds, &a.ledger_permission.to_account_info(), &a.ledger.readers())?;
 
         let seat_byte = [seat];
-        let hand_bump = [ctx.bumps.hand];
+        let hand_bump = [$ctx.bumps.hand];
         let hand_seeds: &[&[u8]] = &[HAND_SEED, table_key.as_ref(), &seat_byte, &hand_bump];
         let hand_info = a.hand.to_account_info();
         if hand_info.data_is_empty() {
@@ -273,15 +267,33 @@ pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Res
         }
     }
 
-    let fp = settle_check(&mut ctx.accounts.escrow, &mut ctx.accounts.ledger)?;
-    let table = &mut ctx.accounts.table;
+    let fp = settle_check(&mut $ctx.accounts.escrow, &mut $ctx.accounts.ledger)?;
+    let table = &mut $ctx.accounts.table;
     if sitting_down {
         table.seat_mask |= 1 << idx;
     }
     stamp(table, fp)?;
     emit!(BoughtIn { table: table_key, seat, amount, rake, stack });
     Ok(())
+    }};
 }
+pub(crate) use buy_in_flow;
+
+/// Sit down in `seat` with `amount`, or add `amount` to your existing seat (rebuy). Rake is taken on
+/// every buy-in. Sitting down adds `reader` (a key from your client, not your wallet) to the
+/// ledger's readers and creates your private hand, readable by `reader` only. A rebuy keeps the
+/// reader chosen at sit-down and ignores `reader`.
+pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Result<()> {
+    let player = ctx.accounts.player.key();
+    buy_in_flow!(ctx, seat, amount, reader, player, token::transfer(
+        CpiContext::new(
+            ctx.accounts.token_program.key(),
+            Transfer { from: ctx.accounts.player_token.to_account_info(), to: ctx.accounts.escrow.to_account_info(), authority: ctx.accounts.player.to_account_info() },
+        ),
+        amount,
+    )?)
+}
+
 
 // ---------------------------------------------------------------------------------------- cash-out
 
@@ -310,36 +322,41 @@ pub struct CashOut<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Leave with the whole stack. Works while paused, but not while a hand is running. Removes you from
-/// the ledger's readers and closes your hand.
-pub fn cash_out(ctx: Context<CashOut>, seat: u8) -> Result<()> {
-    require!(ctx.accounts.table.hand_state == HAND_IDLE, PokerError::HandInProgress);
-    let player = ctx.accounts.player.key();
+/// Cash-out shared by `cash_out` (the wallet signs; paid to the wallet) and `vault_cash_out` (the seat's
+/// table key or the wallet's play key signs; paid to the wallet's game vault). `$authorize` gets the
+/// seat's wallet and reader and errors if the signer may not cash that seat out; `$to` names the
+/// account that receives the stack.
+macro_rules! cash_out_flow {
+    ($ctx:ident, $seat:expr, $authorize:expr, $to:ident) => {{
+    let seat: u8 = $seat;
+    require!($ctx.accounts.table.hand_state == HAND_IDLE, PokerError::HandInProgress);
     let idx = seat as usize;
-    require!(idx < ctx.accounts.ledger.seats.len(), PokerError::InvalidSeat);
-    let ledger = &mut ctx.accounts.ledger;
-    require!(!ledger.seats[idx].is_empty() && ledger.seats[idx].player == player, PokerError::NotSeated);
+    require!(idx < $ctx.accounts.ledger.seats.len(), PokerError::InvalidSeat);
+    let ledger = &mut $ctx.accounts.ledger;
+    require!(!ledger.seats[idx].is_empty(), PokerError::NotSeated);
+    let (seat_player, seat_reader): (Pubkey, Pubkey) = (ledger.seats[idx].player, ledger.seats[idx].reader);
+    ($authorize)(seat_player, seat_reader)?;
     let amount = ledger.seats[idx].stack;
     ledger.seats[idx] = Seat::default();
     ledger.escrow_owed = ledger.escrow_owed.checked_sub(amount).ok_or(PokerError::MathOverflow)?;
     ledger.total_paid_out = ledger.total_paid_out.checked_add(amount).ok_or(PokerError::MathOverflow)?;
 
     if amount > 0 {
-        pay_from_escrow(&ctx.accounts.escrow, &ctx.accounts.player_token, &ctx.accounts.table, &ctx.accounts.token_program, amount)?;
+        pay_from_escrow(&$ctx.accounts.escrow, &$ctx.accounts.$to, &$ctx.accounts.table, &$ctx.accounts.token_program, amount)?;
     }
 
     {
-        let a = &ctx.accounts;
+        let a = &$ctx.accounts;
         let (id, bump) = (a.table.table_id.to_le_bytes(), [a.table.bump]);
         let ts = table_seeds(&a.table, &id, &bump);
         let (table_info, magic, vault, perm) = (a.table.to_account_info(), a.rollup.magic_program.to_account_info(), a.rollup.vault.to_account_info(), a.rollup.permission_program.to_account_info());
         let sp = Sponsor { table: &table_info, table_seeds: &ts, vault: &vault, magic_program: &magic, permission_program: &perm };
         let table_key = a.table.key();
-        let ledger_bump = [ctx.bumps.ledger];
+        let ledger_bump = [$ctx.bumps.ledger];
         let ledger_seeds: &[&[u8]] = &[LEDGER_SEED, table_key.as_ref(), &ledger_bump];
         sp.set_readers(&a.ledger.to_account_info(), ledger_seeds, &a.ledger_permission.to_account_info(), &a.ledger.readers())?;
         let seat_byte = [seat];
-        let hand_bump = [ctx.bumps.hand];
+        let hand_bump = [$ctx.bumps.hand];
         let hand_seeds: &[&[u8]] = &[HAND_SEED, table_key.as_ref(), &seat_byte, &hand_bump];
         let hand_info = a.hand.to_account_info();
         if !a.hand_permission.data_is_empty() {
@@ -350,13 +367,23 @@ pub fn cash_out(ctx: Context<CashOut>, seat: u8) -> Result<()> {
         }
     }
 
-    let fp = settle_check(&mut ctx.accounts.escrow, &mut ctx.accounts.ledger)?;
-    let table = &mut ctx.accounts.table;
+    let fp = settle_check(&mut $ctx.accounts.escrow, &mut $ctx.accounts.ledger)?;
+    let table = &mut $ctx.accounts.table;
     table.seat_mask &= !(1u16 << idx);
     stamp(table, fp)?;
     emit!(CashedOut { table: table.key(), seat, amount });
     Ok(())
+    }};
 }
+pub(crate) use cash_out_flow;
+
+/// Leave with the whole stack. Works while paused, but not while a hand is running. Removes you from
+/// the ledger's readers and closes your hand.
+pub fn cash_out(ctx: Context<CashOut>, seat: u8) -> Result<()> {
+    let player = ctx.accounts.player.key();
+    cash_out_flow!(ctx, seat, |p: Pubkey, _reader: Pubkey| -> Result<()> { require!(p == player, PokerError::NotSeated); Ok(()) }, player_token)
+}
+
 
 // ---------------------------------------------------------------------------------------- rake
 
@@ -547,7 +574,7 @@ pub fn close_table(ctx: Context<CloseTable>) -> Result<()> {
 
 // ---------------------------------------------------------------------------------------- helpers
 
-fn pay_from_escrow<'info>(
+pub(crate) fn pay_from_escrow<'info>(
     escrow: &Account<'info, TokenAccount>,
     to: &Account<'info, TokenAccount>,
     table: &Account<'info, Table>,
@@ -568,7 +595,7 @@ fn pay_from_escrow<'info>(
 
 /// After any money move: the ledger must add up, and the real escrow balance must cover it
 /// (`>=`, because anyone can send tokens to the escrow address). Returns the new fingerprint.
-fn settle_check<'info>(escrow: &mut Box<Account<'info, TokenAccount>>, ledger: &mut Box<Account<'info, Ledger>>) -> Result<[u8; 32]> {
+pub(crate) fn settle_check<'info>(escrow: &mut Box<Account<'info, TokenAccount>>, ledger: &mut Box<Account<'info, Ledger>>) -> Result<[u8; 32]> {
     escrow.reload()?;
     require!(ledger.computed_owed() == Some(ledger.escrow_owed), PokerError::LedgerMismatch);
     require!(escrow.amount >= ledger.escrow_owed, PokerError::EscrowShortfall);
@@ -577,7 +604,7 @@ fn settle_check<'info>(escrow: &mut Box<Account<'info, TokenAccount>>, ledger: &
 }
 
 /// Records the new ledger fingerprint and activity time on the public table.
-fn stamp(table: &mut Box<Account<Table>>, fingerprint: [u8; 32]) -> Result<()> {
+pub(crate) fn stamp(table: &mut Box<Account<Table>>, fingerprint: [u8; 32]) -> Result<()> {
     table.ledger_hash = fingerprint;
     table.ledger_seq = table.ledger_seq.checked_add(1).ok_or(PokerError::MathOverflow)?;
     table.last_activity_ts = Clock::get()?.unix_timestamp;

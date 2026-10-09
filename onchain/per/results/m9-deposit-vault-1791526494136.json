@@ -1,0 +1,16 @@
+{
+ "wallet": "JCkbgxZW4KEgPmQG8snqpqrzTy1ZbpjWqTXofNnfuNZt",
+ "vault": "9mZwTmhkhRqafBedWj1us6TSsekPytr1Fa9DuLVspXmX",
+ "vaultAta": "2Kyjmbci9N8VhxZs7JBH58kuto3buVSYzM5Y6GJzu3cv",
+ "preview": {
+  "err": null
+ },
+ "sig": "uFCPtcVQ8JCNuEXwDqn45NWghVFs9wWR3ehBRorNFVD9UM6DwMKNyKpTKwDdkxekaqVstsg4EoPmjakmaE8uTsa",
+ "solSpent": 0.01085844,
+ "vaultInRollup": {
+  "exists": false,
+  "rawAmount": null,
+  "tokenOwner": null,
+  "after": "60s"
+ }
+}

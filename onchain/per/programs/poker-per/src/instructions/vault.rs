@@ -1,0 +1,482 @@
+//! M9: the game vault and play keys, so the player's wallet (Phantom) only ever signs Solana
+//! transactions it can preview.
+//!
+//! Wallets preview a transaction by simulating it on Solana. Rollup transactions can't be simulated
+//! there (the table belongs to the delegation program on L1), so the wallet warns that the
+//! transaction is unsafe. With these instructions the wallet signs only:
+//! - on L1: `open_vault` and MagicBlock's deposit and withdrawal (all simulate cleanly);
+//! - a plain message that authorizes a browser-held play key until a time.
+//!
+//! The vault is a per-wallet PDA that owns a wSOL token account. MagicBlock's deposit can put money
+//! straight into that account in the rollup (its merge takes any destination token account). Inside
+//! the rollup, a play key carrying the wallet's signed message can buy in from the vault, cash a
+//! seat out into it, and withdraw from it, but only ever to that same wallet's own token account.
+//! The table key (the seat's reader) can cash its own seat out into the vault too, so leaving a table
+//! needs no wallet at all.
+
+use anchor_lang::prelude::*;
+use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
+use anchor_lang::solana_program::program::{invoke, invoke_signed, set_return_data};
+use solana_instructions_sysvar::{load_current_index_checked, load_instruction_at_checked, ID as INSTRUCTIONS_SYSVAR_ID};
+use anchor_spl::associated_token::{self, get_associated_token_address, AssociatedToken};
+use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use ephemeral_rollups_sdk::access_control::structs::PERMISSION_SEED;
+use ephemeral_rollups_sdk::consts::{MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID};
+
+use crate::constants::{CONFIG_SEED, CONFIG_VERSION, TEE_VALIDATOR};
+use crate::errors::PokerError;
+use crate::instructions::money::*;
+use crate::instructions::money::{buy_in_flow, cash_out_flow};
+use crate::instructions::table::{DELEGATION_PROGRAM_ID, ESPL_PROGRAM_ID};
+use crate::private::{write, Sponsor};
+use crate::state::Config;
+use crate::table::{rake_for, Hand, Invites, Ledger, Seat, Table, HAND_IDLE, HAND_SEED, INVITES_SEED, LEDGER_SEED, STATUS_OPEN, TABLE_SEED, WSOL_MINT};
+
+pub const VAULT_SEED: &[u8] = b"vault";
+/// A play key's authorization lasts at most this long (the client asks for 7 days).
+pub const MAX_PLAY_KEY_SECS: i64 = 30 * 24 * 60 * 60;
+pub const ED25519_PROGRAM_ID: Pubkey = pubkey!("Ed25519SigVerify111111111111111111111111111");
+
+const ESPL_INIT_EPHEMERAL_ATA: u8 = 0;
+const ESPL_DELEGATE_EPHEMERAL_ATA: u8 = 4;
+const ESPL_CREATE_EPHEMERAL_ATA_PERMISSION: u8 = 6;
+const ESPL_DELEGATE_EPHEMERAL_ATA_PERMISSION: u8 = 7;
+/// Permission program `UpdatePermission` with no member list: public (see create_table).
+const PERMISSION_UPDATE_PUBLIC: [u8; 9] = [1, 0, 0, 0, 0, 0, 0, 0, 0];
+
+/// The exact text the wallet signs to authorize a play key. Wallets show it as is, so it says in plain
+/// words what it allows; the program rebuilds it byte for byte. It doesn't name the wallet: the
+/// signature check's public key is the wallet (and play-key transactions are close to Solana's size
+/// limit, so every byte counts).
+pub fn play_key_message(key: &Pubkey, expires: i64) -> String {
+    format!(
+        "Nomad Poker private tables
+Allow play key {} to use my game balance until {} (unix time). It can buy in, leave tables and return money only to this wallet.",
+        key, expires
+    )
+}
+
+/// Checks that the instruction right before this one is Solana's Ed25519 signature check of
+/// `play_key_message(key, expires)` by `wallet`, and that `expires` is in the window. The
+/// runtime has already verified that signature, or the transaction wouldn't run.
+pub fn verify_play_key(instructions: &AccountInfo, wallet: &Pubkey, key: &Pubkey, expires: i64) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    require!(expires > now && expires <= now.saturating_add(MAX_PLAY_KEY_SECS), PokerError::PlayKeyExpired);
+    let current = load_current_index_checked(instructions)?;
+    require!(current > 0, PokerError::BadPlayKeyProof);
+    let ix = load_instruction_at_checked(current as usize - 1, instructions)?;
+    require_keys_eq!(ix.program_id, ED25519_PROGRAM_ID, PokerError::BadPlayKeyProof);
+    let d = &ix.data;
+    // One signature; offsets refer to this same instruction (index u16::MAX).
+    require!(d.len() >= 16 && d[0] == 1, PokerError::BadPlayKeyProof);
+    let u = |i: usize| u16::from_le_bytes([d[i], d[i + 1]]) as usize;
+    let (pk_off, msg_off, msg_len) = (u(6), u(10), u(12));
+    require!(u(4) == u16::MAX as usize && u(8) == u16::MAX as usize && u(14) == u16::MAX as usize, PokerError::BadPlayKeyProof);
+    let pk = d.get(pk_off..pk_off + 32).ok_or(PokerError::BadPlayKeyProof)?;
+    require!(pk == wallet.as_ref(), PokerError::BadPlayKeyProof);
+    let msg = d.get(msg_off..msg_off + msg_len).ok_or(PokerError::BadPlayKeyProof)?;
+    require!(msg == play_key_message(key, expires).as_bytes(), PokerError::BadPlayKeyProof);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------- L1: open
+
+/// Creates the wallet's game vault: the vault's wSOL token account on L1, its ephemeral token account
+/// delegated to the TEE (so MagicBlock projects it into the rollup), and that account's permission,
+/// claimed, made public and delegated, exactly as `create_table` does for a table's escrow (M3: anyone
+/// can otherwise attach a private permission nobody can log in as, which blocks every transfer).
+/// The wallet signs and pays the rent; it previews cleanly in a wallet. Idempotent.
+#[derive(Accounts)]
+pub struct OpenVault<'info> {
+    #[account(mut)]
+    pub wallet: Signer<'info>,
+    /// CHECK: the vault PDA; holds nothing itself, only owns the token account.
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    pub vault: UncheckedAccount<'info>,
+    /// CHECK: wrapped SOL only.
+    #[account(address = WSOL_MINT @ PokerError::UnsupportedMint)]
+    pub mint: UncheckedAccount<'info>,
+    /// CHECK: the vault's wSOL token account on L1, created here.
+    #[account(mut, address = get_associated_token_address(&vault.key(), &mint.key()))]
+    pub vault_token: UncheckedAccount<'info>,
+    /// CHECK: the vault's ephemeral token account (Ephemeral SPL Token PDA).
+    #[account(mut, seeds = [vault.key().as_ref(), mint.key().as_ref()], bump, seeds::program = ESPL_PROGRAM_ID)]
+    pub vault_eata: UncheckedAccount<'info>,
+    /// CHECK: Ephemeral SPL Token program's delegation buffer.
+    #[account(mut, seeds = [b"buffer", vault_eata.key().as_ref()], bump, seeds::program = ESPL_PROGRAM_ID)]
+    pub vault_buffer: UncheckedAccount<'info>,
+    /// CHECK: delegation program PDA
+    #[account(mut, seeds = [b"delegation", vault_eata.key().as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub vault_delegation_record: UncheckedAccount<'info>,
+    /// CHECK: delegation program PDA
+    #[account(mut, seeds = [b"delegation-metadata", vault_eata.key().as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub vault_delegation_metadata: UncheckedAccount<'info>,
+    /// CHECK: the vault account's permission, created public here.
+    #[account(mut, seeds = [PERMISSION_SEED, vault_eata.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub vault_permission: UncheckedAccount<'info>,
+    /// CHECK: permission program's delegation buffer.
+    #[account(mut, seeds = [b"buffer", vault_permission.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub vault_permission_buffer: UncheckedAccount<'info>,
+    /// CHECK: delegation program PDA
+    #[account(mut, seeds = [b"delegation", vault_permission.key().as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub vault_permission_delegation_record: UncheckedAccount<'info>,
+    /// CHECK: delegation program PDA
+    #[account(mut, seeds = [b"delegation-metadata", vault_permission.key().as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub vault_permission_delegation_metadata: UncheckedAccount<'info>,
+    /// CHECK: fixed id
+    #[account(address = ESPL_PROGRAM_ID)]
+    pub espl_program: UncheckedAccount<'info>,
+    /// CHECK: fixed id
+    #[account(address = DELEGATION_PROGRAM_ID)]
+    pub delegation_program: UncheckedAccount<'info>,
+    /// CHECK: fixed id
+    #[account(address = PERMISSION_PROGRAM_ID)]
+    pub permission_program: UncheckedAccount<'info>,
+    /// CHECK: the TEE validator, the only one the vault is delegated to.
+    #[account(address = TEE_VALIDATOR)]
+    pub validator: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+pub fn open_vault(ctx: Context<OpenVault>) -> Result<()> {
+    let a = &ctx.accounts;
+    associated_token::create_idempotent(CpiContext::new(
+        a.associated_token_program.key(),
+        associated_token::Create {
+            payer: a.wallet.to_account_info(),
+            associated_token: a.vault_token.to_account_info(),
+            authority: a.vault.to_account_info(),
+            mint: a.mint.to_account_info(),
+            system_program: a.system_program.to_account_info(),
+            token_program: a.token_program.to_account_info(),
+        },
+    ))?;
+    // Same order as create_table: create, delegate, then claim the permission. Each step is skipped
+    // if it's done already, so calling this again is harmless.
+    if a.vault_eata.data_is_empty() {
+        invoke(
+            &Instruction {
+                program_id: ESPL_PROGRAM_ID,
+                accounts: vec![
+                    AccountMeta::new(a.vault_eata.key(), false),
+                    AccountMeta::new(a.wallet.key(), true),
+                    AccountMeta::new_readonly(a.vault.key(), false),
+                    AccountMeta::new_readonly(a.mint.key(), false),
+                    AccountMeta::new_readonly(a.system_program.key(), false),
+                ],
+                data: vec![ESPL_INIT_EPHEMERAL_ATA],
+            },
+            &[a.vault_eata.to_account_info(), a.wallet.to_account_info(), a.vault.to_account_info(), a.mint.to_account_info(), a.system_program.to_account_info(), a.espl_program.to_account_info()],
+        )?;
+    }
+    if *a.vault_eata.owner != DELEGATION_PROGRAM_ID {
+        delegate_vault_eata(&ctx)?;
+    }
+    claim_vault_permission(&ctx)?;
+    emit!(VaultOpened { vault: ctx.accounts.vault.key() });
+    Ok(())
+}
+
+fn delegate_vault_eata(ctx: &Context<OpenVault>) -> Result<()> {
+    let a = &ctx.accounts;
+    let mut data = vec![ESPL_DELEGATE_EPHEMERAL_ATA];
+    data.extend_from_slice(TEE_VALIDATOR.as_ref());
+    invoke(
+        &Instruction {
+            program_id: ESPL_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new(a.wallet.key(), true),
+                AccountMeta::new(a.vault_eata.key(), false),
+                AccountMeta::new_readonly(ESPL_PROGRAM_ID, false),
+                AccountMeta::new(a.vault_buffer.key(), false),
+                AccountMeta::new(a.vault_delegation_record.key(), false),
+                AccountMeta::new(a.vault_delegation_metadata.key(), false),
+                AccountMeta::new_readonly(DELEGATION_PROGRAM_ID, false),
+                AccountMeta::new_readonly(a.system_program.key(), false),
+            ],
+            data,
+        },
+        &[
+            a.wallet.to_account_info(),
+            a.vault_eata.to_account_info(),
+            a.espl_program.to_account_info(),
+            a.vault_buffer.to_account_info(),
+            a.vault_delegation_record.to_account_info(),
+            a.vault_delegation_metadata.to_account_info(),
+            a.delegation_program.to_account_info(),
+            a.system_program.to_account_info(),
+        ],
+    )?;
+    Ok(())
+}
+
+/// Create (flags 0: the vault PDA becomes the authority member), make public (the vault signs),
+/// delegate to the TEE. An outsider may have created the permission first (anyone can, with flags 0):
+/// the vault is still its authority member then, so it's made public and delegated all the same. Once
+/// delegated (by us, or by an outsider first) it can't be changed from L1; see the M9 proof's limits.
+fn claim_vault_permission(ctx: &Context<OpenVault>) -> Result<()> {
+    let a = &ctx.accounts;
+    if *a.vault_permission.owner == DELEGATION_PROGRAM_ID {
+        return Ok(());
+    }
+    if a.vault_permission.data_is_empty() {
+        create_vault_permission(ctx)?;
+    }
+    // Byte 34 is the member list's Option tag; 0 means public already.
+    let is_public = a.vault_permission.try_borrow_data()?.get(34) == Some(&0);
+    if !is_public {
+        make_vault_permission_public(ctx)?;
+    }
+    delegate_vault_permission(ctx)
+}
+
+fn create_vault_permission(ctx: &Context<OpenVault>) -> Result<()> {
+    let a = &ctx.accounts;
+    invoke(
+        &Instruction {
+            program_id: ESPL_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new(a.vault_eata.key(), false),
+                AccountMeta::new(a.vault_permission.key(), false),
+                AccountMeta::new(a.wallet.key(), true),
+                AccountMeta::new_readonly(a.system_program.key(), false),
+                AccountMeta::new_readonly(PERMISSION_PROGRAM_ID, false),
+            ],
+            data: vec![ESPL_CREATE_EPHEMERAL_ATA_PERMISSION, 0],
+        },
+        &[a.vault_eata.to_account_info(), a.vault_permission.to_account_info(), a.wallet.to_account_info(), a.system_program.to_account_info(), a.permission_program.to_account_info(), a.espl_program.to_account_info()],
+    )?;
+    Ok(())
+}
+
+fn make_vault_permission_public(ctx: &Context<OpenVault>) -> Result<()> {
+    let a = &ctx.accounts;
+    let wallet = a.wallet.key();
+    let bump = [ctx.bumps.vault];
+    invoke_signed(
+        &Instruction {
+            program_id: PERMISSION_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new_readonly(a.vault.key(), true),
+                AccountMeta::new_readonly(a.vault_eata.key(), false),
+                AccountMeta::new(a.vault_permission.key(), false),
+            ],
+            data: PERMISSION_UPDATE_PUBLIC.to_vec(),
+        },
+        &[a.vault.to_account_info(), a.vault_eata.to_account_info(), a.vault_permission.to_account_info(), a.permission_program.to_account_info()],
+        &[&[VAULT_SEED, wallet.as_ref(), &bump]],
+    )?;
+    Ok(())
+}
+
+fn delegate_vault_permission(ctx: &Context<OpenVault>) -> Result<()> {
+    let a = &ctx.accounts;
+    invoke(
+        &Instruction {
+            program_id: ESPL_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new(a.wallet.key(), true),
+                AccountMeta::new(a.vault_eata.key(), false),
+                AccountMeta::new_readonly(PERMISSION_PROGRAM_ID, false),
+                AccountMeta::new(a.vault_permission.key(), false),
+                AccountMeta::new_readonly(a.system_program.key(), false),
+                AccountMeta::new(a.vault_permission_buffer.key(), false),
+                AccountMeta::new(a.vault_permission_delegation_record.key(), false),
+                AccountMeta::new(a.vault_permission_delegation_metadata.key(), false),
+                AccountMeta::new_readonly(DELEGATION_PROGRAM_ID, false),
+                AccountMeta::new_readonly(a.validator.key(), false),
+            ],
+            data: vec![ESPL_DELEGATE_EPHEMERAL_ATA_PERMISSION],
+        },
+        &[
+            a.wallet.to_account_info(),
+            a.vault_eata.to_account_info(),
+            a.permission_program.to_account_info(),
+            a.vault_permission.to_account_info(),
+            a.system_program.to_account_info(),
+            a.vault_permission_buffer.to_account_info(),
+            a.vault_permission_delegation_record.to_account_info(),
+            a.vault_permission_delegation_metadata.to_account_info(),
+            a.delegation_program.to_account_info(),
+            a.validator.to_account_info(),
+            a.espl_program.to_account_info(),
+        ],
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------- rollup: buy-in
+
+#[derive(Accounts)]
+#[instruction(seat: u8)]
+pub struct VaultBuyIn<'info> {
+    pub play_key: Signer<'info>,
+    /// CHECK: the wallet that authorized `play_key`; checked against the signed message.
+    pub wallet: UncheckedAccount<'info>,
+    /// CHECK: the wallet's vault PDA (signs the transfer).
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    pub vault: UncheckedAccount<'info>,
+    #[account(mut, address = get_associated_token_address(&vault.key(), &table.mint))]
+    pub vault_token: Box<Account<'info, TokenAccount>>,
+    /// CHECK: the instructions sysvar, for the wallet's signature check.
+    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
+    pub instructions: UncheckedAccount<'info>,
+    #[account(seeds = [CONFIG_SEED], bump = config.bump, constraint = config.version == CONFIG_VERSION @ PokerError::ConfigOutdated)]
+    pub config: Box<Account<'info, Config>>,
+    #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
+    pub table: Box<Account<'info, Table>>,
+    #[account(mut, seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
+    pub ledger: Box<Account<'info, Ledger>>,
+    /// CHECK: permission PDA of the ledger.
+    #[account(mut, seeds = [PERMISSION_SEED, ledger.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub ledger_permission: UncheckedAccount<'info>,
+    /// CHECK: this seat's rollup-only hand PDA.
+    #[account(mut, seeds = [HAND_SEED, table.key().as_ref(), &[seat]], bump)]
+    pub hand: UncheckedAccount<'info>,
+    /// CHECK: permission PDA of the hand.
+    #[account(mut, seeds = [PERMISSION_SEED, hand.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub hand_permission: UncheckedAccount<'info>,
+    #[account(seeds = [INVITES_SEED, table.key().as_ref()], bump)]
+    pub invites: Option<Box<Account<'info, Invites>>>,
+    #[account(mut, address = get_associated_token_address(&table.key(), &table.mint))]
+    pub escrow: Box<Account<'info, TokenAccount>>,
+    pub rollup: RollupPrograms<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+/// `buy_in` paid from the wallet's game vault, signed by a play key the wallet authorized. The seat
+/// belongs to the wallet, exactly as if the wallet had signed.
+pub fn vault_buy_in(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64) -> Result<()> {
+    let wallet = ctx.accounts.wallet.key();
+    verify_play_key(&ctx.accounts.instructions, &wallet, &ctx.accounts.play_key.key(), expires)?;
+    let vault_bump = [ctx.bumps.vault];
+    buy_in_flow!(ctx, seat, amount, reader, wallet, token::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.key(),
+            Transfer { from: ctx.accounts.vault_token.to_account_info(), to: ctx.accounts.escrow.to_account_info(), authority: ctx.accounts.vault.to_account_info() },
+            &[&[VAULT_SEED, wallet.as_ref(), &vault_bump]],
+        ),
+        amount,
+    )?)
+}
+
+// ---------------------------------------------------------------------------------------- rollup: cash-out
+
+#[derive(Accounts)]
+#[instruction(seat: u8)]
+pub struct VaultCashOut<'info> {
+    /// The seat's table key (its reader), or a play key of the seat's wallet.
+    pub signer: Signer<'info>,
+    /// CHECK: the seat's wallet (checked against the ledger).
+    pub wallet: UncheckedAccount<'info>,
+    /// CHECK: the wallet's vault PDA.
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    pub vault: UncheckedAccount<'info>,
+    #[account(mut, address = get_associated_token_address(&vault.key(), &table.mint))]
+    pub vault_token: Box<Account<'info, TokenAccount>>,
+    /// CHECK: the instructions sysvar (used when a play key signs).
+    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
+    pub instructions: UncheckedAccount<'info>,
+    #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
+    pub table: Box<Account<'info, Table>>,
+    #[account(mut, seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
+    pub ledger: Box<Account<'info, Ledger>>,
+    /// CHECK: permission PDA of the ledger.
+    #[account(mut, seeds = [PERMISSION_SEED, ledger.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub ledger_permission: UncheckedAccount<'info>,
+    /// CHECK: this seat's hand PDA; closed here.
+    #[account(mut, seeds = [HAND_SEED, table.key().as_ref(), &[seat]], bump)]
+    pub hand: UncheckedAccount<'info>,
+    /// CHECK: permission PDA of the hand; closed here.
+    #[account(mut, seeds = [PERMISSION_SEED, hand.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub hand_permission: UncheckedAccount<'info>,
+    #[account(mut, address = get_associated_token_address(&table.key(), &table.mint))]
+    pub escrow: Box<Account<'info, TokenAccount>>,
+    pub rollup: RollupPrograms<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+/// `cash_out` into the seat wallet's game vault. Signed by the seat's table key (`expires` is then
+/// ignored), or by a play key of that wallet with its signed message, which also covers a lost table
+/// key. The money can only go to the seat's own wallet's vault.
+pub fn vault_cash_out(ctx: Context<VaultCashOut>, seat: u8, expires: i64) -> Result<()> {
+    let (signer, wallet) = (ctx.accounts.signer.key(), ctx.accounts.wallet.key());
+    let wallet_vouched = if expires != 0 { verify_play_key(&ctx.accounts.instructions, &wallet, &signer, expires).is_ok() } else { false };
+    cash_out_flow!(ctx, seat, |p: Pubkey, reader: Pubkey| -> Result<()> {
+        require_keys_eq!(p, wallet, PokerError::NotSeated);
+        require!(signer == reader || wallet_vouched, PokerError::NotSeatKey);
+        Ok(())
+    }, vault_token)
+}
+
+// ---------------------------------------------------------------------------------------- rollup: withdraw, balance
+
+#[derive(Accounts)]
+pub struct VaultWithdraw<'info> {
+    pub play_key: Signer<'info>,
+    /// CHECK: the wallet that authorized `play_key`; the only possible recipient.
+    pub wallet: UncheckedAccount<'info>,
+    /// CHECK: the wallet's vault PDA (signs the transfer).
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    pub vault: UncheckedAccount<'info>,
+    #[account(mut, address = get_associated_token_address(&vault.key(), &WSOL_MINT))]
+    pub vault_token: Box<Account<'info, TokenAccount>>,
+    /// The wallet's own wSOL account in the rollup; MagicBlock's withdrawal takes it to Solana.
+    #[account(mut, address = get_associated_token_address(&wallet.key(), &WSOL_MINT))]
+    pub wallet_token: Box<Account<'info, TokenAccount>>,
+    /// CHECK: the instructions sysvar, for the wallet's signature check.
+    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
+    pub instructions: UncheckedAccount<'info>,
+    /// CHECK: Magic program, executable only inside the rollup.
+    #[account(address = MAGIC_PROGRAM_ID, constraint = magic_program.executable @ PokerError::NotInRollup)]
+    pub magic_program: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+/// Moves `amount` from the game vault to the wallet's own rollup balance, ready for MagicBlock's
+/// withdrawal to Solana (which the wallet signs on L1).
+pub fn vault_withdraw(ctx: Context<VaultWithdraw>, amount: u64, expires: i64) -> Result<()> {
+    let wallet = ctx.accounts.wallet.key();
+    verify_play_key(&ctx.accounts.instructions, &wallet, &ctx.accounts.play_key.key(), expires)?;
+    require!(amount > 0, PokerError::NothingToCollect);
+    let bump = [ctx.bumps.vault];
+    token::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.key(),
+            Transfer { from: ctx.accounts.vault_token.to_account_info(), to: ctx.accounts.wallet_token.to_account_info(), authority: ctx.accounts.vault.to_account_info() },
+            &[&[VAULT_SEED, wallet.as_ref(), &bump]],
+        ),
+        amount,
+    )?;
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct VaultBalance<'info> {
+    pub play_key: Signer<'info>,
+    /// CHECK: the wallet that authorized `play_key`.
+    pub wallet: UncheckedAccount<'info>,
+    /// CHECK: the wallet's vault PDA.
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    pub vault: UncheckedAccount<'info>,
+    #[account(address = get_associated_token_address(&vault.key(), &WSOL_MINT))]
+    pub vault_token: Box<Account<'info, TokenAccount>>,
+    /// CHECK: the instructions sysvar, for the wallet's signature check.
+    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
+    pub instructions: UncheckedAccount<'info>,
+}
+
+/// The vault's balance as return data (u64 LE), for the client to simulate. The rollup's RPC shows a
+/// token balance only to its owner, and nobody can log in as the vault.
+pub fn vault_balance(ctx: Context<VaultBalance>, expires: i64) -> Result<()> {
+    verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet.key(), &ctx.accounts.play_key.key(), expires)?;
+    set_return_data(&ctx.accounts.vault_token.amount.to_le_bytes());
+    Ok(())
+}
+
+#[event]
+pub struct VaultOpened {
+    pub vault: Pubkey,
+}

@@ -24,6 +24,8 @@ anchor-lang = { version = "=1.2.1", features = ["init-if-needed"] }
 anchor-spl = { version = "=1.2.1" }
 ephemeral-rollups-sdk = { version = "=0.17.3", features = ["anchor", "access-control", "vrf"] }
 solana-sha256-hasher = "3"
+# Reading the instructions sysvar (M9: the wallet's Ed25519 signature check of a play key).
+solana-instructions-sysvar = "3"
 # Zero-copy accounts (the hand log); same version Anchor already pulls in.
 bytemuck = { version = "=1.25.2", features = ["derive", "min_const_generics"] }
 

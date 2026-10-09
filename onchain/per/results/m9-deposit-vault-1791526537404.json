@@ -1,0 +1,18 @@
+{
+ "wallet": "DLZ6dYYxeTbeMWhTAdcCKaHBnzLKmDiJ8UCMzVpCFRus",
+ "vault": "kyjHf5MjhVs53jXExcHD9s91736QykKdVL1GRvWaEZr",
+ "vaultAta": "35ekrKTXtBYsEWCTsUjqtQ3XBdzHqF4yLL2m8Xp1rP8H",
+ "preview": {
+  "err": null
+ },
+ "sig": "4xK3qnLUsK9vmNHSq5fug4JTBnQeLGgjWLUeBhnH5bbtX8kzZxD4bvitBeyK9u2R7CvWoA3yH3hs8gy5opumG3BY",
+ "solSpent": 0.01085844,
+ "vaultInRollup": {
+  "exists": true,
+  "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "rawAmount": "3000000",
+  "tokenOwner": "kyjHf5MjhVs53jXExcHD9s91736QykKdVL1GRvWaEZr",
+  "after": "10s",
+  "balanceSeenByHolder": "3000000"
+ }
+}
