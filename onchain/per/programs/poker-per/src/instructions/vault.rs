@@ -51,7 +51,7 @@ const PERMISSION_UPDATE_PUBLIC: [u8; 9] = [1, 0, 0, 0, 0, 0, 0, 0, 0];
 pub fn play_key_message(key: &Pubkey, expires: i64) -> String {
     format!(
         "Nomad Poker private tables
-Allow play key {} to use my game balance until {} (unix time). It can buy in, leave tables and return money only to this wallet.",
+Allow play key {} to use my game balance until {} (unix time). It can buy in to tables (where chips can be lost), leave them, and send money only back to this wallet.",
         key, expires
     )
 }
@@ -175,7 +175,14 @@ pub fn open_vault(ctx: Context<OpenVault>) -> Result<()> {
         delegate_vault_eata(&ctx)?;
     }
     claim_vault_permission(&ctx)?;
-    emit!(VaultOpened { vault: ctx.accounts.vault.key() });
+    // An outsider can get in first (M9 review): delegate the vault's token account or its permission to
+    // another validator, or delegate the permission while it's still private. Then the vault would take
+    // deposits it can never pay out, so refuse to open it: the wallet's preview fails and no money moves.
+    let a = &ctx.accounts;
+    let to_tee = |record: &UncheckedAccount| -> Result<bool> { Ok(record.try_borrow_data()?.get(8..40) == Some(TEE_VALIDATOR.as_ref())) };
+    let public = a.vault_permission.try_borrow_data()?.get(34) == Some(&0);
+    require!(to_tee(&a.vault_delegation_record)? && to_tee(&a.vault_permission_delegation_record)? && public, PokerError::VaultBlocked);
+    emit!(VaultOpened { vault: a.vault.key() });
     Ok(())
 }
 

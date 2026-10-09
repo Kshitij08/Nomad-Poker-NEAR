@@ -12,7 +12,7 @@ export const ESPL = new PublicKey("SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2")
 export const DLP = new PublicKey("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");
 export const PERMISSION_PROGRAM: PublicKey = s.PERMISSION_PROGRAM_ID;
 /** The client asks for 7 days; the program accepts up to 30. */
-export const PLAY_KEY_DAYS = 7;
+export const PLAY_KEY_DAYS = 1;
 
 export const vaultOf = (wallet: PublicKey) => PublicKey.findProgramAddressSync([Buffer.from("vault"), wallet.toBuffer()], PROGRAM_ID)[0];
 export const vaultTokenOf = (wallet: PublicKey) => getAssociatedTokenAddressSync(NATIVE_MINT, vaultOf(wallet), true);
@@ -20,7 +20,7 @@ export const walletTokenOf = (wallet: PublicKey) => getAssociatedTokenAddressSyn
 
 export function playKeyMessage(key: PublicKey, expires: number | bigint): Buffer {
   return Buffer.from(`Nomad Poker private tables
-Allow play key ${key.toBase58()} to use my game balance until ${expires.toString()} (unix time). It can buy in, leave tables and return money only to this wallet.`, "utf8");
+Allow play key ${key.toBase58()} to use my game balance until ${expires.toString()} (unix time). It can buy in to tables (where chips can be lost), leave them, and send money only back to this wallet.`, "utf8");
 }
 
 /** The Ed25519 check that must sit right before every play-key instruction. */

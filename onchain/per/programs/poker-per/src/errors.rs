@@ -114,4 +114,6 @@ pub enum PokerError {
     PlayKeyExpired,
     #[msg("Only the seat's table key or the wallet's play key can do this")]
     NotSeatKey,
+    #[msg("This game balance can't be used safely: someone else set up its rollup account first (it isn't public, or isn't handed to the TEE validator)")]
+    VaultBlocked,
 }

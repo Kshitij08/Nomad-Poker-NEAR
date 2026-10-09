@@ -3,7 +3,7 @@
 // the rollup is signed by the play key or the seat's table key. Covers the money path end to end plus
 // the attacks the review gate names. Writes results/vault-<ts>.json.
 import { ComputeBudgetProgram, Keypair, LAMPORTS_PER_SOL, PublicKey, SYSVAR_INSTRUCTIONS_PUBKEY, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
-import { createEataPermissionIx, delegateEataPermissionIx, initEphemeralAtaIx, permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
+import { createEataPermissionIx, delegateEataPermissionIx, delegateEphemeralAtaIx, initEphemeralAtaIx, permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { NATIVE_MINT } from "@solana/spl-token";
 import nacl from "tweetnacl";
 import { CONFIG_PDA, connection, loadKey, programFor, programOn, randomTableId, teeConnection, TEE_VALIDATOR } from "../scripts/lib";
@@ -93,18 +93,23 @@ async function main() {
     for (let i = 0; i < 12 && bc !== 5_000_000n; i++) { await sleep(5000); bc = await balance(C, expC).catch(() => -1n); }
     S.check("C's vault works", bc === 5_000_000n, { balance: bc.toString() });
 
+    // Outsider delegates the (still private) permission first: open_vault must refuse, so no deposit is
+    // ever made into a vault that can't pay out.
     const D = await newPlayer(deployer, 0.05), d = openVaultAccounts(W(D));
     const r = await sendL1(new Transaction().add(initEphemeralAtaIx(d.vaultEata, d.vault, NATIVE_MINT, p3.publicKey), createEataPermissionIx(d.vaultEata, p3.publicKey, 0),
       delegateEataPermissionIx(p3.publicKey, d.vaultEata, TEE_VALIDATOR)), [p3]).then(() => "sent", (e: any) => "rejected: " + String(e.message ?? e).slice(0, 120));
-    const openD = await sendL1(new Transaction().add(await openIx(D)), [D.wallet]).then(() => "opened", (e: any) => "failed: " + String(e.message ?? e).slice(0, 120));
-    let bd = -1n, depositD = "skipped";
-    if (openD === "opened") {
-      depositD = await sendL1(new Transaction().add(...depositToVaultIxs(W(D), 5_000_000n)), [D.wallet]).then(() => "sent", (e: any) => "failed: " + String(e.message ?? e).slice(0, 120));
-      const expD = now() + DAY;
-      for (let i = 0; i < 8 && bd !== 5_000_000n; i++) { await sleep(5000); bd = await balance(D, expD).catch(() => -1n); }
-    }
-    S.known("LIMIT: an outsider who also delegates a wallet's vault permission before the wallet's first open_vault can block that vault (MagicBlock lets anyone delegate it)",
-      r === "sent" && bd !== 5_000_000n, { outsider: r, openVault: openD, deposit: depositD, balanceAfter: bd.toString() });
+    S.check("outsider delegates D's vault permission while it's private", r === "sent", { r });
+    await S.err("D's open_vault then refuses (VaultBlocked): its preview fails, so the wallet never funds it", "VaultBlocked",
+      async () => sendL1(new Transaction().add(await openIx(D)), [D.wallet]));
+    S.known("LIMIT: D's vault stays unusable (MagicBlock lets anyone delegate it first); a fresh vault per wallet is planned for M10", true, {});
+
+    // Outsider delegates the vault's token account to a different validator first.
+    const E = await newPlayer(deployer, 0.05), e_ = openVaultAccounts(W(E));
+    const other = Keypair.generate().publicKey;
+    const r2 = await sendL1(new Transaction().add(initEphemeralAtaIx(e_.vaultEata, e_.vault, NATIVE_MINT, p3.publicKey), delegateEphemeralAtaIx(p3.publicKey, e_.vaultEata, other)), [p3])
+      .then(() => "sent", (err: any) => "rejected: " + String(err.message ?? err).slice(0, 120));
+    if (r2 === "sent") await S.err("E's open_vault refuses a vault handed to another validator (VaultBlocked)", "VaultBlocked", async () => sendL1(new Transaction().add(await openIx(E)), [E.wallet]));
+    else S.check("outsider can't delegate E's vault account elsewhere", true, { r2 });
   }
 
   // ---- A table; buy-ins from the vault, signed by play keys.
@@ -125,6 +130,20 @@ async function main() {
     }).preInstructions(o.proofIxs ?? [proof(p.wallet, p.key.publicKey, exp)]).rpc();
   };
 
+  {
+    // A well-formed proof with the right wallet and message but a bad signature: Solana's Ed25519 check
+    // itself must reject it (sent and simulated), not only our parser.
+    const msg = playKeyMessage(A.key.publicKey, expA), sig = nacl.sign.detached(msg, A.wallet.secretKey); sig[5] ^= 1;
+    const forged = proofIx(W(A), msg, sig);
+    await S.err("forged signature (right wallet and message): rejected by Solana's Ed25519 check when sent", "0x2",
+      () => buyIn(A, 0, 2_000_000n, readerA.publicKey, expA, { proofIxs: [forged] }));
+    const tx = await A.er.methods.vaultBalance(BN(expA)).accountsPartial({ playKey: A.key.publicKey, wallet: W(A), vault: vaultOf(W(A)), vaultToken: vaultTokenOf(W(A)), instructions: SYSVAR_INSTRUCTIONS_PUBKEY })
+      .preInstructions([forged]).transaction();
+    const conn = A.er.provider.connection;
+    tx.feePayer = A.key.publicKey; tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash; tx.sign(A.key);
+    const sim = (await conn.simulateTransaction(tx)).value;
+    S.check("forged signature: also rejected when simulated (no balance read with it)", !!sim.err && !(sim as any).returnData, { err: sim.err });
+  }
   await S.err("no wallet signature check before the buy-in: refused", "BadPlayKeyProof", () => buyIn(A, 0, 2_000_000n, readerA.publicKey, expA, { proofIxs: [] }));
   await S.err("signature check not directly before the buy-in: refused", "BadPlayKeyProof",
     () => buyIn(A, 0, 2_000_000n, readerA.publicKey, expA, { proofIxs: [proof(A.wallet, A.key.publicKey, expA), ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 })] }));

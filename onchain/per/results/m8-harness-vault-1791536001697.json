@@ -1,0 +1,71 @@
+{
+  "suite": "m8-harness-vault",
+  "ranAt": "2026-10-09T08:53:21.6978756Z",
+  "pass": 12,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "open_vault (C# builder) lands on Solana",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "deposit 0.01 SOL into the vault (C# port of MagicBlock's shuttle merge)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "vault balance read with the play key (simulated return data) = 0.01 SOL",
+      "status": "PASS",
+      "detail": 10000000
+    },
+    {
+      "name": "buy-in 0.002 SOL from the vault at seat 0, signed by the play key only",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "vault went down by the buy-in",
+      "status": "PASS",
+      "detail": 8000000
+    },
+    {
+      "name": "cash-out into the vault, signed by the table key only",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "vault got the stack back (buy-in less rake)",
+      "status": "PASS",
+      "detail": 9900000
+    },
+    {
+      "name": "wallet's rollup account set up (L1)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "play key moves the whole vault to the wallet's rollup balance",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "withdrawal to Solana (C# port of MagicBlock's withdrawal) lands",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the money arrives in the wallet as SOL (less MagicBlock's withdrawal cost)",
+      "status": "PASS",
+      "detail": {
+        "gained": 9395000,
+        "afterCash": 9900000
+      }
+    },
+    {
+      "wallet": "GCGWBxbWoHDnRF36wxENx8Gb7LkQCWnokcP6DHNVpZGK",
+      "vault": "GgDtoZWvWR6yAiV8eT9eGyPKD1MD75UKa51rhh4y5Ggi",
+      "table": "2YNVJK1389AQvSm6TVcmuDLmAWoL7RJANFg5fAbVwbfs"
+    }
+  ]
+}
