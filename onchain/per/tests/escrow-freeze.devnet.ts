@@ -48,7 +48,10 @@ async function main() {
   const after = await snapshot();
   S.check("escrow permission exists and is delegated (owned by the delegation program)", after?.owner === DLP.toBase58(), { owner: after?.owner });
   const tee = await (await teeConnection(deployer)).getAccountInfo(perm);
-  S.check("inside the rollup the escrow permission is public", !!tee && tee.data[PRIVATE_FLAG_OFFSET] === 0, { privateFlag: tee?.data[PRIVATE_FLAG_OFFSET], bytes: tee?.data.length });
+  // Since 9 Oct MagicBlock's RPC hides permission accounts (their fix of leak 1), so the rollup copy may
+  // be unreadable. The rollup copies it from the delegated Solana snapshot, which is checked instead.
+  S.check("the escrow permission is public (Solana snapshot; the rollup copy, if readable)", after!.data[PRIVATE_FLAG_OFFSET] === 0 && (!tee || tee.data[PRIVATE_FLAG_OFFSET] === 0),
+    { snapshot: after!.data[PRIVATE_FLAG_OFFSET], inRollup: tee ? tee.data[PRIVATE_FLAG_OFFSET] : "hidden by MagicBlock's RPC" });
 
   // Outsider moves. Each must fail or change nothing.
   const tryL1 = async (ix: TransactionInstruction, signers: Keypair[]) => {
@@ -66,7 +69,8 @@ async function main() {
   const r6 = await sendAndConfirmTransaction(erP3, new Transaction().add(makePrivateIx(p3.publicKey, T.escrowEata)), [p3], { skipPreflight: true })
     .then(() => "landed", (e: any) => "rejected: " + String(e.message ?? e).slice(0, 120));
   const teeLater = await (await teeConnection(deployer)).getAccountInfo(perm);
-  S.check("outsider update inside the rollup leaves it public", !!teeLater && teeLater.data[PRIVATE_FLAG_OFFSET] === 0 && teeLater.data.equals(tee!.data), { result: r6 });
+  S.check("outsider update inside the rollup is rejected (or, if the copy is readable, leaves it public)",
+    r6.startsWith("rejected") && (!teeLater || (teeLater.data[PRIVATE_FLAG_OFFSET] === 0 && (!tee || teeLater.data.equals(tee.data)))), { result: r6, inRollup: teeLater ? teeLater.data[PRIVATE_FLAG_OFFSET] : "hidden by MagicBlock's RPC" });
 
   // The table still works end to end.
   await S.ok("delegate", () => T.delegate());

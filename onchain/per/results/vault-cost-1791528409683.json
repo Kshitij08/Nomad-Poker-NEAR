@@ -1,0 +1,30 @@
+{
+ "wallet": "FbC6RMSDzpZ45VFmqr2xVdzZExBXkHR4k9kiR6x7w6DJ",
+ "steps": [
+  {
+   "step": "open the game balance (one time)",
+   "solSpent": 0.01257436,
+   "beyondTheMoney": 0.01257436
+  },
+  {
+   "step": "deposit 0.01 SOL (first)",
+   "solSpent": 0.01199344,
+   "beyondTheMoney": 0.00199344
+  },
+  {
+   "step": "deposit 0.01 SOL (second)",
+   "solSpent": 0.010505,
+   "beyondTheMoney": 0.000505
+  },
+  {
+   "step": "withdrawal setup (one time)",
+   "solSpent": 0.01126256,
+   "beyondTheMoney": 0.01126256
+  },
+  {
+   "step": "withdraw 0.02 SOL",
+   "received": 0.019495,
+   "cost": 0.000505
+  }
+ ]
+}

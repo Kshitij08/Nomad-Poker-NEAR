@@ -161,8 +161,9 @@ async function main() {
   // (tests/escrow-freeze.devnet.ts runs the outsider attacks against it)
   const escrowPerm = await connection.getAccountInfo(permissionPdaFromAccount(A.escrowEata));
   const escrowPermEr = await rawRead(TEE_URL, permissionPdaFromAccount(A.escrowEata));
-  S.check("the escrow's permission exists, is delegated to the TEE, and is public", escrowPerm?.owner.equals(DLP) === true && escrowPermEr.data?.[34] === 0,
-    { l1Owner: escrowPerm?.owner.toBase58(), privateFlag: escrowPermEr.data?.[34] });
+  // The rollup copy is hidden since MagicBlock fixed leak 1 (9 Oct); the delegated Solana snapshot is what it holds.
+  S.check("the escrow's permission exists, is delegated to the TEE, and is public", escrowPerm?.owner.equals(DLP) === true && escrowPerm.data[34] === 0 && (!escrowPermEr.visible || escrowPermEr.data?.[34] === 0),
+    { l1Owner: escrowPerm?.owner.toBase58(), snapshot: escrowPerm?.data[34], inRollup: escrowPermEr.visible ? escrowPermEr.data?.[34] : "hidden by MagicBlock's RPC" });
 
   // ---- invite-only table B
   const B = tableApi(deployer, randomTableId());
@@ -189,7 +190,9 @@ async function main() {
   const leakClosedA = await simulateLeak([A.ledger, A.deck]);
   S.known("MagicBlock leak 2 also covers a closed table: simulateTransaction returns its kept ledger and deck with no login", leakClosedA.length > 0, { bytes: leakClosedA.map((b) => b.length) });
   const deckA = await simulateLeak([A.deck]);
-  S.check("...but A's deck was erased at close (all zero after its discriminator)", deckA.length === 1 && deckA[0].subarray(8).every((b) => b === 0), { deckBytes: deckA[0]?.length });
+  // Only readable through leak 2. Since MagicBlock fixed it, nobody can read the closed deck at all.
+  S.check("...and A's closed deck is erased (all zero) where it can be read, and unreadable to everyone otherwise",
+    deckA.length === 0 || (deckA.length === 1 && deckA[0].subarray(8).every((b) => b === 0)), { deckBytes: deckA[0]?.length ?? "unreadable (leak 2 fixed)" });
   S.check("table A is back on L1, CLOSED", (l1.coder.accounts as any).decode("table", (await connection.getAccountInfo(A.table))!.data).status === 2, {});
 
   S.finish({ tableA: A.table.toBase58(), tableB: B.table.toBase58() });
