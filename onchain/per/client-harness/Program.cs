@@ -2,6 +2,7 @@
 //   dotnet run -- vector                      verifier port vs the program's fixed vector
 //   dotnet run -- play <table> [hands]        two players (p1 seat 0, p2 seat 3) play real hands
 //   dotnet run -- vault <table>               M9: the game vault and play key, with the C# builders the game uses
+//   dotnet run -- host                        M9b: host an invite-only table, an invited player joins and leaves, host closes and reclaims
 // Keys come from POKER_PER_KEYS (p1.json, p2.json), as for the TypeScript suites.
 using System;
 using System.Collections.Generic;
@@ -54,6 +55,7 @@ static class Program
             case "vector": Vector(); break;
             case "play": await Play(new PublicKey(args[1]), args.Length > 2 ? int.Parse(args[2]) : 2); break;
             case "vault": await Vault(new PublicKey(args[1])); break;
+            case "host": await Host(); break;
             default: Console.WriteLine("usage: vector | play <table> [hands]"); return 2;
         }
         Directory.CreateDirectory("../results");
@@ -151,6 +153,79 @@ static class Program
         for (int i = 0; i < 12; i++) { await Task.Delay(5000); gained = (long)(await SolBalance(l1, wallet.PublicKey)) - (long)solBefore; if (gained >= (long)afterCash - 1_000_000) break; }
         Check("the money arrives in the wallet as SOL (less MagicBlock's withdrawal cost)", gained >= (long)afterCash - 1_000_000, new { gained, afterCash });
         Outcomes.Add(new { wallet = wallet.PublicKey.Key, vault = PerVault.Vault(wallet.PublicKey).Key, table = tableKey.Key });
+    }
+
+    // ---- M9b: hosting with the C# builders (PerHost)
+    static async Task<(Account wallet, PerVault.PlayKey key, PerRpc er)> FundedPlayer(Http http, PerRpc l1, Account deployer, ulong lamports, ulong deposit)
+    {
+        var wallet = new Account();
+        var fund = new Solana.Unity.Rpc.Models.TransactionInstruction
+        {
+            ProgramId = PerVault.SystemProgram.KeyBytes,
+            Keys = new List<Solana.Unity.Rpc.Models.AccountMeta> { Solana.Unity.Rpc.Models.AccountMeta.Writable(deployer.PublicKey, true), Solana.Unity.Rpc.Models.AccountMeta.Writable(wallet.PublicKey, false) },
+            Data = new byte[] { 2, 0, 0, 0 }.Concat(BitConverter.GetBytes(lamports)).ToArray(),
+        };
+        await l1.Send(new[] { fund }, new LocalSigner(deployer));
+        if (deposit > 0)
+        {
+            await l1.Send(new[] { PerVault.OpenVault(wallet.PublicKey) }, new WalletLike(wallet));
+            await l1.Send(PerVault.Deposit(wallet.PublicKey, deposit, PerVault.NewShuttleId()), new WalletLike(wallet));
+        }
+        var key = new Account();
+        var expires = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 86400L;
+        var pk = new PerVault.PlayKey { Key = key, Wallet = wallet.PublicKey, Expires = expires, Signature = wallet.Sign(PerVault.PlayKeyMessage(key.PublicKey, expires)) };
+        return (wallet, pk, await Login(http, key));
+    }
+
+    static async Task Host()
+    {
+        var http = new Http();
+        var l1 = new PerRpc(http, Devnet);
+        var deployer = LoadKey("deployer");
+        var host = await FundedPlayer(http, l1, deployer, 80_000_000, 5_000_000);
+        var guest = await FundedPlayer(http, l1, deployer, 40_000_000, 5_000_000);
+        var stranger = await FundedPlayer(http, l1, deployer, 40_000_000, 5_000_000);
+        var id = PerHost.NewTableId();
+        var tableKey = PerHost.TableAddress(host.wallet.PublicKey, id);
+        var t = new PerTableAddresses(tableKey);
+        var stake = PerHost.Stakes[0];
+        var p = new TableParams { SmallBlind = stake.Small, BigBlind = stake.Big, MinBuyIn = 10 * stake.Big, MaxBuyIn = 100 * stake.Big, MaxSeats = 6, InviteOnly = true };
+        Console.WriteLine($"host {host.wallet.PublicKey.Key}, table {tableKey.Key}");
+
+        Check("host creates and hands over an invite-only table (one wallet transaction)", await Try(() => l1.Send(PerHost.CreateAndDelegate(host.wallet.PublicKey, id, p), new WalletLike(host.wallet))));
+        Check("host invites the guest (wallet transaction)", await Try(() => l1.Send(new[] { PerHost.SetInvites(host.wallet.PublicKey, id, new[] { guest.wallet.PublicKey }) }, new WalletLike(host.wallet))));
+        var inv = Invites.Decode(await l1.GetAccount(PerHost.InvitesAddress(tableKey), "confirmed"));
+        Check("the invite list holds the guest and not the stranger", PerHost.IsInvited(inv, tableKey, guest.wallet.PublicKey) && !PerHost.IsInvited(inv, tableKey, stranger.wallet.PublicKey));
+        await Task.Delay(5000);
+        Check("host's play key opens the table (no wallet)", await Try(() => host.er.Send(new[] { PerHost.Open(t, host.key.Key.PublicKey) }, new LocalSigner(host.key.Key))));
+        await Task.Delay(8000);
+
+        var invites = PerHost.InvitesAddress(tableKey);
+        var sReader = new Account();
+        Check("the stranger can't buy in (not invited)", !await Try(() => stranger.er.Send(new[] { stranger.key.Check(), PerVault.BuyIn(t, stranger.key, 0, 2_000_000, sReader.PublicKey, invites) }, new LocalSigner(stranger.key.Key))));
+        var gReader = new Account();
+        Check("the guest buys in from the game balance", await Try(() => guest.er.Send(new[] { guest.key.Check(), PerVault.BuyIn(t, guest.key, 0, 2_000_000, gReader.PublicKey, invites) }, new LocalSigner(guest.key.Key))));
+
+        var config = Config.Decode(await l1.GetAccount(t.Config, "confirmed"));
+        var devWallet = new PublicKey(config.DevWallet);
+        Check("host can't close while the guest is seated", !await Try(() => host.er.Send(new[] { host.key.Check(), PerHost.CloseKeyed(t, host.key, devWallet) }, new LocalSigner(host.key.Key))));
+        var readerRpc = await Login(http, gReader);
+        Check("the guest leaves (table key)", await Try(() => readerRpc.Send(new[] { PerVault.CashOut(t, gReader.PublicKey, guest.wallet.PublicKey, 0, 0) }, new LocalSigner(gReader))));
+        Check("host's play key closes the empty table (no wallet)", await Try(() => host.er.Send(new[] { host.key.Check(), PerHost.CloseKeyed(t, host.key, devWallet) }, new LocalSigner(host.key.Key))));
+
+        bool back = false;
+        for (int i = 0; i < 18 && !back; i++)
+        {
+            await Task.Delay(5000);
+            var info = await l1.Call("getAccountInfo", tableKey.Key, new JObject { ["encoding"] = "base64", ["commitment"] = "confirmed" });
+            back = info?["value"]?.Type == JTokenType.Object && (string)info["value"]["owner"] == PerIds.Program.Key;
+        }
+        Check("the closed table is back on Solana", back);
+        var before = await SolBalance(l1, host.wallet.PublicKey);
+        Check("host reclaims the rent (wallet transaction)", await Try(() => l1.Send(new[] { PerHost.Reclaim(host.wallet.PublicKey, id) }, new WalletLike(host.wallet))));
+        var got = (long)(await SolBalance(l1, host.wallet.PublicKey)) - (long)before;
+        Check("rent came back", got > 10_000_000, got);
+        Outcomes.Add(new { host = host.wallet.PublicKey.Key, table = tableKey.Key, reclaimedLamports = got });
     }
 
     static async Task<bool> Try(Func<Task<string>> f)
