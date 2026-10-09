@@ -34,6 +34,8 @@ export const config = {
   keeperEnabled: process.env.KEEPER_ENABLED !== "false",
   /** M9b: close tables left empty and idle for the config's escape delay. */
   closeAbandoned: process.env.CLOSE_ABANDONED !== "false",
+  /** M10 feature flag: the game shows private tables only while this is on (`PRIVATE_TABLES=false` hides them). */
+  privateTables: process.env.PRIVATE_TABLES !== "false",
 };
 
 if (config.archiveKey.length !== 32) throw new Error("ARCHIVE_KEY_HEX must be 32 bytes of hex");

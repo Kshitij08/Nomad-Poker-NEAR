@@ -268,7 +268,11 @@ async function maybeCloseAbandoned(key: string, address: PublicKey, t: any, prog
   const cfg = await programConfig();
   if (now - Number(t.lastActivityTs) < cfg.idleSecs + 30) return false; // a margin for the rollup clock
   const acc = accountsOf(address);
-  const vault = PublicKey.findProgramAddressSync([Buffer.from("vault"), t.creator.toBuffer()], PROGRAM_ID)[0];
+  // M10: the host's state on Solana says which game vault is current (vault 0 has the M9 address).
+  const walletState = PublicKey.findProgramAddressSync([Buffer.from("wallet"), t.creator.toBuffer()], PROGRAM_ID)[0];
+  const st = await l1.getAccountInfo(walletState);
+  const gen = st && st.data.length >= 45 ? st.data[44] : 0;
+  const vault = PublicKey.findProgramAddressSync([Buffer.from("vault"), t.creator.toBuffer(), Buffer.from(gen ? [gen] : [])], PROGRAM_ID)[0];
   const vaultToken = getAssociatedTokenAddressSync(NATIVE_MINT, vault, true);
   // The host's game balance gets any leftover, if the host has one (an absent optional account would fail).
   const hasVault = !!(await (await keeperTee.get()).getAccountInfo(vaultToken, "processed").catch(() => null));
@@ -279,7 +283,7 @@ async function maybeCloseAbandoned(key: string, address: PublicKey, t: any, prog
       escrow: getAssociatedTokenAddressSync(NATIVE_MINT, address, true), creatorVaultToken: hasVault ? vaultToken : null,
       devToken: getAssociatedTokenAddressSync(NATIVE_MINT, cfg.devWallet), record: acc.record, log: acc.log, logPermission: acc.logPermission,
       vault: rollupPrograms.vault, permissionProgram: rollupPrograms.permissionProgram, magicFeeVault: MAGIC_FEE_VAULT,
-      instructions: SYSVAR_INSTRUCTIONS_PUBKEY, magicContext: MAGIC_CONTEXT_ID, magicProgram: MAGIC_PROGRAM_ID,
+      instructions: SYSVAR_INSTRUCTIONS_PUBKEY, magicContext: MAGIC_CONTEXT_ID, magicProgram: MAGIC_PROGRAM_ID, walletState,
     } as any).rpc();
     closed = true;
     live.delete(key);

@@ -120,4 +120,6 @@ pub enum PokerError {
     InvitesNotReady,
     #[msg("This table still has its Solana invite list; close it first (close_invites)")]
     OldInviteList,
+    #[msg("This game balance isn't blocked; a fresh one is only for a blocked balance")]
+    VaultNotBlocked,
 }

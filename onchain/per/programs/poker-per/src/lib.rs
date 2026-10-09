@@ -107,6 +107,14 @@ pub mod poker_per {
         instructions::vault::vault_buy_in(ctx, seat, amount, reader, expires)
     }
 
+    pub fn revoke_play_keys(ctx: Context<RevokePlayKeys>) -> Result<()> {
+        instructions::vault::revoke_play_keys(ctx)
+    }
+
+    pub fn new_vault(ctx: Context<NewVault>) -> Result<()> {
+        instructions::vault::new_vault(ctx)
+    }
+
     pub fn vault_buy_in_code(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64, code: [u8; 16]) -> Result<()> {
         instructions::vault::vault_buy_in_code(ctx, seat, amount, reader, expires, code)
     }

@@ -38,6 +38,10 @@ use crate::table::{
 };
 
 pub const VAULT_SEED: &[u8] = b"vault";
+/// M10: per-wallet state on L1 (the rollup reads a copy): the play-key set (bumping it cancels every play
+/// key the wallet authorized before) and which game vault is the wallet's (a fresh one replaces a vault an
+/// outsider blocked before its first use).
+pub const WALLET_SEED: &[u8] = b"wallet";
 /// A play key's authorization lasts at most this long (the client asks for 7 days).
 pub const MAX_PLAY_KEY_SECS: i64 = 30 * 24 * 60 * 60;
 /// A table counts as abandoned (anyone may close it) after this many escape delays empty and idle.
@@ -55,18 +59,58 @@ const PERMISSION_UPDATE_PUBLIC: [u8; 9] = [1, 0, 0, 0, 0, 0, 0, 0, 0];
 /// words what it allows; the program rebuilds it byte for byte. It doesn't name the wallet: the
 /// signature check's public key is the wallet (and play-key transactions are close to Solana's size
 /// limit, so every byte counts).
-pub fn play_key_message(key: &Pubkey, expires: i64) -> String {
+pub fn play_key_message(key: &Pubkey, expires: i64, key_set: u32) -> String {
+    // Key set 0 (a wallet that never revoked) keeps the original wording, so authorizations signed before M10
+    // stay valid until the wallet first revokes.
+    let set = if key_set == 0 { String::new() } else { format!(" Key set {}.", key_set) };
     format!(
         "Nomad Poker private tables
-Allow play key {} to use my game balance until {} (unix time). It can buy in to tables (where chips can be lost), leave them, and send money only back to this wallet.",
-        key, expires
+Allow play key {} to use my game balance until {} (unix time). It can buy in to tables (where chips can be lost), leave them, and send money only back to this wallet.{}",
+        key, expires, set
     )
 }
 
+/// The wallet's (key set, vault number): (0, 0) until it first revokes or needs a fresh vault. `state` must
+/// be the wallet's WALLET_SEED PDA (the accounts struct checks the address); a PDA of this program is
+/// either empty or owned by it.
+pub fn wallet_state_of(state: &AccountInfo) -> (u32, u8) {
+    if state.data_is_empty() || state.owner != &crate::ID {
+        return (0, 0);
+    }
+    match state.try_borrow_data() {
+        Ok(data) => WalletState::try_deserialize(&mut &data[..]).map(|w| (w.key_set, w.vault_gen)).unwrap_or((0, 0)),
+        Err(_) => (0, 0),
+    }
+}
+
+/// The extra vault seed for the wallet's current vault: none for vault 0 (the address M9 vaults have), its
+/// number after that.
+pub fn vault_gen_seed(state: &AccountInfo) -> Vec<u8> {
+    match wallet_state_of(state).1 {
+        0 => vec![],
+        g => vec![g],
+    }
+}
+
+pub fn vault_address(wallet: &Pubkey, gen: u8) -> (Pubkey, u8) {
+    let g = [gen];
+    let extra: &[u8] = if gen == 0 { &[] } else { &g };
+    Pubkey::find_program_address(&[VAULT_SEED, wallet.as_ref(), extra], &crate::ID)
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct WalletState {
+    pub wallet: Pubkey,
+    pub key_set: u32,
+    pub vault_gen: u8,
+}
+
 /// Checks that the instruction right before this one is Solana's Ed25519 signature check of
-/// `play_key_message(key, expires)` by `wallet`, and that `expires` is in the window. The
-/// runtime has already verified that signature, or the transaction wouldn't run.
-pub fn verify_play_key(instructions: &AccountInfo, wallet: &Pubkey, key: &Pubkey, expires: i64) -> Result<()> {
+/// `play_key_message(key, expires, key set)` by `wallet`, with the wallet's current key set (M10:
+/// `state`, its WALLET_SEED PDA), and that `expires` is in the window. The runtime has already
+/// verified that signature, or the transaction wouldn't run.
+pub fn verify_play_key(instructions: &AccountInfo, state: &AccountInfo, wallet: &Pubkey, key: &Pubkey, expires: i64) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     require!(expires > now && expires <= now.saturating_add(MAX_PLAY_KEY_SECS), PokerError::PlayKeyExpired);
     let current = load_current_index_checked(instructions)?;
@@ -82,7 +126,7 @@ pub fn verify_play_key(instructions: &AccountInfo, wallet: &Pubkey, key: &Pubkey
     let pk = d.get(pk_off..pk_off + 32).ok_or(PokerError::BadPlayKeyProof)?;
     require!(pk == wallet.as_ref(), PokerError::BadPlayKeyProof);
     let msg = d.get(msg_off..msg_off + msg_len).ok_or(PokerError::BadPlayKeyProof)?;
-    require!(msg == play_key_message(key, expires).as_bytes(), PokerError::BadPlayKeyProof);
+    require!(msg == play_key_message(key, expires, wallet_state_of(state).0).as_bytes(), PokerError::BadPlayKeyProof);
     Ok(())
 }
 
@@ -97,8 +141,11 @@ pub fn verify_play_key(instructions: &AccountInfo, wallet: &Pubkey, key: &Pubkey
 pub struct OpenVault<'info> {
     #[account(mut)]
     pub wallet: Signer<'info>,
+    /// CHECK: the wallet's state (M10; may not exist: vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
     /// CHECK: the vault PDA; holds nothing itself, only owns the token account.
-    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref(), &vault_gen_seed(&wallet_state)], bump)]
     pub vault: UncheckedAccount<'info>,
     /// CHECK: wrapped SOL only.
     #[account(address = WSOL_MINT @ PokerError::UnsupportedMint)]
@@ -269,6 +316,7 @@ fn make_vault_permission_public(ctx: &Context<OpenVault>) -> Result<()> {
     let a = &ctx.accounts;
     let wallet = a.wallet.key();
     let bump = [ctx.bumps.vault];
+    let gen_seed = vault_gen_seed(&a.wallet_state);
     invoke_signed(
         &Instruction {
             program_id: PERMISSION_PROGRAM_ID,
@@ -280,7 +328,7 @@ fn make_vault_permission_public(ctx: &Context<OpenVault>) -> Result<()> {
             data: PERMISSION_UPDATE_PUBLIC.to_vec(),
         },
         &[a.vault.to_account_info(), a.vault_eata.to_account_info(), a.vault_permission.to_account_info(), a.permission_program.to_account_info()],
-        &[&[VAULT_SEED, wallet.as_ref(), &bump]],
+        &[&[VAULT_SEED, wallet.as_ref(), &gen_seed, &bump]],
     )?;
     Ok(())
 }
@@ -330,8 +378,11 @@ pub struct VaultBuyIn<'info> {
     /// CHECK: the wallet that authorized `play_key`; checked against the signed message.
     pub wallet: UncheckedAccount<'info>,
     /// CHECK: the wallet's vault PDA (signs the transfer).
-    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref(), &vault_gen_seed(&wallet_state)], bump)]
     pub vault: UncheckedAccount<'info>,
+    /// CHECK: the wallet's state (M10; may not exist: key set 0, vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
     #[account(mut, address = get_associated_token_address(&vault.key(), &table.mint))]
     pub vault_token: Box<Account<'info, TokenAccount>>,
     /// CHECK: the instructions sysvar, for the wallet's signature check.
@@ -375,13 +426,14 @@ pub fn vault_buy_in_code(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader
 
 fn vault_buy_in_with(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pubkey, expires: i64, code: Option<&[u8; 16]>) -> Result<()> {
     let wallet = ctx.accounts.wallet.key();
-    verify_play_key(&ctx.accounts.instructions, &wallet, &ctx.accounts.play_key.key(), expires)?;
+    verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &wallet, &ctx.accounts.play_key.key(), expires)?;
     let vault_bump = [ctx.bumps.vault];
+    let gen_seed = vault_gen_seed(&ctx.accounts.wallet_state);
     buy_in_flow!(ctx, seat, amount, reader, wallet, code, token::transfer(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
             Transfer { from: ctx.accounts.vault_token.to_account_info(), to: ctx.accounts.escrow.to_account_info(), authority: ctx.accounts.vault.to_account_info() },
-            &[&[VAULT_SEED, wallet.as_ref(), &vault_bump]],
+            &[&[VAULT_SEED, wallet.as_ref(), &gen_seed, &vault_bump]],
         ),
         amount,
     )?)
@@ -397,8 +449,11 @@ pub struct VaultCashOut<'info> {
     /// CHECK: the seat's wallet (checked against the ledger).
     pub wallet: UncheckedAccount<'info>,
     /// CHECK: the wallet's vault PDA.
-    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref(), &vault_gen_seed(&wallet_state)], bump)]
     pub vault: UncheckedAccount<'info>,
+    /// CHECK: the wallet's state (M10; may not exist: key set 0, vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
     #[account(mut, address = get_associated_token_address(&vault.key(), &table.mint))]
     pub vault_token: Box<Account<'info, TokenAccount>>,
     /// CHECK: the instructions sysvar (used when a play key signs).
@@ -428,7 +483,7 @@ pub struct VaultCashOut<'info> {
 /// key. The money can only go to the seat's own wallet's vault.
 pub fn vault_cash_out(ctx: Context<VaultCashOut>, seat: u8, expires: i64) -> Result<()> {
     let (signer, wallet) = (ctx.accounts.signer.key(), ctx.accounts.wallet.key());
-    let wallet_vouched = if expires != 0 { verify_play_key(&ctx.accounts.instructions, &wallet, &signer, expires).is_ok() } else { false };
+    let wallet_vouched = if expires != 0 { verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &wallet, &signer, expires).is_ok() } else { false };
     cash_out_flow!(ctx, seat, |p: Pubkey, reader: Pubkey| -> Result<()> {
         require_keys_eq!(p, wallet, PokerError::NotSeated);
         require!(signer == reader || wallet_vouched, PokerError::NotSeatKey);
@@ -444,8 +499,11 @@ pub struct VaultWithdraw<'info> {
     /// CHECK: the wallet that authorized `play_key`; the only possible recipient.
     pub wallet: UncheckedAccount<'info>,
     /// CHECK: the wallet's vault PDA (signs the transfer).
-    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref(), &vault_gen_seed(&wallet_state)], bump)]
     pub vault: UncheckedAccount<'info>,
+    /// CHECK: the wallet's state (M10; may not exist: key set 0, vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
     #[account(mut, address = get_associated_token_address(&vault.key(), &WSOL_MINT))]
     pub vault_token: Box<Account<'info, TokenAccount>>,
     /// The wallet's own wSOL account in the rollup; MagicBlock's withdrawal takes it to Solana.
@@ -464,14 +522,15 @@ pub struct VaultWithdraw<'info> {
 /// withdrawal to Solana (which the wallet signs on L1).
 pub fn vault_withdraw(ctx: Context<VaultWithdraw>, amount: u64, expires: i64) -> Result<()> {
     let wallet = ctx.accounts.wallet.key();
-    verify_play_key(&ctx.accounts.instructions, &wallet, &ctx.accounts.play_key.key(), expires)?;
+    verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &wallet, &ctx.accounts.play_key.key(), expires)?;
     require!(amount > 0, PokerError::NothingToCollect);
     let bump = [ctx.bumps.vault];
+    let gen_seed = vault_gen_seed(&ctx.accounts.wallet_state);
     token::transfer(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
             Transfer { from: ctx.accounts.vault_token.to_account_info(), to: ctx.accounts.wallet_token.to_account_info(), authority: ctx.accounts.vault.to_account_info() },
-            &[&[VAULT_SEED, wallet.as_ref(), &bump]],
+            &[&[VAULT_SEED, wallet.as_ref(), &gen_seed, &bump]],
         ),
         amount,
     )?;
@@ -484,8 +543,11 @@ pub struct VaultBalance<'info> {
     /// CHECK: the wallet that authorized `play_key`.
     pub wallet: UncheckedAccount<'info>,
     /// CHECK: the wallet's vault PDA.
-    #[account(seeds = [VAULT_SEED, wallet.key().as_ref()], bump)]
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref(), &vault_gen_seed(&wallet_state)], bump)]
     pub vault: UncheckedAccount<'info>,
+    /// CHECK: the wallet's state (M10; may not exist: key set 0, vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
     #[account(address = get_associated_token_address(&vault.key(), &WSOL_MINT))]
     pub vault_token: Box<Account<'info, TokenAccount>>,
     /// CHECK: the instructions sysvar, for the wallet's signature check.
@@ -496,7 +558,7 @@ pub struct VaultBalance<'info> {
 /// The vault's balance as return data (u64 LE), for the client to simulate. The rollup's RPC shows a
 /// token balance only to its owner, and nobody can log in as the vault.
 pub fn vault_balance(ctx: Context<VaultBalance>, expires: i64) -> Result<()> {
-    verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet.key(), &ctx.accounts.play_key.key(), expires)?;
+    verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &ctx.accounts.wallet.key(), &ctx.accounts.play_key.key(), expires)?;
     set_return_data(&ctx.accounts.vault_token.amount.to_le_bytes());
     Ok(())
 }
@@ -525,7 +587,7 @@ pub struct CloseTableKeyed<'info> {
     /// The creator's game vault account: receives any leftover in the escrow. Optional (a creator
     /// without a game balance leaves the leftover in the escrow).
     #[account(mut, address = get_associated_token_address(
-        &Pubkey::find_program_address(&[VAULT_SEED, table.creator.as_ref()], &crate::ID).0, &table.mint))]
+        &vault_address(&table.creator, wallet_state_of(&wallet_state).1).0, &table.mint))]
     pub creator_vault_token: Option<Box<Account<'info, TokenAccount>>>,
     /// The dev wallet's token account: unpaid rake is collected into it first. Needed only when there
     /// is unpaid rake.
@@ -552,6 +614,9 @@ pub struct CloseTableKeyed<'info> {
     /// CHECK: the instructions sysvar (used when a play key signs).
     #[account(address = INSTRUCTIONS_SYSVAR_ID)]
     pub instructions: UncheckedAccount<'info>,
+    /// CHECK: the creator's state (M10; may not exist: key set 0, vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, table.creator.as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -564,7 +629,7 @@ pub struct CloseTableKeyed<'info> {
 pub fn close_table_keyed(ctx: Context<CloseTableKeyed>, expires: i64) -> Result<()> {
     let creator = ctx.accounts.table.creator;
     if expires != 0 {
-        verify_play_key(&ctx.accounts.instructions, &creator, &ctx.accounts.signer.key(), expires)?;
+        verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &creator, &ctx.accounts.signer.key(), expires)?;
     } else {
         // Abandoned: empty for ABANDONED_ESCAPE_DELAYS escape delays (6 hours by default), so a table
         // waiting for players isn't closed under its host. Unlike the escape hatch, a timestamp from the
@@ -624,6 +689,9 @@ pub struct SetInvitesKeyed<'info> {
     /// CHECK: the instructions sysvar, for the creator's signature check.
     #[account(address = INSTRUCTIONS_SYSVAR_ID)]
     pub instructions: UncheckedAccount<'info>,
+    /// CHECK: the creator's state (M10; may not exist: key set 0, vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, table.creator.as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
     pub rollup: RollupPrograms<'info>,
 }
 
@@ -633,7 +701,7 @@ pub struct SetInvitesKeyed<'info> {
 /// either as it is. The list has no readers, and the TEE withholds every transaction that touches it.
 pub fn set_invites_keyed(ctx: Context<SetInvitesKeyed>, expires: i64, hashes: Option<Vec<[u8; 16]>>, code_hash: Option<[u8; 32]>) -> Result<()> {
     let a = &ctx.accounts;
-    verify_play_key(&a.instructions, &a.table.creator, &a.play_key.key(), expires)?;
+    verify_play_key(&a.instructions, &a.wallet_state, &a.table.creator, &a.play_key.key(), expires)?;
     require!(a.table.status == STATUS_OPEN, PokerError::TableNotOpen);
     if let Some(h) = &hashes {
         require!(h.len() <= MAX_INVITES, PokerError::TooManyInvites);
@@ -671,7 +739,105 @@ pub fn set_invites_keyed(ctx: Context<SetInvitesKeyed>, expires: i64, hashes: Op
     Ok(())
 }
 
+// ---------------------------------------------------------------------------------------- L1: revoking play keys (M10)
+
+#[derive(Accounts)]
+pub struct RevokePlayKeys<'info> {
+    #[account(mut)]
+    pub wallet: Signer<'info>,
+    #[account(init_if_needed, payer = wallet, space = 8 + WalletState::INIT_SPACE, seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: Account<'info, WalletState>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Cancels every play key this wallet has authorized (a lost or shared browser): the wallet's key set goes
+/// up by one, and the program accepts only authorizations naming the new set. The wallet signs on L1 (it
+/// previews cleanly); the rollup's copy follows within seconds. The first time also pays the small
+/// account's rent (~0.0011 SOL).
+pub fn revoke_play_keys(ctx: Context<RevokePlayKeys>) -> Result<()> {
+    let st = &mut ctx.accounts.wallet_state;
+    st.wallet = ctx.accounts.wallet.key();
+    st.key_set = st.key_set.checked_add(1).ok_or(PokerError::MathOverflow)?;
+    emit!(PlayKeysRevoked { wallet: st.wallet, key_set: st.key_set });
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------- L1: a fresh vault (M10)
+
+#[derive(Accounts)]
+pub struct NewVault<'info> {
+    #[account(mut)]
+    pub wallet: Signer<'info>,
+    #[account(init_if_needed, payer = wallet, space = 8 + WalletState::INIT_SPACE, seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: Account<'info, WalletState>,
+    /// CHECK: delegation record of the current vault's token account (checked against its address).
+    pub eata_delegation_record: UncheckedAccount<'info>,
+    /// CHECK: the current vault account's permission (checked against its address).
+    pub permission: UncheckedAccount<'info>,
+    /// CHECK: delegation record of that permission (checked against its address).
+    pub permission_delegation_record: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Moves the wallet to a fresh game vault when an outsider blocked its current one before its first use
+/// (MagicBlock lets anyone create a wallet's vault account and hand it to another validator, which
+/// `open_vault` then refuses: M10 probe). Only when the current vault is blocked, so a working vault and the
+/// money in it are never left behind. The client sends this and `open_vault` (for the new vault) in one
+/// transaction, so nobody can get to the new address first.
+pub fn new_vault(ctx: Context<NewVault>) -> Result<()> {
+    let wallet = ctx.accounts.wallet.key();
+    let gen = ctx.accounts.wallet_state.vault_gen;
+    let (vault, _) = vault_address(&wallet, gen);
+    let eata = Pubkey::find_program_address(&[vault.as_ref(), WSOL_MINT.as_ref()], &ESPL_PROGRAM_ID).0;
+    let permission = Pubkey::find_program_address(&[PERMISSION_SEED, eata.as_ref()], &PERMISSION_PROGRAM_ID).0;
+    let record_of = |k: &Pubkey| Pubkey::find_program_address(&[b"delegation", k.as_ref()], &DELEGATION_PROGRAM_ID).0;
+    let a = &ctx.accounts;
+    require_keys_eq!(a.eata_delegation_record.key(), record_of(&eata), PokerError::VaultBlocked);
+    require_keys_eq!(a.permission.key(), permission, PokerError::VaultBlocked);
+    require_keys_eq!(a.permission_delegation_record.key(), record_of(&permission), PokerError::VaultBlocked);
+    // Blocked: the vault account or its permission is handed to a validator other than the TEE, or the
+    // permission is handed over while not public. (What `open_vault` refuses.)
+    let elsewhere = |record: &UncheckedAccount| -> Result<bool> {
+        let d = record.try_borrow_data()?;
+        Ok(d.len() >= 40 && d[8..40] != *TEE_VALIDATOR.as_ref())
+    };
+    let private_delegated = !a.permission_delegation_record.data_is_empty() && a.permission.try_borrow_data()?.get(34) != Some(&0);
+    require!(elsewhere(&a.eata_delegation_record)? || elsewhere(&a.permission_delegation_record)? || private_delegated, PokerError::VaultNotBlocked);
+    let st = &mut ctx.accounts.wallet_state;
+    st.wallet = wallet;
+    st.vault_gen = st.vault_gen.checked_add(1).ok_or(PokerError::MathOverflow)?;
+    emit!(VaultReplaced { wallet, vault_gen: st.vault_gen });
+    Ok(())
+}
+
+#[event]
+pub struct VaultReplaced {
+    pub wallet: Pubkey,
+    pub vault_gen: u8,
+}
+
+#[event]
+pub struct PlayKeysRevoked {
+    pub wallet: Pubkey,
+    pub key_set: u32,
+}
+
 #[event]
 pub struct VaultOpened {
     pub vault: Pubkey,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn play_key_message_by_key_set() {
+        let key = Pubkey::new_from_array([7; 32]);
+        let m0 = play_key_message(&key, 1_800_000_000, 0);
+        // Set 0 is the wording signed before M10, byte for byte, so those authorizations still verify.
+        assert_eq!(m0, format!("Nomad Poker private tables\nAllow play key {} to use my game balance until 1800000000 (unix time). It can buy in to tables (where chips can be lost), leave them, and send money only back to this wallet.", key));
+        assert_eq!(play_key_message(&key, 1_800_000_000, 2), format!("{} Key set 2.", m0));
+        assert_ne!(play_key_message(&key, 1_800_000_000, 1), play_key_message(&key, 1_800_000_000, 2));
+    }
 }

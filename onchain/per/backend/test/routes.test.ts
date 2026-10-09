@@ -23,6 +23,8 @@ async function main() {
   const h = await req("GET", "/health");
   check("GET /health: 200, db ok, both RPCs reachable, keeper looping", h.status === 200 && h.body.ok && h.body.db === "ok" && h.body.l1Slot > 0 && h.body.rollupSlot > 0 && h.body.keeper.loops > 0, { status: h.status, keeper: h.body?.keeper?.loops });
   check("GET /health exposes no secrets and no error text (only public keys and timestamps)", !JSON.stringify(h.body).match(/secret|token|DATABASE|postgres:|lastError"/i), { keys: Object.keys(h.body?.keeper ?? {}) });
+  const flags = await req("GET", "/flags");
+  check("GET /flags: 200 with a boolean privateTables, not cached", flags.status === 200 && typeof flags.body?.privateTables === "boolean" && /no-store/.test(flags.headers.get("cache-control") ?? ""), flags.body);
   check("no X-Powered-By header", !h.headers.get("x-powered-by"), {});
 
   const lobby = await req("GET", "/tables");

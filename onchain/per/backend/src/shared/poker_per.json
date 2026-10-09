@@ -1809,6 +1809,29 @@
           "address": "Sysvar1nstructions1111111111111111111111111"
         },
         {
+          "name": "wallet_state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -3270,6 +3293,63 @@
       "args": []
     },
     {
+      "name": "new_vault",
+      "discriminator": [
+        0,
+        196,
+        119,
+        39,
+        154,
+        60,
+        10,
+        44
+      ],
+      "accounts": [
+        {
+          "name": "wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "wallet_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "eata_delegation_record"
+        },
+        {
+          "name": "permission"
+        },
+        {
+          "name": "permission_delegation_record"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "open_log",
       "discriminator": [
         115,
@@ -3807,16 +3887,17 @@
           "signer": true
         },
         {
-          "name": "vault",
+          "name": "wallet_state",
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
+                  119,
                   97,
-                  117,
                   108,
+                  108,
+                  101,
                   116
                 ]
               },
@@ -3826,6 +3907,9 @@
               }
             ]
           }
+        },
+        {
+          "name": "vault"
         },
         {
           "name": "mint",
@@ -4945,6 +5029,54 @@
       ]
     },
     {
+      "name": "revoke_play_keys",
+      "discriminator": [
+        110,
+        23,
+        234,
+        151,
+        24,
+        208,
+        69,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "wallet_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "rollback_table",
       "discriminator": [
         23,
@@ -5664,8 +5796,57 @@
           }
         },
         {
+          "name": "legacy_invites",
+          "docs": [
+            "two lists and an old one can't keep admitting wallets the private list dropped (M9c review)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  105,
+                  116,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
           "name": "instructions",
           "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "wallet_state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              }
+            ]
+          }
         },
         {
           "name": "rollup",
@@ -6327,16 +6508,20 @@
           "name": "wallet"
         },
         {
-          "name": "vault",
+          "name": "vault"
+        },
+        {
+          "name": "wallet_state",
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
+                  119,
                   97,
-                  117,
                   108,
+                  108,
+                  101,
                   116
                 ]
               },
@@ -6383,16 +6568,20 @@
           "name": "wallet"
         },
         {
-          "name": "vault",
+          "name": "vault"
+        },
+        {
+          "name": "wallet_state",
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
+                  119,
                   97,
-                  117,
                   108,
+                  108,
+                  101,
                   116
                 ]
               },
@@ -6688,16 +6877,20 @@
           "name": "wallet"
         },
         {
-          "name": "vault",
+          "name": "vault"
+        },
+        {
+          "name": "wallet_state",
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
+                  119,
                   97,
-                  117,
                   108,
+                  108,
+                  101,
                   116
                 ]
               },
@@ -7005,16 +7198,20 @@
           "name": "wallet"
         },
         {
-          "name": "vault",
+          "name": "vault"
+        },
+        {
+          "name": "wallet_state",
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
+                  119,
                   97,
-                  117,
                   108,
+                  108,
+                  101,
                   116
                 ]
               },
@@ -7280,16 +7477,20 @@
           "name": "wallet"
         },
         {
-          "name": "vault",
+          "name": "vault"
+        },
+        {
+          "name": "wallet_state",
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
+                  119,
                   97,
-                  117,
                   108,
+                  108,
+                  101,
                   116
                 ]
               },
@@ -7440,6 +7641,19 @@
         230,
         112
       ]
+    },
+    {
+      "name": "WalletState",
+      "discriminator": [
+        126,
+        186,
+        0,
+        158,
+        92,
+        223,
+        167,
+        68
+      ]
     }
   ],
   "events": [
@@ -7587,6 +7801,19 @@
       ]
     },
     {
+      "name": "PlayKeysRevoked",
+      "discriminator": [
+        181,
+        205,
+        206,
+        197,
+        168,
+        224,
+        217,
+        126
+      ]
+    },
+    {
       "name": "RakeCollected",
       "discriminator": [
         55,
@@ -7675,6 +7902,19 @@
         107,
         197,
         16
+      ]
+    },
+    {
+      "name": "VaultReplaced",
+      "discriminator": [
+        222,
+        80,
+        217,
+        199,
+        55,
+        41,
+        151,
+        182
       ]
     }
   ],
@@ -7963,6 +8203,21 @@
       "code": 6056,
       "name": "VaultBlocked",
       "msg": "This game balance can't be used safely: someone else set up its rollup account first (it isn't public, or isn't handed to the TEE validator)"
+    },
+    {
+      "code": 6057,
+      "name": "InvitesNotReady",
+      "msg": "Create the private invite list first (a call with no list and no link), then set it: the first call's data wouldn't be withheld"
+    },
+    {
+      "code": 6058,
+      "name": "OldInviteList",
+      "msg": "This table still has its Solana invite list; close it first (close_invites)"
+    },
+    {
+      "code": 6059,
+      "name": "VaultNotBlocked",
+      "msg": "This game balance isn't blocked; a fresh one is only for a blocked balance"
     }
   ],
   "types": [
@@ -8934,6 +9189,22 @@
       }
     },
     {
+      "name": "PlayKeysRevoked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "key_set",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
       "name": "RakeCollected",
       "type": {
         "kind": "struct",
@@ -9331,6 +9602,42 @@
           {
             "name": "vault",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultReplaced",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault_gen",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WalletState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "key_set",
+            "type": "u32"
+          },
+          {
+            "name": "vault_gen",
+            "type": "u8"
           }
         ]
       }

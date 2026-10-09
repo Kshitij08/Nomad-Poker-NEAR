@@ -56,6 +56,7 @@ static class Program
             case "play": await Play(new PublicKey(args[1]), args.Length > 2 ? int.Parse(args[2]) : 2); break;
             case "vault": await Vault(new PublicKey(args[1])); break;
             case "host": await Host(); break;
+            case "soak": await Soak(int.Parse(args[1]), int.Parse(args[2]), args.Length > 3 ? int.Parse(args[3]) : 3); break;
             default: Console.WriteLine("usage: vector | play <table> [hands]"); return 2;
         }
         Directory.CreateDirectory("../results");
@@ -249,6 +250,182 @@ static class Program
         var got = (long)(await SolBalance(l1, host.wallet.PublicKey)) - (long)before;
         Check("rent came back", got > 10_000_000, got);
         Outcomes.Add(new { host = host.wallet.PublicKey.Key, table = tableKey.Key, reclaimedLamports = got });
+    }
+
+    // ---- M10 soak: hosted tables played in parallel through the client core, then a token reconciliation
+    sealed class SoakSeat
+    {
+        public string Name; public Account Wallet; public PerVault.PlayKey Key; public PerRpc KeyRpc; public Account Reader; public PerRpc ReaderRpc;
+        public PerTableSession Session; public int Seat; public ulong VaultBefore, VaultAfter, BoughtIn, Rake;
+        public readonly List<PokerEvent> Events = new List<PokerEvent>();
+        public readonly List<string> Leaks = new List<string>();
+    }
+
+    static readonly object SoakLock = new object();
+    static void SoakLog(string s) { lock (SoakLock) Console.WriteLine($"{DateTime.UtcNow:HH:mm:ss} {s}"); }
+
+    static async Task<ulong> VaultBalanceOf(PerVault.PlayKey k, PerRpc rpc)
+    {
+        var data = await rpc.SimulateReturn(new[] { k.Check(), PerVault.Balance(k) }, new LocalSigner(k.Key));
+        return data == null ? 0UL : BitConverter.ToUInt64(data, 0);
+    }
+
+    static ulong RakeOf(ulong amount) => (amount * 500 + 9_999) / 10_000; // 5%, rounded up (table.rs rake_for)
+
+    static async Task Soak(int tables, int handsPerTable, int playersPerTable)
+    {
+        var http = new Http();
+        var l1 = new PerRpc(http, Devnet);
+        var deployer = LoadKey("deployer");
+        var config = Config.Decode(await l1.GetAccount(PerTableAddresses.Find(PerIds.Program, Encoding.UTF8.GetBytes("config")), "confirmed"));
+        var devWallet = new PublicKey(config.DevWallet);
+        var started = DateTime.UtcNow;
+        var results = await Task.WhenAll(Enumerable.Range(0, tables).Select(i => SoakTable(http, l1, deployer, devWallet, i, handsPerTable, playersPerTable)));
+        int hands = results.Sum(r => r.hands), verified = results.Sum(r => r.verified);
+        long delta = results.Sum(r => r.delta), rake = results.Sum(r => (long)r.rake);
+        Check($"{tables} tables played {hands} hands in all (asked {tables * handsPerTable})", hands >= tables * handsPerTable, results.Select(r => r.hands));
+        Check("every finished hand verified by every seat (deck, button, own seed and cards, action log)", verified == results.Sum(r => r.checks), new { verified, checks = results.Sum(r => r.checks) });
+        Check("token reconciliation: the players' game balances changed by exactly minus the rake on every buy-in", delta == -rake, new { delta, rake });
+        Check("no player saw another seat's cards during a hand", results.All(r => r.leaks == 0), results.Select(r => r.leaks));
+        Outcomes.Add(new { tables, handsPerTable, playersPerTable, hands, minutes = Math.Round((DateTime.UtcNow - started).TotalMinutes, 1), perTable = results });
+    }
+
+    static async Task<SoakResult> SoakTable(Http http, PerRpc l1, Account deployer, PublicKey devWallet, int n, int hands, int playersPerTable)
+    {
+        var r = new SoakResult { table = "" };
+        try
+        {
+            var seats = new List<SoakSeat>();
+            for (int i = 0; i < playersPerTable; i++)
+            {
+                var (w, k, rpc) = await FundedPlayer(http, l1, deployer, 60_000_000, 30_000_000);
+                seats.Add(new SoakSeat { Name = $"t{n}p{i}", Wallet = w, Key = k, KeyRpc = rpc, Seat = i, Reader = new Account() });
+                await Task.Delay(1500); // devnet's public RPC limits bursts
+            }
+            var host = seats[0];
+            var id = PerHost.NewTableId();
+            var tableKey = PerHost.TableAddress(host.Wallet.PublicKey, id);
+            r.table = tableKey.Key;
+            var t = new PerTableAddresses(tableKey);
+            var stake = PerHost.Stakes[0];
+            var p = new TableParams { SmallBlind = stake.Small, BigBlind = stake.Big, MinBuyIn = 10 * stake.Big, MaxBuyIn = 100 * stake.Big, MaxSeats = (byte)playersPerTable, InviteOnly = false };
+            await l1.Send(PerHost.CreateAndDelegate(host.Wallet.PublicKey, id, p), new WalletLike(host.Wallet));
+            await Task.Delay(12_000); // deposits settle, the rollup picks up the table
+            for (int i = 0; ; i++)
+            {
+                try { await host.KeyRpc.Send(new[] { PerHost.Open(t, host.Key.Key.PublicKey) }, new LocalSigner(host.Key.Key)); break; }
+                catch (Exception) when (i < 8) { await Task.Delay(3000); }
+            }
+            var publicRpc = new PerRpc(http, Tee);
+            foreach (var s in seats)
+            {
+                s.VaultBefore = await VaultBalanceOf(s.Key, s.KeyRpc);
+                await SoakBuyIn(s, t, 10_000_000, r);
+                s.ReaderRpc = await Login(http, s.Reader);
+                s.Session = new PerTableSession(tableKey, publicRpc, s.ReaderRpc, new LocalSigner(s.Reader), s.Wallet.PublicKey);
+                var me = s;
+                s.Session.Events += e => { me.Events.Add(e); if (e is HoleCardsDealtEvent h && h.Seat != me.Seat && h.Card0.Rank != 0) me.Leaks.Add($"saw seat {h.Seat}'s cards live"); };
+            }
+            SoakLog($"table {n} {tableKey.Key}: {seats.Count} seated, playing {hands} hands");
+            var rng = new Random(n * 7919 + 17);
+            int lastEnded = 0;
+            var begin = DateTime.UtcNow;
+            while (DateTime.UtcNow - begin < TimeSpan.FromMinutes(hands * 1.5 + 10))
+            {
+                bool wantMore = lastEnded < hands;
+                if (!wantMore && seats.All(s => s.Session.Table?.HandState == PerGame.HandIdle)) break;
+                foreach (var s in seats)
+                {
+                    try
+                    {
+                        await s.Session.Poll();
+                        var tb = s.Session.Table;
+                        var mySeat = s.Session.Ledger?.Seats[s.Seat];
+                        // Busted (or nearly): rebuy from the game balance between hands.
+                        if (tb.HandState == PerGame.HandIdle && wantMore && mySeat != null && mySeat.Stack < stake.Big * 2)
+                            await SoakBuyIn(s, t, 6_000_000, r);
+                        if (tb.HandState == PerGame.HandIdle && wantMore) await s.Session.PrepareNextHand();
+                        var game = s.Session.Ledger?.Game;
+                        var turn = s.Events.OfType<TurnStartedEvent>().LastOrDefault();
+                        if (tb.HandState == PerGame.HandPlaying && game != null && game.ToAct == s.Seat && turn != null && turn.ForYou && turn.Seat == s.Seat)
+                        {
+                            var legal = PerGame.Legal(game);
+                            int roll = rng.Next(100);
+                            if (legal.CanCheck) { if ((legal.CanBet || legal.CanRaise) && roll < 25) await s.Session.Act(legal.CanBet ? ActionType.Bet : ActionType.Raise, legal.MinRaiseTo); else await s.Session.Act(ActionType.Check, 0); }
+                            else if (roll < 12) await s.Session.Act(ActionType.Fold, 0);
+                            else if (legal.CanRaise && roll < 22) await s.Session.Act(ActionType.Raise, legal.MinRaiseTo);
+                            else if (legal.CanCall) await s.Session.Act(ActionType.Call, 0);
+                            else if (legal.CanAllIn) await s.Session.Act(ActionType.AllIn, 0);
+                            else await s.Session.Act(ActionType.Fold, 0);
+                        }
+                    }
+                    catch (PerTxException e) when (e.ErrorName == "NotYourTurn" || e.ErrorName == "HandNotPlaying" || e.ErrorName == "HandInProgress") { }
+                    catch (Exception e) { r.errors++; if (r.errors < 20) SoakLog($"table {n} {s.Name}: {e.Message}"); await Task.Delay(1000); }
+                }
+                var ended = seats.Min(s => s.Events.OfType<HandEndedEvent>().Count());
+                if (ended > lastEnded)
+                {
+                    lastEnded = ended;
+                    foreach (var s in seats)
+                    {
+                        var ss = s.Session;
+                        if (ss.LastRecord == null) continue;
+                        r.checks++;
+                        var v = PerVerifier.Verify(ss.LastRecord, ss.LastPrevButton, s.Seat, ss.LastMySeed, ss.LastMyCards);
+                        var vl = ss.LastLog != null ? PerVerifier.VerifyLog(ss.LastRecord, ss.LastLog) : null;
+                        if (v.Ok && vl != null && vl.Ok) r.verified++;
+                        else if (r.problems.Count < 10) r.problems.Add(new { hand = ss.LastRecord.HandNo, seat = s.Seat, v.Problems, log = vl?.Problems });
+                    }
+                    if (lastEnded % 10 == 0) SoakLog($"table {n}: {lastEnded}/{hands} hands");
+                }
+                await Task.Delay(300);
+            }
+            r.hands = lastEnded;
+            r.leaks = seats.Sum(s => s.Leaks.Count);
+            // Everyone leaves (table key), the host closes (rake collected first) and reclaims.
+            foreach (var s in seats)
+            {
+                for (int i = 0; ; i++)
+                {
+                    try { await s.ReaderRpc.Send(new[] { PerVault.CashOut(t, s.Reader.PublicKey, s.Wallet.PublicKey, s.Seat, 0) }, new LocalSigner(s.Reader)); break; }
+                    catch (Exception) when (i < 5) { await Task.Delay(3000); }
+                }
+            }
+            await host.KeyRpc.Send(new[] { host.Key.Check(), PerHost.CloseKeyed(t, host.Key, devWallet) }, new LocalSigner(host.Key.Key));
+            await Task.Delay(8000);
+            foreach (var s in seats) { s.VaultAfter = await VaultBalanceOf(s.Key, s.KeyRpc); r.delta += (long)s.VaultAfter - (long)s.VaultBefore; }
+            r.rake = (ulong)seats.Sum(s => (long)s.Rake);
+            r.boughtIn = (ulong)seats.Sum(s => (long)s.BoughtIn);
+            for (int i = 0; i < 24; i++)
+            {
+                await Task.Delay(5000);
+                var info = await l1.Call("getAccountInfo", tableKey.Key, new JObject { ["encoding"] = "base64", ["commitment"] = "confirmed" });
+                if (info?["value"]?.Type == JTokenType.Object && (string)info["value"]["owner"] == PerIds.Program.Key)
+                {
+                    await l1.Send(new[] { PerHost.Reclaim(host.Wallet.PublicKey, id) }, new WalletLike(host.Wallet));
+                    r.reclaimed = true;
+                    break;
+                }
+            }
+            r.minutes = Math.Round((DateTime.UtcNow - begin).TotalMinutes, 1);
+            SoakLog($"table {n}: done, {r.hands} hands, {r.verified}/{r.checks} verified, balances {r.delta}, rake {r.rake}, errors {r.errors}");
+        }
+        catch (Exception e) { r.fatal = e.Message; SoakLog($"table {n} FAILED: {e}"); }
+        return r;
+    }
+
+    static async Task SoakBuyIn(SoakSeat s, PerTableAddresses t, ulong amount, SoakResult r)
+    {
+        await s.KeyRpc.Send(new[] { s.Key.Check(), PerVault.BuyIn(t, s.Key, s.Seat, amount, s.Reader.PublicKey) }, new LocalSigner(s.Key.Key));
+        s.BoughtIn += amount;
+        s.Rake += RakeOf(amount);
+        r.buyIns++;
+    }
+
+    sealed class SoakResult
+    {
+        public string table; public int hands, checks, verified, leaks, errors, buyIns; public long delta; public ulong rake, boughtIn;
+        public bool reclaimed; public double minutes; public string fatal; public List<object> problems = new List<object>();
     }
 
     static async Task<bool> Try(Func<Task<string>> f)

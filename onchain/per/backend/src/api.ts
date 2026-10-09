@@ -89,6 +89,12 @@ export function app() {
 
   // Probes are cached for 5 s, so /health traffic can't push the service's RPC use up.
   let probe = { at: 0, db: "down", l1Slot: null as number | null, rollupSlot: null as number | null };
+  // M10: feature flags the game reads at start. Turning PRIVATE_TABLES off (a Railway variable, then a
+  // restart) hides private tables in every game client; Coins tables and their escrow are unaffected.
+  a.get("/flags", (_req, res) => {
+    res.set("cache-control", "no-store").json({ privateTables: config.privateTables });
+  });
+
   a.get("/health", async (_req, res) => {
     if (Date.now() - probe.at > 5_000) {
       const next = { at: Date.now(), db: "down", l1Slot: null as number | null, rollupSlot: null as number | null };

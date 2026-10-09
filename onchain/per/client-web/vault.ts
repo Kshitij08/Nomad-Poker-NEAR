@@ -14,13 +14,19 @@ export const PERMISSION_PROGRAM: PublicKey = s.PERMISSION_PROGRAM_ID;
 /** The client asks for 7 days; the program accepts up to 30. */
 export const PLAY_KEY_DAYS = 1;
 
-export const vaultOf = (wallet: PublicKey) => PublicKey.findProgramAddressSync([Buffer.from("vault"), wallet.toBuffer()], PROGRAM_ID)[0];
-export const vaultTokenOf = (wallet: PublicKey) => getAssociatedTokenAddressSync(NATIVE_MINT, vaultOf(wallet), true);
+/** M10: the wallet's state (play-key set, which vault is current); may not exist (both 0). */
+export const walletStateOf = (wallet: PublicKey) => PublicKey.findProgramAddressSync([Buffer.from("wallet"), wallet.toBuffer()], PROGRAM_ID)[0];
+/** Reads (key set, vault number) from a WalletState account's data (8 + 32 + 4 + 1 bytes); none = (0, 0). */
+export const decodeWalletState = (data: Buffer | null | undefined) => data && data.length >= 45 ? { keySet: data.readUInt32LE(40), vaultGen: data[44] } : { keySet: 0, vaultGen: 0 };
+/** The wallet's vault `gen` (M10): vault 0 has the M9 address; a fresh vault adds its number as a seed. */
+export const vaultOf = (wallet: PublicKey, gen = 0) => PublicKey.findProgramAddressSync([Buffer.from("vault"), wallet.toBuffer(), Buffer.from(gen ? [gen] : [])], PROGRAM_ID)[0];
+export const vaultTokenOf = (wallet: PublicKey, gen = 0) => getAssociatedTokenAddressSync(NATIVE_MINT, vaultOf(wallet, gen), true);
 export const walletTokenOf = (wallet: PublicKey) => getAssociatedTokenAddressSync(NATIVE_MINT, wallet);
 
-export function playKeyMessage(key: PublicKey, expires: number | bigint): Buffer {
+/** `keySet` (M10): the wallet's current play-key set; 0 keeps the M9 wording. */
+export function playKeyMessage(key: PublicKey, expires: number | bigint, keySet = 0): Buffer {
   return Buffer.from(`Nomad Poker private tables
-Allow play key ${key.toBase58()} to use my game balance until ${expires.toString()} (unix time). It can buy in to tables (where chips can be lost), leave them, and send money only back to this wallet.`, "utf8");
+Allow play key ${key.toBase58()} to use my game balance until ${expires.toString()} (unix time). It can buy in to tables (where chips can be lost), leave them, and send money only back to this wallet.${keySet ? ` Key set ${keySet}.` : ""}`, "utf8");
 }
 
 /** The Ed25519 check that must sit right before every play-key instruction. */
@@ -28,13 +34,13 @@ export const proofIx = (wallet: PublicKey, message: Buffer, signature: Uint8Arra
   Ed25519Program.createInstructionWithPublicKey({ publicKey: wallet.toBytes(), message, signature });
 
 /** Accounts of `open_vault` (L1), in the order the IDL lists them. */
-export function openVaultAccounts(wallet: PublicKey) {
-  const vault = vaultOf(wallet);
+export function openVaultAccounts(wallet: PublicKey, gen = 0) {
+  const vault = vaultOf(wallet, gen);
   const vaultEata = PublicKey.findProgramAddressSync([vault.toBuffer(), NATIVE_MINT.toBuffer()], ESPL)[0];
   const permission: PublicKey = s.permissionPdaFromAccount(vaultEata);
   const dlp = (tag: string, k: PublicKey) => PublicKey.findProgramAddressSync([Buffer.from(tag), k.toBuffer()], DLP)[0];
   return {
-    wallet, vault, mint: NATIVE_MINT, vaultToken: vaultTokenOf(wallet), vaultEata,
+    wallet, walletState: walletStateOf(wallet), vault, mint: NATIVE_MINT, vaultToken: vaultTokenOf(wallet, gen), vaultEata,
     vaultBuffer: PublicKey.findProgramAddressSync([Buffer.from("buffer"), vaultEata.toBuffer()], ESPL)[0],
     vaultDelegationRecord: dlp("delegation", vaultEata), vaultDelegationMetadata: dlp("delegation-metadata", vaultEata),
     vaultPermission: permission,
@@ -50,7 +56,7 @@ export function openVaultAccounts(wallet: PublicKey) {
  * wrap into the wallet's wSOL account, then MagicBlock's shuttle merge with the vault's account as the
  * destination. The vault must be open (`open_vault`, which can go in an earlier transaction).
  */
-export function depositToVaultIxs(wallet: PublicKey, lamports: bigint, shuttleId = Math.floor(Math.random() * 2 ** 32)): TransactionInstruction[] {
+export function depositToVaultIxs(wallet: PublicKey, lamports: bigint, shuttleId = Math.floor(Math.random() * 2 ** 32), gen = 0): TransactionInstruction[] {
   const walletAta = walletTokenOf(wallet);
   const [shuttleEata] = s.deriveShuttleEphemeralAta(wallet, NATIVE_MINT, shuttleId);
   const [shuttleAta] = s.deriveShuttleAta(shuttleEata, NATIVE_MINT);
@@ -59,7 +65,7 @@ export function depositToVaultIxs(wallet: PublicKey, lamports: bigint, shuttleId
     createAssociatedTokenAccountIdempotentInstruction(wallet, walletAta, wallet, NATIVE_MINT),
     SystemProgram.transfer({ fromPubkey: wallet, toPubkey: walletAta, lamports: Number(lamports) }),
     createSyncNativeInstruction(walletAta),
-    s.setupAndDelegateShuttleEphemeralAtaWithMergeIx(wallet, shuttleEata, shuttleAta, wallet, walletAta, vaultTokenOf(wallet), shuttleWalletAta, NATIVE_MINT, shuttleId, lamports, TEE_VALIDATOR),
+    s.setupAndDelegateShuttleEphemeralAtaWithMergeIx(wallet, shuttleEata, shuttleAta, wallet, walletAta, vaultTokenOf(wallet, gen), shuttleWalletAta, NATIVE_MINT, shuttleId, lamports, TEE_VALIDATOR),
   ];
 }
 
