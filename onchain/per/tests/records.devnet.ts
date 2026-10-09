@@ -74,7 +74,9 @@ async function main() {
   };
 
   // ---- setup (the backend's auditor is put back at the end)
-  const previousAuditor: PublicKey = ((await (l1.account as any).config.fetch(CONFIG_PDA)) as any).auditor;
+  // Restore the backend's auditor at the end (its key file), not whatever was set before this run: a
+  // run that crashed between the two would otherwise leave its test key in the shared config (9 Oct).
+  const previousAuditor: PublicKey = loadKey("auditor").publicKey;
   await S.ok("admin sets a fresh auditor key", () => l1.methods.setAuditor(auditor.publicKey).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc());
   await S.ok("create + delegate a 6-seat table", async () => { await T.create(params); return T.delegate(); });
   await sleep(4000);
