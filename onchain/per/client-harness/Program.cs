@@ -1,6 +1,7 @@
 // M8 harness: the Unity client's private-table core, run headless against devnet.
 //   dotnet run -- vector                      verifier port vs the program's fixed vector
 //   dotnet run -- play <table> [hands]        two players (p1 seat 0, p2 seat 3) play real hands
+//   dotnet run -- vault <table>               M9: the game vault and play key, with the C# builders the game uses
 // Keys come from POKER_PER_KEYS (p1.json, p2.json), as for the TypeScript suites.
 using System;
 using System.Collections.Generic;
@@ -52,6 +53,7 @@ static class Program
         {
             case "vector": Vector(); break;
             case "play": await Play(new PublicKey(args[1]), args.Length > 2 ? int.Parse(args[2]) : 2); break;
+            case "vault": await Vault(new PublicKey(args[1])); break;
             default: Console.WriteLine("usage: vector | play <table> [hands]"); return 2;
         }
         Directory.CreateDirectory("../results");
@@ -87,6 +89,80 @@ static class Program
         public readonly List<PokerEvent> Events = new List<PokerEvent>();
         public readonly List<string> Leaks = new List<string>();
         public bool Raised;
+    }
+
+    // ---- M9: game vault and play key, end to end with the C# builders (PerVault)
+    const string Devnet = "https://api.devnet.solana.com";
+
+    static async Task Vault(PublicKey tableKey)
+    {
+        var http = new Http();
+        var l1 = new PerRpc(http, Devnet);
+        var deployer = LoadKey("deployer");
+        var wallet = new Account();
+        var walletSigner = new WalletLike(wallet);
+        var fund = new Solana.Unity.Rpc.Models.TransactionInstruction
+        {
+            ProgramId = PerVault.SystemProgram.KeyBytes,
+            Keys = new List<Solana.Unity.Rpc.Models.AccountMeta> { Solana.Unity.Rpc.Models.AccountMeta.Writable(deployer.PublicKey, true), Solana.Unity.Rpc.Models.AccountMeta.Writable(wallet.PublicKey, false) },
+            Data = new byte[] { 2, 0, 0, 0 }.Concat(BitConverter.GetBytes(60_000_000UL)).ToArray(),
+        };
+        await l1.Send(new[] { fund }, new LocalSigner(deployer));
+        Console.WriteLine($"wallet {wallet.PublicKey.Key}, vault {PerVault.Vault(wallet.PublicKey).Key}");
+
+        // L1, wallet-signed (Phantom in the game): open the vault, deposit into it.
+        Check("open_vault (C# builder) lands on Solana", await Try(() => l1.Send(new[] { PerVault.OpenVault(wallet.PublicKey) }, walletSigner)));
+        Check("deposit 0.01 SOL into the vault (C# port of MagicBlock's shuttle merge)", await Try(() => l1.Send(PerVault.Deposit(wallet.PublicKey, 10_000_000, PerVault.NewShuttleId()), walletSigner)));
+
+        // The play key: the wallet signs one message (Phantom "Sign message" in the game).
+        var key = new Account();
+        var expires = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + PerVault.PlayKeyDays * 86400L;
+        var pk = new PerVault.PlayKey { Key = key, Wallet = wallet.PublicKey, Expires = expires, Signature = wallet.Sign(PerVault.PlayKeyMessage(key.PublicKey, expires)) };
+        var er = await Login(http, key);
+        async Task<ulong> Balance()
+        {
+            var data = await er.SimulateReturn(new[] { pk.Check(), PerVault.Balance(pk) }, new LocalSigner(key));
+            return data == null ? 0 : BitConverter.ToUInt64(data, 0);
+        }
+        ulong bal = 0;
+        for (int i = 0; i < 12 && bal != 10_000_000; i++) { await Task.Delay(5000); try { bal = await Balance(); } catch { } }
+        Check("vault balance read with the play key (simulated return data) = 0.01 SOL", bal == 10_000_000, bal);
+
+        // Buy in with the play key; leave with the table key. No wallet.
+        var t = new PerTableAddresses(tableKey);
+        var table = Table.Decode(await new PerRpc(http, Tee).GetAccount(tableKey));
+        int seat = Enumerable.Range(0, table.MaxSeats).First(i => (table.SeatMask & (1 << i)) == 0);
+        var session = new Account();
+        Check($"buy-in 0.002 SOL from the vault at seat {seat}, signed by the play key only", await Try(() => er.Send(new[] { pk.Check(), PerVault.BuyIn(t, pk, seat, 2_000_000, session.PublicKey) }, new LocalSigner(key))));
+        var afterBuy = await Balance();
+        Check("vault went down by the buy-in", afterBuy == 8_000_000, afterBuy);
+        var sessionRpc = await Login(http, session);
+        Check("cash-out into the vault, signed by the table key only", await Try(() => sessionRpc.Send(new[] { PerVault.CashOut(t, session.PublicKey, wallet.PublicKey, seat, 0) }, new LocalSigner(session))));
+        var afterCash = await Balance();
+        Check("vault got the stack back (buy-in less rake)", afterCash > afterBuy && afterCash <= 10_000_000, afterCash);
+
+        // Withdraw: wallet's rollup account (L1), play key moves vault -> it, wallet withdraws (L1).
+        Check("wallet's rollup account set up (L1)", await Try(() => l1.Send(PerVault.EnsureWalletInRollup(wallet.PublicKey), walletSigner)));
+        await Task.Delay(5000);
+        Check("play key moves the whole vault to the wallet's rollup balance", await Try(() => er.Send(new[] { pk.Check(), PerVault.Withdraw(pk, afterCash) }, new LocalSigner(key))));
+        var solBefore = await SolBalance(l1, wallet.PublicKey);
+        Check("withdrawal to Solana (C# port of MagicBlock's withdrawal) lands", await Try(() => l1.Send(PerVault.WithdrawToWallet(wallet.PublicKey, afterCash, PerVault.NewShuttleId()), walletSigner)));
+        long gained = 0;
+        for (int i = 0; i < 12; i++) { await Task.Delay(5000); gained = (long)(await SolBalance(l1, wallet.PublicKey)) - (long)solBefore; if (gained >= (long)afterCash - 1_000_000) break; }
+        Check("the money arrives in the wallet as SOL (less MagicBlock's withdrawal cost)", gained >= (long)afterCash - 1_000_000, new { gained, afterCash });
+        Outcomes.Add(new { wallet = wallet.PublicKey.Key, vault = PerVault.Vault(wallet.PublicKey).Key, table = tableKey.Key });
+    }
+
+    static async Task<bool> Try(Func<Task<string>> f)
+    {
+        try { await f(); return true; }
+        catch (Exception e) { Console.WriteLine("   " + e.Message); return false; }
+    }
+
+    static async Task<ulong> SolBalance(PerRpc rpc, PublicKey k)
+    {
+        var r = await rpc.Call("getBalance", k.Key, new JObject { ["commitment"] = "confirmed" });
+        return (ulong)r["value"];
     }
 
     static Account LoadKey(string name)
