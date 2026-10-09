@@ -12,7 +12,6 @@
 import { createHash } from "crypto";
 import { ComputeBudgetProgram, PublicKey } from "@solana/web3.js";
 import { DELEGATION_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
-import { NATIVE_MINT, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
 import { MAGIC_CONTEXT_ID, MAGIC_PROGRAM_ID, permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { CONFIG_PDA, MAGIC_FEE_VAULT, PROGRAM_ID, TeeSession, accountsOf, coder, l1, rollupPrograms, toPublic } from "./chain";
@@ -245,6 +244,12 @@ async function step(address: PublicKey, auditorOurs: boolean) {
 }
 
 const HAND_IDLE = 0;
+// Associated token addresses without @solana/spl-token (not a backend dependency).
+const NATIVE_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+const getAssociatedTokenAddressSync = (mint: PublicKey, owner: PublicKey, _offCurve = false) =>
+  PublicKey.findProgramAddressSync([owner.toBuffer(), TOKEN_PROGRAM.toBuffer(), mint.toBuffer()], ATA_PROGRAM)[0];
 const DEFAULT_ESCAPE_IDLE_SECS = 3_600;
 let configCache: { at: number; devWallet: PublicKey; idleSecs: number } | null = null;
 async function programConfig() {
