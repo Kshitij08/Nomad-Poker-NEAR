@@ -1,0 +1,64 @@
+{
+  "suite": "m8-harness-soak",
+  "ranAt": "2026-10-09T23:18:57.7928206Z",
+  "pass": 5,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "1 tables played 31 hands in all (asked 30)",
+      "status": "PASS",
+      "detail": [
+        31
+      ]
+    },
+    {
+      "name": "every finished hand verified by every seat (deck, button, own seed and cards, action log)",
+      "status": "PASS",
+      "detail": {
+        "verified": 93,
+        "checks": 93
+      }
+    },
+    {
+      "name": "token reconciliation: the players' game balances changed by exactly minus the rake on every buy-in",
+      "status": "PASS",
+      "detail": {
+        "delta": -1500000,
+        "rake": 1500000
+      }
+    },
+    {
+      "name": "no player saw another seat's cards during a hand",
+      "status": "PASS",
+      "detail": [
+        0
+      ]
+    },
+    {
+      "tables": 1,
+      "handsPerTable": 30,
+      "playersPerTable": 3,
+      "hands": 31,
+      "minutes": 12.0,
+      "perTable": [
+        {
+          "table": "5uSyHZuJFP1foKDR1RQNLQrrcRwKqqhAX2wwFEpzTyZA",
+          "hands": 31,
+          "checks": 93,
+          "verified": 93,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 3,
+          "silentTurns": 24,
+          "delta": -1500000,
+          "rake": 1500000,
+          "boughtIn": 30000000,
+          "reclaimed": true,
+          "minutes": 11.3,
+          "fatal": null,
+          "problems": []
+        }
+      ]
+    }
+  ]
+}

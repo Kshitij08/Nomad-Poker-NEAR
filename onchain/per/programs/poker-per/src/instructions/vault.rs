@@ -726,8 +726,9 @@ pub struct VaultBalance<'info> {
     pub instructions: UncheckedAccount<'info>,
 }
 
-/// The vault's balance as return data (u64 LE), for the client to simulate. The rollup's RPC shows a
-/// token balance only to its owner, and nobody can log in as the vault.
+/// The vault's balance as return data (u64 LE), for the client to simulate. (Not a privacy measure: since about
+/// 9 Oct the rollup's RPC shows the token balance of a public-permission account such as the vault to any
+/// logged-in reader, M10 probe-m10-balance-visibility.ts.)
 pub fn vault_balance(ctx: Context<VaultBalance>, expires: i64) -> Result<()> {
     verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &ctx.accounts.wallet.key(), &ctx.accounts.play_key.key(), expires)?;
     set_return_data(&ctx.accounts.vault_token.amount.to_le_bytes());

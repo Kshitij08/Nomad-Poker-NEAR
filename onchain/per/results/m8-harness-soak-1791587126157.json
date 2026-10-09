@@ -1,0 +1,140 @@
+{
+  "suite": "m8-harness-soak",
+  "ranAt": "2026-10-09T23:05:26.1578828Z",
+  "pass": 5,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "5 tables played 501 hands in all (asked 500)",
+      "status": "PASS",
+      "detail": [
+        100,
+        101,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "every finished hand verified by every seat (deck, button, own seed and cards, action log)",
+      "status": "PASS",
+      "detail": {
+        "verified": 1503,
+        "checks": 1503
+      }
+    },
+    {
+      "name": "token reconciliation: the players' game balances changed by exactly minus the rake on every buy-in",
+      "status": "PASS",
+      "detail": {
+        "delta": -9300000,
+        "rake": 9300000
+      }
+    },
+    {
+      "name": "no player saw another seat's cards during a hand",
+      "status": "PASS",
+      "detail": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "tables": 5,
+      "handsPerTable": 100,
+      "playersPerTable": 3,
+      "hands": 501,
+      "minutes": 27.4,
+      "perTable": [
+        {
+          "table": "4S4vXCnwLd3f1dbapkQ28yxL732JHou7soP6mSbJVZk7",
+          "hands": 100,
+          "checks": 300,
+          "verified": 300,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 6,
+          "silentTurns": 176,
+          "delta": -2400000,
+          "rake": 2400000,
+          "boughtIn": 48000000,
+          "reclaimed": true,
+          "minutes": 25.9,
+          "fatal": null,
+          "problems": []
+        },
+        {
+          "table": "ERLgSnN1AvhbRZrxvZ1NSqHtxnkYVxNGs5PJVB3a8gth",
+          "hands": 101,
+          "checks": 303,
+          "verified": 303,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 4,
+          "silentTurns": 84,
+          "delta": -1800000,
+          "rake": 1800000,
+          "boughtIn": 36000000,
+          "reclaimed": true,
+          "minutes": 24.6,
+          "fatal": null,
+          "problems": []
+        },
+        {
+          "table": "743ZcBxyWUdP9vsRMEk3wsbeQKMLtfS26hYyLBMimpPm",
+          "hands": 100,
+          "checks": 300,
+          "verified": 300,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 4,
+          "silentTurns": 137,
+          "delta": -1800000,
+          "rake": 1800000,
+          "boughtIn": 36000000,
+          "reclaimed": true,
+          "minutes": 24.7,
+          "fatal": null,
+          "problems": []
+        },
+        {
+          "table": "F9r52snwcAoA8BYc6LbSxM825dz7C3a7cR5HM1nqdn3H",
+          "hands": 100,
+          "checks": 300,
+          "verified": 300,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 3,
+          "silentTurns": 123,
+          "delta": -1500000,
+          "rake": 1500000,
+          "boughtIn": 30000000,
+          "reclaimed": true,
+          "minutes": 24.7,
+          "fatal": null,
+          "problems": []
+        },
+        {
+          "table": "6CDWpiQoHdngfQk12tgYU5acz4AA5xnG3ZCDtKMu46SZ",
+          "hands": 100,
+          "checks": 300,
+          "verified": 300,
+          "leaks": 0,
+          "errors": 0,
+          "buyIns": 4,
+          "silentTurns": 87,
+          "delta": -1800000,
+          "rake": 1800000,
+          "boughtIn": 36000000,
+          "reclaimed": true,
+          "minutes": 23.7,
+          "fatal": null,
+          "problems": []
+        }
+      ]
+    }
+  ]
+}
