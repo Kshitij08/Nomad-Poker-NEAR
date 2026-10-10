@@ -1,0 +1,217 @@
+{
+  "suite": "host",
+  "program": "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv",
+  "ranAt": "2026-10-10T22:18:22.723Z",
+  "pass": 26,
+  "fail": 0,
+  "knownPlatformIssues": 0,
+  "host": "Ak38bNG1pkKSahHc97Wd412yaHX4zdEy217UAfV1FYmV",
+  "publicTable": "57owkuWn9haUPMNA4fvwDxEqNcLAoDoqrzLf9bmeHLeM",
+  "inviteTable": "CtKxMov6kjfWUPvmbD2fiPJcP7y51JGMVipbEeBB8GFE",
+  "hostCostLamports": 30039680,
+  "reclaimedLamports": 13239136,
+  "createAndDelegateBytes": 1076,
+  "outcomes": [
+    {
+      "name": "create_table previews cleanly in a wallet",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "create + hand over fit one transaction (one Phantom approval)",
+      "status": "PASS",
+      "detail": {
+        "bytes": 1076
+      }
+    },
+    {
+      "name": "host creates and hands over a public table in one transaction",
+      "status": "PASS",
+      "detail": {
+        "sig": "4siYxyptAj2ffUoWZLmiPxYDbmz13LaMG3FVtazQbWqH16VT4rwB32N1j7a2BoibV8PLV9LyH1TVhSPz2ttuNt6B",
+        "problem": null
+      }
+    },
+    {
+      "name": "host creates an invite-only table",
+      "status": "PASS",
+      "detail": {
+        "sig": "596TXZUGBrK8gSYMu6HDb8twwAWQdCappMws4f3RehND8Qa359meT74B4kcXa4zcTUFc3gJz21oQDJKUTqx6aUZc",
+        "problem": null
+      }
+    },
+    {
+      "name": "set_invites previews cleanly in a wallet",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "host invites I",
+      "status": "PASS",
+      "detail": {
+        "sig": "61Qjs4gnGjycVRW34ns7kXdpbmXxGiRdgQ4YoRsyP9F3DUj7KKmRXkMBgX7Q61iWiepcDvuJHGE6We4jR93u71W6",
+        "problem": null
+      }
+    },
+    {
+      "name": "host's play key opens both tables (no wallet)",
+      "status": "PASS",
+      "detail": {
+        "sig": "65SqqfLLjn7sxgDjxYxwxcTeJ6oEBLabAwssJkyL2k4GipJcojc4mMQnsKB4ceiyHUbzsjTSHRjNPqkx51AjmDYs",
+        "problem": null
+      }
+    },
+    {
+      "name": "opening stamps the table's activity with rollup time (the abandoned rule counts from the open)",
+      "status": "PASS",
+      "detail": {
+        "lastActivityTs": 1791670303,
+        "now": 1791670304
+      }
+    },
+    {
+      "name": "uninvited U can't buy in at the invite-only table",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotInvited",
+        "got": "NotInvited (6031)"
+      }
+    },
+    {
+      "name": "invited I buys in at the invite-only table",
+      "status": "PASS",
+      "detail": {
+        "sig": "NksAKwYZuTBkGsxyjuLQPFuzN7YW8xT8vBmssZw4Hvy4k3bdGtj6aKybVjKFHJ676wdeu9Sxt7yzSYXLDXt9kFZ",
+        "problem": null
+      }
+    },
+    {
+      "name": "U buys in at the public table",
+      "status": "PASS",
+      "detail": {
+        "sig": "3JcjLDe5uBHAwfLXwm2MSm8CqxV3Jxi3DDKRTX4yJwSa9rJoEQVT9VmZyoe3GJGfvPrBBGUEHwGaiAhi4fL4maVY",
+        "problem": null
+      }
+    },
+    {
+      "name": "host's play key can't close while someone is seated",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableNotEmpty",
+        "got": "TableNotEmpty (6022)"
+      }
+    },
+    {
+      "name": "I leaves (table key)",
+      "status": "PASS",
+      "detail": {
+        "sig": "4Xn4KqhkJzc4MXNCUCBhtWmGZMjnNZR9SHe7pyFXiPYd8Yq1AuqkcBFfBdx5mtxCb9wHvC2XYa1QzTyv51sFTW4M",
+        "problem": null
+      }
+    },
+    {
+      "name": "a stranger can't close a table that isn't abandoned (expires 0)",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableActive",
+        "got": "TableActive (6029)"
+      }
+    },
+    {
+      "name": "I's play key (I's signature) can't close H's table",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadPlayKeyProof",
+        "got": "BadPlayKeyProof (6053)"
+      }
+    },
+    {
+      "name": "a forged signature for H can't close it",
+      "status": "PASS",
+      "detail": {
+        "expected": "0x2",
+        "got": "Simulation failed. \nMessage: transaction verification error: Error processing Instruction 0: custom program error: 0x2. \n\nCatch the `SendTransactionError` and call `getLogs()` on it for full details."
+      }
+    },
+    {
+      "name": "host's play key closes the empty invite-only table (rake collected first; table pays the commit)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3yDzxYW9jMtV7ArD1SHDZpQSi1snU4M1v3XKCG3JEBHSXEjZN1mAZscRNh1VvWj2CcfupEj4odCVjknnoMwmKp5u",
+        "problem": null
+      }
+    },
+    {
+      "name": "the closed table returns to Solana",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "reclaim_table previews cleanly in a wallet",
+      "status": "PASS",
+      "detail": {
+        "err": null
+      }
+    },
+    {
+      "name": "host reclaims the rent",
+      "status": "PASS",
+      "detail": {
+        "sig": "442yC1rYdoLMojQXPSnadJ6Wqu8G1k8SXWrw31cCk7raS21pq1HAFRmEBMAir4jbY4gVXnYPjPXjjTbsqqfEV5ek",
+        "problem": null
+      }
+    },
+    {
+      "name": "U leaves the public table",
+      "status": "PASS",
+      "detail": {
+        "sig": "4PvpanxFgJoP7kpeZhjWZeY5UKYDg2f9c6Vimyk2pFXhKUX4vLzNWqoVLr6WFkjPqtbYFS7FRMZBMQ1rDjxkY7Wz",
+        "problem": null
+      }
+    },
+    {
+      "name": "a stranger can't close a freshly emptied table (expires 0)",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableActive",
+        "got": "TableActive (6029)"
+      }
+    },
+    {
+      "name": "test only: escape delay set to 60 s (abandoned = 6 delays = 6 minutes)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5xTBPhJiFiYi5ruThXRYBfqeLXF97eAYHWFHYsa4ypNy2UZJkDP9yjWiEd9cWSaJTaGesNy6HnbUzrqJJh4Vsdv7",
+        "problem": null
+      }
+    },
+    {
+      "name": "after 1 minute (one escape delay) it isn't abandoned yet",
+      "status": "PASS",
+      "detail": {
+        "expected": "TableActive",
+        "got": "TableActive (6029)"
+      }
+    },
+    {
+      "name": "after 6 minutes empty and idle, anyone (the keeper) closes it",
+      "status": "PASS",
+      "detail": {
+        "sig": "2h27YkEapAXnMqNw9MtmaijgESXmBZKN1si4bBNr2LhzW6sb6udqApATzTb3DfFp6hLyVbGarv2mUdifvoQfu7B7",
+        "problem": null
+      }
+    },
+    {
+      "name": "escape delay restored to the default",
+      "status": "PASS",
+      "detail": {
+        "sig": "3SPSx4D48scATZRCJnuVyahnuYeMyqnnRG62vQEASp7qfGR9DKK7e1T1t7YiMvC67KLDRbDkm1w8Gd3XshCpLGKA",
+        "problem": null
+      }
+    }
+  ]
+}

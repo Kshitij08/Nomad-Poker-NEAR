@@ -1,0 +1,80 @@
+{
+  "suite": "m5-engine",
+  "program": "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv",
+  "ranAt": "2026-10-10T22:27:19.451Z",
+  "pass": 8,
+  "fail": 1,
+  "knownPlatformIssues": 0,
+  "outcomes": [
+    {
+      "name": "top-up p1 to 0.012 wSOL in the rollup",
+      "status": "PASS",
+      "detail": {
+        "sig": "5gSfaTbwQXhnm6FgCkPZnTXEcNhcoZ6RvwX3tdvUsqQb99m11upfwC4XzBGjLiMqaJVogpXe4jb3Gqh7LqXgFbBY",
+        "problem": null
+      }
+    },
+    {
+      "name": "create + delegate a 6-seat table (blinds 0.0001 / 0.0002)",
+      "status": "PASS",
+      "detail": {
+        "sig": "GC2hYUG3bV1AjFTLCgyi1DvqRxM8qbnwjLpKJndkUdbCkHGH2a27KNRYX2rQEbjPjei3PT8g1effksBNcCDwPai",
+        "problem": null
+      }
+    },
+    {
+      "name": "open (ledger, deck, record, hand log)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5tG7inYmzbjzopsRXcBXLVCFS8f5n7mypQpS6EfsZXFEXnghxxvHk7cW2R7mbF4hoaQNzXthBSYiVUZDn3YUG23F",
+        "problem": null
+      }
+    },
+    {
+      "name": "open again (idempotent)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2jF1LFGJrGgscQ38UvXhj7CVQVEHms655U3tRe6YWB3yaPo4EjTJS1bVH4fEoF7JB5sg751xg2TkEn5FK2imEBus",
+        "problem": null
+      }
+    },
+    {
+      "name": "opening again doesn't restart the seed window (no stalling by re-opening)",
+      "status": "PASS",
+      "detail": {
+        "idle0": 1791671230
+      }
+    },
+    {
+      "name": "p1 sits in seat 0 with 2,000,000 (1,900,000 after rake)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3GMtWQM5eB7RjZgUcM82857MxWE1CEdcBUVwwgerDKa3VYYNeDq33PegUnSswszi3g6p4E2QsEZxAXnpt8GJiQ8U",
+        "problem": null
+      }
+    },
+    {
+      "name": "p2 sits in seat 2 with 4,000,000",
+      "status": "PASS",
+      "detail": {
+        "sig": "38TeZ7pj1xynUivXd9QxkTGNE7Zpca4eokTGsCTxkc6aHNdb9opQuPMA7YFY5USqfsFnnsg9TgErkCYqKuQywvKh",
+        "problem": null
+      }
+    },
+    {
+      "name": "p3 sits in seat 4 with 6,000,000",
+      "status": "PASS",
+      "detail": {
+        "sig": "3Bfs5JJ5Lna31YG82TomqXyeJ9ZahthzzEhXkNLb8XQr1QDhfeXatgyPKZgwdNUe8VzQpvwJuQQp4o85MuntYBLq",
+        "problem": null
+      }
+    },
+    {
+      "name": "suite crashed",
+      "status": "FAIL",
+      "detail": {
+        "error": "Error\n    at Function.parse (C:\\Kshitij\\Work\\X2C\\web3\\GitHub\\Poker\\per\\node_modules\\@coral-xyz\\anchor\\src\\error.ts:244:14)\n    at translateError (C:\\Kshitij\\Work\\X2C\\web3\\GitHub\\Poker\\per\\node_modules\\@coral-xyz\\anchor\\src\\error.ts:282:37)\n    at MethodsBuilder.rpc (C:\\Kshitij\\Work\\X2C\\web3\\GitHub\\Poker\\per\\node_modules\\@coral-xyz\\anchor\\src\\program\\namespace\\rpc.ts:35:29)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async playHand (C:\\Kshitij\\Work\\X2C\\web3\\GitHub\\Poker\\per\\tests\\engine.devnet.ts:84:64)\n    at async main (C:\\Kshitij\\Work\\X2C\\web3\\GitHub\\Poker\\per\\tests\\engine.devnet.ts:156:13)"
+      }
+    }
+  ]
+}

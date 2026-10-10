@@ -3,6 +3,7 @@
 //   dotnet run -- play <table> [hands]        two players (p1 seat 0, p2 seat 3) play real hands
 //   dotnet run -- vault <table>               M9: the game vault and play key, with the C# builders the game uses
 //   dotnet run -- host                        M9b: host an invite-only table, an invited player joins and leaves, host closes and reclaims
+//   dotnet run -- sitout                      M10: sit_out takes back a committed seed; the next hand deals without the seat
 // Keys come from POKER_PER_KEYS (p1.json, p2.json), as for the TypeScript suites.
 using System;
 using System.Collections.Generic;
@@ -57,6 +58,7 @@ static class Program
             case "vault": await Vault(new PublicKey(args[1])); break;
             case "host": await Host(); break;
             case "exit": await Exit(); break;
+            case "sitout": await SitOutSuite(); break;
             case "soak": await Soak(int.Parse(args[1]), int.Parse(args[2]), args.Length > 3 ? int.Parse(args[3]) : 3); break;
             default: Console.WriteLine("usage: vector | play <table> [hands]"); return 2;
         }
@@ -466,6 +468,158 @@ static class Program
     {
         public string table; public int hands, checks, verified, leaks, errors, buyIns, silentTurns; public long delta; public ulong rake, boughtIn;
         public bool reclaimed; public double minutes; public string fatal; public List<object> problems = new List<object>();
+    }
+
+    // ---- M10: Sit out (the playtest found a seat dealt in after Sit out: its seed for the next hand was already in)
+    static async Task SitOutSuite()
+    {
+        var http = new Http();
+        var l1 = new PerRpc(http, Devnet);
+        var deployer = LoadKey("deployer");
+        var config = Config.Decode(await l1.GetAccount(PerTableAddresses.Find(PerIds.Program, Encoding.UTF8.GetBytes("config")), "confirmed"));
+        var devWallet = new PublicKey(config.DevWallet);
+        var seats = new List<SoakSeat>();
+        for (int i = 0; i < 3; i++)
+        {
+            var (w, k, rpc) = await Retry(() => FundedPlayer(http, l1, deployer, i == 0 ? 100_000_000UL : 55_000_000UL, 30_000_000), $"fund p{i}");
+            seats.Add(new SoakSeat { Name = $"p{i}", Wallet = w, Key = k, KeyRpc = rpc, Seat = i, Reader = new Account() });
+            await Task.Delay(1500);
+        }
+        var host = seats[0];
+        var id = PerHost.NewTableId();
+        var tableKey = PerHost.TableAddress(host.Wallet.PublicKey, id);
+        var t = new PerTableAddresses(tableKey);
+        var stake = PerHost.Stakes[0];
+        var p = new TableParams { SmallBlind = stake.Small, BigBlind = stake.Big, MinBuyIn = 10 * stake.Big, MaxBuyIn = 100 * stake.Big, MaxSeats = 3, InviteOnly = false };
+        await Retry(() => l1.Send(PerHost.CreateAndDelegate(host.Wallet.PublicKey, id, p), new WalletLike(host.Wallet)), "create");
+        await Task.Delay(12_000);
+        for (int i = 0; ; i++)
+        {
+            try { await host.KeyRpc.Send(new[] { PerHost.Open(t, host.Key.Key.PublicKey) }, new LocalSigner(host.Key.Key)); break; }
+            catch (Exception) when (i < 8) { await Task.Delay(3000); }
+        }
+        var publicRpc = new PerRpc(http, Tee);
+        var dummy = new SoakResult();
+        foreach (var s in seats)
+        {
+            await SoakBuyIn(s, t, 10_000_000, dummy);
+            s.ReaderRpc = await Login(http, s.Reader);
+            s.Session = new PerTableSession(tableKey, publicRpc, s.ReaderRpc, new LocalSigner(s.Reader), s.Wallet.PublicKey);
+            var me = s;
+            s.Session.Events += e => me.Events.Add(e);
+        }
+        Console.WriteLine($"table {tableKey.Key}: 3 seated");
+        async Task PollAll() { foreach (var s in seats) { await s.Session.Poll(); await s.Session.KeepMoving(); } }
+        // Plays the running hand out (check, else fold) until the table is idle again.
+        async Task PlayOut()
+        {
+            var start = DateTime.UtcNow;
+            while (DateTime.UtcNow - start < TimeSpan.FromMinutes(3))
+            {
+                await PollAll();
+                if (seats.All(s => s.Session.Table.HandState == PerGame.HandIdle)) return;
+                foreach (var s in seats)
+                {
+                    var g = s.Session.Ledger?.Game;
+                    if (s.Session.Table.HandState == PerGame.HandPlaying && g != null && g.ToAct == s.Seat)
+                        try { await s.Session.Act(PerGame.Legal(g).CanCheck ? ActionType.Check : ActionType.Fold, 0); } catch (PerTxException) { }
+                }
+                await Task.Delay(800);
+            }
+            throw new Exception("hand didn't finish in 3 min");
+        }
+        // Commits for `who` (each also tries start_hand), then waits until a hand is under way. Returns how long it took.
+        async Task<double> DealWith(IEnumerable<SoakSeat> who, ulong afterHand)
+        {
+            var start = DateTime.UtcNow;
+            while (DateTime.UtcNow - start < TimeSpan.FromSeconds(90))
+            {
+                await PollAll();
+                if (seats[0].Session.Table.HandNo > afterHand) return (DateTime.UtcNow - start).TotalSeconds;
+                foreach (var s in who) await s.Session.PrepareNextHand();
+                await Task.Delay(1000);
+            }
+            throw new Exception("no hand started in 90 s");
+        }
+
+        await PollAll();
+        await DealWith(seats, 0);
+        var t1 = seats[0].Session.Table;
+        Check("hand 1 deals all three seats", t1.DealtMask == 0b111, t1.DealtMask);
+        await PlayOut();
+
+        // The bug: p2's seed for the next hand is already in when it sits out.
+        var p2 = seats[2];
+        await p2.Session.PrepareNextHand();
+        // The deck can't be read by anyone (seeds are secret), so what proves the withdrawal is hand 2 below: a
+        // committed seed deals its seat in even when the seat is marked sitting out.
+        Check("p2 committed its seed for hand 2", p2.Session.MySeed != null);
+        // An outsider (p1's key) can't sit p2 out.
+        bool outsiderRefused;
+        try { await seats[1].ReaderRpc.Send(new[] { PerIx.SitOut(t, seats[1].Reader.PublicKey, 2) }, new LocalSigner(seats[1].Reader)); outsiderRefused = false; }
+        catch (PerTxException e) { outsiderRefused = e.ErrorName == "NotSeated"; Console.WriteLine("   " + e.Message); }
+        Check("another seat's key can't sit p2 out (NotSeated)", outsiderRefused);
+        Check("p2 sits out (sit_out, its table key)", await Try(() => p2.Session.SitOut()));
+        await PollAll();
+        Check("p2's seat is marked sitting out", seats[0].Session.Ledger.Seats[2].SittingOut);
+        Check("p2's chips stay on the seat", seats[0].Session.Ledger.Seats[2].Stack > 0, seats[0].Session.Ledger.Seats[2].Stack);
+        Check("sit_out again is harmless", await Try(() => p2.Session.SitOut()));
+
+        var secs = await DealWith(seats.Take(2), 1);
+        var t2 = seats[0].Session.Table;
+        Check("hand 2 deals p0 and p1 only (p2's committed seed was withdrawn)", t2.DealtMask == 0b011, t2.DealtMask);
+        Check("hand 2 didn't wait the 20 s seed window for p2", secs < 15, Math.Round(secs, 1));
+        bool midHandRefused;
+        try { await p2.ReaderRpc.Send(new[] { PerIx.SitOut(t, p2.Reader.PublicKey, 2) }, new LocalSigner(p2.Reader)); midHandRefused = false; }
+        catch (PerTxException e) { midHandRefused = e.ErrorName == "HandInProgress"; Console.WriteLine("   " + e.Message); }
+        Check("sit_out during a hand is refused (HandInProgress)", midHandRefused);
+        // Sitting back in mid-hand (sit_in), so hand 3 waits for p2's seed. Without it the playtest-style race wins:
+        // p0 and p1 commit first and, p2 not being waited for, hand 3 starts without it (the first run of this suite).
+        Check("p2 sits back in during hand 2 (sit_in)", await Try(() => p2.Session.SitIn()));
+        await PollAll();
+        Check("p2's seat is no longer marked sitting out", !seats[0].Session.Ledger.Seats[2].SittingOut);
+        await PlayOut();
+        bool outsiderSitIn;
+        try { await seats[1].ReaderRpc.Send(new[] { PerIx.SitIn(t, seats[1].Reader.PublicKey, 2) }, new LocalSigner(seats[1].Reader)); outsiderSitIn = false; }
+        catch (PerTxException e) { outsiderSitIn = e.ErrorName == "NotSeated"; }
+        Check("another seat's key can't sit p2 in (NotSeated)", outsiderSitIn);
+
+        // p0 and p1 commit before p2 (the order that lost the race).
+        await DealWith(seats, 2);
+        var t3 = seats[0].Session.Table;
+        Check("hand 3 deals p2 again after it commits a seed", t3.DealtMask == 0b111, t3.DealtMask);
+        await PollAll();
+        Check("p2's seat is still in after hand 3 starts", !seats[0].Session.Ledger.Seats[2].SittingOut);
+        await PlayOut();
+
+        // Heads-up (the playtest's case): p1 sits out with its seed in; p0 alone can't start a hand.
+        await seats[1].Session.PrepareNextHand();
+        Check("p2 sits out again", await Try(() => p2.Session.SitOut()));
+        Check("p1 sits out with its seed in", await Try(() => seats[1].Session.SitOut()));
+        bool alone = false;
+        try { await host.ReaderRpc.Send(new[] { PerIx.CommitSeed(t, host.Reader.PublicKey, 0, new byte[32].Select((_, i) => (byte)(i + 1)).ToArray()) }, new LocalSigner(host.Reader)); } catch (PerTxException) { }
+        try { await host.ReaderRpc.Send(new[] { PerIx.StartHand(t, host.Reader.PublicKey) }, new LocalSigner(host.Reader)); }
+        catch (PerTxException e) { alone = e.ErrorName == "NotEnoughPlayers"; Console.WriteLine("   " + e.Message); }
+        Check("with the others sitting out, no hand starts (NotEnoughPlayers)", alone);
+
+        // Everyone leaves, the host closes and reclaims.
+        foreach (var s in seats)
+            for (int i = 0; ; i++)
+            {
+                try { await s.ReaderRpc.Send(new[] { PerVault.CashOut(t, s.Reader.PublicKey, s.Wallet.PublicKey, s.Seat, 0) }, new LocalSigner(s.Reader)); break; }
+                catch (Exception) when (i < 20) { await Task.Delay(3000); }
+            }
+        await host.KeyRpc.Send(new[] { host.Key.Check(), PerHost.CloseKeyed(t, host.Key, devWallet) }, new LocalSigner(host.Key.Key));
+        bool reclaimed = false;
+        for (int i = 0; i < 24 && !reclaimed; i++)
+        {
+            await Task.Delay(5000);
+            var info = await l1.Call("getAccountInfo", tableKey.Key, new JObject { ["encoding"] = "base64", ["commitment"] = "confirmed" });
+            if (info?["value"]?.Type == JTokenType.Object && (string)info["value"]["owner"] == PerIds.Program.Key)
+                reclaimed = await Try(() => l1.Send(new[] { PerHost.Reclaim(host.Wallet.PublicKey, id) }, new WalletLike(host.Wallet)));
+        }
+        Check("everyone cashed out, the host closed and reclaimed", reclaimed);
+        Outcomes.Add(new { table = tableKey.Key });
     }
 
     // ---- M10 (review H1): the exit with the game's builders (PerVault.VaultExit / VaultPayout)

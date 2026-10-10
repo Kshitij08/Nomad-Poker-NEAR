@@ -55,6 +55,74 @@ pub fn commit_seed(ctx: Context<CommitSeed>, seat: u8, seed: [u8; 32]) -> Result
     Ok(())
 }
 
+/// M10: sit out. The seat's table key (or wallet) takes back a seed it already committed for the next hand and
+/// marks the seat sitting out, so the next hands are dealt without it and nobody waits the seed window for it.
+/// Between hands only. Committing a seed again sits the seat back in (start_hand clears the mark).
+#[derive(Accounts)]
+#[instruction(seat: u8)]
+pub struct SitOut<'info> {
+    /// The seat's wallet or its reader key.
+    pub player: Signer<'info>,
+    #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
+    pub table: Box<Account<'info, Table>>,
+    #[account(mut, seeds = [DECK_SEED, table.key().as_ref()], bump, has_one = table)]
+    pub deck: Box<Account<'info, Deck>>,
+    #[account(mut, seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
+    pub ledger: Box<Account<'info, Ledger>>,
+    #[account(seeds = [HAND_SEED, table.key().as_ref(), &[seat]], bump,
+        constraint = hand.owner == player.key() || hand.reader == player.key() @ PokerError::NotSeated)]
+    pub hand: Box<Account<'info, Hand>>,
+}
+
+pub fn sit_out(ctx: Context<SitOut>, seat: u8) -> Result<()> {
+    require!(ctx.accounts.table.hand_state == HAND_IDLE, PokerError::HandInProgress);
+    let i = seat as usize;
+    require!(i < ctx.accounts.ledger.seats.len() && ctx.accounts.ledger.seats[i].player == ctx.accounts.hand.owner, PokerError::NotSeated);
+    let deck = &mut ctx.accounts.deck;
+    deck.seeds[i] = [0; 32];
+    deck.seed_owners[i] = Pubkey::default();
+    deck.seed_mask &= !(1u16 << seat);
+    let ledger = &mut ctx.accounts.ledger;
+    if !ledger.seats[i].sitting_out {
+        ledger.seats[i].sitting_out = true;
+        // The mark is part of the ledger, so its fingerprint on the table changes too (as start_hand does).
+        let table = &mut ctx.accounts.table;
+        table.ledger_hash = ledger.fingerprint()?;
+        table.ledger_seq = table.ledger_seq.checked_add(1).ok_or(PokerError::MathOverflow)?;
+    }
+    Ok(())
+}
+
+/// M10: sit back in. Clears the seat's sitting-out mark at any time (a hand may be running), so the next hand
+/// waits for its seed like everyone else's. Without it, a seat sitting out isn't waited for, and at a table of
+/// three or more the others' seeds start the next hand before the returning seat's arrives.
+#[derive(Accounts)]
+#[instruction(seat: u8)]
+pub struct SitIn<'info> {
+    /// The seat's wallet or its reader key.
+    pub player: Signer<'info>,
+    #[account(mut, seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
+    pub table: Box<Account<'info, Table>>,
+    #[account(mut, seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
+    pub ledger: Box<Account<'info, Ledger>>,
+    #[account(seeds = [HAND_SEED, table.key().as_ref(), &[seat]], bump,
+        constraint = hand.owner == player.key() || hand.reader == player.key() @ PokerError::NotSeated)]
+    pub hand: Box<Account<'info, Hand>>,
+}
+
+pub fn sit_in(ctx: Context<SitIn>, seat: u8) -> Result<()> {
+    let i = seat as usize;
+    require!(i < ctx.accounts.ledger.seats.len() && ctx.accounts.ledger.seats[i].player == ctx.accounts.hand.owner, PokerError::NotSeated);
+    let ledger = &mut ctx.accounts.ledger;
+    if ledger.seats[i].sitting_out {
+        ledger.seats[i].sitting_out = false;
+        let table = &mut ctx.accounts.table;
+        table.ledger_hash = ledger.fingerprint()?;
+        table.ledger_seq = table.ledger_seq.checked_add(1).ok_or(PokerError::MathOverflow)?;
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------------------- start
 
 #[vrf]

@@ -165,6 +165,14 @@ pub mod poker_per {
         instructions::hand::commit_seed(ctx, seat, seed)
     }
 
+    pub fn sit_out(ctx: Context<SitOut>, seat: u8) -> Result<()> {
+        instructions::hand::sit_out(ctx, seat)
+    }
+
+    pub fn sit_in(ctx: Context<SitIn>, seat: u8) -> Result<()> {
+        instructions::hand::sit_in(ctx, seat)
+    }
+
     pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
         instructions::hand::start_hand(ctx)
     }
