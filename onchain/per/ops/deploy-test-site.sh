@@ -12,8 +12,14 @@ cp -r "$REPO/Builds/WebGL-per/." "$S/"
 cp "$REPO/per/ops/test-site/vercel.json" "$REPO/per/client-web/rollup-wallet.html" "$REPO/per/client-web/rollup-wallet.js" "$S/"
 cd "$S"
 # Once (11 Oct) the deploy printed nothing and the site kept the old build: show the whole tail, and fail on no alias.
-OUT=$(npx --yes vercel@latest deploy --prod --yes 2>&1 || true)
-echo "$OUT" | grep -E "Aliased|readyState|Error|error" || { echo "$OUT" | tail -20; echo "DEPLOY FAILED"; exit 1; }
+# Vercel sometimes answers "status": "error" once and succeeds on the next try (11 Oct): retry once.
+for try in 1 2; do
+  OUT=$(npx --yes vercel@latest deploy --prod --yes 2>&1 || true)
+  echo "$OUT" | grep -q "Aliased" && break
+  echo "deploy attempt $try failed:"; echo "$OUT" | grep -E "\"status\"|Error|error|message" | head -5
+done
+echo "$OUT" | grep -q "Aliased" || { echo "$OUT" | tail -20; echo "DEPLOY FAILED"; exit 1; }
+echo "$OUT" | grep -E "Aliased|readyState"
 WANT=$(stat -c%s "$REPO/Builds/WebGL-per/Build/WebGL-per.wasm.unityweb")
 for i in 1 2 3 4 5 6; do
   GOT=$(curl -sI "https://poker-per-m8-test.vercel.app/Build/WebGL-per.wasm.unityweb?v=$(date +%s)" | grep -i content-length | tr -dc 0-9)
