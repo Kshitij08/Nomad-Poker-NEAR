@@ -2,6 +2,8 @@
 // spoofed callback, two real hands dealt by the VRF inside the TEE, private hole cards, the ledger
 // salt, what a reader can see of the oracle's transaction, the public hand record and the off-chain
 // verifier (including tampered records). Results go to results/m4-hand-<ts>.json.
+// Runs with the backend's keeper on (M10): the keeper may begin a dealt hand and time out the player to
+// act before the suite does, as it does in real play. Steps it can take first accept either outcome.
 import { Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { NATIVE_MINT, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction } from "@solana/spl-token";
 import { delegateSpl } from "@magicblock-labs/ephemeral-rollups-sdk";
@@ -12,7 +14,7 @@ import { verify, holeCards, dealOrder, nextButton, cardName, NO_CARD, Record } f
 import { recoverHand } from "./attack";
 
 const S = new Suite("m4-hand");
-const HAND_DEALT = 2, HAND_IDLE = 0;
+const HAND_DEALT = 2, HAND_PLAYING = 3, HAND_IDLE = 0;
 
 // MagicBlock leak 2: simulateTransaction returns accounts listed in `accounts.addresses`, without a login.
 async function simulateLeak(accounts: PublicKey[]): Promise<Buffer[]> {
@@ -66,11 +68,46 @@ async function main() {
     const seat = coder.decode("ledger", (await rawRead(url.p1, T.ledger)).data!).game.toAct;
     return T.act(bySeat[seat][0], bySeat[seat][1], seat, KIND.fold);
   };
+  // Begins the betting, unless the keeper already has (it ticks a dealt hand at once).
+  const beginOrKeeper = async (prog: any, signer: PublicKey, hand: number): Promise<string> => {
+    try { return await T.beginHand(prog, signer); }
+    catch (e) {
+      const t = await readTable();
+      if (errName(e).startsWith("HandNotDealt") && Number(t.handNo) === hand && t.handState !== HAND_DEALT) return "already begun by the keeper";
+      throw e;
+    }
+  };
+  // Ends a heads-up hand: the player to act folds, unless the keeper already timed them out (15 s turns).
+  const endHand = async (hand: number): Promise<string> => {
+    let how = "the keeper timed out the player to act";
+    const t = await readTable();
+    if (t.handState === HAND_PLAYING && Number(t.handNo) === hand) {
+      try { await foldToAct(); how = "the player to act folded"; }
+      catch (e) { if (!/NotYourTurn|HandNotPlaying/.test(errName(e))) throw e; }
+    }
+    const start = Date.now();
+    while (Date.now() - start < 40_000) {
+      const now = await readTable();
+      if (now.handState === HAND_IDLE && Number(now.handNo) === hand) return how;
+      await sleep(500);
+    }
+    throw new Error(`hand ${hand} didn't end in 40 s`);
+  };
+  // The table and the ledger as one consistent pair (the keeper may change the ledger between two reads).
+  const readTableAndLedger = async () => {
+    for (let i = 0; ; i++) {
+      const a = await readTable();
+      const raw = (await rawRead(url.p1, T.ledger)).data;
+      const b = await readTable();
+      if (a.ledgerSeq.toString() === b.ledgerSeq.toString() || i >= 5) return { table: b, ledgerRaw: raw };
+    }
+  };
   const waitDealt = async (hand: number) => {
     const start = Date.now();
     while (Date.now() - start < 30_000) {
       const t = await readTable();
-      if (t.handState === HAND_DEALT && Number(t.handNo) === hand) return Date.now() - start;
+      // Dealt, or already begun by the keeper (which ticks a dealt hand at once).
+      if ((t.handState === HAND_DEALT || t.handState === HAND_PLAYING) && Number(t.handNo) === hand) return Date.now() - start;
       await sleep(50);
     }
     return -1;
@@ -149,9 +186,14 @@ async function main() {
     { p1: h0?.cards.map(cardName), p2: h3?.cards.map(cardName), button: t1.button });
   S.check("players can't read each other's cards; outsiders read neither; nobody reads the deck", !(await rawRead(url.p1, handOf(T.table, 3))).visible && !(await rawRead(url.p2, handOf(T.table, 0))).visible
     && !(await rawRead(url.outsider, handOf(T.table, 0))).visible && !(await rawRead(url.p1, T.deck)).visible && !(await rawRead(TEE_URL, T.deck)).visible, {});
-  const ledgerRaw = (await rawRead(url.p1, T.ledger)).data;
+  const { table: tl, ledgerRaw } = await readTableAndLedger();
   const salt = ledgerRaw ? Buffer.from(coder.decode("ledger", ledgerRaw).salt) : Buffer.alloc(32);
-  S.check("the ledger got a salt from the VRF, and the table's fingerprint covers it", !!ledgerRaw && !salt.equals(Buffer.alloc(32)) && Buffer.from(t1.ledgerHash).equals(sha256(ledgerRaw)), { ledgerReadable: !!ledgerRaw });
+  S.check("the ledger got a salt from the VRF, and the table's fingerprint covers it", !!ledgerRaw && !salt.equals(Buffer.alloc(32)) && Buffer.from(tl.ledgerHash).equals(sha256(ledgerRaw)), { ledgerReadable: !!ledgerRaw });
+
+  // Begin now, while the hand is surely live (the keeper may have begun it already; it times the player to
+  // act out after 15 s, before the probes below finish).
+  await S.ok("begin the betting (blinds posted), or the keeper already has", () => beginOrKeeper(prog.p3, p3.publicKey, 1));
+  await S.err("an outsider can't act in the hand", "NotSeated", () => T.act(prog.p3, p3.publicKey, 0, KIND.fold));
 
   // Can anyone rebuild the live hand from transaction data (seeds in commit_seed transactions, the
   // VRF output in the oracle's fulfillment)? Tried with no login, an outsider's login, and the other
@@ -162,7 +204,7 @@ async function main() {
     p2Reader: await recoverHand(url.p2, T.table, 1n, 0b1001, 5_000),
   };
   const rebuilt = (r: any) => !!r.predicted && h0 && r.predicted[0].join() === h0.cards.map(cardName).join();
-  S.check("while the hand is live, nobody else can rebuild p1's cards from transaction data, or see any seed or the VRF output (no login, outsider, the other player)",
+  S.check("during hand 1, nobody else can rebuild p1's cards from transaction data, or see any seed or the VRF output (no login, outsider, the other player)",
     Object.values(live).every((r: any) => !rebuilt(r) && !r.vrfOutputFound && r.seedsFound === 0),
     Object.fromEntries(Object.entries(live).map(([k, v]: any) => [k, { listed: v.signaturesListed, hidden: v.transactionsHidden, seeds: v.seedsFound, vrf: v.vrfOutputFound }])));
 
@@ -174,9 +216,7 @@ async function main() {
     { deckReturned: leakDeck.length, handReturned: leakHand.length, leakedDeckMatchesP1Cards: !!leakedDeck && h0 && holeCards(Array.from(leakedDeck.cards), dealOrder(t1.button, 0b1001))[0].join() === Array.from(h0.cards).join() });
 
   // ---- end hand 1 and verify it from the public record
-  await S.ok("begin the betting (blinds posted)", () => T.beginHand(prog.p3, p3.publicKey));
-  await S.err("an outsider can't act in the hand", "NotSeated", () => T.act(prog.p3, p3.publicKey, 0, KIND.fold));
-  await S.ok("the player to act folds, ending hand 1 (heads-up)", () => foldToAct());
+  await S.ok("hand 1 ends: the player to act folds, or the keeper timed them out (heads-up)", () => endHand(1));
   const r1 = await readRecord();
   const v1a = r1 ? verify(r1, { seat: 0, seed: seed1, cards: h0?.cards }) : { ok: false, problems: ["no record"], deck: [] };
   const v1b = r1 ? verify(r1, { seat: 3, seed: seed2, cards: h3?.cards }) : { ok: false, problems: ["no record"], deck: [] };
@@ -203,7 +243,7 @@ async function main() {
   const t2 = await readTable();
   S.check("hand 2 dealt; the button moved to the next seated seat", lat2 >= 0 && t2.button === nextButton(t1.button, 0b1001), { msFromRequestToDealt: lat2, button1: t1.button, button2: t2.button });
   const h0b = await readHand(url.p1, 0);
-  await S.ok("begin hand 2 and the player to act folds", async () => { await T.beginHand(prog.deployer, deployer.publicKey); return foldToAct(); });
+  await S.ok("begin hand 2 (or the keeper does) and it ends: the player to act folds, or the keeper times them out", async () => { await beginOrKeeper(prog.deployer, deployer.publicKey, 2); return endHand(2); });
   const r2 = await readRecord();
   const v2 = r2 ? verify(r2, { seat: 0, seed: seed1b, cards: h0b?.cards }, r1?.button) : { ok: false, problems: ["no record"], deck: [] as number[] };
   S.check("verifier: hand 2 recomputes, including the button rotation", v2.ok && r2?.handNo === 2n && verify(r2!, { seat: 3, seed: seed2b }).ok, { problems: v2.problems });
@@ -231,9 +271,12 @@ async function main() {
   S.known("MagicBlock leak 2 also covers a closed table: simulateTransaction returns its kept ledger with no login", leakClosed.length > 0, { bytes: leakClosed.map((b) => b.length) });
   const deckClosed = await simulateLeak([T.deck]);
   const closedLedger = leakClosed[0] ? coder.decode("ledger", leakClosed[0]) : null;
-  S.check("...but close erased what it would show: the ledger's salt, game and seats are zero, the deck is all zero",
-    !!closedLedger && Buffer.from(closedLedger.salt).equals(Buffer.alloc(32)) && closedLedger.game.seats.every((s: any) => Number(s.stack) === 0 && Number(s.total) === 0) && closedLedger.seats.every((s: any) => s.player.equals(PublicKey.default))
-      && deckClosed.length === 1 && deckClosed[0].subarray(8).every((b) => b === 0), { deckBytes: deckClosed[0]?.length });
+  // Since MagicBlock fixed leak 2 for closed tables (seen 11 Oct), nothing comes back at all: that passes too.
+  const ledgerErased = leakClosed.length === 0 || (!!closedLedger && Buffer.from(closedLedger.salt).equals(Buffer.alloc(32))
+    && closedLedger.game.seats.every((s: any) => Number(s.stack) === 0 && Number(s.total) === 0) && closedLedger.seats.every((s: any) => s.player.equals(PublicKey.default)));
+  const deckErased = deckClosed.length === 0 || (deckClosed.length === 1 && deckClosed[0].subarray(8).every((b) => b === 0));
+  S.check("...and close erased what it would show (the ledger's salt, game and seats zero, the deck all zero), or nothing is returned at all",
+    ledgerErased && deckErased, { ledgerBytes: leakClosed[0]?.length ?? "not returned", deckBytes: deckClosed[0]?.length ?? "not returned" });
 
   S.finish({ table: T.table.toBase58(), latenciesMs: [lat1, lat2], hand1: { button: r1?.button, deck: r1?.cards.map(cardName).join(" ") } });
 }

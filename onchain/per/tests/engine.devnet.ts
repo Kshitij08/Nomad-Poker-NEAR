@@ -3,6 +3,8 @@
 // and actions; the final stacks must match exactly. Also: blinds, turn order, illegal actions,
 // the 15 s turn timer, side pots, the seed window, rebuy/cash-out locks during a hand, the action
 // log's privacy and hash. Results go to results/m5-engine-<ts>.json.
+// Runs with the backend's keeper on (M10): the keeper may begin a dealt hand, time out a seat or commit
+// the table before the suite does, as in real play. Those steps accept either outcome.
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { NATIVE_MINT, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction } from "@solana/spl-token";
 import { delegateSpl } from "@magicblock-labs/ephemeral-rollups-sdk";
@@ -44,10 +46,13 @@ async function main() {
   const readTable = async () => coder.decode("table", (await er.deployer.getAccountInfo(T.table, "processed"))!.data);
   const readLedger = async () => coder.decode("ledger", (await rawRead(rd.p1, T.ledger)).data!);
   const readRecord = async () => coder.decode("handRecord", (await rawRead(TEE_URL, T.record)).data!);
-  const waitState = async (state: number, handNo?: number) => {
+  const keeperBegan: string[] = [];
+  const actSigs: string[] = []; // the suite's own act transactions, fetched by signature after close
+  const waitState = async (state: number | number[], handNo?: number) => {
+    const states = Array.isArray(state) ? state : [state];
     for (let i = 0; i < 300; i++) {
       const t = await readTable();
-      if (t.handState === state && (handNo === undefined || Number(t.handNo) === handNo)) return t;
+      if (states.includes(t.handState) && (handNo === undefined || Number(t.handNo) === handNo)) return t;
       await sleep(100);
     }
     throw new Error(`table never reached state ${state}`);
@@ -79,9 +84,18 @@ async function main() {
     const handNo = Number(t0.handNo) + 1;
     const stacksBefore = (await readLedger()).seats.map((s: any) => BigInt(s.stack.toString()));
     await T.startHand(prog.deployer, deployer.publicKey);
-    const dealtT = await waitState(2, handNo);
-    cu.push({ hand: label, seat: -1, kind: -1, units: await bisectCompute(er.deployer, deployer, (u) => T.beginHandTx(prog.deployer, deployer.publicKey, u)), endsHand: false, what: "begin_hand" } as any);
-    if (hooks.beginWithTick) await T.tick(prog.deployer); else await T.beginHand(prog.deployer, deployer.publicKey);
+    // Dealt, or already begun by the keeper (its tick begins a dealt hand at once).
+    const dealtT = await waitState([2, 3], handNo);
+    if (dealtT.handState === 2) {
+      const units = await bisectCompute(er.deployer, deployer, (u) => T.beginHandTx(prog.deployer, deployer.publicKey, u));
+      if (units > 0) cu.push({ hand: label, seat: -1, kind: -1, units, endsHand: false, what: "begin_hand" } as any);
+    }
+    try { if (hooks.beginWithTick) await T.tick(prog.deployer); else await T.beginHand(prog.deployer, deployer.publicKey); }
+    catch (e) {
+      const st = (await readTable()).handState;
+      if (!(errName(e).startsWith("HandNotDealt") && st === 3)) throw new Error(`${label}: begin failed: ${errName(e)} (table state ${st}): ${String((e as any)?.message ?? e).slice(0, 300)}`);
+      keeperBegan.push(label);
+    }
     let g = (await readLedger()).game;
     const begun = g;
     if (hooks.afterBegin) await hooks.afterBegin(g);
@@ -103,10 +117,10 @@ async function main() {
       while (hi > 0 && hi - lo > 2_000) { const mid = Math.floor((lo + hi) / 2); if (await passes(mid)) hi = mid; else lo = mid; }
       cu.push({ hand: label, seat, kind, units: hi, endsHand: false });
       if (hooks.readerActsFor === seat) {
-        await T.act(readerProg[seat], readerKey[seat].publicKey, seat, kind, amount);
+        actSigs.push(await T.act(readerProg[seat], readerKey[seat].publicKey, seat, kind, amount));
         readerActed.push({ hand: label, seat, kind });
       } else {
-        await T.act(prog[seat], wallets[seat].publicKey, seat, kind, amount);
+        actSigs.push(await T.act(prog[seat], wallets[seat].publicKey, seat, kind, amount));
       }
       actions.push([seat, kind, amount.toString()]);
       g = (await readLedger()).game;
@@ -162,13 +176,25 @@ async function main() {
   S.check("hand A: on-chain final stacks equal the C# engine's replay of the same hand", repA.match, repA);
   S.check("hand A: chips conserved (stacks before = stacks after)", sum(A.stacksBefore) === sum(A.ledgerAfter.seats.map((s: any) => BigInt(s.stack.toString()))), {});
   S.check("hand A: more than one pot paid out (main + side pot)", repA.csharpAwards.length >= 2, { awards: repA.csharpAwards });
-  // Commits: the table pays, so anyone may commit at most every 15 minutes; the creator any time.
-  await S.ok("an outsider (p3) commits the table (its first commit)", () => T.commit(prog[4], p3.publicKey));
-  await sleep(8000);
-  const l1AfterA = coder.decode("table", (await connection.getAccountInfo(T.table))!.data);
-  S.check("the commit reached Solana: the L1 copy shows hand 1, idle", Number(l1AfterA.handNo) === 1 && l1AfterA.handState === 0, { l1HandNo: Number(l1AfterA.handNo), l1HandState: l1AfterA.handState });
+  // Commits: the table pays, so an outsider may commit only after a change and at most every 15 minutes;
+  // the creator any time. The keeper commits after each hand too; if it was first, the outsider is
+  // correctly refused (nothing changed since).
+  await S.ok("an outsider (p3) commits the table after hand A, or the keeper already has", async () => {
+    try { return await T.commit(prog[4], p3.publicKey); }
+    catch (e) { if (errName(e).startsWith("CommitTooSoon")) return "the keeper committed first; the outsider is refused (no change since)"; throw e; }
+  });
   await S.err("an outsider can't commit again within 15 minutes (the table pays)", "CommitTooSoon", () => T.commit(prog[4], p3.publicKey));
   await S.ok("the creator may commit any time", () => T.commit(prog.deployer, deployer.publicKey));
+  // The keeper may have committed mid-hand (just after the betting began, a change); the creator's commit
+  // above came after the hand, so the L1 copy must show it idle.
+  let l1AfterA: any = null;
+  for (let i = 0; i < 10; i++) {
+    await sleep(3000);
+    l1AfterA = coder.decode("table", (await connection.getAccountInfo(T.table))!.data);
+    if (Number(l1AfterA.handNo) === 1 && l1AfterA.handState === 0) break;
+  }
+  S.check("the commit reached Solana: the L1 copy shows hand 1, idle", Number(l1AfterA.handNo) === 1 && l1AfterA.handState === 0, { l1HandNo: Number(l1AfterA.handNo), l1HandState: l1AfterA.handState });
+
 
   // Anyone left with nothing rebuys between hands.
   for (const s of SEATS) {
@@ -196,9 +222,17 @@ async function main() {
       await S.ok(`hand B: seat ${seat} makes a minimum raise to ${minTo}`, () => T.act(prog[seat], wallets[seat].publicKey, seat, KIND.raise, minTo));
       (globalThis as any).bPre = [[seat, KIND.raise, minTo.toString()]];
       const next = (await readLedger()).game.toAct;
-      await sleep(16_500);
-      cu.push({ hand: "B: rules and timeout", seat: next, kind: -1, units: await bisectCompute(er.deployer, deployer, (u) => T.timeoutTx(prog.deployer, deployer.publicKey, u)), endsHand: false, what: "timeout" } as any);
-      await S.ok(`hand B: after 15 s anyone (the creator, not seated) times out seat ${next}`, () => T.timeout(prog.deployer, deployer.publicKey));
+      // Time out just after the deadline: the keeper does it about a second after, so whoever's first wins.
+      const deadline = Number((await readTable()).turnDeadline);
+      await sleep(Math.max(0, (deadline + 1) * 1000 - Date.now()) + 200);
+      await S.ok(`hand B: after 15 s anyone (the creator, not seated; or the keeper) times out seat ${next}`, async () => {
+        try { return await T.timeout(prog.deployer, deployer.publicKey); }
+        catch (e) {
+          const g = (await readLedger()).game;
+          if (g.seats[next].status === 3 || g.toAct !== next) return "the keeper timed it out first";
+          throw e;
+        }
+      });
       const g2 = (await readLedger()).game;
       (globalThis as any).bPre.push([next, g2.seats[next].status === 3 ? KIND.fold : KIND.check, "0"]);
       S.check(`hand B: the timed-out seat ${next} was folded (it faced a raise)`, g2.seats[next].status === 3, { status: g2.seats[next].status });
@@ -298,10 +332,22 @@ async function main() {
     if (bets.actTxs > 0) break;
     await sleep(10_000);
   }
-  S.check("after the table closes, its transactions are listed but their contents stay hidden: no act instruction or bet size is readable with no login",
-    bets.listed > 0 && bets.hidden > 0 && bets.actTxs === 0 && bets.actWithAmountVisible === 0, bets);
+  // Since about 11 Oct the rollup no longer lists transactions touching private accounts at all (the list
+  // used to include them with their contents withheld), so also fetch the suite's own act transactions
+  // by signature: none may show its instructions.
+  const direct = { fetched: 0, notReturned: 0, contentsHidden: 0, readable: 0 };
+  for (const sig of actSigs.slice(0, 12)) {
+    direct.fetched++;
+    const res = (await rpcNoLogin("getTransaction", [sig, { encoding: "json", maxSupportedTransactionVersion: 0 }])).result;
+    const msg = res?.transaction?.message;
+    if (!res) direct.notReturned++;
+    else if (!msg || !(msg.accountKeys ?? []).length || !(msg.instructions ?? []).some((ix: any) => Buffer.from(require("bs58").decode(ix.data)).subarray(0, 8).equals(actDisc))) direct.contentsHidden++;
+    else direct.readable++;
+  }
+  S.check("after the table closes, no act instruction or bet size is readable with no login (in the table's transaction list, or fetching the suite's own act transactions by signature)",
+    bets.actTxs === 0 && bets.actWithAmountVisible === 0 && direct.fetched > 0 && direct.readable === 0, { list: bets, bySignature: direct });
 
-  S.finish({ table: T.table.toBase58(), hands: hands.map((x) => ({ label: x.label, handNo: x.handNo, button: x.button, dealtMask: x.dealtMask, actions: x.allActions ?? x.actions })),
+  S.finish({ table: T.table.toBase58(), keeperBegan, hands: hands.map((x) => ({ label: x.label, handNo: x.handNo, button: x.button, dealtMask: x.dealtMask, actions: x.allActions ?? x.actions })),
     replays: { A: repA, B: repB, C: repC, D1: repD1, D2: repD2 }, computeUnits: cu });
 }
 
