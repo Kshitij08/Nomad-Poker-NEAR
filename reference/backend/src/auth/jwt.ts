@@ -36,6 +36,32 @@ export async function verifyPlayerToken(token: string): Promise<PlayerJwtPayload
   return payload as PlayerJwtPayload;
 }
 
+export type PlayFabJwtPayload = JWTPayload & {
+  sub: string;
+  typ: "pf";
+};
+
+/**
+ * A short-lived token for a PlayFab player, issued after the backend has checked their session ticket
+ * with PlayFab. Separate from the wallet ("player") tokens: one never stands in for the other.
+ */
+export async function signPlayFabToken(playFabId: string): Promise<string> {
+  return new SignJWT({ typ: "pf" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(playFabId)
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(getSecret());
+}
+
+export async function verifyPlayFabToken(token: string): Promise<PlayFabJwtPayload> {
+  const { payload } = await jwtVerify(token, getSecret(), { algorithms: ["HS256"] });
+  if (payload.typ !== "pf" || typeof payload.sub !== "string" || !payload.sub) {
+    throw new Error("Invalid PlayFab token claims");
+  }
+  return payload as PlayFabJwtPayload;
+}
+
 export function hasJwtSecretConfigured(): boolean {
   const secret = process.env.JWT_SECRET?.trim();
   return Boolean(secret && secret.length >= 16);

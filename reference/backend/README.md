@@ -113,6 +113,11 @@ API: `http://localhost:8787`
 | `AUTH_URI` | URI line of that message (default `https://<AUTH_DOMAIN>/`) |
 | `PORT` | HTTP port (default `8787`; Railway injects its own) |
 | `BACKEND_PUBLIC_URL` | Optional; public Railway URL for CLI scripts |
+| `PLAYFAB_TITLE_ID` | **Required for tournaments** — the PlayFab title (`6A5AE`) |
+| `PLAYFAB_SECRET_KEY` | **Required for tournaments** — title secret key; the backend moves all tournament chips with it. Never log it |
+| `PLAYFAB_FAKE` | `1` = in-memory PlayFab for local runs (tickets look like `fake:<playFabId>:<name>`) |
+| `TOURNAMENT_MIN_LEAD_SECS` | Earliest a new tournament may start, in seconds from now (default `600`) |
+| `TOURNAMENTS_SCHEDULER` | `0` turns the tournament scheduler off (run it in exactly one replica) |
 
 ### Chain config for clients
 
@@ -219,6 +224,52 @@ Build: **SolanaTest → Create Solana Test Scene**, then build WebGL (`Assets/So
 | POST | `/internal/cash-out` | Server-signed cash-out (default leave path) |
 
 All `/internal/*` routes require `X-API-Key` when `INTERNAL_API_KEY` is set.
+
+---
+
+## Tournaments
+
+Hosted round-format tournaments (design and architecture docs in the team's claude.ai artifacts). The
+backend owns the records and **all tournament money**: the host's prize, entry fees, refunds and prizes.
+Game servers only report results.
+
+- **Sign-in:** the client sends its PlayFab session ticket to `POST /api/auth/playfab`. The backend checks
+  it with PlayFab and returns a 1-hour Bearer token for the routes below.
+- **Money:** every chip move is a `money_moves` row with a fixed idempotency key, written in the same
+  transaction as the change it pays for, then sent to PlayFab Economy v2. A retry never moves chips twice,
+  and a refund's key is its debit's key plus `:refund`. A worker retries pending moves every 5 s.
+  Refunds and prizes never give up.
+- **Clock:** a 5-second scheduler does four things:
+  - asks for a server 3 minutes before the start, once 2 or more players are in
+  - at the start time, locks the roster, or cancels and refunds if fewer than 2 players
+  - aborts and refunds if the server never starts, or stops sending heartbeats for 3 minutes
+  - retries pending money
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/playfab` | `{sessionTicket}` → `{token, playFabId, displayName, expiresIn}` |
+| GET | `/api/tournaments?filter=upcoming\|running\|finished` | Public list |
+| GET | `/api/tournaments/code/:code` | Look up by the 6-letter code |
+| GET | `/api/tournaments/:id` | One tournament (more detail for its host and players) |
+| GET | `/api/me/tournaments` | My entries and hosted ones; `sessionName` once the server is ready |
+| POST | `/api/tournaments` | Create (takes the host prize) |
+| POST | `/api/tournaments/:id/edit` · `raise-prize` · `cancel` · `remove` | Host actions, before the start |
+| POST | `/api/tournaments/:id/register` · `unregister` | Player actions, before the start |
+| POST | `/internal/tournaments/claim-spawn` | Spawner: take one tournament that needs a server |
+| POST | `/internal/tournaments/:id/ready` | Server: `{ok, error}` — the Fusion session is up |
+| GET | `/internal/tournaments/:id` | Server: settings and roster (frozen once locked) |
+| POST | `/internal/tournaments/:id/verify` | Server: `{sessionTicket}` → `{playFabId, displayName, entrant}` — game servers never hold the PlayFab key |
+| POST | `/internal/tournaments/:id/started` · `progress` · `result` | Server: started, heartbeat `{seq, snapshot}`, final `{championId, standings}` |
+
+### Tests
+
+```bash
+# a throwaway local database — never point this at Railway, the tests truncate tables
+initdb -D /tmp/trn-pg && pg_ctl -D /tmp/trn-pg -o "-p 55432" start && createdb -h 127.0.0.1 -p 55432 trn_test
+TEST_DATABASE_URL=postgres://$(whoami)@127.0.0.1:55432/trn_test npm test
+```
+
+Without `TEST_DATABASE_URL`, only the database-free tests run.
 
 ---
 
