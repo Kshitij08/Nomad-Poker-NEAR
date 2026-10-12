@@ -1,6 +1,7 @@
 // What a player pays in SOL for the M9 game balance: opening the vault (one time), a deposit, a second
 // deposit, and the one-time withdrawal setup plus a withdrawal. Fresh devnet wallet, same instructions
 // as the game (client-web/vault.ts mirrors PerVault.cs).
+import { ComputeBudgetProgram } from "@solana/web3.js";
 import { Keypair, LAMPORTS_PER_SOL, SYSVAR_INSTRUCTIONS_PUBKEY, SystemProgram, Transaction } from "@solana/web3.js";
 import nacl from "tweetnacl";
 import fs from "fs";
@@ -15,7 +16,7 @@ import { depositToVaultIxs, ensureWalletInRollupIxs, openVaultAccounts, playKeyM
   const bal = () => connection.getBalance(w.publicKey);
   const step = async (name: string, f: () => Promise<unknown>, moved = 0) => { const b = await bal(); await f(); const a = await bal(); return { step: name, solSpent: (b - a) / LAMPORTS_PER_SOL, beyondTheMoney: (b - a - moved) / LAMPORTS_PER_SOL }; };
   const out: any[] = [];
-  out.push(await step("open the game balance (one time)", async () => sendL1(new Transaction().add(await programFor(w).methods.openVault().accountsPartial(openVaultAccounts(w.publicKey)).instruction()), [w])));
+  out.push(await step("open the game balance (one time)", async () => sendL1(new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }), await programFor(w).methods.openVault().accountsPartial(openVaultAccounts(w.publicKey)).instruction()), [w])));
   out.push(await step("deposit 0.01 SOL (first)", () => sendL1(new Transaction().add(...depositToVaultIxs(w.publicKey, 10_000_000n)), [w]), 10_000_000));
   out.push(await step("deposit 0.01 SOL (second)", () => sendL1(new Transaction().add(...depositToVaultIxs(w.publicKey, 10_000_000n)), [w]), 10_000_000));
   out.push(await step("withdrawal setup (one time)", async () => sendL1(new Transaction().add(...(await ensureWalletInRollupIxs(w.publicKey))), [w])));
