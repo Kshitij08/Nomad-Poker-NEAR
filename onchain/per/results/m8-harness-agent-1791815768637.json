@@ -1,0 +1,233 @@
+{
+  "suite": "m8-harness-agent",
+  "ranAt": "2026-10-12T14:36:08.637327Z",
+  "pass": 41,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "before any Agent is set, an Agent key can't buy in (NotAgent)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the player's play key sets an Agent: this key, 1 hour, 0.016 SOL stake (no wallet prompt)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the Agent key reads its record: the wallet, the stake, nothing committed",
+      "status": "PASS",
+      "detail": {
+        "Stake": 16000000,
+        "Committed": 0
+      }
+    },
+    {
+      "name": "the record is private: another logged-in key can't read it",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a key that isn't the Agent can't buy in for the player (NotAgent)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "buying in for more than the stake is refused (AgentStakeExceeded)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the Agent buys in 0.01 SOL from the player's game balance",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "...exactly 0.01 SOL left the game balance",
+      "status": "PASS",
+      "detail": {
+        "before": 40000000,
+        "mid": 30000000
+      }
+    },
+    {
+      "name": "its seat is the player's own seat (the wallet, not labelled), found by its table key",
+      "status": "PASS",
+      "detail": 2
+    },
+    {
+      "name": "the record holds that seat and 0.01 SOL committed",
+      "status": "PASS",
+      "detail": {
+        "Seat": 2,
+        "Committed": 10000000
+      }
+    },
+    {
+      "name": "a second seat while it holds one is refused (AgentBusy)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the player can't take a second seat at that table themselves (one seat per wallet)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a rebuy past the stake is refused (0.01 + 0.007 > 0.016)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a rebuy within it is fine (0.01 + 0.006)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a hand was played with the Agent's seat in it, and it acted with its table key",
+      "status": "PASS",
+      "detail": {
+        "startHand": 0,
+        "hand": 1,
+        "state": 0,
+        "agentActed": true,
+        "dealt": 7
+      }
+    },
+    {
+      "name": "another seat's key can't cash out the Agent's seat (NotAgent)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the Agent cashes out its seat",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "...its whole stack went to the player's game balance",
+      "status": "PASS",
+      "detail": {
+        "stack": 15000000,
+        "got": 15000000
+      }
+    },
+    {
+      "name": "...and came off what it had committed; the seat is free",
+      "status": "PASS",
+      "detail": {
+        "Committed": 1000000,
+        "stack": 15000000
+      }
+    },
+    {
+      "name": "the player sits down themselves (play key)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the Agent can't rebuy into the player's own seat (AgentBusy)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the Agent can't cash out the player's own seat (NotAgentSeat)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the player leaves",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the player sets the Agent again (the count starts anew)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the Agent sits down again",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "releasing a seat that's still there is refused (AgentBusy)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the player cashes the Agent's seat out with their play key",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the record still holds the old seat: a new seat is refused (AgentBusy)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "anyone frees it once the seat is gone (agent_release)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "...without lowering what it had committed (0.01 SOL still counts)",
+      "status": "PASS",
+      "detail": 10000000
+    },
+    {
+      "name": "the player stops the Agent",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a stopped Agent can't buy in (NotAgent)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "...nor read the record any more",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a new Agent key for 20 s replaces the old one (one Agent per wallet)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the old key can't buy in (NotAgent)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "after its time is up the Agent can't buy in (AgentExpired)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "an Agent for longer than 7 days is refused",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the player sets it for an hour",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the player cancels their play keys (wallet, on Solana)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "cancelling the play keys stops the Agent too (AgentExpired)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "table": "3TKiCDdYyfG4SWnr14vXqpURoomtyYgSaePa1MhWJrkY",
+      "agent": "HEAQYGLsnYSbZfJ2VYysqheYmLVRDPoUzrR2vAThJYpv"
+    }
+  ]
+}

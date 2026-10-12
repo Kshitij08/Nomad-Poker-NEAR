@@ -60,6 +60,7 @@ static class Program
             case "host": await Host(); break;
             case "exit": await Exit(); break;
             case "sitout": await SitOutSuite(); break;
+            case "agent": await AgentSuite(); break;
             case "tourney": await TourneySuite(args.Length > 1 ? int.Parse(args[1]) : 9); break;
             case "soak": await Soak(int.Parse(args[1]), int.Parse(args[2]), args.Length > 3 ? int.Parse(args[3]) : 3); break;
             default: Console.WriteLine("usage: vector | play <table> [hands]"); return 2;
@@ -635,6 +636,169 @@ static class Program
         }
         Check("everyone cashed out, the host closed and reclaimed", reclaimed);
         Outcomes.Add(new { table = tableKey.Key });
+    }
+
+    // ---- M12a: the Agent key. The player's play key sets it on the wallet's private Agent record; it may only
+    // buy in (as the wallet, within the stake, one seat at a time), play that seat with its table key, and cash out
+    // into the game balance.
+    static async Task AgentSuite()
+    {
+        var http = new Http();
+        var l1 = new PerRpc(http, Devnet);
+        var deployer = LoadKey("deployer");
+        var config = Config.Decode(await l1.GetAccount(PerTableAddresses.Find(PerIds.Program, Encoding.UTF8.GetBytes("config")), "confirmed"));
+        var publicRpc = new PerRpc(http, Tee);
+
+        // ---- the sponsor (once per program)
+        if (await l1.GetAccount(PerAgent.Sponsor, "confirmed") == null)
+        {
+            Check("the admin creates the Agent sponsor (0.05 SOL for records' rent) and hands it to the rollup",
+                new PublicKey(config.Admin).Equals(deployer.PublicKey) && await Try(() => l1.Send(PerAgent.CreateSponsor(deployer.PublicKey, 50_000_000), new WalletLike(deployer))));
+            await Task.Delay(12_000);
+        }
+        else Console.WriteLine("   the Agent sponsor exists");
+
+        // ---- a table: host, opponent; `owner` is the player whose Agent plays
+        var seats = new List<SoakSeat>();
+        for (int i = 0; i < 3; i++)
+        {
+            var (fw, fk, frpc) = await Retry(() => FundedPlayer(http, l1, deployer, i == 0 ? 100_000_000UL : 60_000_000UL, 40_000_000), $"fund a{i}");
+            seats.Add(new SoakSeat { Name = $"a{i}", Wallet = fw, Key = fk, KeyRpc = frpc, Seat = i, Reader = new Account() });
+            await Task.Delay(1500);
+        }
+        var (host, opp, owner) = (seats[0], seats[1], seats[2]);
+        var tid = PerHost.NewTableId();
+        var t = new PerTableAddresses(PerHost.TableAddress(host.Wallet.PublicKey, tid));
+        var st = PerHost.Stakes[0];
+        var prm = new TableParams { SmallBlind = st.Small, BigBlind = st.Big, MinBuyIn = 10 * st.Big, MaxBuyIn = 100 * st.Big, MaxSeats = 8, InviteOnly = false };
+        await Retry(() => l1.Send(PerHost.CreateAndDelegate(host.Wallet.PublicKey, tid, prm), new WalletLike(host.Wallet)), "create");
+        await Task.Delay(12_000);
+        for (int i = 0; ; i++)
+        {
+            try { await host.KeyRpc.Send(new[] { PerHost.Open(t, host.Key.Key.PublicKey) }, new LocalSigner(host.Key.Key)); break; }
+            catch (Exception) when (i < 8) { await Task.Delay(3000); }
+        }
+        Console.WriteLine($"   table {t.Table.Key}");
+        var dummy = new SoakResult();
+        foreach (var x in new[] { host, opp })
+        {
+            await SoakBuyIn(x, t, 10_000_000, dummy);
+            x.ReaderRpc = await Login(http, x.Reader);
+            x.Session = new PerTableSession(t.Table, publicRpc, x.ReaderRpc, new LocalSigner(x.Reader), x.Wallet.PublicKey);
+        }
+
+        var agentKey = new Account();
+        var agentRpc = await Login(http, agentKey);
+        var w = owner.Wallet.PublicKey;
+        const ulong Stake = 16_000_000;
+        long Now() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        async Task<PerAgent.State> ReadAs(PerRpc rpc) { try { return PerAgent.State.Decode(await rpc.GetAccount(PerAgent.StateAddress(w))); } catch { return null; } }
+        Task<string> AgentBuy(int seat, ulong amount, PublicKey reader) =>
+            agentRpc.Send(new[] { PerAgent.BuyIn(t, agentKey.PublicKey, w, seat, amount, reader) }, new LocalSigner(agentKey));
+
+        Check("before any Agent is set, an Agent key can't buy in (NotAgent)", await Refused(() => AgentBuy(2, 10_000_000, new Account().PublicKey), "NotAgent"));
+        Check("the player's play key sets an Agent: this key, 1 hour, 0.016 SOL stake (no wallet prompt)",
+            await Try(() => owner.KeyRpc.Send(PerAgent.Set(owner.Key, agentKey.PublicKey, Now() + 3600, Stake), new LocalSigner(owner.Key.Key))));
+        var st0 = await ReadAs(agentRpc);
+        Check("the Agent key reads its record: the wallet, the stake, nothing committed", st0 != null && st0.Wallet.Equals(w) && st0.Stake == Stake && st0.Committed == 0 && !st0.HasSeat, new { st0?.Stake, st0?.Committed });
+        var stranger = new Account();
+        var strangerRpc = await Login(http, stranger);
+        Check("the record is private: another logged-in key can't read it", await ReadAs(strangerRpc) == null);
+        Check("a key that isn't the Agent can't buy in for the player (NotAgent)", await Refused(() => opp.ReaderRpc.Send(new[] { PerAgent.BuyIn(t, opp.Reader.PublicKey, w, 2, 10_000_000, new Account().PublicKey) }, new LocalSigner(opp.Reader)), "NotAgent"));
+        Check("buying in for more than the stake is refused (AgentStakeExceeded)", await Refused(() => AgentBuy(2, 20_000_000, new Account().PublicKey), "AgentStakeExceeded"));
+
+        var before = await VaultBalanceOf(owner.Key, owner.KeyRpc);
+        var r1 = new Account();
+        Check("the Agent buys in 0.01 SOL from the player's game balance", await Try(() => AgentBuy(2, 10_000_000, r1.PublicKey)));
+        var mid = await VaultBalanceOf(owner.Key, owner.KeyRpc);
+        Check("...exactly 0.01 SOL left the game balance", before - mid == 10_000_000, new { before, mid });
+        var agentSeat = new SoakSeat { Name = "agent", Wallet = owner.Wallet, Key = owner.Key, KeyRpc = owner.KeyRpc, Seat = 2, Reader = r1, ReaderRpc = await Login(http, r1) };
+        agentSeat.Session = new PerTableSession(t.Table, publicRpc, agentSeat.ReaderRpc, new LocalSigner(r1), w);
+        await agentSeat.Session.Poll();
+        Check("its seat is the player's own seat (the wallet, not labelled), found by its table key", agentSeat.Session.MySeat == 2 && agentSeat.Session.Ledger.Seats[2].Player.SequenceEqual(w.KeyBytes), agentSeat.Session.MySeat);
+        var st1 = await ReadAs(agentRpc);
+        Check("the record holds that seat and 0.01 SOL committed", st1 != null && st1.HasSeat && st1.Table.Equals(t.Table) && st1.Seat == 2 && st1.Committed == 10_000_000, new { st1?.Seat, st1?.Committed });
+        Check("a second seat while it holds one is refused (AgentBusy)", await Refused(() => AgentBuy(3, 10_000_000, new Account().PublicKey), "AgentBusy"));
+        Check("the player can't take a second seat at that table themselves (one seat per wallet)", await Refused(() => owner.KeyRpc.Send(new[] { owner.Key.Check(), PerVault.BuyIn(t, owner.Key, 5, 10_000_000, new Account().PublicKey) }, new LocalSigner(owner.Key.Key)), "InvalidSeat"));
+        Check("a rebuy past the stake is refused (0.01 + 0.007 > 0.016)", await Refused(() => AgentBuy(2, 7_000_000, r1.PublicKey), "AgentStakeExceeded"));
+        Check("a rebuy within it is fine (0.01 + 0.006)", await Try(() => AgentBuy(2, 6_000_000, r1.PublicKey)));
+
+        // ---- one hand: the Agent's seat plays with its table key like any player's
+        var players = new List<SoakSeat> { host, opp, agentSeat };
+        async Task PollAll() { foreach (var x in players) { await x.Session.Poll(); await x.Session.KeepMoving(); } }
+        await PollAll();
+        await host.ReaderRpc.Send(new[] { PerIx.RequestStart(t, host.Reader.PublicKey) }, new LocalSigner(host.Reader));
+        var handStart = DateTime.UtcNow;
+        bool agentActed = false;
+        ulong startHand = host.Session.Table?.HandNo ?? 0;
+        while (DateTime.UtcNow - handStart < TimeSpan.FromMinutes(3))
+        {
+            await PollAll();
+            var tb = host.Session.Table;
+            if (tb.HandNo > startHand && tb.HandState == PerGame.HandIdle) break;
+            foreach (var x in players)
+            {
+                if (x.Session.Table.HandState == PerGame.HandIdle) { if (tb.HandNo == startHand) await x.Session.PrepareNextHand(); continue; }
+                var g = x.Session.Ledger?.Game;
+                if (x.Session.Table.HandState == PerGame.HandPlaying && g != null && g.ToAct == x.Seat)
+                    try { var lg = PerGame.Legal(g); await x.Session.Act(lg.CanCheck ? ActionType.Check : lg.CanCall ? ActionType.Call : ActionType.Fold, 0); if (x == agentSeat) agentActed = true; } catch (PerTxException) { }
+            }
+            await Task.Delay(800);
+        }
+        Check("a hand was played with the Agent's seat in it, and it acted with its table key", host.Session.Table.HandNo > startHand && host.Session.Table.HandState == PerGame.HandIdle && agentActed,
+            new { startHand, hand = host.Session.Table.HandNo, state = host.Session.Table.HandState, agentActed, dealt = host.Session.Table.DealtMask });
+        await agentSeat.Session.Poll();
+        ulong stack = agentSeat.Session.Ledger.Seats[2].Stack;
+
+        // ---- leaving
+        var preOut = await VaultBalanceOf(owner.Key, owner.KeyRpc);
+        Check("another seat's key can't cash out the Agent's seat (NotAgent)", await Refused(() => opp.ReaderRpc.Send(new[] { PerAgent.CashOut(t, opp.Reader.PublicKey, w, 2) }, new LocalSigner(opp.Reader)), "NotAgent"));
+        Check("the Agent cashes out its seat", await Try(() => agentRpc.Send(new[] { PerAgent.CashOut(t, agentKey.PublicKey, w, 2) }, new LocalSigner(agentKey))));
+        var postOut = await VaultBalanceOf(owner.Key, owner.KeyRpc);
+        Check("...its whole stack went to the player's game balance", postOut - preOut == stack, new { stack, got = postOut - preOut });
+        var st2 = await ReadAs(agentRpc);
+        Check("...and came off what it had committed; the seat is free", st2 != null && !st2.HasSeat && st2.Committed == (16_000_000 > stack ? 16_000_000 - stack : 0), new { st2?.Committed, stack });
+
+        // ---- the player's own seat is never the Agent's
+        var mine = new Account();
+        Check("the player sits down themselves (play key)", await Try(() => owner.KeyRpc.Send(new[] { owner.Key.Check(), PerVault.BuyIn(t, owner.Key, 5, 10_000_000, mine.PublicKey) }, new LocalSigner(owner.Key.Key))));
+        Check("the Agent can't rebuy into the player's own seat (AgentBusy)", await Refused(() => AgentBuy(5, 1_000_000, mine.PublicKey), "AgentBusy"));
+        Check("the Agent can't cash out the player's own seat (NotAgentSeat)", await Refused(() => agentRpc.Send(new[] { PerAgent.CashOut(t, agentKey.PublicKey, w, 5) }, new LocalSigner(agentKey)), "NotAgentSeat"));
+        Check("the player leaves", await Try(() => owner.KeyRpc.Send(new[] { owner.Key.Check(), PerVault.CashOut(t, owner.Key.Key.PublicKey, w, 5, owner.Key.Expires) }, new LocalSigner(owner.Key.Key))));
+
+        // ---- the player takes the Agent's seat back with their play key; anyone frees the record
+        Check("the player sets the Agent again (the count starts anew)", await Try(() => owner.KeyRpc.Send(PerAgent.Set(owner.Key, agentKey.PublicKey, Now() + 3600, Stake), new LocalSigner(owner.Key.Key))));
+        var r2 = new Account();
+        Check("the Agent sits down again", await Try(() => AgentBuy(3, 10_000_000, r2.PublicKey)));
+        Check("releasing a seat that's still there is refused (AgentBusy)", await Refused(() => strangerRpc.Send(new[] { PerAgent.Release(t, w) }, new LocalSigner(stranger)), "AgentBusy"));
+        Check("the player cashes the Agent's seat out with their play key", await Try(() => owner.KeyRpc.Send(new[] { owner.Key.Check(), PerVault.CashOut(t, owner.Key.Key.PublicKey, w, 3, owner.Key.Expires) }, new LocalSigner(owner.Key.Key))));
+        Check("the record still holds the old seat: a new seat is refused (AgentBusy)", await Refused(() => AgentBuy(4, 1_000_000, new Account().PublicKey), "AgentBusy"));
+        Check("anyone frees it once the seat is gone (agent_release)", await Try(() => strangerRpc.Send(new[] { PerAgent.Release(t, w) }, new LocalSigner(stranger))));
+        var st3 = await ReadAs(agentRpc);
+        Check("...without lowering what it had committed (0.01 SOL still counts)", st3 != null && !st3.HasSeat && st3.Committed == 10_000_000, st3?.Committed);
+
+        // ---- stopping, replacing, expiry, cancelled play keys
+        Check("the player stops the Agent", await Try(() => owner.KeyRpc.Send(PerAgent.Stop(owner.Key), new LocalSigner(owner.Key.Key))));
+        Check("a stopped Agent can't buy in (NotAgent)", await Refused(() => AgentBuy(4, 1_000_000, new Account().PublicKey), "NotAgent"));
+        Check("...nor read the record any more", await ReadAs(agentRpc) == null);
+        var agent2 = new Account();
+        var agent2Rpc = await Login(http, agent2);
+        Check("a new Agent key for 20 s replaces the old one (one Agent per wallet)", await Try(() => owner.KeyRpc.Send(PerAgent.Set(owner.Key, agent2.PublicKey, Now() + 20, Stake), new LocalSigner(owner.Key.Key))));
+        Check("the old key can't buy in (NotAgent)", await Refused(() => AgentBuy(4, 1_000_000, new Account().PublicKey), "NotAgent"));
+        await Task.Delay(25_000);
+        Check("after its time is up the Agent can't buy in (AgentExpired)", await Refused(() => agent2Rpc.Send(new[] { PerAgent.BuyIn(t, agent2.PublicKey, w, 4, 1_000_000, new Account().PublicKey) }, new LocalSigner(agent2)), "AgentExpired"));
+        Check("an Agent for longer than 7 days is refused", await Refused(() => owner.KeyRpc.Send(PerAgent.Set(owner.Key, agent2.PublicKey, Now() + PerAgent.MaxSeconds + 600, Stake), new LocalSigner(owner.Key.Key)), "AgentExpired"));
+        Check("the player sets it for an hour", await Try(() => owner.KeyRpc.Send(PerAgent.Set(owner.Key, agent2.PublicKey, Now() + 3600, Stake), new LocalSigner(owner.Key.Key))));
+        Check("the player cancels their play keys (wallet, on Solana)", await Try(() => l1.Send(new List<Solana.Unity.Rpc.Models.TransactionInstruction> { PerVault.RevokePlayKeys(w) }, new WalletLike(owner.Wallet))));
+        bool stopped = false;
+        for (int i = 0; i < 20 && !stopped; i++)
+        {
+            await Task.Delay(3000);
+            try { await agent2Rpc.Send(new[] { PerAgent.BuyIn(t, agent2.PublicKey, w, 4, 1_000_000, new Account().PublicKey) }, new LocalSigner(agent2)); Console.WriteLine("   accepted (bought in before the rollup saw the cancel)"); break; }
+            catch (PerTxException e) { stopped = e.ErrorName == "AgentExpired"; if (!stopped) Console.WriteLine("   " + e.Message); }
+        }
+        Check("cancelling the play keys stops the Agent too (AgentExpired)", stopped);
+        Outcomes.Add(new { table = t.Table.Key, agent = agentKey.PublicKey.Key });
     }
 
     // ---- M11: an on-chain tournament, end to end, with the game's builders (PerTourney) and session code

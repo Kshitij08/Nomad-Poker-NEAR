@@ -158,4 +158,16 @@ pub enum PokerError {
     TourneyNeedsSync,
     #[msg("The tournament is still moving")]
     TourneyNotAbandoned,
+    #[msg("Not this wallet's Agent key (or no Agent)")]
+    NotAgent,
+    #[msg("The Agent expired, was stopped, or the play keys were cancelled")]
+    AgentExpired,
+    #[msg("Bad Agent settings")]
+    BadAgentSettings,
+    #[msg("The Agent already has a seat (one at a time), or that's the player's own seat")]
+    AgentBusy,
+    #[msg("That would put more than the Agent's stake at risk")]
+    AgentStakeExceeded,
+    #[msg("Not the Agent's seat")]
+    NotAgentSeat,
 }

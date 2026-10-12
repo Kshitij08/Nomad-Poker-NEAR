@@ -268,6 +268,30 @@ pub mod poker_per {
         instructions::tourney::tourney_sync(ctx)
     }
 
+    pub fn create_agent_sponsor(ctx: Context<CreateAgentSponsor>, lamports: u64) -> Result<()> {
+        instructions::agent::create_agent_sponsor(ctx, lamports)
+    }
+
+    pub fn delegate_agent_sponsor(ctx: Context<DelegateAgentSponsor>) -> Result<()> {
+        instructions::agent::delegate_agent_sponsor(ctx)
+    }
+
+    pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64, stake: u64) -> Result<()> {
+        instructions::agent::agent_set(ctx, expires, agent, until, stake)
+    }
+
+    pub fn agent_buy_in(ctx: Context<AgentBuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Result<()> {
+        instructions::agent::agent_buy_in(ctx, seat, amount, reader)
+    }
+
+    pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8) -> Result<()> {
+        instructions::agent::agent_cash_out(ctx, seat)
+    }
+
+    pub fn agent_release(ctx: Context<AgentRelease>) -> Result<()> {
+        instructions::agent::agent_release(ctx)
+    }
+
     pub fn tourney_set_reader(ctx: Context<TourneySetReader>, expires: i64, reader: Pubkey) -> Result<()> {
         instructions::tourney::tourney_set_reader(ctx, expires, reader)
     }
