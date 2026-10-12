@@ -2,7 +2,7 @@
 // from the existing game backend (its own Railway project and database).
 import { app } from "./api";
 import { config } from "./config";
-import { migrate } from "./db";
+import { migrate, pool } from "./db";
 import { keeperState, runKeeper } from "./keeper";
 import { stepAgents } from "./agents";
 
@@ -18,11 +18,25 @@ async function main() {
       if (since > 180_000) { console.error(`keeper stalled for ${Math.round(since / 1000)} s; exiting`); process.exit(1); }
     }, 30_000).unref();
     // M12: the Agent runner, one step per running Agent every 1.5 s (each waits for its previous step).
+    // Your playtest: during a deploy the old and new service briefly run together, and both stepped the same Agents
+    // (the old one bought back in where the new one had just left). Only the holder of this Postgres lock runs
+    // Agents; the old service holds it until it exits.
     let agentsBusy = false;
+    let lockClient: import("pg").PoolClient | null = null;
     setInterval(() => {
       if (agentsBusy) return;
       agentsBusy = true;
-      stepAgents().catch((e) => console.error("agents:", e?.message ?? e)).finally(() => { agentsBusy = false; });
+      (async () => {
+        if (!lockClient) {
+          const c = await pool.connect();
+          const got = (await c.query("select pg_try_advisory_lock(424212) as ok")).rows[0].ok;
+          if (!got) { c.release(); return; }
+          lockClient = c;
+          c.on("error", () => { lockClient = null; }); // a dropped connection drops the lock: take it again
+          console.log("agents: this instance runs the Agents");
+        }
+        await stepAgents();
+      })().catch((e) => console.error("agents:", e?.message ?? e)).finally(() => { agentsBusy = false; });
     }, 1_500).unref();
   }
 }

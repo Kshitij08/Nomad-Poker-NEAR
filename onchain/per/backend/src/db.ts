@@ -59,6 +59,8 @@ const MIGRATIONS: string[] = [
   `create index if not exists keeper_events_table on keeper_events (table_address, action, id desc)`,
   // M9c: "Your tables" on any device (GET /tables?creator=).
   `create index if not exists tables_creator on tables (creator, first_seen desc)`,
+  // M12 playtest: the lobby hides tables nothing has happened at for an hour (abandoned test seats kept them open).
+  `alter table tables add column if not exists idle_since bigint not null default 0`,
 ];
 
 // An idle client's error (e.g. the database restarting) must not crash the service.

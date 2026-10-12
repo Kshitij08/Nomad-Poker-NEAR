@@ -127,7 +127,9 @@ export function app() {
       res.json(r.rows.map(tableRow));
       return;
     }
-    const r = await pool.query("select * from tables where status = 1 and delegated order by updated_at desc limit 200");
+    // Only tables that are playing, or opened / dealt a hand in the last hour: abandoned ones (test seats nobody will
+    // ever play) stay out of the lobby. A host still sees theirs under "Your tables" (?creator=).
+    const r = await pool.query("select * from tables where status = 1 and delegated and (hand_state <> 0 or idle_since > extract(epoch from now()) - 3600) order by updated_at desc limit 200");
     res.json(r.rows.map(tableRow));
   });
 

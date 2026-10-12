@@ -1,0 +1,31 @@
+{
+  "suite": "m8-harness-agenthost",
+  "ranAt": "2026-10-12T17:07:09.1849531Z",
+  "pass": 2,
+  "fail": 2,
+  "outcomes": [
+    {
+      "name": "owner0 deploys an Agent with no table chosen",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "owner1 deploys an Agent with no table chosen",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "both Agents finished their hands within 20 minutes",
+      "status": "FAIL",
+      "detail": {
+        "finished": [],
+        "minutes": 20.1
+      }
+    },
+    {
+      "name": "they played at the same table",
+      "status": "FAIL",
+      "detail": []
+    }
+  ]
+}

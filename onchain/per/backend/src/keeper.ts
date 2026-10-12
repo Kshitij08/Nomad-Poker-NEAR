@@ -21,6 +21,8 @@ import { event, pool } from "./db";
 import { seal } from "./archive";
 import { verify, verifyLog, HandLogFile, Record } from "./shared/verifier";
 import { stepTournaments } from "./tourney";
+import * as anchor from "@coral-xyz/anchor";
+import idl from "./shared/poker_per.json";
 
 const STATUS_OPEN = 1, STATUS_CLOSED = 2;
 const HAND_DEALT = 2, HAND_PLAYING = 3;
@@ -41,6 +43,7 @@ function fail(where: string, e: any) {
 const keeperTee = new TeeSession(config.keeper);
 const auditorTee = new TeeSession(config.auditor);
 const live = new Map<string, PublicKey>();
+const reclaimed = new Set<string>();
 const failedAt = new Map<string, number>();
 
 /** Runs `fn` unless the same action on the same table failed less than 30 s ago; logs the outcome. */
@@ -85,6 +88,7 @@ async function upsertTable(address: PublicKey, t: any) {
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      on conflict (address) do update set status=$4, seated=$6, hand_no=$12, hand_state=$13, ledger_seq=$14, last_commit_ts=$15, updated_at=now()`,
     [p.address, p.tableId, p.creator, p.status, p.maxSeats, p.seated, p.inviteOnly, p.smallBlind, p.bigBlind, p.minBuyIn, p.maxBuyIn, p.handNo, p.handState, p.ledgerSeq, p.lastCommitTs]);
+  await pool.query("update tables set idle_since = $2 where address = $1", [p.address, Number(t.idleSince)]);
 }
 
 /** Finds every table in the rollup with the current layout; older layouts don't decode and are skipped. */
@@ -113,6 +117,23 @@ async function discover() {
       live.delete(key);
       await archiveLogs(key, pubkey, t, false, null);
     }
+  }
+  // M12: tables the Agent runner hosted (the keeper is their creator and paid their rent). Once one is closed and
+  // back on Solana, the keeper takes its rent back.
+  for (const [pubkey, t] of decoded) {
+    const key = pubkey.toBase58();
+    if (t.status !== STATUS_CLOSED || !t.creator.equals(config.keeper.publicKey) || reclaimed.has(key)) continue;
+    const onL1 = await l1.getAccountInfo(pubkey).catch(() => null);
+    if (!onL1) { reclaimed.add(key); continue; }
+    if (!onL1.owner.equals(PROGRAM_ID)) continue; // still on its way back from the rollup
+    await attempt(key, "reclaim_table (agent-hosted)", async () => {
+      const program = new anchor.Program(idl as anchor.Idl, new anchor.AnchorProvider(l1, new anchor.Wallet(config.keeper), { commitment: "confirmed" }));
+      const sig = await program.methods.reclaimTable(t.tableId).accountsPartial({
+        creator: config.keeper.publicKey, table: pubkey, escapePayer: PublicKey.findProgramAddressSync([Buffer.from("escape-payer"), pubkey.toBuffer()], PROGRAM_ID)[0],
+      } as any).rpc();
+      reclaimed.add(key);
+      return sig;
+    });
   }
   keeperState.lastDiscoverAt = Date.now();
   keeperState.tablesTracked = live.size;

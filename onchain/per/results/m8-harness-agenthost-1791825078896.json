@@ -1,0 +1,69 @@
+{
+  "suite": "m8-harness-agenthost",
+  "ranAt": "2026-10-12T17:11:18.8965248Z",
+  "pass": 8,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "owner0 deploys an Agent with no table chosen",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "owner1 deploys an Agent with no table chosen",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "both Agents finished their hands within 20 minutes",
+      "status": "PASS",
+      "detail": {
+        "finished": [
+          "owner0",
+          "owner1"
+        ],
+        "minutes": 2.4
+      }
+    },
+    {
+      "name": "they played at the same table",
+      "status": "PASS",
+      "detail": [
+        "4J6e6Hd78XKbGCZaRD4FJ2iwXM5n4Tk57FZ7HFUek1gi"
+      ]
+    },
+    {
+      "name": "the table was hosted by the service (its creator is the keeper, which paid the rent)",
+      "status": "PASS",
+      "detail": "BNb3zGjZ59bcukW3qVnVo8VoEsDjqij2RpshsvCEahZx"
+    },
+    {
+      "name": "the Agents started it themselves and played",
+      "status": "PASS",
+      "detail": {
+        "HandNo": 5,
+        "StartRequestedFor": 1
+      }
+    },
+    {
+      "name": "owner0: 5 hands (lost its stack); balance changed by exactly cash-outs minus buy-ins",
+      "status": "PASS",
+      "detail": {
+        "played": 5,
+        "buyIns": 10000000,
+        "cashOuts": 0,
+        "delta": -10000000
+      }
+    },
+    {
+      "name": "owner1: 5 hands (played 5 hands (your limit)); balance changed by exactly cash-outs minus buy-ins",
+      "status": "PASS",
+      "detail": {
+        "played": 5,
+        "buyIns": 10000000,
+        "cashOuts": 19000000,
+        "delta": 9000000
+      }
+    }
+  ]
+}

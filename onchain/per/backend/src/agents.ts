@@ -6,7 +6,7 @@
 // wallet's signed authorization, so only the wallet's owner can deploy, stop or read their Agent.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import * as anchor from "@coral-xyz/anchor";
-import { ComputeBudgetProgram, Keypair, PublicKey } from "@solana/web3.js";
+import { ComputeBudgetProgram, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
 import nacl from "tweetnacl";
 import type { Express, Request, Response } from "express";
@@ -14,6 +14,7 @@ import { CONFIG_PDA, PROGRAM_ID, TeeSession, accountsOf, coder, l1, rollupProgra
 import { config } from "./config";
 import { event, pool } from "./db";
 import { PRESETS, Profile, clampProfile, decide, Game, ST } from "./agentBot";
+import idl from "./shared/poker_per.json";
 
 // ---------------------------------------------------------------------------------------- settings and limits
 
@@ -247,6 +248,62 @@ function sessionFor(kp: Keypair): TeeSession {
   return s;
 }
 const busy = new Set<string>();
+const waitingSince = new Map<string, number>();
+const startPressedAt = new Map<number, number>();
+/** Tables this service hosted for Agents: address -> stake (big blind) and when. */
+const hostedTables = new Map<string, { address: string; big: bigint; at: number }>();
+let hosting: Promise<string | null> | null = null;
+const STAKES = [{ small: 100_000n, big: 200_000n }, { small: 500_000n, big: 1_000_000n }, { small: 1_000_000n, big: 2_000_000n }]; // PerHost.Stakes
+const MAX_WAITING_HOSTED = 3;
+const ESPL = new PublicKey("SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2");
+const TEE_VALIDATOR = new PublicKey("MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo");
+
+/** Hosts a public 8-seat table for an Agent with `left` lamports of stake: the highest stake level whose buy-in
+ *  (its buy-in in big blinds, at least the 10 BB minimum) fits. One at a time; at most 3 hosted tables waiting. */
+async function hostTableFor(settings: AgentSettings, left: bigint): Promise<string | null> {
+  if (hosting) return null;
+  const fits = STAKES.filter((st) => BigInt(Math.max(10, settings.buyInBB)) * st.big <= left);
+  if (fits.length === 0) return null;
+  const st = fits[fits.length - 1];
+  const now = Date.now();
+  // One waiting at this stake already (hosted in the last 10 minutes)? The Agent joins that one instead.
+  const recent = [...hostedTables.values()].filter((h) => now - h.at < 10 * 60_000);
+  if (recent.some((h) => h.big === st.big) || recent.length >= MAX_WAITING_HOSTED) return null;
+  hosting = (async () => {
+    const keeper = config.keeper;
+    const id = BigInt("0x" + randomBytes(8).toString("hex")) & ((1n << 63n) - 1n);
+    const idLe = Buffer.alloc(8); idLe.writeBigUInt64LE(id);
+    const table = pda(Buffer.from("table"), keeper.publicKey.toBuffer(), idLe);
+    const escrowEata = PublicKey.findProgramAddressSync([table.toBuffer(), NATIVE_MINT.toBuffer()], ESPL)[0];
+    const l1Program = new anchor.Program(idl as anchor.Idl, new anchor.AnchorProvider(l1, new anchor.Wallet(keeper), { commitment: "confirmed" }));
+    const params = { smallBlind: new anchor.BN(st.small.toString()), bigBlind: new anchor.BN(st.big.toString()), minBuyIn: new anchor.BN((10n * st.big).toString()), maxBuyIn: new anchor.BN((100n * st.big).toString()), maxSeats: 8, inviteOnly: false };
+    const create = await l1Program.methods.createTable(new anchor.BN(id.toString()), params)
+      .accountsPartial({ creator: keeper.publicKey, config: CONFIG_PDA, table, mint: NATIVE_MINT, escrow: ata(table), escrowEata } as any).instruction();
+    const delegate = await l1Program.methods.delegateTable(new anchor.BN(id.toString()), keeper.publicKey)
+      .accountsPartial({ payer: keeper.publicKey, table, escapePayer: pda(Buffer.from("escape-payer"), table.toBuffer()), validator: TEE_VALIDATOR } as any).instruction();
+    const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 500_000 }), create, delegate);
+    await anchor.web3.sendAndConfirmTransaction(l1, tx, [keeper], { commitment: "confirmed" });
+    // The rollup picks the table up within seconds; then open it (its private ledger, deck, record, log).
+    const keeperProgram = await sessionFor(keeper).program();
+    const acc = accountsOf(table);
+    let opened = false;
+    for (let i = 0; i < 10 && !opened; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        await keeperProgram.methods.openTable().accountsPartial({
+          payer: keeper.publicKey, table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), deck: acc.deck,
+          deckPermission: permissionPdaFromAccount(acc.deck), record: acc.record, log: acc.log, logPermission: acc.logPermission, rollup: rollupPrograms,
+        } as any).rpc();
+        opened = true;
+      } catch { /* not in the rollup yet */ }
+    }
+    if (!opened) throw new Error(`hosted table ${table.toBase58()} didn't open`);
+    hostedTables.set(table.toBase58(), { address: table.toBase58(), big: st.big, at: Date.now() });
+    await event(table.toBase58(), "agent host", true, `blinds ${st.small}/${st.big}`);
+    return table.toBase58();
+  })();
+  try { return await hosting; } finally { hosting = null; }
+}
 /** Per running session: the hand its seed went in for, and when it last saw another player. */
 const seededFor = new Map<number, bigint>();
 const aloneSince = new Map<number, number>();
@@ -258,6 +315,9 @@ async function setStatus(wallet: string, status: string, detail: string) {
 }
 
 const STEP_LIMIT_MS = 90_000;
+/** A table counts as not playing once no hand has started for this long while the Agent sits there (half that
+ *  when choosing one is twice too long: a table that's between hands is idle for seconds, not minutes). */
+const DEAD_TABLE_SECS = 5 * 60;
 /** Starts a step for every Agent that's playing or leaving, or still holds a seat (review H1: whatever its
  *  status says). Each Agent runs one step at a time, and none waits for another's (review M6). */
 export async function stepAgents() {
@@ -323,10 +383,14 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
     }
   }
   const left = rec.stake > rec.committed ? rec.stake - rec.committed : 0n;
-  const candidates = settings.table
+  const listed = settings.table
     ? (await pool.query("select * from tables where address = $1 and status = 1 and delegated", [settings.table])).rows
     : (await pool.query("select * from tables where status = 1 and delegated and not invite_only and seated >= 1 and seated < max_seats order by seated desc, updated_at desc limit 30")).rows;
   const now = Date.now();
+  // Tables this service hosted for Agents (newest first): joined even before the lobby index lists them.
+  const hostedRows = settings.table ? [] : [...hostedTables.values()].filter((h) => now - h.at < 10 * 60_000).reverse()
+    .map((h) => ({ address: h.address, big_blind: h.big.toString(), min_buy_in: (10n * h.big).toString(), max_buy_in: (100n * h.big).toString(), hosted: true }));
+  const candidates = [...hostedRows, ...listed.filter((t: any) => !hostedTables.has(t.address))];
   for (const t of candidates.slice(0, 10)) {
     if ((triedTables.get(`${row.wallet}|${t.address}`) ?? 0) > now - 10 * 60_000) continue;
     const bb = BigInt(t.big_blind), min = BigInt(t.min_buy_in), max = BigInt(t.max_buy_in);
@@ -338,9 +402,15 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
     const info = await (await sessionFor(agentKp).get()).getAccountInfo(table, "processed");
     if (!info) continue;
     const tb = coder.decode("table", info.data);
-    if (tb.status !== 1 || tb.kind !== 0 || tb.seatMask === 0) continue; // review M5: someone else must be there
+    if (tb.status !== 1 || tb.kind !== 0 || (tb.seatMask === 0 && !t.hosted)) continue; // review M5: someone else must be there (or it's one we hosted)
+    // Your playtest (12 Oct): both Agents sat at a table nobody had started (Start round never pressed), idle for
+    // 30 h, whose other seats were abandoned wallets. Only tables that have started and dealt in the last 10 minutes.
+    const idleSecs = Math.floor(now / 1000) - Number(tb.idleSince);
+    if (tb.handState === 0 && idleSecs > DEAD_TABLE_SECS * 2) continue; // opened, or last dealt, over 10 minutes ago
     let seat = -1;
-    for (let i = 0; i < tb.maxSeats; i++) if (((tb.seatMask >> i) & 1) === 0) { seat = i; break; }
+    // A random free seat: two Agents joining the same table at once (a hosted one) shouldn't both pick the first.
+    const free = Array.from({ length: tb.maxSeats }, (_, i) => i).filter((i) => ((tb.seatMask >> i) & 1) === 0);
+    if (free.length > 0) seat = free[randomBytes(1)[0] % free.length];
     if (seat < 0) continue;
     const reader = Keypair.generate();
     const { seed } = await walletState(wallet);
@@ -360,16 +430,28 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
       const after = decodeAgentState((await agentConn.getAccountInfo(agentStateOf(wallet), "processed").catch(() => null))?.data as Buffer);
       if (!(after && after.table.equals(table) && after.reader.equals(reader.publicKey))) {
         await pool.query("delete from agent_sessions where id = $1", [pending]);
-        triedTables.set(`${row.wallet}|${t.address}`, now);
+        // Lost a race for the seat (or the table just appeared): try again next step, not in 10 minutes.
+        const lostRace = t.hosted || /SeatTaken|InvalidSeat/.test(String(e?.message ?? e));
+        if (!lostRace) triedTables.set(`${row.wallet}|${t.address}`, now);
         await event(t.address, "agent buy-in", false, redact(String(e?.message ?? e)));
         continue;
       }
     }
+    waitingSince.delete(row.wallet);
     await setStatus(row.wallet, row.status, `playing at table ${t.address.slice(0, 6)}…, seat ${seat + 1}`);
     await event(t.address, "agent buy-in", true, `${amount} lamports, seat ${seat}`);
     return;
   }
-  await setStatus(row.wallet, row.status, left < 1n ? "its stake is used up" : "waiting for a table with players at your stake");
+  if (left < 1n) { await setStatus(row.wallet, row.status, "its stake is used up"); return; }
+  // Your playtest: nothing to join, so after a minute of waiting it hosts a public table at its stake (the platform's
+  // keeper pays the rent, as for tournament tables, and closes and reclaims it once it's empty). Another Agent or a
+  // player can then join; with its host not seated, any seated player may press Start round.
+  if (!waitingSince.has(row.wallet)) waitingSince.set(row.wallet, now);
+  if (!settings.table && now - waitingSince.get(row.wallet)! >= 60_000) {
+    const hosted = await hostTableFor(settings, left).catch(async (e: any) => { await event(null, "agent host", false, redact(String(e?.message ?? e))); return null; });
+    if (hosted) { await setStatus(row.wallet, row.status, `hosted a table (${hosted.slice(0, 6)}…); sitting down`); return; }
+  }
+  await setStatus(row.wallet, row.status, "waiting for a table with players at your stake");
 }
 
 const KIND = { fold: 0, check: 1, call: 2, bet: 3, raise: 4, allIn: 5 } as const;
@@ -420,9 +502,19 @@ async function play(row: any, s: any, wallet: PublicKey, agentKp: Keypair, setti
       : now >= Number(row.until) - 60 ? "its time is up"
       : Date.now() - new Date(s.started_at).getTime() >= settings.maxMinutes * 60_000 ? "played for your time limit"
       : (aloneSince.get(s.id) ?? Date.now()) < Date.now() - 5 * 60_000 ? "nobody else at the table for 5 minutes"
+      : now - Math.max(Number(tb.idleSince), Math.floor(new Date(s.started_at).getTime() / 1000)) > DEAD_TABLE_SECS ? "no hand was dealt there for 5 minutes"
       : "";
     if (reason) { await cashOut(row, s, wallet, agentKp, reader, table, stack, reason); return; }
-    if (Number(tb.startRequestedFor) === 0) return; // the host hasn't started the table yet
+    if (Number(tb.startRequestedFor) === 0) {
+      // The host starts the table. At one whose host holds no seat (one this service hosted), any seated player may.
+      const hostSeated = ledger.seats.some((x: any) => x.player.equals(tb.creator));
+      const withChips = ledger.seats.filter((x: any) => !x.player.equals(PublicKey.default) && toBig(x.stack) > 0n).length;
+      if (!hostSeated && withChips >= 2 && (startPressedAt.get(Number(s.id)) ?? 0) < Date.now() - 20_000) {
+        startPressedAt.set(Number(s.id), Date.now());
+        try { await program.methods.requestStart().accountsPartial({ player: reader.publicKey, table, ledger: acc.ledger } as any).rpc(); } catch { /* not yet */ }
+      }
+      return;
+    }
     const next = handNo + 1n;
     if (seededFor.get(Number(s.id)) !== next) {
       try {
@@ -476,9 +568,10 @@ async function endSession(row: any, s: any, cashOut: bigint | null, reason: stri
   seededFor.delete(Number(s.id));
   aloneSince.delete(Number(s.id));
   try { sessions.delete(open(s.reader_secret).publicKey.toBase58()); } catch { /* */ }
-  if (reason.startsWith("nobody else")) triedTables.set(`${row.wallet}|${s.table_address}`, Date.now() + 5 * 60_000); // review M5: 15 min there
+  hostedTables.delete(s.table_address); // a hosted table its Agent left no longer stops another being hosted
+  if (reason.startsWith("nobody else") || reason.startsWith("no hand was dealt")) triedTables.set(`${row.wallet}|${s.table_address}`, Date.now() + 5 * 60_000); // review M5: 15 min there
   // A limit or a stop ends the run; a lost seat or an empty table moves on to another table.
-  const moveOn = reason.startsWith("nobody else") || reason.startsWith("the seat is gone");
+  const moveOn = reason.startsWith("nobody else") || reason.startsWith("no hand was dealt") || reason.startsWith("the seat is gone");
   if (!moveOn || row.status === "stopping") await setStatus(row.wallet, "stopped", reason);
   else await setStatus(row.wallet, "running", reason + "; looking for another table");
 }

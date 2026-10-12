@@ -62,6 +62,7 @@ static class Program
             case "sitout": await SitOutSuite(); break;
             case "agent": await AgentSuite(); break;
             case "agentrun": await AgentRunSuite(); break;
+            case "agenthost": await AgentHostSuite(); break;
             case "agentsoak": await AgentSoakSuite(args.Length > 1 ? int.Parse(args[1]) : 25); break;
             case "tourney": await TourneySuite(args.Length > 1 ? int.Parse(args[1]) : 9); break;
             case "soak": await Soak(int.Parse(args[1]), int.Parse(args[2]), args.Length > 3 ? int.Parse(args[3]) : 3); break;
@@ -1132,6 +1133,65 @@ static class Program
         Check("the table adds up: seats + unpaid rake = what the escrow owes", seats + led.RakeAccrued == led.EscrowOwed, new { seats, rake = led.RakeAccrued, owed = led.EscrowOwed });
         Check("the people's sessions ran without unexpected errors", humanErrors == 0, humanErrors);
         Outcomes.Add(new { table = t.Table.Key, minutes = Math.Round((DateTime.UtcNow - start).TotalMinutes, 1) });
+    }
+
+    // ---- M12 playtest: with no table to join, an Agent hosts one (the keeper pays and is its creator); a second
+    // Agent joins it; with the host not seated, the Agents press Start round themselves and play.
+    static async Task AgentHostSuite(int hands = 5)
+    {
+        var http = new Http();
+        var l1 = new PerRpc(http, Devnet);
+        var deployer = LoadKey("deployer");
+        var owners = new List<SoakSeat>();
+        for (int i = 0; i < 2; i++)
+        {
+            var (fw, fk, frpc) = await Retry(() => FundedPlayer(http, l1, deployer, 60_000_000UL, 40_000_000), $"fund h{i}");
+            owners.Add(new SoakSeat { Name = $"owner{i}", Wallet = fw, Key = fk, KeyRpc = frpc });
+            await Task.Delay(1500);
+        }
+        var before = new Dictionary<string, ulong>();
+        foreach (var o in owners)
+        {
+            before[o.Name] = await VaultBalanceOf(o.Key, o.KeyRpc);
+            var prep = await PerAgent.Call(http, Backend, o.Key, "/agents/prepare", new JObject { ["settings"] = new JObject { ["strategy"] = "aggressive", ["stake"] = 25_000_000, ["buyInBB"] = 50, ["maxHands"] = hands, ["maxMinutes"] = 30 } });
+            await o.KeyRpc.Send(PerAgent.Set(o.Key, new PublicKey((string)prep["agent"]), DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 3600, 25_000_000), new LocalSigner(o.Key.Key));
+            await Task.Delay(2000);
+            Check($"{o.Name} deploys an Agent with no table chosen", await Try(async () => (await PerAgent.Call(http, Backend, o.Key, "/agents/start")).ToString()));
+            await Task.Delay(20_000);
+        }
+        var done = new Dictionary<string, JObject>();
+        var start = DateTime.UtcNow;
+        while (done.Count < owners.Count && DateTime.UtcNow - start < TimeSpan.FromMinutes(20))
+        {
+            await Task.Delay(15_000);
+            foreach (var o in owners)
+            {
+                if (done.ContainsKey(o.Name)) continue;
+                var me = await PerAgent.Call(http, Backend, o.Key, "/agents/me");
+                SoakLog($"{o.Name}: {(string)me["agent"]?["status"]} · {(string)me["agent"]?["detail"]}");
+                if ((string)me["agent"]?["status"] == "stopped") done[o.Name] = me;
+            }
+        }
+        Check("both Agents finished their hands within 20 minutes", done.Count == owners.Count, new { finished = done.Keys, minutes = Math.Round((DateTime.UtcNow - start).TotalMinutes, 1) });
+        if (done.Count < owners.Count) foreach (var o in owners) try { await PerAgent.Call(http, Backend, o.Key, "/agents/stop"); } catch { }
+        var tablesOf = owners.Where(o => done.ContainsKey(o.Name)).Select(o => (string)((JArray)done[o.Name]["sessions"]).Last()["table_address"]).Distinct().ToList();
+        Check("they played at the same table", tablesOf.Count == 1, tablesOf);
+        if (tablesOf.Count == 1)
+        {
+            var tb = Poker.Per.Generated.Table.Decode(await new PerRpc(http, Tee).GetAccount(new PublicKey(tablesOf[0])));
+            Check("the table was hosted by the service (its creator is the keeper, which paid the rent)", tb != null && new PublicKey(tb.Creator).Equals(KeeperKey), tb == null ? null : new PublicKey(tb.Creator).Key);
+            Check("the Agents started it themselves and played", tb != null && tb.StartRequestedFor != 0 && tb.HandNo >= (ulong)hands, tb == null ? null : (object)new { tb.HandNo, tb.StartRequestedFor });
+        }
+        foreach (var o in owners)
+        {
+            if (!done.TryGetValue(o.Name, out var me)) continue;
+            long buyIns = 0, cashOuts = 0; int played = 0;
+            foreach (JObject s in (JArray)me["sessions"]) { buyIns += long.Parse((string)s["buy_in"]); cashOuts += s["cash_out"].Type == JTokenType.Null ? 0 : long.Parse((string)s["cash_out"]); played += (int)s["hands"]; }
+            await Task.Delay(2000);
+            var after = await VaultBalanceOf(o.Key, o.KeyRpc);
+            Check($"{o.Name}: {played} hands ({(string)me["agent"]["detail"]}); balance changed by exactly cash-outs minus buy-ins",
+                (long)after - (long)before[o.Name] == cashOuts - buyIns, new { played, buyIns, cashOuts, delta = (long)after - (long)before[o.Name] });
+        }
     }
 
     // ---- M11: an on-chain tournament, end to end, with the game's builders (PerTourney) and session code
