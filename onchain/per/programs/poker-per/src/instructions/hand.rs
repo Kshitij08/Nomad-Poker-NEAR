@@ -123,9 +123,9 @@ pub fn sit_in(ctx: Context<SitIn>, seat: u8) -> Result<()> {
     Ok(())
 }
 
-/// M10: the host's Start round. Marks the next hand as asked for (`start_hand` refuses a new hand
-/// otherwise) and restarts the seed window from now, so every seated player's game has the full window to
-/// commit its seed once it sees the request. Between hands only; pressing again changes nothing.
+/// M10: the host's Start round, pressed once per table: no hand starts before it, and after it hands keep
+/// starting on their own. The first press restarts the seed window from now, so every seated player's game
+/// has the full window to commit its seed once it sees it. Between hands only; pressing again changes nothing.
 #[derive(Accounts)]
 pub struct RequestStart<'info> {
     /// The host's wallet or their seat's table key (any seated player's, while the host holds no seat).
@@ -147,9 +147,8 @@ pub fn request_start(ctx: Context<RequestStart>) -> Result<()> {
         .map(|s| (ledger.seats[s as usize].player, ledger.seats[s as usize].reader))
         .collect();
     require!(crate::table::may_request_start(&table.creator, &ctx.accounts.player.key(), &seats), PokerError::NotHost);
-    let next = table.hand_no.checked_add(1).ok_or(PokerError::MathOverflow)?;
-    if table.start_requested_for != next {
-        table.start_requested_for = next;
+    if table.start_requested_for == 0 {
+        table.start_requested_for = table.hand_no.checked_add(1).ok_or(PokerError::MathOverflow)?;
         table.idle_since = Clock::get()?.unix_timestamp;
     }
     Ok(())
@@ -178,7 +177,7 @@ pub struct StartHand<'info> {
     pub oracle_queue: UncheckedAccount<'info>,
 }
 
-/// Anyone may start the next hand, once the host asked for it (M10: `request_start`) and two or more
+/// Anyone may start the next hand, once the host started the table (M10: `request_start`) and two or more
 /// seated players with chips have committed seeds:
 /// straight away if every seated player with chips has, otherwise once `SEED_WINDOW_SECS` have
 /// passed since the table became idle (those without a seed sit the hand out). It requests
@@ -192,8 +191,8 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
     require!(table.status == STATUS_OPEN, PokerError::TableNotOpen);
     match start_rule(table.hand_state, now, table.vrf_requested_ts)? {
         StartKind::NewHand => {
-            // M10: only once the host pressed Start round for this hand.
-            require!(table.start_requested_for == table.hand_no.checked_add(1).ok_or(PokerError::MathOverflow)?, PokerError::StartNotRequested);
+            // M10: only after the host pressed Start round (once per table).
+            require!(table.start_requested_for != 0, PokerError::StartNotRequested);
             let deck = &mut ctx.accounts.deck;
             let ledger = &mut ctx.accounts.ledger;
             // Seats with chips that are waited for, and those whose current occupant committed a

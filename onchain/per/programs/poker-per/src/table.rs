@@ -186,8 +186,9 @@ pub struct Table {
     /// from the reserved bytes, so the account keeps its size and older tables read zeros.
     pub committed_ledger_seq: u64,
     pub committed_hand_no: u64,
-    /// M10: the hand number the host asked to start (`hand_no + 1` once they pressed Start round). A new hand
-    /// starts only after that. Taken from the reserved bytes (the account keeps its size).
+    /// M10: the first hand the host started (`hand_no + 1` when they first pressed Start round; 0 = not yet).
+    /// No hand starts before that; after it, hands keep starting as before. Taken from the reserved bytes
+    /// (the account keeps its size).
     pub start_requested_for: u64,
     pub reserved: [u8; TABLE_RESERVED],
 }

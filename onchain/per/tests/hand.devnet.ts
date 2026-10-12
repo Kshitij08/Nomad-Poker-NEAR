@@ -239,8 +239,10 @@ async function main() {
 
   // ---- hand 2: seeds don't carry over; the button moves on
   const seed1b = randomBytes(32), seed2b = randomBytes(32);
-  await S.err("hand 2 can't start before Start round is pressed again", "StartNotRequested", () => T.startHand(prog.p1, p1.publicKey));
-  await S.ok("with the host not seated, a seated player (p1) may press Start round", () => T.requestStart(prog.p1, p1.publicKey));
+  // Start round is pressed once per table: hand 2 needs no new press (pressing again changes nothing).
+  const sr = (await readTable()).startRequestedFor.toString();
+  await S.ok("with the host not seated, a seated player (p1) may press Start round (no-op once started)", () => T.requestStart(prog.p1, p1.publicKey));
+  S.check("pressing again changed nothing: the table stays started from hand 1", (await readTable()).startRequestedFor.toString() === sr && sr === "1", { startRequestedFor: sr });
   await S.ok("p1 commits a fresh seed for hand 2", () => T.commitSeed(prog.p1, p1.publicKey, 0, seed1b));
   await S.err("hand 2 can't start on p2's hand-1 seed", "MissingSeeds", () => T.startHand(prog.p1, p1.publicKey));
   await S.ok("p2 commits a fresh seed for hand 2", () => T.commitSeed(prog.p2, p2.publicKey, 3, seed2b));

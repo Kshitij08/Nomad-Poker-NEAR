@@ -8703,7 +8703,7 @@
     {
       "code": 6062,
       "name": "StartNotRequested",
-      "msg": "The host hasn't started the next round yet"
+      "msg": "The host hasn't started the table yet (Start round)"
     },
     {
       "code": 6063,
@@ -9958,8 +9958,9 @@
           {
             "name": "start_requested_for",
             "docs": [
-              "M10: the hand number the host asked to start (`hand_no + 1` once they pressed Start round). A new hand",
-              "starts only after that. Taken from the reserved bytes (the account keeps its size)."
+              "M10: the first hand the host started (`hand_no + 1` when they first pressed Start round; 0 = not yet).",
+              "No hand starts before that; after it, hands keep starting as before. Taken from the reserved bytes",
+              "(the account keeps its size)."
             ],
             "type": "u64"
           },
