@@ -154,4 +154,8 @@ pub enum PokerError {
     TourneyWrongStage,
     #[msg("Nothing to pay this wallet")]
     NothingOwed,
+    #[msg("The tournament table must be synced before its next hand")]
+    TourneyNeedsSync,
+    #[msg("The tournament is still moving")]
+    TourneyNotAbandoned,
 }

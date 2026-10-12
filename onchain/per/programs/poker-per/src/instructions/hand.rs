@@ -75,6 +75,8 @@ pub struct SitOut<'info> {
 }
 
 pub fn sit_out(ctx: Context<SitOut>, seat: u8) -> Result<()> {
+    // M11 review H2: at a tournament table nobody sits out (an absent player is blinded away).
+    require!(ctx.accounts.table.kind == crate::tourney::KIND_CASH, PokerError::TourneyTable);
     require!(ctx.accounts.table.hand_state == HAND_IDLE, PokerError::HandInProgress);
     let i = seat as usize;
     require!(i < ctx.accounts.ledger.seats.len() && ctx.accounts.ledger.seats[i].player == ctx.accounts.hand.owner, PokerError::NotSeated);
@@ -195,6 +197,8 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
             // started by the program when it seats the round (M11).
             require!(table.start_requested_for != 0, PokerError::StartNotRequested);
             let tourney_table = table.kind == crate::tourney::KIND_TOURNEY;
+            // M11 review M2: a tournament table plays its next hand only after `tourney_sync`.
+            require!(!tourney_table || table.needs_sync == 0, PokerError::TourneyNeedsSync);
             let deck = &mut ctx.accounts.deck;
             let ledger = &mut ctx.accounts.ledger;
             // Seats with chips that are waited for, and those whose current occupant committed a
@@ -203,7 +207,8 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
             for seat in dealing::seats_in(table.seat_mask) {
                 let (i, bit) = (seat as usize, 1u16 << seat);
                 let has_seed = deck.seed_mask & bit != 0 && deck.seed_owners[i] == ledger.seats[i].player;
-                if ledger.seats[i].stack > 0 && (has_seed || !ledger.seats[i].sitting_out) {
+                // At a tournament table every seat with chips plays (review H2): sitting out isn't a thing there.
+                if ledger.seats[i].stack > 0 && (has_seed || !ledger.seats[i].sitting_out || tourney_table) {
                     funded |= bit;
                     if has_seed {
                         seeded |= bit;

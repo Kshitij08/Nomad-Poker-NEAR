@@ -7664,6 +7664,26 @@
       "args": []
     },
     {
+      "name": "tourney_abandon",
+      "discriminator": [
+        87,
+        2,
+        226,
+        8,
+        167,
+        44,
+        94,
+        179
+      ],
+      "accounts": [
+        {
+          "name": "tourney",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "tourney_cancel",
       "discriminator": [
         79,
@@ -7753,6 +7773,531 @@
           "type": "i64"
         }
       ]
+    },
+    {
+      "name": "tourney_close",
+      "discriminator": [
+        21,
+        106,
+        250,
+        240,
+        100,
+        82,
+        78,
+        242
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "tourney",
+          "writable": true
+        },
+        {
+          "name": "magic_fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  103,
+                  105,
+                  99,
+                  45,
+                  102,
+                  101,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  5,
+                  61,
+                  71,
+                  26,
+                  133,
+                  158,
+                  115,
+                  46,
+                  104,
+                  11,
+                  201,
+                  88,
+                  248,
+                  65,
+                  7,
+                  43,
+                  143,
+                  63,
+                  188,
+                  25,
+                  115,
+                  155,
+                  230,
+                  151,
+                  196,
+                  198,
+                  129,
+                  18,
+                  111,
+                  140,
+                  31,
+                  116
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                181,
+                183,
+                0,
+                225,
+                242,
+                87,
+                58,
+                192,
+                204,
+                6,
+                34,
+                1,
+                52,
+                74,
+                207,
+                151,
+                184,
+                53,
+                6,
+                235,
+                140,
+                229,
+                25,
+                152,
+                204,
+                98,
+                126,
+                24,
+                147,
+                128,
+                167,
+                62
+              ]
+            }
+          }
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "tourney_close_table",
+      "discriminator": [
+        104,
+        15,
+        211,
+        110,
+        207,
+        99,
+        251,
+        186
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "tourney",
+          "writable": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tourney"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "deck",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "log",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "log_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "log"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "address": "MagicVau1t999999999999999999999999999999999"
+        },
+        {
+          "name": "permission_program",
+          "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+        },
+        {
+          "name": "magic_fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  103,
+                  105,
+                  99,
+                  45,
+                  102,
+                  101,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  5,
+                  61,
+                  71,
+                  26,
+                  133,
+                  158,
+                  115,
+                  46,
+                  104,
+                  11,
+                  201,
+                  88,
+                  248,
+                  65,
+                  7,
+                  43,
+                  143,
+                  63,
+                  188,
+                  25,
+                  115,
+                  155,
+                  230,
+                  151,
+                  196,
+                  198,
+                  129,
+                  18,
+                  111,
+                  140,
+                  31,
+                  116
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                181,
+                183,
+                0,
+                225,
+                242,
+                87,
+                58,
+                192,
+                204,
+                6,
+                34,
+                1,
+                52,
+                74,
+                207,
+                151,
+                184,
+                53,
+                6,
+                235,
+                140,
+                229,
+                25,
+                152,
+                204,
+                98,
+                126,
+                24,
+                147,
+                128,
+                167,
+                62
+              ]
+            }
+          }
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "tourney_draw",
@@ -8166,6 +8711,215 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "tourney_reclaim",
+      "discriminator": [
+        224,
+        187,
+        77,
+        255,
+        167,
+        56,
+        211,
+        244
+      ],
+      "accounts": [
+        {
+          "name": "tourney",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  117,
+                  114,
+                  110,
+                  101,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "host"
+              },
+              {
+                "kind": "arg",
+                "path": "tourney_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escape_payer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  97,
+                  112,
+                  101,
+                  45,
+                  112,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tourney"
+              }
+            ]
+          }
+        },
+        {
+          "name": "host_wallet",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "tourney_id",
+          "type": "u64"
+        },
+        {
+          "name": "host",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "tourney_reclaim_table",
+      "discriminator": [
+        81,
+        91,
+        170,
+        6,
+        235,
+        142,
+        44,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "tourney",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  117,
+                  114,
+                  110,
+                  101,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "host"
+              },
+              {
+                "kind": "arg",
+                "path": "tourney_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "tourney"
+              },
+              {
+                "kind": "arg",
+                "path": "index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escape_payer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  97,
+                  112,
+                  101,
+                  45,
+                  112,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rent_payer",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "tourney_id",
+          "type": "u64"
+        },
+        {
+          "name": "host",
+          "type": "pubkey"
+        },
+        {
+          "name": "index",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "tourney_refund",
@@ -10870,6 +11624,16 @@
       "code": 6075,
       "name": "NothingOwed",
       "msg": "Nothing to pay this wallet"
+    },
+    {
+      "code": 6076,
+      "name": "TourneyNeedsSync",
+      "msg": "The tournament table must be synced before its next hand"
+    },
+    {
+      "code": 6077,
+      "name": "TourneyNotAbandoned",
+      "msg": "The tournament is still moving"
     }
   ],
   "types": [
@@ -12192,11 +12956,19 @@
             "type": "u8"
           },
           {
+            "name": "needs_sync",
+            "docs": [
+              "M11 review M2: at a tournament table, set when a hand ends and cleared by `tourney_sync` (blinds,",
+              "eliminations, the end of the table's round); the next hand starts only after the sync."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                11
+                10
               ]
             }
           }
@@ -12501,11 +13273,54 @@
             "type": "u8"
           },
           {
+            "name": "seated_mask",
+            "docs": [
+              "Review H1: tables seated this round (bit i = tables[i]); a table is synced only once seated."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "closed_mask",
+            "docs": [
+              "Review M3: tables closed after the end (bit i); the tournament closes only after all of them."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "pad",
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          },
+          {
+            "name": "last_progress_ts",
+            "docs": [
+              "Review M1: when the tournament last moved (a draw, a seating, a hand played at any table). After",
+              "ABANDON_SECS without that, anyone may cancel it and everyone is refunded."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "synced_hand",
+            "docs": [
+              "Each table's hand number at its last sync (progress is a table playing hands)."
+            ],
+            "type": {
+              "array": [
+                "u64",
+                5
+              ]
+            }
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                62
+                8
               ]
             }
           }

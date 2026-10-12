@@ -267,4 +267,24 @@ pub mod poker_per {
     pub fn tourney_sync(ctx: Context<TourneyTable>) -> Result<()> {
         instructions::tourney::tourney_sync(ctx)
     }
+
+    pub fn tourney_abandon(ctx: Context<TourneyAbandon>) -> Result<()> {
+        instructions::tourney::tourney_abandon(ctx)
+    }
+
+    pub fn tourney_close_table(ctx: Context<TourneyCloseTable>) -> Result<()> {
+        instructions::tourney::tourney_close_table(ctx)
+    }
+
+    pub fn tourney_reclaim_table(ctx: Context<TourneyReclaimTable>, tourney_id: u64, host: Pubkey, index: u64) -> Result<()> {
+        instructions::tourney::tourney_reclaim_table(ctx, tourney_id, host, index)
+    }
+
+    pub fn tourney_close(ctx: Context<TourneyClose>) -> Result<()> {
+        instructions::tourney::tourney_close(ctx)
+    }
+
+    pub fn tourney_reclaim(ctx: Context<TourneyReclaim>, tourney_id: u64, host: Pubkey) -> Result<()> {
+        instructions::tourney::tourney_reclaim(ctx, tourney_id, host)
+    }
 }

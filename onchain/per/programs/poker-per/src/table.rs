@@ -17,7 +17,7 @@ pub const TABLE_VERSION: u8 = 2;
 /// M4 and M5 took 60 of the original 96 reserved bytes for the hand fields. M6 added
 /// `last_record`, which grew the account: tables created before M6 can't be read by this layout
 /// (only `reclaim_table` handles them), so none may be open when this build is deployed.
-pub const TABLE_RESERVED: usize = 11;
+pub const TABLE_RESERVED: usize = 10;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -194,6 +194,9 @@ pub struct Table {
     /// program with the tournament as its creator. It holds chips, never money: no buy-in, cash-out or
     /// rake there. Taken from the reserved bytes (the account keeps its size).
     pub kind: u8,
+    /// M11 review M2: at a tournament table, set when a hand ends and cleared by `tourney_sync` (blinds,
+    /// eliminations, the end of the table's round); the next hand starts only after the sync.
+    pub needs_sync: u8,
     pub reserved: [u8; TABLE_RESERVED],
 }
 

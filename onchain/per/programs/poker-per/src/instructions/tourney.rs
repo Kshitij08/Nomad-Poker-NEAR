@@ -23,7 +23,9 @@ use anchor_lang::solana_program::program::invoke_signed;
 use anchor_spl::associated_token::{get_associated_token_address, AssociatedToken};
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use ephemeral_rollups_sdk::access_control::structs::PERMISSION_SEED;
-use ephemeral_rollups_sdk::anchor::{delegate, vrf, vrf_callback};
+use ephemeral_rollups_sdk::anchor::{commit, delegate, vrf, vrf_callback};
+use ephemeral_rollups_sdk::consts::EPHEMERAL_VAULT_ID;
+use ephemeral_rollups_sdk::ephem::{FoldableIntentBuilder, MagicIntentBundleBuilder};
 use ephemeral_rollups_sdk::consts::PERMISSION_PROGRAM_ID;
 use ephemeral_rollups_sdk::cpi::cpi_delegate;
 use ephemeral_rollups_sdk::types::DelegateAccountArgs;
@@ -43,7 +45,7 @@ use crate::instructions::vault::{vault_gen_seed, verify_play_key, VAULT_SEED, WA
 use crate::private::{write, Sponsor};
 use crate::state::Config;
 use crate::table::{
-    Hand, Ledger, Seat, Table, HAND_IDLE, HAND_SEED, LEDGER_SEED, STATUS_CREATED, STATUS_OPEN, TABLE_RESERVED, TABLE_SEED,
+    Hand, Ledger, Seat, Table, DECK_SEED, HAND_IDLE, HAND_SEED, LEDGER_SEED, LOG_SEED, RECORD_SEED, STATUS_CLOSED, STATUS_CREATED, STATUS_OPEN, TABLE_RESERVED, TABLE_SEED,
     TABLE_SPONSOR_LAMPORTS, TABLE_VERSION, VRF_RETRY_SECS, WSOL_MINT,
 };
 use crate::tourney::*;
@@ -287,8 +289,9 @@ pub fn delegate_tournament(ctx: Context<DelegateTournament>, tourney_id: u64, ho
 
 /// A table for the tournament: created by the program with the tournament as its creator and `index`
 /// as its id, so it's tied to the tournament and nobody can make one that looks like it. It holds chips
-/// only (no escrow). Anyone may create it and pays its rent (the keeper). Then `delegate_table` (anyone,
-/// for a tournament table) and `open_table`.
+/// only (no escrow). Anyone may create it and pays its rent (the keeper); `tourney_reclaim_table` returns
+/// that rent to them once the tournament is over. Then `delegate_table` (anyone, for a tournament table)
+/// and `open_table`.
 #[derive(Accounts)]
 #[instruction(tourney_id: u64, host: Pubkey, index: u64)]
 pub struct CreateTourneyTable<'info> {
@@ -311,7 +314,8 @@ pub fn create_tourney_table(ctx: Context<CreateTourneyTable>, _tourney_id: u64, 
     t.max_seats = TOURNEY_SEATS;
     t.table_id = index;
     t.creator = ctx.accounts.tourney.key();
-    t.mint = WSOL_MINT;
+    // A tournament table holds no money, so `mint` names who paid its rent: closing it returns the rent there.
+    t.mint = ctx.accounts.payer.key();
     t.small_blind = small_blind(0);
     t.big_blind = small_blind(0) * 2;
     t.last_activity_ts = Clock::get()?.unix_timestamp;
@@ -557,6 +561,7 @@ pub fn tourney_payout(ctx: Context<TourneyPayout>) -> Result<()> {
     let (first, second, fee, signer) = {
         let mut t = ctx.accounts.tourney.load_mut()?;
         require!(t.status == T_FINISHED, PokerError::TourneyWrongStage);
+        require!(t.champion != Pubkey::default() && t.runner_up != Pubkey::default() && t.champion != t.runner_up, PokerError::TourneyWrongStage);
         require_keys_eq!(ctx.accounts.champion.key(), t.champion, PokerError::NothingOwed);
         require_keys_eq!(ctx.accounts.runner_up.key(), t.runner_up, PokerError::NothingOwed);
         let (first, second, fee) = payouts(t.entry_fee, t.count as u64, t.host_prize)?;
@@ -636,6 +641,9 @@ pub fn tourney_start(ctx: Context<TourneyStart>) -> Result<()> {
             _ => return err!(PokerError::TourneyWrongStage),
         }
         t.vrf_requested_ts = now;
+        if t.last_progress_ts == 0 {
+            t.last_progress_ts = now;
+        }
         t.vrf_nonce = t.vrf_nonce.checked_add(1).ok_or(PokerError::MathOverflow)?;
         t.vrf_nonce
     };
@@ -676,6 +684,8 @@ pub fn tourney_draw(ctx: Context<TourneyDraw>, randomness: [u8; 32], nonce: u64)
     t.round = 1;
     t.round_tables = tables_for(n) as u8;
     t.done_mask = 0;
+    t.seated_mask = 0;
+    t.last_progress_ts = now;
     t.running_since = now;
     // The first deal comes 15 s after the draw (the GDD's Coins rule), so every game can get there.
     t.round_starts_ts = now + 15;
@@ -710,6 +720,19 @@ impl<'info> TourneyTable<'info> {
         require!(t.done_mask & (1 << i) == 0, PokerError::TourneyWrongStage);
         require!(self.table.hand_state == HAND_IDLE, PokerError::HandInProgress);
         Ok(i)
+    }
+
+    /// Review H1: a table is synced only once this round's players are all seated there (an empty,
+    /// not-yet-seated table would otherwise look finished).
+    fn require_seated(&self, i: usize) -> Result<()> {
+        let t = self.tourney.load()?;
+        // Seated this round: the mark (set by `tourney_seat_table`), or, for a round seated before the mark
+        // existed, players in its seats. Either way, nobody assigned here may still be waiting for a seat.
+        require!(t.seated_mask & (1 << i) != 0 || self.table.seat_mask != 0, PokerError::TourneyTablesNotReady);
+        let waiting = t.entrants[..t.count as usize].iter().any(|e| e.state == E_PLAYING && e.table as usize == i && (e.seat as usize) < TOURNEY_SEATS as usize
+            && self.table.seat_mask & (1u16 << e.seat) == 0);
+        require!(!waiting, PokerError::TourneyTablesNotReady);
+        Ok(())
     }
 
     fn set_ledger_readers(&self, ledger_bump: u8) -> Result<()> {
@@ -785,10 +808,17 @@ pub fn tourney_seat_table<'info>(ctx: Context<'info, TourneyTable<'info>>) -> Re
     }
     ctx.accounts.set_ledger_readers(ctx.bumps.ledger)?;
     let fp = ctx.accounts.ledger.fingerprint()?;
+    {
+        let mut t = ctx.accounts.tourney.load_mut()?;
+        t.seated_mask |= 1 << i;
+        t.last_progress_ts = now;
+        t.synced_hand[i] = ctx.accounts.table.hand_no;
+    }
     let table = &mut ctx.accounts.table;
     for (seat, _, _) in &seats {
         table.seat_mask |= 1 << seat;
     }
+    table.needs_sync = 0;
     table.small_blind = sb;
     table.big_blind = bb;
     if table.start_requested_for == 0 {
@@ -808,6 +838,7 @@ pub fn tourney_seat_table<'info>(ctx: Context<'info, TourneyTable<'info>>) -> Re
 pub fn tourney_sync(ctx: Context<TourneyTable>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let i = ctx.accounts.index()?;
+    ctx.accounts.require_seated(i)?;
     let key = ctx.accounts.tourney.key();
     // Busted seats, best first: a bigger stack at the start of the hand they lost finishes higher.
     let mut busted: Vec<(u64, usize)> = (0..TOURNEY_SEATS as usize)
@@ -819,6 +850,12 @@ pub fn tourney_sync(ctx: Context<TourneyTable>) -> Result<()> {
     let (sb, bb) = {
         let mut t = ctx.accounts.tourney.load_mut()?;
         let final_round = t.round_tables == 1;
+        // Progress: this table played a hand since its last sync (review M1).
+        let hand_no = ctx.accounts.table.hand_no;
+        if hand_no > t.synced_hand[i] {
+            t.synced_hand[i] = hand_no;
+            t.last_progress_ts = now;
+        }
         // Worst first, so they take the lowest places.
         for (_, s) in busted.iter().rev() {
             let wallet = ctx.accounts.ledger.seats[*s].player;
@@ -876,6 +913,7 @@ pub fn tourney_sync(ctx: Context<TourneyTable>) -> Result<()> {
     let table = &mut ctx.accounts.table;
     table.small_blind = sb;
     table.big_blind = bb;
+    table.needs_sync = 0;
     Ok(())
 }
 
@@ -897,8 +935,260 @@ fn next_round(t: &mut Tournament, key: Pubkey, now: i64) {
     t.round = t.round.saturating_add(1);
     t.round_tables = tables_for(order.len()) as u8;
     t.done_mask = 0;
+    t.seated_mask = 0;
+    t.last_progress_ts = now;
     t.round_starts_ts = now + ROUND_PAUSE_SECS;
     emit!(TourneyNextRound { tourney: key, round: t.round, players: order.len() as u8, tables: t.round_tables });
+}
+
+/// Review M1: a tournament that stopped moving (the VRF never came, a table stalled, the keeper and every
+/// player went away) for ABANDON_SECS: anyone cancels it, and everyone gets their entry fee back and the
+/// host their prize (`tourney_refund`), as the GDD's Coins tournaments refund when their server goes silent.
+#[derive(Accounts)]
+pub struct TourneyAbandon<'info> {
+    #[account(mut)]
+    pub tourney: AccountLoader<'info, Tournament>,
+}
+
+pub fn tourney_abandon(ctx: Context<TourneyAbandon>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let key = ctx.accounts.tourney.key();
+    let mut t = ctx.accounts.tourney.load_mut()?;
+    require!(t.status == T_DRAWING || t.status == T_RUNNING, PokerError::TourneyWrongStage);
+    let since = if t.last_progress_ts == 0 { t.start_ts } else { t.last_progress_ts };
+    require!(now.saturating_sub(since) >= ABANDON_SECS, PokerError::TourneyNotAbandoned);
+    t.status = T_CANCELLED;
+    emit!(TourneyCancelled { tourney: key });
+    Ok(())
+}
+
+// ======================================================================================== closing (after the end)
+
+/// After a tournament is paid or cancelled: closes one of its (empty) tables, exactly as a cash table is
+/// closed (the ledger, deck and log keep a permission with no readers and are erased; the public record
+/// goes), and sends it back to Solana. Anyone may call it (the keeper); the table pays its own commit.
+#[commit]
+#[derive(Accounts)]
+pub struct TourneyCloseTable<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut)]
+    pub tourney: AccountLoader<'info, Tournament>,
+    #[account(mut, seeds = [TABLE_SEED, tourney.key().as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
+    pub table: Box<Account<'info, Table>>,
+    #[account(mut, seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
+    pub ledger: Box<Account<'info, Ledger>>,
+    /// CHECK: permission PDA of the ledger; its readers are removed here.
+    #[account(mut, seeds = [PERMISSION_SEED, ledger.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub ledger_permission: UncheckedAccount<'info>,
+    /// CHECK: the deck; erased here.
+    #[account(mut, seeds = [DECK_SEED, table.key().as_ref()], bump)]
+    pub deck: UncheckedAccount<'info>,
+    /// CHECK: the public hand record; closed here.
+    #[account(mut, seeds = [RECORD_SEED, table.key().as_ref()], bump)]
+    pub record: UncheckedAccount<'info>,
+    /// CHECK: the hand log; erased here.
+    #[account(mut, seeds = [LOG_SEED, table.key().as_ref()], bump)]
+    pub log: UncheckedAccount<'info>,
+    /// CHECK: permission PDA of the hand log; its readers are removed here.
+    #[account(mut, seeds = [PERMISSION_SEED, log.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub log_permission: UncheckedAccount<'info>,
+    /// CHECK: MagicBlock's rent vault for rollup-only accounts.
+    #[account(mut, address = EPHEMERAL_VAULT_ID)]
+    pub vault: UncheckedAccount<'info>,
+    /// CHECK: MagicBlock's permission program.
+    #[account(address = PERMISSION_PROGRAM_ID)]
+    pub permission_program: UncheckedAccount<'info>,
+    /// CHECK: the TEE validator's magic fee vault; the table pays its own commit.
+    #[account(mut, seeds = [MAGIC_FEE_VAULT_SEED, TEE_VALIDATOR.as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub magic_fee_vault: UncheckedAccount<'info>,
+}
+
+pub fn tourney_close_table(ctx: Context<TourneyCloseTable>) -> Result<()> {
+    let cancelled = {
+        let t = ctx.accounts.tourney.load()?;
+        require!(t.status == T_PAID || t.status == T_CANCELLED, PokerError::TourneyWrongStage);
+        t.status == T_CANCELLED
+    };
+    let a = &ctx.accounts;
+    require!(a.table.kind == KIND_TOURNEY && a.table.creator == a.tourney.key(), PokerError::NotTourneyTable);
+    require!(a.table.status == STATUS_OPEN, PokerError::TableNotOpen);
+    // A paid tournament's tables are empty by then; a cancelled (abandoned) one's may still hold players and
+    // even a hand: their chips are worth nothing once everyone is refunded, so they're erased with the rest.
+    require!(cancelled || (a.table.seat_mask == 0 && a.table.hand_state == HAND_IDLE), PokerError::TableNotEmpty);
+    let index = a.table.table_id as usize;
+    {
+        let (id, bump) = (a.table.table_id.to_le_bytes(), [a.table.bump]);
+        let ts = table_seeds(&a.table, &id, &bump);
+        let (table_info, magic, vault, perm) = (a.table.to_account_info(), a.magic_program.to_account_info(), a.vault.to_account_info(), a.permission_program.to_account_info());
+        let sp = Sponsor { table: &table_info, table_seeds: &ts, vault: &vault, magic_program: &magic, permission_program: &perm };
+        let table_key = a.table.key();
+        let ledger_bump = [ctx.bumps.ledger];
+        let ledger_seeds: &[&[u8]] = &[LEDGER_SEED, table_key.as_ref(), &ledger_bump];
+        sp.set_readers(&a.ledger.to_account_info(), ledger_seeds, &a.ledger_permission.to_account_info(), &[])?;
+        let log_bump = [ctx.bumps.log];
+        let log_seeds: &[&[u8]] = &[LOG_SEED, table_key.as_ref(), &log_bump];
+        if !a.log_permission.data_is_empty() {
+            sp.set_readers(&a.log.to_account_info(), log_seeds, &a.log_permission.to_account_info(), &[])?;
+        }
+        let record_info = a.record.to_account_info();
+        if !record_info.data_is_empty() {
+            sp.close_account(&record_info)?;
+        }
+    }
+    for info in [ctx.accounts.deck.to_account_info(), ctx.accounts.log.to_account_info()] {
+        let mut data = info.try_borrow_mut_data()?;
+        if data.len() > 8 {
+            data[8..].fill(0);
+        }
+    }
+    {
+        let ledger = &mut ctx.accounts.ledger;
+        ledger.game = Default::default();
+        ledger.salt = [0; 32];
+        ledger.seats = Default::default();
+    }
+    {
+        let mut t = ctx.accounts.tourney.load_mut()?;
+        if index < MAX_TOURNEY_TABLES {
+            t.closed_mask |= 1 << index;
+        }
+    }
+    let table = &mut ctx.accounts.table;
+    table.status = STATUS_CLOSED;
+    table.seat_mask = 0;
+    table.hand_state = HAND_IDLE;
+    table.last_activity_ts = Clock::get()?.unix_timestamp;
+    table.exit(&crate::ID)?;
+    let t = &ctx.accounts.table;
+    let (id, bump) = (t.table_id.to_le_bytes(), [t.bump]);
+    let ts = table_seeds(t, &id, &bump);
+    MagicIntentBundleBuilder::new(t.to_account_info(), ctx.accounts.magic_context.to_account_info(), ctx.accounts.magic_program.to_account_info())
+        .magic_fee_vault(ctx.accounts.magic_fee_vault.to_account_info())
+        .commit_and_undelegate(&[ctx.accounts.table.to_account_info()])
+        .build_and_invoke_signed(&[&ts])?;
+    Ok(())
+}
+
+/// Back on Solana: deletes a closed tournament table and returns its rent and its escape payer's float to
+/// whoever paid them (recorded in the table at creation: a tournament table has no money of its own, so
+/// its `mint` field names its rent payer). Anyone may call it.
+#[derive(Accounts)]
+#[instruction(tourney_id: u64, host: Pubkey, index: u64)]
+pub struct TourneyReclaimTable<'info> {
+    /// CHECK: the tournament's address (its data may be delegated); ties the table to host and id.
+    #[account(seeds = [TOURNEY_SEED, host.as_ref(), &tourney_id.to_le_bytes()], bump)]
+    pub tourney: UncheckedAccount<'info>,
+    /// CHECK: the closed table, back on L1; owner, layout and status are checked in the handler.
+    #[account(mut, seeds = [TABLE_SEED, tourney.key().as_ref(), &index.to_le_bytes()], bump)]
+    pub table: UncheckedAccount<'info>,
+    #[account(mut, seeds = [ESCAPE_PAYER_SEED, table.key().as_ref()], bump)]
+    pub escape_payer: SystemAccount<'info>,
+    /// CHECK: the table's rent payer, checked against the table.
+    #[account(mut)]
+    pub rent_payer: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+pub fn tourney_reclaim_table(ctx: Context<TourneyReclaimTable>, _tourney_id: u64, _host: Pubkey, _index: u64) -> Result<()> {
+    let a = &ctx.accounts;
+    let info = a.table.to_account_info();
+    require_keys_eq!(*info.owner, crate::ID, PokerError::TableNotClosed);
+    {
+        let data = info.try_borrow_data()?;
+        require!(data.len() > 8 && data[..8] == *Table::DISCRIMINATOR, PokerError::TableNotClosed);
+        let t = Table::try_deserialize(&mut &data[..])?;
+        require!(t.status == crate::table::STATUS_CLOSED && t.kind == KIND_TOURNEY, PokerError::TableNotClosed);
+        require_keys_eq!(t.mint, a.rent_payer.key(), PokerError::NotCreator);
+    }
+    let left = a.escape_payer.lamports();
+    if left > 0 {
+        let table_key = a.table.key();
+        let payer_bump = [ctx.bumps.escape_payer];
+        transfer(
+            CpiContext::new_with_signer(a.system_program.key(), SolTransfer { from: a.escape_payer.to_account_info(), to: a.rent_payer.to_account_info() }, &[&[ESCAPE_PAYER_SEED, table_key.as_ref(), &payer_bump]]),
+            left,
+        )?;
+    }
+    info.resize(0)?;
+    let keep = Rent::get()?.minimum_balance(0);
+    let refund = info.lamports().saturating_sub(keep);
+    **info.try_borrow_mut_lamports()? -= refund;
+    **a.rent_payer.to_account_info().try_borrow_mut_lamports()? += refund;
+    Ok(())
+}
+
+/// After a tournament is paid or cancelled and owes nothing: sends the tournament account back to Solana
+/// (it pays its own commit). Anyone may call it.
+#[commit]
+#[derive(Accounts)]
+pub struct TourneyClose<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut)]
+    pub tourney: AccountLoader<'info, Tournament>,
+    /// CHECK: the TEE validator's magic fee vault.
+    #[account(mut, seeds = [MAGIC_FEE_VAULT_SEED, TEE_VALIDATOR.as_ref()], bump, seeds::program = DELEGATION_PROGRAM_ID)]
+    pub magic_fee_vault: UncheckedAccount<'info>,
+}
+
+pub fn tourney_close(ctx: Context<TourneyClose>) -> Result<()> {
+    let signer = {
+        let t = ctx.accounts.tourney.load()?;
+        require!((t.status == T_PAID || t.status == T_CANCELLED) && t.owed == 0, PokerError::TourneyWrongStage);
+        let linked = t.tables.iter().enumerate().fold(0u8, |m, (i, k)| if *k != Pubkey::default() { m | 1 << i } else { m });
+        require!(t.closed_mask & linked == linked, PokerError::TableNotEmpty);
+        PoolSigner::of(&t)
+    };
+    let info = ctx.accounts.tourney.to_account_info();
+    MagicIntentBundleBuilder::new(info.clone(), ctx.accounts.magic_context.to_account_info(), ctx.accounts.magic_program.to_account_info())
+        .magic_fee_vault(ctx.accounts.magic_fee_vault.to_account_info())
+        .commit_and_undelegate(&[info])
+        .build_and_invoke_signed(&[&[TOURNEY_SEED, signer.host.as_ref(), &signer.id, &signer.bump]])?;
+    Ok(())
+}
+
+/// Back on Solana: deletes the tournament account and returns its rent and its escape payer's float to the
+/// host, who paid them. Anyone may call it.
+#[derive(Accounts)]
+#[instruction(tourney_id: u64, host: Pubkey)]
+pub struct TourneyReclaim<'info> {
+    /// CHECK: the closed tournament, back on L1; checked in the handler.
+    #[account(mut, seeds = [TOURNEY_SEED, host.as_ref(), &tourney_id.to_le_bytes()], bump)]
+    pub tourney: UncheckedAccount<'info>,
+    #[account(mut, seeds = [ESCAPE_PAYER_SEED, tourney.key().as_ref()], bump)]
+    pub escape_payer: SystemAccount<'info>,
+    /// CHECK: the host (the seeds tie the tournament to it).
+    #[account(mut, address = host)]
+    pub host_wallet: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+pub fn tourney_reclaim(ctx: Context<TourneyReclaim>, _tourney_id: u64, _host: Pubkey) -> Result<()> {
+    let a = &ctx.accounts;
+    let info = a.tourney.to_account_info();
+    require_keys_eq!(*info.owner, crate::ID, PokerError::TourneyWrongStage);
+    {
+        let data = info.try_borrow_data()?;
+        require!(data.len() >= TOURNEY_SPACE && data[..8] == *Tournament::DISCRIMINATOR, PokerError::TourneyWrongStage);
+        let t: &Tournament = bytemuck::from_bytes(&data[8..TOURNEY_SPACE]);
+        require!((t.status == T_PAID || t.status == T_CANCELLED) && t.owed == 0, PokerError::TourneyWrongStage);
+    }
+    let left = a.escape_payer.lamports();
+    if left > 0 {
+        let key = a.tourney.key();
+        let payer_bump = [ctx.bumps.escape_payer];
+        transfer(
+            CpiContext::new_with_signer(a.system_program.key(), SolTransfer { from: a.escape_payer.to_account_info(), to: a.host_wallet.to_account_info() }, &[&[ESCAPE_PAYER_SEED, key.as_ref(), &payer_bump]]),
+            left,
+        )?;
+    }
+    info.resize(0)?;
+    let keep = Rent::get()?.minimum_balance(0);
+    let refund = info.lamports().saturating_sub(keep);
+    **info.try_borrow_mut_lamports()? -= refund;
+    **a.host_wallet.to_account_info().try_borrow_mut_lamports()? += refund;
+    Ok(())
 }
 
 // ======================================================================================== events

@@ -1,5 +1,5 @@
 //! M11: on-chain tournaments. Player-hosted, scheduled freezeouts for 2 to 30 players (the GDD's Coins
-//! format on 6-seat tables). The tournament account holds the money (an escrow, like a table's); its
+//! format on 8-seat tables). The tournament account holds the money (an escrow, like a table's); its
 //! tables are ordinary tables whose creator is the tournament and which hold chips, never money.
 //! This file: the account, its constants, and the pure rules (blinds, seat plans, payouts), unit-tested.
 
@@ -10,9 +10,10 @@ use crate::errors::PokerError;
 pub const TOURNEY_SEED: &[u8] = b"tourney";
 pub const TOURNEY_VERSION: u8 = 1;
 pub const MAX_ENTRANTS: usize = 30;
-/// Seats per tournament table (the game draws at most 6).
-pub const TOURNEY_SEATS: u8 = 6;
-/// The most tables a round needs (30 players / 6).
+/// Seats per tournament table: 8, as at every table in the game (your call, 12 Oct).
+pub const TOURNEY_SEATS: u8 = 8;
+/// Table slots in the account: a round needs at most 4 (30 players / 8); 5 keeps the layout the first
+/// tournaments were made with.
 pub const MAX_TOURNEY_TABLES: usize = 5;
 pub const START_STACK: u64 = 5_000;
 /// Platform fee on entry fees only (GDD: 5%), to the config's dev wallet.
@@ -23,6 +24,10 @@ pub const ROUND_PAUSE_SECS: i64 = 60;
 /// 2 minutes so devnet tests don't wait (an earlier start only costs the host registrations).
 pub const MIN_LEAD_SECS: i64 = 120;
 pub const MAX_LEAD_SECS: i64 = 14 * 86_400;
+/// A tournament that hasn't moved for this long (no draw, no seating, no hand at any table) may be
+/// cancelled by anyone, refunding every entry fee and the host prize (review M1; the GDD's Coins rule
+/// refunds when the server goes silent).
+pub const ABANDON_SECS: i64 = 2 * 3_600;
 /// A seat whose player sent no seed for the hand is absent: its turns time out this fast.
 pub const ABSENT_TURN_SECS: i64 = 3;
 pub const NAME_LEN: usize = 40;
@@ -107,7 +112,17 @@ pub struct Tournament {
     pub done_mask: u8,
     /// Tables linked (created, opened and checked) so far.
     pub linked: u8,
-    pub reserved: [u8; 62],
+    /// Review H1: tables seated this round (bit i = tables[i]); a table is synced only once seated.
+    pub seated_mask: u8,
+    /// Review M3: tables closed after the end (bit i); the tournament closes only after all of them.
+    pub closed_mask: u8,
+    pub pad: [u8; 4],
+    /// Review M1: when the tournament last moved (a draw, a seating, a hand played at any table). After
+    /// ABANDON_SECS without that, anyone may cancel it and everyone is refunded.
+    pub last_progress_ts: i64,
+    /// Each table's hand number at its last sync (progress is a table playing hands).
+    pub synced_hand: [u64; MAX_TOURNEY_TABLES],
+    pub reserved: [u8; 8],
 }
 
 pub const TOURNEY_SPACE: usize = 8 + core::mem::size_of::<Tournament>();
@@ -145,7 +160,7 @@ pub fn small_blind(level: u32) -> u64 {
     1_500u64.saturating_mul(1u64 << extra)
 }
 
-/// Tables for a round of `n` players: one when 6 or fewer (the final table), else enough 6-seat tables.
+/// Tables for a round of `n` players: one when 8 or fewer (the final table), else enough 8-seat tables.
 pub fn tables_for(n: usize) -> usize {
     if n <= TOURNEY_SEATS as usize { 1 } else { (n + TOURNEY_SEATS as usize - 1) / TOURNEY_SEATS as usize }
 }
@@ -206,8 +221,8 @@ mod tests {
             rounds.push((n, tables));
         }
         assert_eq!(rounds, vec![
-            (2, vec![1]), (6, vec![1]), (7, vec![2, 1]), (12, vec![2, 1]), (13, vec![3, 1]), (18, vec![3, 1]),
-            (19, vec![4, 2, 1]), (24, vec![4, 2, 1]), (25, vec![5, 2, 1]), (30, vec![5, 2, 1]),
+            (2, vec![1]), (6, vec![1]), (7, vec![1]), (12, vec![2, 1]), (13, vec![2, 1]), (18, vec![3, 1]),
+            (19, vec![3, 1]), (24, vec![3, 1]), (25, vec![4, 1]), (30, vec![4, 1]),
         ]);
     }
 

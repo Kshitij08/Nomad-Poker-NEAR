@@ -265,6 +265,9 @@ fn finish_hand(a: &mut HandAccounts, now: i64) -> Result<()> {
     table.hand_state = HAND_IDLE;
     table.idle_since = now;
     table.turn_deadline = 0;
+    if table.kind == crate::tourney::KIND_TOURNEY {
+        table.needs_sync = 1;
+    }
     emit!(HandEnded { table: table.key(), hand_no: table.hand_no });
     // No commit here: settlement must never depend on a commit succeeding. The table is committed
     // by `commit_table` (rate-limited, table-paid), which clients or a keeper call.
