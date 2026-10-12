@@ -228,6 +228,25 @@ export function agentRoutes(a: Express) {
     return { status: "stopping" };
   });
 
+  /** Nomad menu, ONCHAIN Quick Play: a public table at this stake level with a free seat, that is playing or was
+   *  opened in the last 10 minutes; else one this service hosts (as for Agents). The game then buys in and sits. */
+  route("/quickplay/onchain", async (_wallet, data) => {
+    const level = Math.max(0, Math.min(STAKES.length - 1, Number(data?.stake ?? 0) | 0));
+    const st = STAKES[level];
+    const recentTs = Math.floor(Date.now() / 1000) - 600;
+    const listed = (await pool.query(
+      `select address from tables where status = 1 and delegated and not invite_only and seated < max_seats and big_blind = $1
+         and (hand_state <> 0 or idle_since > $2) order by seated desc, updated_at desc limit 1`, [st.big.toString(), recentTs])).rows;
+    if (listed.length) return { table: listed[0].address, hosted: false };
+    const now = Date.now();
+    for (const h of hostedTables.values()) if (h.big === st.big && now - h.at < 10 * 60_000) return { table: h.address, hosted: true };
+    const recent = [...hostedTables.values()].filter((h) => now - h.at < 10 * 60_000);
+    if (recent.length >= MAX_WAITING_HOSTED) throw new Error("too many new tables are waiting for players; try again in a minute");
+    const table = await hostTableAt(st);
+    if (!table) throw new Error("couldn't open a table right now; try again");
+    return { table, hosted: true };
+  });
+
   /** Your Agent: settings, status, the current session and the history (yours only). */
   route("/agents/me", async (wallet) => {
     const w = wallet.toBase58();
@@ -269,6 +288,12 @@ async function hostTableFor(settings: AgentSettings, left: bigint): Promise<stri
   // One waiting at this stake already (hosted in the last 10 minutes)? The Agent joins that one instead.
   const recent = [...hostedTables.values()].filter((h) => now - h.at < 10 * 60_000);
   if (recent.some((h) => h.big === st.big) || recent.length >= MAX_WAITING_HOSTED) return null;
+  return hostTableAt(st);
+}
+
+/** Hosts one public 8-seat table at a stake level, the keeper as its creator (it pays and later reclaims the rent). */
+async function hostTableAt(st: { small: bigint; big: bigint }): Promise<string | null> {
+  if (hosting) return hosting;
   hosting = (async () => {
     const keeper = config.keeper;
     const id = BigInt("0x" + randomBytes(8).toString("hex")) & ((1n << 63n) - 1n);
