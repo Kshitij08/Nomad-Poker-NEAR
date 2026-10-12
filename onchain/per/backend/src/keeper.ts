@@ -242,11 +242,30 @@ async function step(address: PublicKey, auditorOurs: boolean) {
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: PLAY_CU })]).rpc());
     return; // the table changed: the next loop works from a fresh read
   }
+  if (await maybeStartTourneyHand(key, address, t, program, now)) return;
   if (await maybeCloseAbandoned(key, address, t, program, now)) return;
   await maybeCommit(key, address, t, program);
 }
 
-const HAND_IDLE = 0;
+const HAND_IDLE = 0, HAND_SHUFFLING = 1, KIND_TOURNEY = 1;
+/** As the program's SEED_WINDOW_SECS and VRF_RETRY_SECS. */
+const SEED_WINDOW_SECS = 20, VRF_RETRY_SECS = 20;
+const ORACLE_QUEUE = new PublicKey("5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc");
+const seatCount = (mask: number) => mask.toString(2).split("").filter((c) => c === "1").length;
+/** Your playtest: a tournament table whose players are away never dealt a hand (start_hand was only ever sent by a
+ *  player's browser). At a tournament table every seat with chips is dealt after the seed window, so the keeper
+ *  starts the next hand there once the window has passed (or retries a VRF request that never came back). Cash
+ *  tables are left to their players: an idle cash table should stay idle. */
+async function maybeStartTourneyHand(key: string, address: PublicKey, t: any, program: any, now: number) {
+  if (t.kind !== KIND_TOURNEY || Number(t.startRequestedFor) === 0) return false;
+  const idleReady = t.handState === HAND_IDLE && t.needsSync === 0 && seatCount(t.seatMask) >= 2 && now - Number(t.idleSince) >= SEED_WINDOW_SECS + 1;
+  const retry = t.handState === HAND_SHUFFLING && now - Number(t.vrfRequestedTs) >= VRF_RETRY_SECS + 1;
+  if (!idleReady && !retry) return false;
+  const acc = accountsOf(address);
+  await attempt(key, retry ? "start_hand retry" : "start_hand", () => program.methods.startHand()
+    .accountsPartial({ payer: config.keeper.publicKey, config: CONFIG_PDA, table: address, deck: acc.deck, ledger: acc.ledger, oracleQueue: ORACLE_QUEUE } as any).rpc());
+  return true;
+}
 // Associated token addresses without @solana/spl-token (not a backend dependency).
 const NATIVE_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");

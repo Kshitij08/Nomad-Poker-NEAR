@@ -743,6 +743,14 @@ static class Program
         // Review M1: a tournament that's moving can't be abandoned.
         Check("a tournament that's moving can't be abandoned (review M1)", await Refused(() => outsider.KeyRpc.Send(new[] { new Solana.Unity.Rpc.Models.TransactionInstruction { ProgramId = PerIds.Program.KeyBytes, Keys = new List<Solana.Unity.Rpc.Models.AccountMeta> { Solana.Unity.Rpc.Models.AccountMeta.Writable(tk, false) }, Data = Ix.TourneyAbandon() } }, new LocalSigner(outsider.Key.Key)), "TourneyNotAbandoned"));
         bool sitOutChecked = false;
+        // Your playtest: the players' browsers were the only ones starting hands, so a table whose players were away
+        // never dealt. For the first 2 minutes of play nobody here starts a hand: the keeper has to.
+        DateTime? firstSeated = null;
+        var keeperOnlyHands = new Dictionary<int, ulong>(); // table -> hand number when the window opened
+        bool keeperDealt = false;
+        // ...and a player whose browser lost its table key moves the seat to a new one (tourney_set_reader).
+        var rotator = entrants[2];
+        bool rotated = false;
 
         // ---- play: everyone all-in every hand, so the rounds go quickly; one player never shows up
         var start = DateTime.UtcNow;
@@ -765,6 +773,16 @@ static class Program
                     try { await host.KeyRpc.Send(new[] { PerIx.ComputeLimit(PerIx.PlayCu), PerTourney.SeatTable(tk, i, want) }, new LocalSigner(host.Key.Key)); seatings++; }
                     catch (Exception e) { if (errors++ < 10) SoakLog("seat: " + e.Message); }
             }
+            if (firstSeated == null && tr.SeatedMask != 0) firstSeated = DateTime.UtcNow;
+            bool keeperWindow = firstSeated != null && DateTime.UtcNow - firstSeated.Value < TimeSpan.FromMinutes(2);
+            if (firstSeated != null && tr.Round == 1)
+                for (int i = 0; i < tr.RoundTables; i++)
+                {
+                    var tab = Poker.Per.Generated.Table.Decode(await publicRpc.GetAccount(PerTourney.TableAddress(tk, i)));
+                    if (tab == null) continue;
+                    if (keeperWindow && !keeperOnlyHands.ContainsKey(i)) keeperOnlyHands[i] = tab.HandNo;
+                    else if (keeperWindow && tab.HandNo > keeperOnlyHands[i]) keeperDealt = true;
+                }
             // The absent player: dealt in without a seed? A short turn when it's to act?
             if (entrants[5].Absent)
             {
@@ -807,12 +825,38 @@ static class Program
                         sitOutChecked = true;
                         Check("Sit out is refused at a tournament table (review H2)", await Refused(() => p.ReaderRpc.Send(new[] { PerIx.SitOut(p.Session.Addresses, p.Reader.PublicKey, p.Session.MySeat) }, new LocalSigner(p.Reader)), "TourneyTable"));
                     }
+                    if (p == rotator && !rotated && firstSeated != null && tb.HandState == PerGame.HandIdle)
+                    {
+                        rotated = true;
+                        int seat = p.Session.MySeat;
+                        var fresh = new Account();
+                        Check("a player's key can't take another entrant's table key (InvalidReader)", await Refused(() => p.KeyRpc.Send(new[] { p.Key.Check(), PerTourney.SetReader(tk, p.Key, entrants[3].Reader.PublicKey, -1, -1) }, new LocalSigner(p.Key.Key)), "InvalidReader"));
+                        Check("an outsider's play key can't move anyone's registration (NotRegistered)", await Refused(() => outsider.KeyRpc.Send(new[] { outsider.Key.Check(), PerTourney.SetReader(tk, outsider.Key, new Account().PublicKey, -1, -1) }, new LocalSigner(outsider.Key.Key)), "NotRegistered"));
+                        bool moved;
+                        try { await p.KeyRpc.Send(new[] { p.Key.Check(), PerTourney.SetReader(tk, p.Key, fresh.PublicKey, en.Table, seat) }, new LocalSigner(p.Key.Key)); moved = true; }
+                        catch (PerTxException ex) { moved = false; rotated = ex.ErrorName != "HandInProgress"; SoakLog("set reader: " + ex.Message); }
+                        if (moved)
+                        {
+                            var oldReader = p.Reader;
+                            p.Reader = fresh;
+                            p.ReaderRpc = await Login(http, fresh);
+                            p.Session = new PerTableSession(PerTourney.TableAddress(tk, en.Table), publicRpc, p.ReaderRpc, new LocalSigner(p.Reader), p.Wallet.PublicKey);
+                            await p.Session.Poll();
+                            var tm = await ReadTourney(publicRpc, tk);
+                            var me2 = Enumerable.Range(0, tm.Count).Select(k => tm.Entrants[k]).First(x => new PublicKey(x.Wallet).Equals(p.Wallet.PublicKey));
+                            Check("a lost table key is replaced by the play key: the registration and the seat move to the new key", new PublicKey(me2.Reader).Equals(fresh.PublicKey) && p.Session.MySeat == seat, new { seat, found = p.Session.MySeat });
+                            var oldSession = new PerTableSession(PerTourney.TableAddress(tk, en.Table), publicRpc, await Login(http, oldReader), new LocalSigner(oldReader), p.Wallet.PublicKey);
+                            await oldSession.Poll();
+                            Check("...and the old key no longer finds the seat (it can't read the ledger or act)", oldSession.MySeat < 0, oldSession.MySeat);
+                            tb = p.Session.Table;
+                        }
+                    }
                     if (tb.HandState == PerGame.HandIdle)
                     {
                         try { await p.ReaderRpc.Send(new[] { PerIx.ComputeLimit(PerIx.PlayCu), PerTourney.Sync(tk, en.Table) }, new LocalSigner(p.Reader)); syncs++; }
                         catch (PerTxException) { }
                         await p.Session.Poll();
-                        if (p.Session.MySeat >= 0 && p.Session.Table.HandState == PerGame.HandIdle && await p.Session.PrepareNextHand() != null) hands++;
+                        if (!keeperWindow && p.Session.MySeat >= 0 && p.Session.Table.HandState == PerGame.HandIdle && await p.Session.PrepareNextHand() != null) hands++;
                     }
                     var g = p.Session.Ledger?.Game;
                     if (p.Session.Table.HandState == PerGame.HandPlaying && g != null && g.ToAct == p.Session.MySeat)
@@ -828,10 +872,12 @@ static class Program
         }
         tr = await ReadTourney(publicRpc, tk);
         var places = Enumerable.Range(0, tr.Count).Select(e => (int)tr.Entrants[e].Place).OrderBy(x => x).ToList();
-        Check("the tournament finished: a champion and a runner-up", tr.Status == PerTourney.Finished && !new PublicKey(tr.Champion).Equals(new PublicKey(new byte[32])) && !new PublicKey(tr.RunnerUp).Equals(new PublicKey(new byte[32])),
+        Check("the tournament finished: a champion and a runner-up", (tr.Status == PerTourney.Finished || tr.Status == PerTourney.Paid) && !new PublicKey(tr.Champion).Equals(new PublicKey(new byte[32])) && !new PublicKey(tr.RunnerUp).Equals(new PublicKey(new byte[32])),
             new { tr.Status, tr.Round, minutes = Math.Round((DateTime.UtcNow - start).TotalMinutes, 1), seatings, syncs, hands, errors });
         Check($"every player got a distinct finishing place 1..{n}", places.SequenceEqual(Enumerable.Range(1, n)), places);
         Check(tables > 1 ? "it took two rounds (the tables, then the final table)" : "one table: the final from the start", tr.Round == (tables > 1 ? 2 : 1), tr.Round);
+        Check("the table-key swap ran (a seated player was found between hands)", rotated);
+        Check("the keeper dealt hands while no player started one (tables with players away keep moving)", keeperDealt, keeperOnlyHands);
         Check("a player who sent no seed was still dealt in (absent players are blinded away, not skipped)", absentDealt);
         Check("...and its turns ran out after 3 s, not 15", absentShortTurn);
 
@@ -841,9 +887,15 @@ static class Program
         var (first, second, fee) = PerTourney.Payouts(Fee, n, Prize);
         var champP = players.First(p => p.Wallet.PublicKey.Equals(champ));
         var runP = players.First(p => p.Wallet.PublicKey.Equals(runner));
-        var champBefore = await VaultBalanceOf(champP.Key, champP.KeyRpc);
-        var runBefore = await VaultBalanceOf(runP.Key, runP.KeyRpc);
-        Check("anyone pays out: champion, runner-up and the 5% platform fee", await Try(() => outsider.KeyRpc.Send(new[] { PerTourney.Payout(tk, champ, runner, devWallet) }, new LocalSigner(outsider.Key.Key))));
+        // Measured from before the tournament (the keeper may pay out within seconds of the end, before this test
+        // gets there): each paid its entry fee once (the leaver's came back), the host also the prize.
+        ulong Paid(TPlayer p) => Fee + (p == host ? Prize : 0);
+        var champBefore = before[champP.Name] - Paid(champP);
+        var runBefore = before[runP.Name] - Paid(runP);
+        bool paidOut;
+        try { await outsider.KeyRpc.Send(new[] { PerTourney.Payout(tk, champ, runner, devWallet) }, new LocalSigner(outsider.Key.Key)); paidOut = true; }
+        catch (PerTxException e) { paidOut = e.ErrorName == "TourneyWrongStage" && (await ReadTourney(publicRpc, tk)).Status == PerTourney.Paid; Console.WriteLine("   " + e.Message + (paidOut ? " (the keeper paid out first)" : "")); }
+        Check("anyone (this test, or the keeper first) pays out: champion, runner-up and the 5% platform fee", paidOut);
         await Task.Delay(2000);
         var champAfter = await VaultBalanceOf(champP.Key, champP.KeyRpc);
         var runAfter = await VaultBalanceOf(runP.Key, runP.KeyRpc);

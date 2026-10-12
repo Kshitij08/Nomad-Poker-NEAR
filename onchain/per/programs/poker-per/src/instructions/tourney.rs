@@ -941,6 +941,113 @@ fn next_round(t: &mut Tournament, key: Pubkey, now: i64) {
     emit!(TourneyNextRound { tourney: key, round: t.round, players: order.len() as u8, tables: t.round_tables });
 }
 
+/// Review L1 / your playtest: a player whose browser lost their tournament table key (cleared site data,
+/// another device) replaces it with a new one, signed by their play key (the wallet's authority). If they're
+/// seated right now, the seat's reader, their hand account and its permission move to the new key too (the
+/// table must be between hands). The old key can no longer act or read their cards.
+#[derive(Accounts)]
+pub struct TourneySetReader<'info> {
+    pub play_key: Signer<'info>,
+    /// CHECK: the wallet that authorized `play_key`; checked against the signed message.
+    pub wallet: UncheckedAccount<'info>,
+    /// CHECK: the wallet's state (may not exist). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
+    /// CHECK: the instructions sysvar, for the wallet's signature check.
+    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
+    pub instructions: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub tourney: AccountLoader<'info, Tournament>,
+    /// The player's table this round, when seated (with its ledger, the seat's hand and the permissions).
+    #[account(mut)]
+    pub table: Option<Box<Account<'info, Table>>>,
+    #[account(mut)]
+    pub ledger: Option<Box<Account<'info, Ledger>>>,
+    /// CHECK: permission PDA of the ledger (checked against the ledger below).
+    #[account(mut)]
+    pub ledger_permission: Option<UncheckedAccount<'info>>,
+    /// CHECK: the seat's hand PDA (checked below).
+    #[account(mut)]
+    pub hand: Option<UncheckedAccount<'info>>,
+    /// CHECK: permission PDA of the hand (checked below).
+    #[account(mut)]
+    pub hand_permission: Option<UncheckedAccount<'info>>,
+    pub rollup: RollupPrograms<'info>,
+}
+
+pub fn tourney_set_reader(ctx: Context<TourneySetReader>, expires: i64, reader: Pubkey) -> Result<()> {
+    let wallet = ctx.accounts.wallet.key();
+    verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &wallet, &ctx.accounts.play_key.key(), expires)?;
+    let tourney_key = ctx.accounts.tourney.key();
+    let (seated_at, seat) = {
+        let mut t = ctx.accounts.tourney.load_mut()?;
+        require!(t.status <= T_RUNNING, PokerError::TourneyWrongStage);
+        let e = t.entrant_of(&wallet).ok_or(PokerError::NotRegistered)?;
+        require!(t.entrants[e].state == E_REGISTERED || t.entrants[e].state == E_PLAYING, PokerError::TourneyWrongStage);
+        require!(reader != Pubkey::default() && reader != wallet, PokerError::InvalidReader);
+        require!(!t.entrants[..t.count as usize].iter().enumerate().any(|(k, x)| k != e && (x.reader == reader || x.wallet == reader)), PokerError::InvalidReader);
+        t.entrants[e].reader = reader;
+        let (table, seat) = (t.entrants[e].table, t.entrants[e].seat);
+        let table_key = if (table as usize) < MAX_TOURNEY_TABLES { t.tables[table as usize] } else { Pubkey::default() };
+        (table_key, seat)
+    };
+    // Seated at that table now? Then the seat moves to the new key as well.
+    let seated = match (&ctx.accounts.table, &ctx.accounts.ledger) {
+        (Some(table), Some(ledger)) => {
+            require_keys_eq!(table.key(), seated_at, PokerError::NotTourneyTable);
+            require!(table.creator == tourney_key && table.kind == KIND_TOURNEY, PokerError::NotTourneyTable);
+            let (ledger_key, _) = Pubkey::find_program_address(&[LEDGER_SEED, table.key().as_ref()], &crate::ID);
+            require_keys_eq!(ledger.key(), ledger_key, PokerError::NotTourneyTable);
+            (seat as usize) < TOURNEY_SEATS as usize && ledger.seats[seat as usize].player == wallet
+        }
+        _ => false,
+    };
+    if !seated {
+        return Ok(());
+    }
+    let table = ctx.accounts.table.as_ref().unwrap();
+    require!(table.hand_state == HAND_IDLE, PokerError::HandInProgress);
+    let table_key = table.key();
+    let (hand_key, hand_bump) = Pubkey::find_program_address(&[HAND_SEED, table_key.as_ref(), &[seat]], &crate::ID);
+    let hand_info = ctx.accounts.hand.as_ref().ok_or(PokerError::NotTourneyTable)?.to_account_info();
+    let hand_perm = ctx.accounts.hand_permission.as_ref().ok_or(PokerError::NotTourneyTable)?.to_account_info();
+    let ledger_perm = ctx.accounts.ledger_permission.as_ref().ok_or(PokerError::NotTourneyTable)?.to_account_info();
+    require_keys_eq!(hand_info.key(), hand_key, PokerError::NotTourneyTable);
+    require_keys_eq!(hand_perm.key(), Pubkey::find_program_address(&[PERMISSION_SEED, hand_key.as_ref()], &PERMISSION_PROGRAM_ID).0, PokerError::NotTourneyTable);
+    let ledger_key = ctx.accounts.ledger.as_ref().unwrap().key();
+    let (ledger_perm_key, _) = Pubkey::find_program_address(&[PERMISSION_SEED, ledger_key.as_ref()], &PERMISSION_PROGRAM_ID);
+    require_keys_eq!(ledger_perm.key(), ledger_perm_key, PokerError::NotTourneyTable);
+    {
+        let ledger = ctx.accounts.ledger.as_mut().unwrap();
+        ledger.seats[seat as usize].reader = reader;
+    }
+    let mut hand: Hand = {
+        let data = hand_info.try_borrow_data()?;
+        Hand::try_deserialize(&mut &data[..])?
+    };
+    hand.reader = reader;
+    write(&hand_info, &hand)?;
+    let table = ctx.accounts.table.as_ref().unwrap();
+    let ledger = ctx.accounts.ledger.as_ref().unwrap();
+    let (id, bump) = (table.table_id.to_le_bytes(), [table.bump]);
+    let ts = table_seeds(table, &id, &bump);
+    let (table_info, magic, vault, perm) = (table.to_account_info(), ctx.accounts.rollup.magic_program.to_account_info(), ctx.accounts.rollup.vault.to_account_info(), ctx.accounts.rollup.permission_program.to_account_info());
+    let sp = Sponsor { table: &table_info, table_seeds: &ts, vault: &vault, magic_program: &magic, permission_program: &perm };
+    let (_, ledger_bump) = Pubkey::find_program_address(&[LEDGER_SEED, table_key.as_ref()], &crate::ID);
+    let lb = [ledger_bump];
+    let ledger_seeds: &[&[u8]] = &[LEDGER_SEED, table_key.as_ref(), &lb];
+    sp.set_readers(&ledger.to_account_info(), ledger_seeds, &ledger_perm, &ledger.readers())?;
+    let seat_byte = [seat];
+    let hb = [hand_bump];
+    let hand_seeds: &[&[u8]] = &[HAND_SEED, table_key.as_ref(), &seat_byte, &hb];
+    sp.set_readers(&hand_info, hand_seeds, &hand_perm, &[reader])?;
+    let fp = ledger.fingerprint()?;
+    let table = ctx.accounts.table.as_mut().unwrap();
+    table.ledger_hash = fp;
+    table.ledger_seq = table.ledger_seq.checked_add(1).ok_or(PokerError::MathOverflow)?;
+    Ok(())
+}
+
 /// Review M1: a tournament that stopped moving (the VRF never came, a table stalled, the keeper and every
 /// player went away) for ABANDON_SECS: anyone cancels it, and everyone gets their entry fee back and the
 /// host their prize (`tourney_refund`), as the GDD's Coins tournaments refund when their server goes silent.

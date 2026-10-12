@@ -9244,6 +9244,117 @@
       "args": []
     },
     {
+      "name": "tourney_set_reader",
+      "discriminator": [
+        89,
+        30,
+        212,
+        187,
+        177,
+        221,
+        124,
+        223
+      ],
+      "accounts": [
+        {
+          "name": "play_key",
+          "signer": true
+        },
+        {
+          "name": "wallet"
+        },
+        {
+          "name": "wallet_state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "tourney",
+          "writable": true
+        },
+        {
+          "name": "table",
+          "docs": [
+            "The player's table this round, when seated (with its ledger, the seat's hand and the permissions)."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "ledger_permission",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "hand",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "hand_permission",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "rollup",
+          "accounts": [
+            {
+              "name": "magic_program",
+              "docs": [
+                "keeps these instructions off L1."
+              ],
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "vault",
+              "writable": true,
+              "address": "MagicVau1t999999999999999999999999999999999"
+            },
+            {
+              "name": "permission_program",
+              "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+            }
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "expires",
+          "type": "i64"
+        },
+        {
+          "name": "reader",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "tourney_start",
       "discriminator": [
         93,

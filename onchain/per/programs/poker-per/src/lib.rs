@@ -268,6 +268,10 @@ pub mod poker_per {
         instructions::tourney::tourney_sync(ctx)
     }
 
+    pub fn tourney_set_reader(ctx: Context<TourneySetReader>, expires: i64, reader: Pubkey) -> Result<()> {
+        instructions::tourney::tourney_set_reader(ctx, expires, reader)
+    }
+
     pub fn tourney_abandon(ctx: Context<TourneyAbandon>) -> Result<()> {
         instructions::tourney::tourney_abandon(ctx)
     }
