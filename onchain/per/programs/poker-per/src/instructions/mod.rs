@@ -4,6 +4,7 @@ pub mod money;
 pub mod play;
 pub mod table;
 pub mod vault;
+pub mod tourney;
 
 pub use config::*;
 pub use hand::*;
@@ -11,3 +12,4 @@ pub use money::*;
 pub use play::*;
 pub use table::*;
 pub use vault::*;
+pub use tourney::*;

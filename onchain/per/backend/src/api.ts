@@ -10,6 +10,7 @@ import { open } from "./archive";
 import { keeperState, recordFromJson, redact } from "./keeper";
 import { l1, teePublic } from "./chain";
 import { verify, verifyLog, HandLogFile } from "./shared/verifier";
+import { tourneyList } from "./tourney";
 
 /**
  * Fixed-window rate limit per client: an IPv4 address, or an IPv6 /64 (one subscriber's block, so
@@ -124,6 +125,13 @@ export function app() {
     }
     const r = await pool.query("select * from tables where status = 1 and delegated order by updated_at desc limit 200");
     res.json(r.rows.map(tableRow));
+  });
+
+  // M11: tournaments, as the keeper last read them from the rollup (all public on chain). Listed ones only,
+  // unless ?all=1 (a private tournament's link carries its address).
+  a.get("/tournaments", (req, res) => {
+    const all = req.query.all === "1";
+    res.json({ at: tourneyList.at, items: tourneyList.items.filter((t) => all || !t.private || t.status !== 0) });
   });
 
   a.get("/tables/:table", async (req, res) => {

@@ -213,7 +213,11 @@ fn apply(a: &mut HandAccounts, seat: u8, kind: u8, amount: u64, timed_out: bool,
 /// After the engine moved: either the next turn starts, or the hand is over and gets settled.
 fn after_move(a: &mut HandAccounts, _awards: Awards, now: i64) -> Result<()> {
     if a.ledger.game.street != DONE {
-        a.table.turn_deadline = now.saturating_add(TURN_SECS);
+        // M11: at a tournament table a seat that sent no seed this hand is absent: short turns, so it's
+        // blinded away without holding everyone up.
+        let to_act = a.ledger.game.to_act;
+        let absent = a.table.kind == crate::tourney::KIND_TOURNEY && (to_act as usize) < 16 && a.deck.seed_mask & (1u16 << to_act) == 0;
+        a.table.turn_deadline = now.saturating_add(if absent { crate::tourney::ABSENT_TURN_SECS } else { TURN_SECS });
         return stamp(&mut a.table, &a.ledger, now);
     }
     finish_hand(a, now)

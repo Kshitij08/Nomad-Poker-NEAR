@@ -4,6 +4,7 @@
 //   dotnet run -- vault <table>               M9: the game vault and play key, with the C# builders the game uses
 //   dotnet run -- host                        M9b: host an invite-only table, an invited player joins and leaves, host closes and reclaims
 //   dotnet run -- sitout                      M10: sit_out takes back a committed seed; the next hand deals without the seat
+//   dotnet run -- tourney                     M11: a 7-player on-chain tournament end to end (create, register, tables, VRF draw, two rounds, payout) and a cancelled one
 // Keys come from POKER_PER_KEYS (p1.json, p2.json), as for the TypeScript suites.
 using System;
 using System.Collections.Generic;
@@ -59,6 +60,7 @@ static class Program
             case "host": await Host(); break;
             case "exit": await Exit(); break;
             case "sitout": await SitOutSuite(); break;
+            case "tourney": await TourneySuite(); break;
             case "soak": await Soak(int.Parse(args[1]), int.Parse(args[2]), args.Length > 3 ? int.Parse(args[3]) : 3); break;
             default: Console.WriteLine("usage: vector | play <table> [hands]"); return 2;
         }
@@ -633,6 +635,246 @@ static class Program
         }
         Check("everyone cashed out, the host closed and reclaimed", reclaimed);
         Outcomes.Add(new { table = tableKey.Key });
+    }
+
+    // ---- M11: an on-chain tournament, end to end, with the game's builders (PerTourney) and session code
+    sealed class TPlayer
+    {
+        public string Name; public Account Wallet; public PerVault.PlayKey Key; public PerRpc KeyRpc;
+        public Account Reader; public PerRpc ReaderRpc; public PerTableSession Session; public int SessionTable = -1;
+        public bool Absent;
+    }
+
+    static async Task<Poker.Per.Generated.Tournament> ReadTourney(PerRpc rpc, PublicKey t) => PerTourney.Decode(await rpc.GetAccount(t));
+
+    static async Task TourneySuite()
+    {
+        var http = new Http();
+        var l1 = new PerRpc(http, Devnet);
+        var deployer = LoadKey("deployer");
+        var config = Config.Decode(await l1.GetAccount(PerTableAddresses.Find(PerIds.Program, Encoding.UTF8.GetBytes("config")), "confirmed"));
+        var devWallet = new PublicKey(config.DevWallet);
+        var publicRpc = new PerRpc(http, Tee);
+        const ulong Fee = 5_000_000, Prize = 3_000_000;
+
+        var players = new List<TPlayer>();
+        for (int i = 0; i < 8; i++)
+        {
+            var (w, k, rpc) = await Retry(() => FundedPlayer(http, l1, deployer, i == 0 ? 120_000_000UL : 40_000_000UL, 20_000_000), $"fund t{i}");
+            var p = new TPlayer { Name = $"t{i}", Wallet = w, Key = k, KeyRpc = rpc, Reader = new Account() };
+            p.ReaderRpc = await Login(http, p.Reader);
+            players.Add(p);
+            await Task.Delay(1500);
+        }
+        var host = players[0];
+        var outsider = players[7];
+        var entrants = players.Take(7).ToList();
+        // Absent at first: sends no seeds and never acts. It must still be dealt in, with 3 s turns; once both
+        // are seen it comes back (else the final would crawl: an absent player only ever folds its blinds).
+        entrants[5].Absent = true;
+        bool absentDealt = false, absentShortTurn = false;
+        await Task.Delay(10_000); // deposits settle in the rollup
+
+        // ---- create, fund, register
+        var id = PerHost.NewTableId();
+        var tk = PerTourney.Address(host.Wallet.PublicKey, id);
+        long startTs = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 150;
+        var prm = new TourneyParams { Name = PerTourney.NameBytes("M11 devnet test"), Speed = PerTourney.Turbo, MaxPlayers = 7, EntryFee = Fee, StartTs = startTs, CodeHash = new byte[32] };
+        Check("the host creates the tournament and hands it to the rollup (one wallet transaction)", await Try(() => l1.Send(PerTourney.CreateAndDelegate(host.Wallet.PublicKey, id, prm), new WalletLike(host.Wallet))));
+        Console.WriteLine($"   tournament {tk.Key}");
+        await Task.Delay(12_000);
+        var before = new Dictionary<string, ulong>();
+        foreach (var p in players) before[p.Name] = await VaultBalanceOf(p.Key, p.KeyRpc);
+        Check("the host funds a 0.003 SOL prize from the game balance (play key)", await Try(() => host.KeyRpc.Send(PerTourney.Fund(tk, host.Key, Prize), new LocalSigner(host.Key.Key))));
+        foreach (var p in entrants)
+        {
+            var me = p;
+            Check($"{p.Name} registers (0.005 SOL from the game balance)", await Try(() => me.KeyRpc.Send(PerTourney.Register(tk, me.Key, me.Reader.PublicKey), new LocalSigner(me.Key.Key))));
+            if (p == entrants[1])
+                Check("registering twice is refused (AlreadyRegistered)", await Refused(() => entrants[1].KeyRpc.Send(PerTourney.Register(tk, entrants[1].Key, new Account().PublicKey), new LocalSigner(entrants[1].Key.Key)), "AlreadyRegistered"));
+        }
+        Check("an eighth player is refused: the tournament is full (TourneyFull)", await Refused(() => outsider.KeyRpc.Send(PerTourney.Register(tk, outsider.Key, outsider.Reader.PublicKey), new LocalSigner(outsider.Key.Key)), "TourneyFull"));
+        var leaver = entrants[6];
+        var midLeave = await VaultBalanceOf(leaver.Key, leaver.KeyRpc);
+        Check("a player leaves before the start: the fee comes back", await Try(() => leaver.KeyRpc.Send(PerTourney.Leave(tk, leaver.Key), new LocalSigner(leaver.Key.Key))));
+        Check("...exactly 0.005 SOL back in the game balance", await VaultBalanceOf(leaver.Key, leaver.KeyRpc) == midLeave + Fee);
+        Check("...and registers again", await Try(() => leaver.KeyRpc.Send(PerTourney.Register(tk, leaver.Key, leaver.Reader.PublicKey), new LocalSigner(leaver.Key.Key))));
+        Check("a non-host can't fund the prize (NotCreator)", await Refused(() => entrants[1].KeyRpc.Send(PerTourney.Fund(tk, entrants[1].Key, 1), new LocalSigner(entrants[1].Key.Key)), "NotCreator"));
+        var t0 = await ReadTourney(publicRpc, tk);
+        Check("anyone can read the tournament (public): 7 registered, prize 0.003, owed 0.038 SOL", t0 != null && t0.Count == 7 && t0.HostPrize == Prize && t0.Owed == Prize + 7 * Fee, new { t0?.Count, t0?.HostPrize, t0?.Owed });
+
+        // ---- tables (the keeper's job; the deployer pays here)
+        int tables = PerTourney.TablesFor(7);
+        for (int i = 0; i < tables; i++)
+        {
+            int k = i;
+            bool made = await Try(() => l1.Send(PerTourney.CreateTable(deployer.PublicKey, host.Wallet.PublicKey, id, k), new LocalSigner(deployer)));
+            if (!made) made = await l1.GetAccount(PerTourney.TableAddress(tk, k), "confirmed") != null || await publicRpc.GetAccount(PerTourney.TableAddress(tk, k)) != null; // the keeper made it first
+            Check($"table {i}: created for the tournament and handed to the rollup (anyone may; the keeper too)", made);
+        }
+        await Task.Delay(12_000);
+        for (int i = 0; i < tables; i++)
+        {
+            var ta = new PerTableAddresses(PerTourney.TableAddress(tk, i));
+            int k = i;
+            await Retry(() => host.KeyRpc.Send(new[] { PerHost.Open(ta, host.Key.Key.PublicKey) }, new LocalSigner(host.Key.Key)), $"open table {i}");
+            Check($"table {i} linked to the tournament", await Try(() => host.KeyRpc.Send(new[] { PerTourney.Link(tk, k) }, new LocalSigner(host.Key.Key))));
+        }
+        var t0a = new PerTableAddresses(PerTourney.TableAddress(tk, 0));
+        // Refused before the handler (a chip table has no escrow: Anchor's AccountNotInitialized) or by its
+        // TourneyTable guard; either way no money moves.
+        bool buyInRefused;
+        try { await outsider.KeyRpc.Send(new[] { outsider.Key.Check(), PerVault.BuyIn(t0a, outsider.Key, 0, 2_000_000, outsider.Reader.PublicKey) }, new LocalSigner(outsider.Key.Key)); buyInRefused = false; }
+        catch (PerTxException e) { buyInRefused = e.ErrorName == "TourneyTable" || e.Message.Contains("3012"); Console.WriteLine("   " + e.Message); }
+        Check("a tournament table refuses a buy-in (it holds chips, never money)", buyInRefused);
+        Check("starting before the start time is refused (TourneyTooEarly)", await Refused(() => host.KeyRpc.Send(new[] { PerTourney.Start(tk, host.Key.Key.PublicKey) }, new LocalSigner(host.Key.Key)), "TourneyTooEarly"));
+
+        // ---- start: the VRF draws the seats
+        while (DateTimeOffset.UtcNow.ToUnixTimeSeconds() <= startTs + 1) await Task.Delay(2000);
+        Check("registering after the start time is refused (TourneyClosed)", await Refused(() => outsider.KeyRpc.Send(PerTourney.Register(tk, outsider.Key, new Account().PublicKey), new LocalSigner(outsider.Key.Key)), "TourneyClosed"));
+        // The test backend's keeper (M11) starts tournaments on time too; whoever's first, the other is refused.
+        bool started;
+        try { await host.KeyRpc.Send(new[] { PerTourney.Start(tk, host.Key.Key.PublicKey) }, new LocalSigner(host.Key.Key)); started = true; }
+        catch (PerTxException e) { started = (e.ErrorName == "TourneyWrongStage" || e.ErrorName == "VrfPending") && (await ReadTourney(publicRpc, tk)).Status >= PerTourney.Drawing; Console.WriteLine("   " + e.Message + (started ? " (the keeper started it first)" : "")); }
+        Check("at the start time anyone (this test, or the keeper first) starts it: the VRF is asked for the seat draw", started);
+        Poker.Per.Generated.Tournament tr = null;
+        for (int i = 0; i < 30 && (tr == null || tr.Status != PerTourney.Running); i++) { await Task.Delay(1000); tr = await ReadTourney(publicRpc, tk); }
+        var placesOk = tr != null && Enumerable.Range(0, 7).All(e => tr.Entrants[e].State == PerTourney.EntrantPlaying && tr.Entrants[e].Table < tables)
+            && Enumerable.Range(0, 7).Select(e => tr.Entrants[e].Table * 10 + tr.Entrants[e].Seat).Distinct().Count() == 7;
+        Check("the VRF callback drew the seats: 7 players over 2 tables, every seat distinct", tr?.Status == PerTourney.Running && placesOk && tr.RoundTables == 2,
+            tr == null ? null : (object)Enumerable.Range(0, 7).Select(e => $"{tr.Entrants[e].Table}/{tr.Entrants[e].Seat}"));
+
+        // ---- play: everyone all-in every hand, so the rounds go quickly; one player never shows up
+        var start = DateTime.UtcNow;
+        int lastRound = 0, seatings = 0, syncs = 0, hands = 0, errors = 0;
+        var seenTables = new HashSet<string>();
+        while (DateTime.UtcNow - start < TimeSpan.FromMinutes(25))
+        {
+            tr = await ReadTourney(publicRpc, tk);
+            if (tr.Status == PerTourney.Finished || tr.Status == PerTourney.Paid) break;
+            if (tr.Round != lastRound) { SoakLog($"round {tr.Round}: {tr.RoundTables} table(s), {Enumerable.Range(0, tr.Count).Count(e => tr.Entrants[e].State == PerTourney.EntrantPlaying)} players"); lastRound = tr.Round; }
+            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            // Seat each table of the round once its round may start (anyone may; the host's key here).
+            for (int i = 0; i < tr.RoundTables; i++)
+            {
+                if ((tr.DoneMask & (1 << i)) != 0 || now < tr.RoundStartsTs) continue;
+                var ta = new PerTableAddresses(PerTourney.TableAddress(tk, i));
+                var tab = Poker.Per.Generated.Table.Decode(await publicRpc.GetAccount(ta.Table));
+                var want = PerTourney.SeatsToTake(tr, i, null).Where(s => (tab.SeatMask & (1 << s)) == 0).ToList();
+                if (want.Count > 0 && tab.HandState == PerGame.HandIdle)
+                    try { await host.KeyRpc.Send(new[] { PerIx.ComputeLimit(PerIx.PlayCu), PerTourney.SeatTable(tk, i, want) }, new LocalSigner(host.Key.Key)); seatings++; }
+                    catch (Exception e) { if (errors++ < 10) SoakLog("seat: " + e.Message); }
+            }
+            // The absent player: dealt in without a seed? A short turn when it's to act?
+            if (entrants[5].Absent)
+            {
+                int ae = Enumerable.Range(0, tr.Count).First(k => new PublicKey(tr.Entrants[k].Wallet).Equals(entrants[5].Wallet.PublicKey));
+                var aen = tr.Entrants[ae];
+                if (aen.State == PerTourney.EntrantPlaying && aen.Table < tr.RoundTables)
+                {
+                    var atab = Poker.Per.Generated.Table.Decode(await publicRpc.GetAccount(PerTourney.TableAddress(tk, aen.Table)));
+                    if (atab.HandState >= PerGame.HandDealt && (atab.DealtMask & (1 << aen.Seat)) != 0) absentDealt = true;
+                    var mate = entrants.FirstOrDefault(x => !x.Absent && x.SessionTable == aen.Table && x.Session?.Ledger != null);
+                    var mg = mate?.Session.Ledger.Game;
+                    if (atab.HandState == PerGame.HandPlaying && mg != null && mg.ToAct == aen.Seat)
+                    {
+                        long left = atab.TurnDeadline - DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                        if (left <= 4) absentShortTurn = true;
+                    }
+                }
+                if ((absentDealt && absentShortTurn) || DateTime.UtcNow - start > TimeSpan.FromMinutes(6)) { entrants[5].Absent = false; SoakLog($"absent player returns (dealt without a seed: {absentDealt}, 3 s turn: {absentShortTurn})"); }
+            }
+            foreach (var p in entrants.Where(x => !x.Absent))
+            {
+                int e = Enumerable.Range(0, tr.Count).FirstOrDefault(k => new PublicKey(tr.Entrants[k].Wallet).Equals(p.Wallet.PublicKey));
+                var en = tr.Entrants[e];
+                if (en.State != PerTourney.EntrantPlaying || en.Table >= tr.RoundTables) continue;
+                if (p.SessionTable != en.Table)
+                {
+                    var tbl = PerTourney.TableAddress(tk, en.Table);
+                    p.Session = new PerTableSession(tbl, publicRpc, p.ReaderRpc, new LocalSigner(p.Reader), p.Wallet.PublicKey);
+                    p.SessionTable = en.Table;
+                    seenTables.Add($"{p.Name}->{en.Table}");
+                }
+                try
+                {
+                    await p.Session.Poll();
+                    await p.Session.KeepMoving();
+                    var tb = p.Session.Table;
+                    if (tb == null || p.Session.MySeat < 0) continue;
+                    if (tb.HandState == PerGame.HandIdle)
+                    {
+                        try { await p.ReaderRpc.Send(new[] { PerIx.ComputeLimit(PerIx.PlayCu), PerTourney.Sync(tk, en.Table) }, new LocalSigner(p.Reader)); syncs++; }
+                        catch (PerTxException) { }
+                        await p.Session.Poll();
+                        if (p.Session.MySeat >= 0 && p.Session.Table.HandState == PerGame.HandIdle && await p.Session.PrepareNextHand() != null) hands++;
+                    }
+                    var g = p.Session.Ledger?.Game;
+                    if (p.Session.Table.HandState == PerGame.HandPlaying && g != null && g.ToAct == p.Session.MySeat)
+                    {
+                        var legal = PerGame.Legal(g);
+                        await p.Session.Act(legal.CanAllIn ? ActionType.AllIn : legal.CanCall ? ActionType.Call : ActionType.Check, 0);
+                    }
+                }
+                catch (PerTxException ex) when (ex.ErrorName == "NotYourTurn" || ex.ErrorName == "HandNotPlaying" || ex.ErrorName == "HandInProgress" || ex.ErrorName == "MissingSeeds") { }
+                catch (Exception ex) { if (errors++ < 20) SoakLog($"{p.Name}: {ex.Message}"); }
+            }
+            await Task.Delay(700);
+        }
+        tr = await ReadTourney(publicRpc, tk);
+        var places = Enumerable.Range(0, tr.Count).Select(e => (int)tr.Entrants[e].Place).OrderBy(x => x).ToList();
+        Check("the tournament finished: a champion and a runner-up", tr.Status == PerTourney.Finished && !new PublicKey(tr.Champion).Equals(new PublicKey(new byte[32])) && !new PublicKey(tr.RunnerUp).Equals(new PublicKey(new byte[32])),
+            new { tr.Status, tr.Round, minutes = Math.Round((DateTime.UtcNow - start).TotalMinutes, 1), seatings, syncs, hands, errors });
+        Check("every player got a distinct finishing place 1..7", places.SequenceEqual(Enumerable.Range(1, 7)), places);
+        Check("it took two rounds (two tables, then the final table)", tr.Round == 2, tr.Round);
+        Check("a player who sent no seed was still dealt in (absent players are blinded away, not skipped)", absentDealt);
+        Check("...and its turns ran out after 3 s, not 15", absentShortTurn);
+
+        // ---- payout
+        var champ = new PublicKey(tr.Champion);
+        var runner = new PublicKey(tr.RunnerUp);
+        var (first, second, fee) = PerTourney.Payouts(Fee, 7, Prize);
+        var champP = players.First(p => p.Wallet.PublicKey.Equals(champ));
+        var runP = players.First(p => p.Wallet.PublicKey.Equals(runner));
+        var champBefore = await VaultBalanceOf(champP.Key, champP.KeyRpc);
+        var runBefore = await VaultBalanceOf(runP.Key, runP.KeyRpc);
+        Check("anyone pays out: champion, runner-up and the 5% platform fee", await Try(() => outsider.KeyRpc.Send(new[] { PerTourney.Payout(tk, champ, runner, devWallet) }, new LocalSigner(outsider.Key.Key))));
+        await Task.Delay(2000);
+        var champAfter = await VaultBalanceOf(champP.Key, champP.KeyRpc);
+        var runAfter = await VaultBalanceOf(runP.Key, runP.KeyRpc);
+        Check($"the champion got {first} (60% of the pool after the fee)", champAfter - champBefore == first, new { got = champAfter - champBefore, first });
+        Check($"the runner-up got {second} (40%)", runAfter - runBefore == second, new { got = runAfter - runBefore, second });
+        Check("prizes + fee = host prize + entry fees, exactly", first + second + fee == Prize + 7 * Fee);
+        var tp = await ReadTourney(publicRpc, tk);
+        Check("paid once: the tournament owes nothing; a second payout is refused", tp.Status == PerTourney.Paid && tp.Owed == 0
+            && await Refused(() => outsider.KeyRpc.Send(new[] { PerTourney.Payout(tk, champ, runner, devWallet) }, new LocalSigner(outsider.Key.Key)), "TourneyWrongStage"));
+
+        // ---- a cancelled tournament refunds everyone
+        var id2 = PerHost.NewTableId();
+        var t2 = PerTourney.Address(host.Wallet.PublicKey, id2);
+        var prm2 = new TourneyParams { Name = PerTourney.NameBytes("M11 cancel test"), Speed = PerTourney.Turbo, MaxPlayers = 4, EntryFee = 1_000_000, StartTs = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 300, CodeHash = new byte[32] };
+        await Retry(() => l1.Send(PerTourney.CreateAndDelegate(host.Wallet.PublicKey, id2, prm2), new WalletLike(host.Wallet)), "create t2");
+        await Task.Delay(12_000);
+        var hostB = await VaultBalanceOf(host.Key, host.KeyRpc);
+        var pB = await VaultBalanceOf(outsider.Key, outsider.KeyRpc);
+        await host.KeyRpc.Send(PerTourney.Fund(t2, host.Key, 2_000_000), new LocalSigner(host.Key.Key));
+        await outsider.KeyRpc.Send(PerTourney.Register(t2, outsider.Key, outsider.Reader.PublicKey), new LocalSigner(outsider.Key.Key));
+        Check("only the host can cancel (NotCreator)", await Refused(() => outsider.KeyRpc.Send(PerTourney.Cancel(t2, outsider.Key), new LocalSigner(outsider.Key.Key)), "NotCreator"));
+        Check("the host cancels before the start", await Try(() => host.KeyRpc.Send(PerTourney.Cancel(t2, host.Key), new LocalSigner(host.Key.Key))));
+        Check("registering in a cancelled tournament is refused", await Refused(() => entrants[1].KeyRpc.Send(PerTourney.Register(t2, entrants[1].Key, new Account().PublicKey), new LocalSigner(entrants[1].Key.Key)), "TourneyClosed"));
+        Check("anyone refunds the player", await Try(() => entrants[1].KeyRpc.Send(new[] { PerTourney.Refund(t2, outsider.Wallet.PublicKey) }, new LocalSigner(entrants[1].Key.Key))));
+        Check("anyone refunds the host's prize", await Try(() => entrants[1].KeyRpc.Send(new[] { PerTourney.Refund(t2, host.Wallet.PublicKey) }, new LocalSigner(entrants[1].Key.Key))));
+        Check("a second refund is refused (NothingOwed)", await Refused(() => entrants[1].KeyRpc.Send(new[] { PerTourney.Refund(t2, outsider.Wallet.PublicKey) }, new LocalSigner(entrants[1].Key.Key)), "NothingOwed"));
+        await Task.Delay(2000);
+        Check("both game balances are back where they started", await VaultBalanceOf(host.Key, host.KeyRpc) == hostB && await VaultBalanceOf(outsider.Key, outsider.KeyRpc) == pB);
+        Outcomes.Add(new { tournament = tk.Key, cancelled = t2.Key, tables, champion = champ.Key, first, second, fee, seenTables });
+    }
+
+    static async Task<bool> Refused(Func<Task<string>> f, string error)
+    {
+        try { await f(); Console.WriteLine($"   accepted (expected {error})"); return false; }
+        catch (PerTxException e) { Console.WriteLine("   " + e.Message); return e.ErrorName == error; }
+        catch (Exception e) { Console.WriteLine("   " + e.Message); return false; }
     }
 
     // ---- M10 (review H1): the exit with the game's builders (PerVault.VaultExit / VaultPayout)

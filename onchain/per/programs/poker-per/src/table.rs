@@ -17,7 +17,7 @@ pub const TABLE_VERSION: u8 = 2;
 /// M4 and M5 took 60 of the original 96 reserved bytes for the hand fields. M6 added
 /// `last_record`, which grew the account: tables created before M6 can't be read by this layout
 /// (only `reclaim_table` handles them), so none may be open when this build is deployed.
-pub const TABLE_RESERVED: usize = 12;
+pub const TABLE_RESERVED: usize = 11;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -190,6 +190,10 @@ pub struct Table {
     /// No hand starts before that; after it, hands keep starting as before. Taken from the reserved bytes
     /// (the account keeps its size).
     pub start_requested_for: u64,
+    /// M11: KIND_CASH (0, every table before M11) or KIND_TOURNEY: a tournament's table, created by the
+    /// program with the tournament as its creator. It holds chips, never money: no buy-in, cash-out or
+    /// rake there. Taken from the reserved bytes (the account keeps its size).
+    pub kind: u8,
     pub reserved: [u8; TABLE_RESERVED],
 }
 

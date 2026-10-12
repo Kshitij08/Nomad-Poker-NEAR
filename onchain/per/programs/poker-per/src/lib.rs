@@ -15,6 +15,7 @@ pub mod instructions;
 pub mod private;
 pub mod state;
 pub mod table;
+pub mod tourney;
 
 use instructions::*;
 
@@ -205,5 +206,65 @@ pub mod poker_per {
 
     pub fn tick(ctx: Context<BeginHand>) -> Result<()> {
         instructions::play::tick(ctx)
+    }
+
+    // ---- M11: tournaments (L1)
+
+    pub fn create_tournament(ctx: Context<CreateTournament>, tourney_id: u64, params: TourneyParams) -> Result<()> {
+        instructions::tourney::create_tournament(ctx, tourney_id, params)
+    }
+
+    pub fn delegate_tournament(ctx: Context<DelegateTournament>, tourney_id: u64, host: Pubkey) -> Result<()> {
+        instructions::tourney::delegate_tournament(ctx, tourney_id, host)
+    }
+
+    pub fn create_tourney_table(ctx: Context<CreateTourneyTable>, tourney_id: u64, host: Pubkey, index: u64) -> Result<()> {
+        instructions::tourney::create_tourney_table(ctx, tourney_id, host, index)
+    }
+
+    // ---- M11: tournaments (rollup)
+
+    pub fn tourney_fund(ctx: Context<TourneyMoney>, expires: i64, amount: u64) -> Result<()> {
+        instructions::tourney::tourney_fund(ctx, expires, amount)
+    }
+
+    pub fn tourney_register(ctx: Context<TourneyMoney>, expires: i64, reader: Pubkey, code: Option<[u8; 16]>) -> Result<()> {
+        instructions::tourney::tourney_register(ctx, expires, reader, code)
+    }
+
+    pub fn tourney_leave(ctx: Context<TourneyMoney>, expires: i64) -> Result<()> {
+        instructions::tourney::tourney_leave(ctx, expires)
+    }
+
+    pub fn tourney_cancel(ctx: Context<TourneyMoney>, expires: i64) -> Result<()> {
+        instructions::tourney::tourney_cancel(ctx, expires)
+    }
+
+    pub fn tourney_refund(ctx: Context<TourneyPayee>) -> Result<()> {
+        instructions::tourney::tourney_refund(ctx)
+    }
+
+    pub fn tourney_payout(ctx: Context<TourneyPayout>) -> Result<()> {
+        instructions::tourney::tourney_payout(ctx)
+    }
+
+    pub fn tourney_link_table(ctx: Context<TourneyLinkTable>) -> Result<()> {
+        instructions::tourney::tourney_link_table(ctx)
+    }
+
+    pub fn tourney_start(ctx: Context<TourneyStart>) -> Result<()> {
+        instructions::tourney::tourney_start(ctx)
+    }
+
+    pub fn tourney_draw(ctx: Context<TourneyDraw>, randomness: [u8; 32], nonce: u64) -> Result<()> {
+        instructions::tourney::tourney_draw(ctx, randomness, nonce)
+    }
+
+    pub fn tourney_seat_table<'info>(ctx: Context<'info, TourneyTable<'info>>) -> Result<()> {
+        instructions::tourney::tourney_seat_table(ctx)
+    }
+
+    pub fn tourney_sync(ctx: Context<TourneyTable>) -> Result<()> {
+        instructions::tourney::tourney_sync(ctx)
     }
 }

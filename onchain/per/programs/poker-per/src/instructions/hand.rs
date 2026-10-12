@@ -191,8 +191,10 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
     require!(table.status == STATUS_OPEN, PokerError::TableNotOpen);
     match start_rule(table.hand_state, now, table.vrf_requested_ts)? {
         StartKind::NewHand => {
-            // M10: only after the host pressed Start round (once per table).
+            // M10: only after the host pressed Start round (once per table). A tournament's table is
+            // started by the program when it seats the round (M11).
             require!(table.start_requested_for != 0, PokerError::StartNotRequested);
+            let tourney_table = table.kind == crate::tourney::KIND_TOURNEY;
             let deck = &mut ctx.accounts.deck;
             let ledger = &mut ctx.accounts.ledger;
             // Seats with chips that are waited for, and those whose current occupant committed a
@@ -215,7 +217,9 @@ pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
                 funded
             } else {
                 require!(now.saturating_sub(table.idle_since) >= SEED_WINDOW_SECS, PokerError::MissingSeeds);
-                seeded
+                // M11: at a tournament table an absent player is still dealt (and blinded away); the deck
+                // mixes the VRF with the seeds that did come. At a cash table they sit the hand out.
+                if tourney_table { funded } else { seeded }
             };
             require!(dealt.count_ones() >= 2, PokerError::NotEnoughPlayers);
             // Who missed the window sits out until they commit again; who's dealt is back in.

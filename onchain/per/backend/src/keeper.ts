@@ -8,7 +8,8 @@
 //     unpaid rake goes to the dev wallet and any leftover to the host's game balance; the host
 //     reclaims the rent.
 // It can't move funds, deal, act for a player or read live cards: the program allows none of that
-// to anyone but the players and the VRF.
+// to anyone but the players and the VRF. M11 adds the tournament jobs (tourney.ts): it creates and pays for
+// tournament tables, and the refunds and prizes it triggers can only go to players' own game balances.
 import { createHash } from "crypto";
 import { ComputeBudgetProgram, PublicKey } from "@solana/web3.js";
 import { DELEGATION_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
@@ -19,6 +20,7 @@ import { config } from "./config";
 import { event, pool } from "./db";
 import { seal } from "./archive";
 import { verify, verifyLog, HandLogFile, Record } from "./shared/verifier";
+import { stepTournaments } from "./tourney";
 
 const STATUS_OPEN = 1, STATUS_CLOSED = 2;
 const HAND_DEALT = 2, HAND_PLAYING = 3;
@@ -27,7 +29,7 @@ const RETRY_AFTER_MS = 30_000;
 const CONCURRENCY = 4;
 
 export const keeperState = { startedAt: Date.now(), lastLoopAt: 0, lastDiscoverAt: 0, loops: 0, tablesTracked: 0, lastError: "", lastErrorAt: 0, auditorMatches: null as boolean | null,
-  dlp: { slot: null as number | null, expected: null as number | null, changed: false, checkedAt: 0 } };
+  dlp: { slot: null as number | null, expected: null as number | null, changed: false, checkedAt: 0 }, tournaments: 0 };
 
 /** Rollup logins travel as `?token=` in URLs; never let one reach a log, an event or /health. */
 export const redact = (s: string) => s.replace(/token=[^&\s"']+/g, "token=<redacted>");
@@ -318,7 +320,7 @@ async function checkDelegationProgram() {
   }
 }
 
-let lastPrune = 0;
+let lastPrune = 0, lastTourneys = 0;
 export async function runKeeper() {
   for (;;) {
     const started = Date.now();
@@ -329,6 +331,11 @@ export async function runKeeper() {
       const tables = [...live.values()];
       for (let i = 0; i < tables.length; i += CONCURRENCY) {
         await Promise.all(tables.slice(i, i + CONCURRENCY).map((a) => step(a, ours).catch((e) => fail(`step ${a.toBase58()}`, e))));
+      }
+      // M11: tournaments (create, open and link their tables, start, seat, sync, refund, pay out).
+      if (Date.now() - lastTourneys > 5_000) {
+        lastTourneys = Date.now();
+        keeperState.tournaments = await stepTournaments(keeperTee, attempt).catch((e) => { fail("tournaments", e); return keeperState.tournaments; });
       }
       if (Date.now() - lastPrune > 3_600_000) {
         await pool.query("delete from keeper_events where at < now() - interval '30 days'");

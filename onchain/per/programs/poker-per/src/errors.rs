@@ -130,4 +130,28 @@ pub enum PokerError {
     StartNotRequested,
     #[msg("Only the host may start the round")]
     NotHost,
+    #[msg("A tournament table holds chips, not money: no buy-in, cash-out or rake there")]
+    TourneyTable,
+    #[msg("The tournament isn't taking registrations")]
+    TourneyClosed,
+    #[msg("The tournament is full")]
+    TourneyFull,
+    #[msg("Already registered")]
+    AlreadyRegistered,
+    #[msg("Not registered in this tournament")]
+    NotRegistered,
+    #[msg("The tournament hasn't reached its start time")]
+    TourneyTooEarly,
+    #[msg("Bad tournament settings")]
+    BadTourneySettings,
+    #[msg("Wrong private code")]
+    BadTourneyCode,
+    #[msg("The tournament's tables aren't ready")]
+    TourneyTablesNotReady,
+    #[msg("Not a table of this tournament")]
+    NotTourneyTable,
+    #[msg("The tournament isn't in that stage")]
+    TourneyWrongStage,
+    #[msg("Nothing to pay this wallet")]
+    NothingOwed,
 }

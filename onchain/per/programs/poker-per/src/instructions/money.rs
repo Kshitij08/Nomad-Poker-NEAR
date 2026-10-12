@@ -199,6 +199,8 @@ macro_rules! buy_in_flow {
     require!(!config.paused, PokerError::Paused);
     let table = &$ctx.accounts.table;
     require!(table.status == STATUS_OPEN, PokerError::TableNotOpen);
+    // M11: a tournament's table holds chips, never money.
+    require!(table.kind == crate::tourney::KIND_CASH, PokerError::TourneyTable);
     require!(amount > 0, PokerError::BuyInTooSmall);
     require!(seat < table.max_seats, PokerError::InvalidSeat);
     let player: Pubkey = $player;
@@ -335,6 +337,7 @@ pub struct CashOut<'info> {
 macro_rules! cash_out_flow {
     ($ctx:ident, $seat:expr, $authorize:expr, $to:ident) => {{
     let seat: u8 = $seat;
+    require!($ctx.accounts.table.kind == crate::tourney::KIND_CASH, PokerError::TourneyTable);
     require!($ctx.accounts.table.hand_state == HAND_IDLE, PokerError::HandInProgress);
     let idx = seat as usize;
     require!(idx < $ctx.accounts.ledger.seats.len(), PokerError::InvalidSeat);

@@ -1,0 +1,271 @@
+{
+  "suite": "m8-harness-tourney",
+  "ranAt": "2026-10-12T07:41:49.372973Z",
+  "pass": 43,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "the host creates the tournament and hands it to the rollup (one wallet transaction)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the host funds a 0.003 SOL prize from the game balance (play key)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "t0 registers (0.005 SOL from the game balance)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "t1 registers (0.005 SOL from the game balance)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "registering twice is refused (AlreadyRegistered)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "t2 registers (0.005 SOL from the game balance)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "t3 registers (0.005 SOL from the game balance)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "t4 registers (0.005 SOL from the game balance)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "t5 registers (0.005 SOL from the game balance)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "t6 registers (0.005 SOL from the game balance)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "an eighth player is refused: the tournament is full (TourneyFull)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a player leaves before the start: the fee comes back",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "...exactly 0.005 SOL back in the game balance",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "...and registers again",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a non-host can't fund the prize (NotCreator)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "anyone can read the tournament (public): 7 registered, prize 0.003, owed 0.038 SOL",
+      "status": "PASS",
+      "detail": {
+        "Count": 7,
+        "HostPrize": 3000000,
+        "Owed": 38000000
+      }
+    },
+    {
+      "name": "table 0: created for the tournament and handed to the rollup (anyone may; the keeper too)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "table 1: created for the tournament and handed to the rollup (anyone may; the keeper too)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "table 0 linked to the tournament",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "table 1 linked to the tournament",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a tournament table refuses a buy-in (it holds chips, never money)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "starting before the start time is refused (TourneyTooEarly)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "registering after the start time is refused (TourneyClosed)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "at the start time anyone (this test, or the keeper first) starts it: the VRF is asked for the seat draw",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the VRF callback drew the seats: 7 players over 2 tables, every seat distinct",
+      "status": "PASS",
+      "detail": [
+        "255/255",
+        "255/255",
+        "255/255",
+        "255/255",
+        "255/255",
+        "255/255",
+        "0/0"
+      ]
+    },
+    {
+      "name": "the tournament finished: a champion and a runner-up",
+      "status": "PASS",
+      "detail": {
+        "Status": 3,
+        "Round": 2,
+        "minutes": 2.0,
+        "seatings": 3,
+        "syncs": 18,
+        "hands": 3,
+        "errors": 0
+      }
+    },
+    {
+      "name": "every player got a distinct finishing place 1..7",
+      "status": "PASS",
+      "detail": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "it took two rounds (two tables, then the final table)",
+      "status": "PASS",
+      "detail": 2
+    },
+    {
+      "name": "a player who sent no seed was still dealt in (absent players are blinded away, not skipped)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "...and its turns ran out after 3 s, not 15",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "anyone pays out: champion, runner-up and the 5% platform fee",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the champion got 21750000 (60% of the pool after the fee)",
+      "status": "PASS",
+      "detail": {
+        "got": 21750000,
+        "first": 21750000
+      }
+    },
+    {
+      "name": "the runner-up got 14500000 (40%)",
+      "status": "PASS",
+      "detail": {
+        "got": 14500000,
+        "second": 14500000
+      }
+    },
+    {
+      "name": "prizes + fee = host prize + entry fees, exactly",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "paid once: the tournament owes nothing; a second payout is refused",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "only the host can cancel (NotCreator)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "the host cancels before the start",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "registering in a cancelled tournament is refused",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "anyone refunds the player",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "anyone refunds the host's prize",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "a second refund is refused (NothingOwed)",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "both game balances are back where they started",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "tournament": "CGTFGaL1NzHNF6tQGv1fAgTVhvZQHxWjdmcEQBPsWnj8",
+      "cancelled": "Fx2eBtaNQqBErnUZTTrJyHcMGBxiKJwbqR7xidJNpAn5",
+      "tables": 2,
+      "champion": "7rHsrSRsgmgAvZnTN198nChAW3R6G9B2TZNUxfrKMSiM",
+      "first": 21750000,
+      "second": 14500000,
+      "fee": 1750000,
+      "seenTables": [
+        "t0->1",
+        "t1->0",
+        "t2->1",
+        "t3->0",
+        "t4->0",
+        "t6->0",
+        "t5->1",
+        "t5->0"
+      ]
+    }
+  ]
+}

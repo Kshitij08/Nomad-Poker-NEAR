@@ -144,6 +144,7 @@ pub fn create_table(ctx: Context<CreateTable>, table_id: u64, params: TableParam
     t.last_activity_ts = Clock::get()?.unix_timestamp;
     t.ledger_hash = [0; 32];
     t.ledger_seq = 0;
+    t.kind = crate::tourney::KIND_CASH;
     t.reserved = [0; TABLE_RESERVED];
 
     let a = &ctx.accounts;
@@ -152,37 +153,89 @@ pub fn create_table(ctx: Context<CreateTable>, table_id: u64, params: TableParam
         CpiContext::new(a.system_program.key(), Transfer { from: a.creator.to_account_info(), to: a.table.to_account_info() }),
         TABLE_SPONSOR_LAMPORTS,
     )?;
+    let creator = a.creator.key();
+    let (id, bump) = (a.table.table_id.to_le_bytes(), [a.table.bump]);
+    setup_escrow(
+        &EscrowAccounts {
+            payer: &a.creator.to_account_info(),
+            owner: &a.table.to_account_info(),
+            mint: &a.mint.to_account_info(),
+            escrow: &a.escrow.to_account_info(),
+            escrow_eata: &a.escrow_eata.to_account_info(),
+            escrow_buffer: &a.escrow_buffer.to_account_info(),
+            escrow_delegation_record: &a.escrow_delegation_record.to_account_info(),
+            escrow_delegation_metadata: &a.escrow_delegation_metadata.to_account_info(),
+            escrow_permission: &a.escrow_permission.to_account_info(),
+            escrow_permission_buffer: &a.escrow_permission_buffer.to_account_info(),
+            escrow_permission_delegation_record: &a.escrow_permission_delegation_record.to_account_info(),
+            escrow_permission_delegation_metadata: &a.escrow_permission_delegation_metadata.to_account_info(),
+            espl_program: &a.espl_program.to_account_info(),
+            delegation_program: &a.delegation_program.to_account_info(),
+            permission_program: &a.permission_program.to_account_info(),
+            validator: &a.validator.to_account_info(),
+            token_program: &a.token_program.to_account_info(),
+            associated_token_program: &a.associated_token_program.to_account_info(),
+            system_program: &a.system_program.to_account_info(),
+        },
+        &[TABLE_SEED, creator.as_ref(), &id, &bump],
+    )?;
+    let t = &ctx.accounts.table;
+    emit!(TableCreated { table: t.key(), table_id, creator: t.creator, mint: t.mint, max_buy_in: t.max_buy_in, rake_bps: t.rake_bps });
+    Ok(())
+}
+
+/// The escrow accounts `create_table` and `create_tournament` (M11) set up the same way; `owner` is the
+/// table or tournament PDA (it owns the escrow and signs with `owner_seeds`).
+pub(crate) struct EscrowAccounts<'a, 'info> {
+    pub payer: &'a AccountInfo<'info>,
+    pub owner: &'a AccountInfo<'info>,
+    pub mint: &'a AccountInfo<'info>,
+    pub escrow: &'a AccountInfo<'info>,
+    pub escrow_eata: &'a AccountInfo<'info>,
+    pub escrow_buffer: &'a AccountInfo<'info>,
+    pub escrow_delegation_record: &'a AccountInfo<'info>,
+    pub escrow_delegation_metadata: &'a AccountInfo<'info>,
+    pub escrow_permission: &'a AccountInfo<'info>,
+    pub escrow_permission_buffer: &'a AccountInfo<'info>,
+    pub escrow_permission_delegation_record: &'a AccountInfo<'info>,
+    pub escrow_permission_delegation_metadata: &'a AccountInfo<'info>,
+    pub espl_program: &'a AccountInfo<'info>,
+    pub delegation_program: &'a AccountInfo<'info>,
+    pub permission_program: &'a AccountInfo<'info>,
+    pub validator: &'a AccountInfo<'info>,
+    pub token_program: &'a AccountInfo<'info>,
+    pub associated_token_program: &'a AccountInfo<'info>,
+    pub system_program: &'a AccountInfo<'info>,
+}
+
+/// Creates the owner's wSOL escrow (its L1 token account and MagicBlock's ephemeral token account,
+/// delegated to the TEE), then claims the escrow's permission: created, made public (the owner signs as
+/// its authority) and delegated to the TEE, so nobody else can make it private (see `CreateTable`).
+pub(crate) fn setup_escrow(e: &EscrowAccounts, owner_seeds: &[&[u8]]) -> Result<()> {
     associated_token::create_idempotent(CpiContext::new(
-        a.associated_token_program.key(),
+        e.associated_token_program.key(),
         associated_token::Create {
-            payer: a.creator.to_account_info(),
-            associated_token: a.escrow.to_account_info(),
-            authority: a.table.to_account_info(),
-            mint: a.mint.to_account_info(),
-            system_program: a.system_program.to_account_info(),
-            token_program: a.token_program.to_account_info(),
+            payer: e.payer.clone(),
+            associated_token: e.escrow.clone(),
+            authority: e.owner.clone(),
+            mint: e.mint.clone(),
+            system_program: e.system_program.clone(),
+            token_program: e.token_program.clone(),
         },
     ))?;
     invoke(
         &Instruction {
             program_id: ESPL_PROGRAM_ID,
             accounts: vec![
-                AccountMeta::new(a.escrow_eata.key(), false),
-                AccountMeta::new(a.creator.key(), true),
-                AccountMeta::new_readonly(a.table.key(), false),
-                AccountMeta::new_readonly(a.mint.key(), false),
-                AccountMeta::new_readonly(a.system_program.key(), false),
+                AccountMeta::new(e.escrow_eata.key(), false),
+                AccountMeta::new(e.payer.key(), true),
+                AccountMeta::new_readonly(e.owner.key(), false),
+                AccountMeta::new_readonly(e.mint.key(), false),
+                AccountMeta::new_readonly(e.system_program.key(), false),
             ],
             data: vec![ESPL_INIT_EPHEMERAL_ATA],
         },
-        &[
-            a.escrow_eata.to_account_info(),
-            a.creator.to_account_info(),
-            a.table.to_account_info(),
-            a.mint.to_account_info(),
-            a.system_program.to_account_info(),
-            a.espl_program.to_account_info(),
-        ],
+        &[e.escrow_eata.clone(), e.payer.clone(), e.owner.clone(), e.mint.clone(), e.system_program.clone(), e.espl_program.clone()],
     )?;
     let mut data = vec![ESPL_DELEGATE_EPHEMERAL_ATA];
     data.extend_from_slice(TEE_VALIDATOR.as_ref());
@@ -190,83 +243,52 @@ pub fn create_table(ctx: Context<CreateTable>, table_id: u64, params: TableParam
         &Instruction {
             program_id: ESPL_PROGRAM_ID,
             accounts: vec![
-                AccountMeta::new(a.creator.key(), true),
-                AccountMeta::new(a.escrow_eata.key(), false),
+                AccountMeta::new(e.payer.key(), true),
+                AccountMeta::new(e.escrow_eata.key(), false),
                 AccountMeta::new_readonly(ESPL_PROGRAM_ID, false),
-                AccountMeta::new(a.escrow_buffer.key(), false),
-                AccountMeta::new(a.escrow_delegation_record.key(), false),
-                AccountMeta::new(a.escrow_delegation_metadata.key(), false),
+                AccountMeta::new(e.escrow_buffer.key(), false),
+                AccountMeta::new(e.escrow_delegation_record.key(), false),
+                AccountMeta::new(e.escrow_delegation_metadata.key(), false),
                 AccountMeta::new_readonly(DELEGATION_PROGRAM_ID, false),
-                AccountMeta::new_readonly(a.system_program.key(), false),
+                AccountMeta::new_readonly(e.system_program.key(), false),
             ],
             data,
         },
         &[
-            a.creator.to_account_info(),
-            a.escrow_eata.to_account_info(),
-            a.espl_program.to_account_info(),
-            a.escrow_buffer.to_account_info(),
-            a.escrow_delegation_record.to_account_info(),
-            a.escrow_delegation_metadata.to_account_info(),
-            a.delegation_program.to_account_info(),
-            a.system_program.to_account_info(),
+            e.payer.clone(), e.escrow_eata.clone(), e.espl_program.clone(), e.escrow_buffer.clone(),
+            e.escrow_delegation_record.clone(), e.escrow_delegation_metadata.clone(), e.delegation_program.clone(), e.system_program.clone(),
         ],
     )?;
-    claim_escrow_permission(&ctx)?;
-    let t = &ctx.accounts.table;
-    emit!(TableCreated { table: t.key(), table_id, creator: t.creator, mint: t.mint, max_buy_in: t.max_buy_in, rake_bps: t.rake_bps });
-    Ok(())
-}
-
-/// Creates the escrow's permission, makes it public and delegates it to the TEE (see `CreateTable`).
-fn claim_escrow_permission(ctx: &Context<CreateTable>) -> Result<()> {
-    let a = &ctx.accounts;
-    // 1. Create it with flags 0: the table PDA becomes its authority member. The creator pays rent.
+    // 1. Create the permission with flags 0: the owner PDA becomes its authority member. The payer pays rent.
     invoke(
         &Instruction {
             program_id: ESPL_PROGRAM_ID,
             accounts: vec![
-                AccountMeta::new(a.escrow_eata.key(), false),
-                AccountMeta::new(a.escrow_permission.key(), false),
-                AccountMeta::new(a.creator.key(), true),
-                AccountMeta::new_readonly(a.system_program.key(), false),
+                AccountMeta::new(e.escrow_eata.key(), false),
+                AccountMeta::new(e.escrow_permission.key(), false),
+                AccountMeta::new(e.payer.key(), true),
+                AccountMeta::new_readonly(e.system_program.key(), false),
                 AccountMeta::new_readonly(PERMISSION_PROGRAM_ID, false),
             ],
             data: vec![ESPL_CREATE_EPHEMERAL_ATA_PERMISSION, 0],
         },
-        &[
-            a.escrow_eata.to_account_info(),
-            a.escrow_permission.to_account_info(),
-            a.creator.to_account_info(),
-            a.system_program.to_account_info(),
-            a.permission_program.to_account_info(),
-            a.espl_program.to_account_info(),
-        ],
+        &[e.escrow_eata.clone(), e.escrow_permission.clone(), e.payer.clone(), e.system_program.clone(), e.permission_program.clone(), e.espl_program.clone()],
     )?;
-    // 2. Make it public. As the authority member, the table PDA may sign alone. "Public" means no
-    // member list at all, so afterwards nobody, the table included, can change, undelegate or close
-    // it. Its rent (paid by the creator) stays locked; that's the price of nobody being able to
-    // make the escrow private.
-    let creator = a.creator.key();
-    let id = a.table.table_id.to_le_bytes();
-    let bump = [a.table.bump];
+    // 2. Make it public. As the authority member, the owner PDA may sign alone. "Public" means no
+    // member list at all, so afterwards nobody, the owner included, can change, undelegate or close
+    // it. Its rent stays locked; that's the price of nobody being able to make the escrow private.
     invoke_signed(
         &Instruction {
             program_id: PERMISSION_PROGRAM_ID,
             accounts: vec![
-                AccountMeta::new_readonly(a.table.key(), true),
-                AccountMeta::new_readonly(a.escrow_eata.key(), false),
-                AccountMeta::new(a.escrow_permission.key(), false),
+                AccountMeta::new_readonly(e.owner.key(), true),
+                AccountMeta::new_readonly(e.escrow_eata.key(), false),
+                AccountMeta::new(e.escrow_permission.key(), false),
             ],
             data: PERMISSION_UPDATE_PUBLIC.to_vec(),
         },
-        &[
-            a.table.to_account_info(),
-            a.escrow_eata.to_account_info(),
-            a.escrow_permission.to_account_info(),
-            a.permission_program.to_account_info(),
-        ],
-        &[&[TABLE_SEED, creator.as_ref(), &id, &bump]],
+        &[e.owner.clone(), e.escrow_eata.clone(), e.escrow_permission.clone(), e.permission_program.clone()],
+        &[owner_seeds],
     )?;
     // 3. Delegate it to the TEE. Anyone may delegate an ephemeral token account's permission, to any
     // validator, so doing it here leaves nothing for an outsider to redirect.
@@ -274,31 +296,23 @@ fn claim_escrow_permission(ctx: &Context<CreateTable>) -> Result<()> {
         &Instruction {
             program_id: ESPL_PROGRAM_ID,
             accounts: vec![
-                AccountMeta::new(a.creator.key(), true),
-                AccountMeta::new(a.escrow_eata.key(), false),
+                AccountMeta::new(e.payer.key(), true),
+                AccountMeta::new(e.escrow_eata.key(), false),
                 AccountMeta::new_readonly(PERMISSION_PROGRAM_ID, false),
-                AccountMeta::new(a.escrow_permission.key(), false),
-                AccountMeta::new_readonly(a.system_program.key(), false),
-                AccountMeta::new(a.escrow_permission_buffer.key(), false),
-                AccountMeta::new(a.escrow_permission_delegation_record.key(), false),
-                AccountMeta::new(a.escrow_permission_delegation_metadata.key(), false),
+                AccountMeta::new(e.escrow_permission.key(), false),
+                AccountMeta::new_readonly(e.system_program.key(), false),
+                AccountMeta::new(e.escrow_permission_buffer.key(), false),
+                AccountMeta::new(e.escrow_permission_delegation_record.key(), false),
+                AccountMeta::new(e.escrow_permission_delegation_metadata.key(), false),
                 AccountMeta::new_readonly(DELEGATION_PROGRAM_ID, false),
-                AccountMeta::new_readonly(a.validator.key(), false),
+                AccountMeta::new_readonly(e.validator.key(), false),
             ],
             data: vec![ESPL_DELEGATE_EPHEMERAL_ATA_PERMISSION],
         },
         &[
-            a.creator.to_account_info(),
-            a.escrow_eata.to_account_info(),
-            a.permission_program.to_account_info(),
-            a.escrow_permission.to_account_info(),
-            a.system_program.to_account_info(),
-            a.escrow_permission_buffer.to_account_info(),
-            a.escrow_permission_delegation_record.to_account_info(),
-            a.escrow_permission_delegation_metadata.to_account_info(),
-            a.delegation_program.to_account_info(),
-            a.validator.to_account_info(),
-            a.espl_program.to_account_info(),
+            e.payer.clone(), e.escrow_eata.clone(), e.permission_program.clone(), e.escrow_permission.clone(), e.system_program.clone(),
+            e.escrow_permission_buffer.clone(), e.escrow_permission_delegation_record.clone(), e.escrow_permission_delegation_metadata.clone(),
+            e.delegation_program.clone(), e.validator.clone(), e.espl_program.clone(),
         ],
     )?;
     Ok(())
@@ -333,7 +347,8 @@ pub fn delegate_table(ctx: Context<DelegateTable>, table_id: u64, creator: Pubke
             let data = info.try_borrow_data()?;
             Table::try_deserialize(&mut &data[..])?
         };
-        may_delegate(table.status, table.creator == ctx.accounts.payer.key())?;
+        // M11: a tournament's table is created by the program alone, so anyone may hand it to the rollup.
+        may_delegate(table.status, table.creator == ctx.accounts.payer.key() || table.kind == crate::tourney::KIND_TOURNEY)?;
         table.status = STATUS_OPEN;
         // Stamp the delegation time: the escape-hatch idle clock starts now.
         table.last_activity_ts = Clock::get()?.unix_timestamp;
