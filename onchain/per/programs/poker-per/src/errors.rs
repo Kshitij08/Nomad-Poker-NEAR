@@ -126,4 +126,8 @@ pub enum PokerError {
     BadWalletState,
     #[msg("The old game balance still holds money; withdraw it first")]
     VaultNotEmpty,
+    #[msg("The host hasn't started the next round yet")]
+    StartNotRequested,
+    #[msg("Only the host may start the round")]
+    NotHost,
 }

@@ -64,7 +64,7 @@ async function main() {
 
   // ---- hand 1: nobody begins it but the keeper; then p? raises and the other never acts
   await S.ok("p1 and p2 commit seeds", async () => { await T.commitSeed(prog.p1, p1.publicKey, 0, randomBytes(32)); return T.commitSeed(prog.p2, p2.publicKey, 3, randomBytes(32)); });
-  await S.ok("an outsider (p3) starts hand 1", () => T.startHand(prog.p3, p3.publicKey));
+  await S.ok("the host presses Start round; an outsider (p3) starts hand 1", async () => { await T.requestStart(prog.deployer, deployer.publicKey); return T.startHand(prog.p3, p3.publicKey); });
   const playing = await until(async () => { const t = await readTable(); return t.handState === 3 ? t : null; }, 60_000, 500);
   // The keeper logs an action after it confirms, which can be a moment after the rollup shows it.
   const ticks = (n: number) => until(async () => { const t = (await keeperEvents()).filter((e) => e.action === "tick" && e.ok); return t.length >= n ? t : null; }, 20_000);
@@ -85,6 +85,7 @@ async function main() {
 
   // ---- hand 2 straight away (fast play): hand 1's log must still be archived before hand 2 begins
   await S.ok("hand 2 starts at once: p1 and p2 commit seeds, an outsider starts it", async () => {
+    await T.requestStart(prog.deployer, deployer.publicKey);
     await T.commitSeed(prog.p1, p1.publicKey, 0, randomBytes(32)); await T.commitSeed(prog.p2, p2.publicKey, 3, randomBytes(32));
     return T.startHand(prog.p3, p3.publicKey);
   });

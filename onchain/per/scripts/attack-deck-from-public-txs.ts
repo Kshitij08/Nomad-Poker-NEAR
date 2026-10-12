@@ -29,6 +29,7 @@ async function main() {
   await T.buyIn(prog.p2, p2.publicKey, 3, 2_000_000n);
   await T.commitSeed(prog.p1, p1.publicKey, 0, randomBytes(32));
   await T.commitSeed(prog.p2, p2.publicKey, 3, randomBytes(32));
+  await T.requestStart(prog.d, deployer.publicKey);
   await T.startHand(prog.d, deployer.publicKey);
   for (let i = 0; i < 300; i++) { const t = coder.decode("table", (await er.d.getAccountInfo(T.table, "processed"))!.data); if (t.handState === 2) break; await sleep(100); }
   const hand = async (kp: any, seat: number) => coder.decode("hand", (await rawRead(connUrl(await teeConnection(readerFor(kp.publicKey))), handOf(T.table, seat))).data!).cards.map(cardName);

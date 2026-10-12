@@ -351,6 +351,8 @@ static class Program
                         // Busted (or nearly): rebuy from the game balance between hands.
                         if (tb.HandState == PerGame.HandIdle && wantMore && mySeat != null && mySeat.Stack < stake.Big * 2)
                             await SoakBuyIn(s, t, 6_000_000, r);
+                        // M10: the host (seat 0, the creator) presses Start round; every seat commits once it's pressed.
+                        if (tb.HandState == PerGame.HandIdle && wantMore && !s.Session.StartRequested && s.Session.MayStartRound && s.Session.SeatedWithChips >= 2) await s.Session.RequestStart();
                         if (tb.HandState == PerGame.HandIdle && wantMore) await s.Session.PrepareNextHand();
                         var game = s.Session.Ledger?.Game;
                         var turn = s.Events.OfType<TurnStartedEvent>().LastOrDefault();
@@ -528,6 +530,8 @@ static class Program
             }
             throw new Exception("hand didn't finish in 3 min");
         }
+        // M10: the host's Start round alone (its seat key signs; no seed committed with it).
+        async Task HostAsks() { await host.ReaderRpc.Send(new[] { PerIx.RequestStart(t, host.Reader.PublicKey) }, new LocalSigner(host.Reader)); await PollAll(); }
         // Commits for `who` (each also tries start_hand), then waits until a hand is under way. Returns how long it took.
         async Task<double> DealWith(IEnumerable<SoakSeat> who, ulong afterHand)
         {
@@ -536,6 +540,7 @@ static class Program
             {
                 await PollAll();
                 if (seats[0].Session.Table.HandNo > afterHand) return (DateTime.UtcNow - start).TotalSeconds;
+                if (!seats[0].Session.StartRequested) await HostAsks();
                 foreach (var s in who) await s.Session.PrepareNextHand();
                 await Task.Delay(1000);
             }
@@ -543,6 +548,12 @@ static class Program
         }
 
         await PollAll();
+        bool notHost;
+        try { await seats[1].ReaderRpc.Send(new[] { PerIx.RequestStart(t, seats[1].Reader.PublicKey) }, new LocalSigner(seats[1].Reader)); notHost = false; }
+        catch (PerTxException e) { notHost = e.ErrorName == "NotHost"; Console.WriteLine("   " + e.Message); }
+        Check("M10: with the host seated, another player can't press Start round (NotHost)", notHost);
+        await seats[1].Session.PrepareNextHand();
+        Check("M10: before Start round, a player's game commits no seed", seats[1].Session.MySeed == null);
         await DealWith(seats, 0);
         var t1 = seats[0].Session.Table;
         Check("hand 1 deals all three seats", t1.DealtMask == 0b111, t1.DealtMask);
@@ -550,6 +561,7 @@ static class Program
 
         // The bug: p2's seed for the next hand is already in when it sits out.
         var p2 = seats[2];
+        await HostAsks();
         await p2.Session.PrepareNextHand();
         // The deck can't be read by anyone (seeds are secret), so what proves the withdrawal is hand 2 below: a
         // committed seed deals its seat in even when the seat is marked sitting out.
@@ -593,6 +605,7 @@ static class Program
         await PlayOut();
 
         // Heads-up (the playtest's case): p1 sits out with its seed in; p0 alone can't start a hand.
+        await HostAsks();
         await seats[1].Session.PrepareNextHand();
         Check("p2 sits out again", await Try(() => p2.Session.SitOut()));
         Check("p1 sits out with its seed in", await Try(() => seats[1].Session.SitOut()));
@@ -715,6 +728,7 @@ static class Program
                 {
                     await p.Session.Poll();
                     var t = p.Session.Table;
+                    if (t.HandState == PerGame.HandIdle && wantMore && !p.Session.StartRequested && p.Session.MayStartRound && p.Session.SeatedWithChips >= 2) await p.Session.RequestStart();
                     if (t.HandState == PerGame.HandIdle && wantMore) await p.Session.PrepareNextHand();
                     var turn = p.Events.OfType<TurnStartedEvent>().LastOrDefault();
                     var game = p.Session.Ledger?.Game;

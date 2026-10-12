@@ -118,6 +118,10 @@ async function main() {
   await S.ok("open: ledger, deck and the public hand record", () => T.open(prog.deployer, deployer.publicKey));
   S.check("the hand record is readable with no login (public)", (await rawRead(TEE_URL, T.record)).visible, {});
   await S.ok("p1 sits in seat 0", () => T.buyIn(prog.p1, p1.publicKey, 0, 2_000_000n));
+  // M10: the host starts each round.
+  await S.err("a hand can't start before the host presses Start round (StartNotRequested)", "StartNotRequested", () => T.startHand(prog.p3, p3.publicKey));
+  await S.err("an outsider (not seated, not the host) can't press Start round (NotHost)", "NotHost", () => T.requestStart(prog.p3, p3.publicKey));
+  await S.ok("the host (the creator's wallet) presses Start round", () => T.requestStart(prog.deployer, deployer.publicKey));
   await S.err("a hand can't start with one player", "NotEnoughPlayers", () => T.startHand(prog.p3, p3.publicKey));
   await S.ok("p2 sits in seat 3", () => T.buyIn(prog.p2, p2.publicKey, 3, 2_000_000n));
 
@@ -235,6 +239,8 @@ async function main() {
 
   // ---- hand 2: seeds don't carry over; the button moves on
   const seed1b = randomBytes(32), seed2b = randomBytes(32);
+  await S.err("hand 2 can't start before Start round is pressed again", "StartNotRequested", () => T.startHand(prog.p1, p1.publicKey));
+  await S.ok("with the host not seated, a seated player (p1) may press Start round", () => T.requestStart(prog.p1, p1.publicKey));
   await S.ok("p1 commits a fresh seed for hand 2", () => T.commitSeed(prog.p1, p1.publicKey, 0, seed1b));
   await S.err("hand 2 can't start on p2's hand-1 seed", "MissingSeeds", () => T.startHand(prog.p1, p1.publicKey));
   await S.ok("p2 commits a fresh seed for hand 2", () => T.commitSeed(prog.p2, p2.publicKey, 3, seed2b));

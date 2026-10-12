@@ -83,6 +83,7 @@ async function main() {
     const t0 = await readTable();
     const handNo = Number(t0.handNo) + 1;
     const stacksBefore = (await readLedger()).seats.map((s: any) => BigInt(s.stack.toString()));
+    await T.requestStart(prog.deployer, deployer.publicKey); // M10: the host's Start round (once per hand; again is a no-op)
     await T.startHand(prog.deployer, deployer.publicKey);
     // Dealt, or already begun by the keeper (its tick begins a dealt hand at once).
     const dealtT = await waitState([2, 3], handNo);
@@ -258,6 +259,7 @@ async function main() {
   }
 
   // ---- hand C: p3 doesn't commit a seed; after the 20 s window the others play heads-up
+  await T.requestStart(prog.deployer, deployer.publicKey); // the seed window counts from Start round
   for (const s of [0, 2]) await T.commitSeed(prog[s], wallets[s].publicKey, s, randomBytes(32));
   await S.err("hand C: with p3's seed missing the hand can't start inside the seed window", "MissingSeeds", () => T.startHand(prog.deployer, deployer.publicKey));
   const idle = Number((await readTable()).idleSince);

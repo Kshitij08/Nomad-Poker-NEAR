@@ -17,7 +17,7 @@ pub const TABLE_VERSION: u8 = 2;
 /// M4 and M5 took 60 of the original 96 reserved bytes for the hand fields. M6 added
 /// `last_record`, which grew the account: tables created before M6 can't be read by this layout
 /// (only `reclaim_table` handles them), so none may be open when this build is deployed.
-pub const TABLE_RESERVED: usize = 20;
+pub const TABLE_RESERVED: usize = 12;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -70,6 +70,17 @@ pub fn start_rule(hand_state: u8, now: i64, vrf_requested_ts: i64) -> Result<Sta
         }
         _ => err!(PokerError::HandInProgress),
     }
+}
+
+/// M10: who may ask for the next hand to start: the host (the creator's wallet, or the table key of a seat
+/// the creator holds), or, while the creator holds no seat, any seated player (so a table whose host left
+/// isn't stuck). `seats` are the ledger's (player, reader) pairs of taken seats.
+pub fn may_request_start(creator: &Pubkey, signer: &Pubkey, seats: &[(Pubkey, Pubkey)]) -> bool {
+    if signer == creator {
+        return true;
+    }
+    let creator_seated = seats.iter().any(|(player, _)| player == creator);
+    seats.iter().any(|(player, reader)| (player == signer || reader == signer) && (player == creator || !creator_seated))
 }
 
 /// `abort_hand` is allowed only while shuffling, `VRF_ABORT_SECS` after the hand *started*
@@ -175,6 +186,9 @@ pub struct Table {
     /// from the reserved bytes, so the account keeps its size and older tables read zeros.
     pub committed_ledger_seq: u64,
     pub committed_hand_no: u64,
+    /// M10: the hand number the host asked to start (`hand_no + 1` once they pressed Start round). A new hand
+    /// starts only after that. Taken from the reserved bytes (the account keeps its size).
+    pub start_requested_for: u64,
     pub reserved: [u8; TABLE_RESERVED],
 }
 
@@ -496,6 +510,22 @@ pub fn check_table_params(p: &TableParams, config_max_buy_in: u64) -> Result<()>
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn request_start_host_only_unless_host_unseated() {
+        use anchor_lang::prelude::Pubkey;
+        let (host, host_key, p, p_key, out) = (Pubkey::new_unique(), Pubkey::new_unique(), Pubkey::new_unique(), Pubkey::new_unique(), Pubkey::new_unique());
+        let both = [(host, host_key), (p, p_key)];
+        assert!(super::may_request_start(&host, &host, &both));
+        assert!(super::may_request_start(&host, &host_key, &both));
+        assert!(!super::may_request_start(&host, &p, &both));
+        assert!(!super::may_request_start(&host, &p_key, &both));
+        assert!(!super::may_request_start(&host, &out, &both));
+        let no_host = [(p, p_key)];
+        assert!(super::may_request_start(&host, &host, &no_host));
+        assert!(super::may_request_start(&host, &p_key, &no_host));
+        assert!(!super::may_request_start(&host, &out, &no_host));
+    }
+
     use super::*;
 
     fn params() -> TableParams {

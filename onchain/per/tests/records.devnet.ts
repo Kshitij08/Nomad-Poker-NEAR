@@ -11,12 +11,12 @@ import { NATIVE_MINT, createAssociatedTokenAccountIdempotentInstruction, createS
 import { delegateSpl } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { randomBytes } from "crypto";
 import { connection, programFor, programOn, loadKey, teeConnection, TEE_VALIDATOR, PROGRAM_ID, CONFIG_PDA, randomTableId } from "../scripts/lib";
-import { BN, KIND, Suite, escapePayerOf, sleep, tableApi, rawRead, readerFor, sendL1, tokenOf, connUrl } from "./helpers";
+import { BN, KIND, Suite, errName, escapePayerOf, sleep, tableApi, rawRead, readerFor, sendL1, tokenOf, connUrl } from "./helpers";
 import { fetchRecord, downloadLog, report } from "../scripts/verify-hand";
 import { recoverBetFromLogHash } from "./attack";
 
 const S = new Suite("m6-records");
-const HAND_DEALT = 2;
+const HAND_DEALT = 2, HAND_PLAYING = 3;
 const explorer = (sig: string) => `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
 const u64 = (n: bigint) => { const b = Buffer.alloc(8); b.writeBigUInt64LE(n); return b; };
 
@@ -54,7 +54,8 @@ async function main() {
     const start = Date.now();
     while (Date.now() - start < 30_000) {
       const t = await readTable();
-      if (t.handState === HAND_DEALT && Number(t.handNo) === hand) return true;
+      // Dealt, or already begun by the backend's keeper (it ticks a dealt hand at once; M10).
+      if ((t.handState === HAND_DEALT || t.handState === HAND_PLAYING) && Number(t.handNo) === hand) return true;
       await sleep(100);
     }
     return false;
@@ -63,9 +64,12 @@ async function main() {
   const BET = 734_000n;
   const playHand = async (hand: number, duringPlay?: () => Promise<void>) => {
     await S.ok(`hand ${hand}: p1 and p2 commit seeds`, async () => { await T.commitSeed(prog.p1, p1.publicKey, 0, randomBytes(32)); return T.commitSeed(prog.p2, p2.publicKey, 3, randomBytes(32)); });
-    await S.ok(`hand ${hand}: start (VRF requested)`, () => T.startHand(prog.p3, p3.publicKey));
+    await S.ok(`hand ${hand}: the host presses Start round; start (VRF requested)`, async () => { await T.requestStart(prog.deployer, deployer.publicKey); return T.startHand(prog.p3, p3.publicKey); });
     S.check(`hand ${hand}: dealt by the VRF callback`, await waitDealt(hand), {});
-    await S.ok(`hand ${hand}: begin (blinds)`, () => T.beginHand(prog.p3, p3.publicKey));
+    await S.ok(`hand ${hand}: begin (blinds), or the keeper already has`, async () => {
+      try { return await T.beginHand(prog.p3, p3.publicKey); }
+      catch (e) { if (errName(e).startsWith("HandNotDealt") && (await readTable()).handState === HAND_PLAYING) return "already begun by the keeper"; throw e; }
+    });
     if (duringPlay) await duringPlay();
     let seat = (await readLedger()).game.toAct;
     await S.ok(`hand ${hand}: seat ${seat} raises to ${BET}`, () => T.act(bySeat[seat][0], bySeat[seat][1], seat, KIND.raise, BET));

@@ -4718,6 +4718,79 @@
       ]
     },
     {
+      "name": "request_start",
+      "discriminator": [
+        140,
+        14,
+        232,
+        85,
+        93,
+        89,
+        1,
+        153
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "docs": [
+            "The host's wallet or their seat's table key (any seated player's, while the host holds no seat)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.creator",
+                "account": "Table"
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ledger",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "request_table_undelegation",
       "discriminator": [
         160,
@@ -8626,6 +8699,16 @@
       "code": 6061,
       "name": "VaultNotEmpty",
       "msg": "The old game balance still holds money; withdraw it first"
+    },
+    {
+      "code": 6062,
+      "name": "StartNotRequested",
+      "msg": "The host hasn't started the next round yet"
+    },
+    {
+      "code": 6063,
+      "name": "NotHost",
+      "msg": "Only the host may start the round"
     }
   ],
   "types": [
@@ -9873,11 +9956,19 @@
             "type": "u64"
           },
           {
+            "name": "start_requested_for",
+            "docs": [
+              "M10: the hand number the host asked to start (`hand_no + 1` once they pressed Start round). A new hand",
+              "starts only after that. Taken from the reserved bytes (the account keeps its size)."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                20
+                12
               ]
             }
           }

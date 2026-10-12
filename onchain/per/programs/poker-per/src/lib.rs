@@ -173,6 +173,10 @@ pub mod poker_per {
         instructions::hand::sit_in(ctx, seat)
     }
 
+    pub fn request_start(ctx: Context<RequestStart>) -> Result<()> {
+        instructions::hand::request_start(ctx)
+    }
+
     pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
         instructions::hand::start_hand(ctx)
     }

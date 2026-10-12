@@ -129,6 +129,8 @@ export function tableApi(creator: Keypair, tableId: bigint) {
       .accountsPartial({ payer, table, ledger, ledgerPermission: permissionPdaFromAccount(ledger), deck, deckPermission: permissionPdaFromAccount(deck), record, log, logPermission: permissionPdaFromAccount(log), rollup }).rpc(),
     commitSeed: (prog: anchor.Program, player: PublicKey, seat: number, seed: Buffer) => prog.methods.commitSeed(seat, Array.from(seed))
       .accountsPartial({ player, table, deck, hand: handOf(table, seat) }).rpc(),
+    /** M10: the host's Start round (the creator's wallet or their seat's table key; any seated player's while the creator holds no seat). */
+    requestStart: (prog: anchor.Program, player: PublicKey) => prog.methods.requestStart().accountsPartial({ player, table, ledger }).rpc(),
     startHand: (prog: anchor.Program, payer: PublicKey) => prog.methods.startHand()
       .accountsPartial({ payer, config: CONFIG_PDA, table, deck, ledger, oracleQueue: EPHEMERAL_QUEUE }).rpc(),
     abortHand: (prog: anchor.Program, signer: PublicKey) => prog.methods.abortHand().accountsPartial({ signer, table }).rpc(),
