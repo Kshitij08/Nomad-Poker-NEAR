@@ -11,6 +11,7 @@ import { keeperState, recordFromJson, redact } from "./keeper";
 import { l1, teePublic } from "./chain";
 import { verify, verifyLog, HandLogFile } from "./shared/verifier";
 import { tourneyList } from "./tourney";
+import { agentRoutes, runnerState } from "./agents";
 
 /**
  * Fixed-window rate limit per client: an IPv4 address, or an IPv6 /64 (one subscriber's block, so
@@ -92,6 +93,9 @@ export function app() {
   let probe = { at: 0, db: "down", l1Slot: null as number | null, rollupSlot: null as number | null };
   // M10: feature flags the game reads at start. Turning PRIVATE_TABLES off (a Railway variable, then a
   // restart) hides private tables in every game client; Coins tables and their escrow are unaffected.
+  // M12: Agents (every request signed by the player's play key; see agents.ts).
+  agentRoutes(a);
+
   a.get("/flags", (_req, res) => {
     res.set("cache-control", "no-store").json({ privateTables: config.privateTables });
   });
@@ -193,6 +197,7 @@ export function app() {
 
   /** The keeper's current state, including its last error text (public /health shows only when). */
   a.get("/audit/keeper", adminOnly, (_req, res) => { res.json({ ...keeperState, lastError: redact(keeperState.lastError) }); });
+  a.get("/audit/agents", adminOnly, (_req, res) => { res.json({ ...runnerState, lastError: redact(runnerState.lastError) }); });
 
   a.use((_req, res) => res.status(404).json({ error: "not found" }));
   // Client errors raised by Express itself (invalid JSON 400, body too large 413) keep their status;

@@ -1,0 +1,86 @@
+{
+  "suite": "m8-harness-agentsoak",
+  "ranAt": "2026-10-12T15:47:16.7761824Z",
+  "pass": 10,
+  "fail": 0,
+  "outcomes": [
+    {
+      "name": "agent0 deploys a conservative Agent",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "agent1 deploys a balanced Agent",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "agent2 deploys a aggressive Agent",
+      "status": "PASS",
+      "detail": null
+    },
+    {
+      "name": "every Agent finished within 70 minutes",
+      "status": "PASS",
+      "detail": {
+        "finished": [
+          "agent1",
+          "agent2",
+          "agent0"
+        ],
+        "minutes": 27.4
+      }
+    },
+    {
+      "name": "agent0: played 25 hands and stopped (played 25 hands (your limit)); its balance changed by exactly cash-outs minus buy-ins",
+      "status": "PASS",
+      "detail": {
+        "played": 25,
+        "sessions": 1,
+        "buyIns": 10000000,
+        "cashOuts": 9700000,
+        "delta": -300000
+      }
+    },
+    {
+      "name": "agent1: played 23 hands and stopped (lost its stack); its balance changed by exactly cash-outs minus buy-ins",
+      "status": "PASS",
+      "detail": {
+        "played": 23,
+        "sessions": 1,
+        "buyIns": 10000000,
+        "cashOuts": 0,
+        "delta": -10000000
+      }
+    },
+    {
+      "name": "agent2: played 25 hands and stopped (played 25 hands (your limit)); its balance changed by exactly cash-outs minus buy-ins",
+      "status": "PASS",
+      "detail": {
+        "played": 25,
+        "sessions": 1,
+        "buyIns": 10000000,
+        "cashOuts": 25400000,
+        "delta": 15400000
+      }
+    },
+    {
+      "name": "the table adds up: seats + unpaid rake = what the escrow owes",
+      "status": "PASS",
+      "detail": {
+        "seats": 31400000,
+        "rake": 3500000,
+        "owed": 34900000
+      }
+    },
+    {
+      "name": "the people's sessions ran without unexpected errors",
+      "status": "PASS",
+      "detail": 0
+    },
+    {
+      "table": "6gStN2AWJXN7sSpeuyknTfaquqNKvb25pZaceRb7ysm7",
+      "minutes": 27.6
+    }
+  ]
+}

@@ -292,6 +292,10 @@ pub mod poker_per {
         instructions::agent::agent_release(ctx)
     }
 
+    pub fn agent_close(ctx: Context<AgentClose>, expires: i64) -> Result<()> {
+        instructions::agent::agent_close(ctx, expires)
+    }
+
     pub fn tourney_set_reader(ctx: Context<TourneySetReader>, expires: i64, reader: Pubkey) -> Result<()> {
         instructions::tourney::tourney_set_reader(ctx, expires, reader)
     }

@@ -1,6 +1,7 @@
 // Postgres: the lobby index, the hand archive and the keeper's log. Migrations run at start-up.
 import { Pool } from "pg";
 import { config } from "./config";
+import { AGENT_MIGRATIONS } from "./agents";
 
 export const pool = new Pool({ connectionString: config.databaseUrl, max: 5 });
 
@@ -64,7 +65,7 @@ const MIGRATIONS: string[] = [
 pool.on("error", (e) => console.error("postgres pool error:", e.message));
 
 export async function migrate() {
-  for (const sql of MIGRATIONS) await pool.query(sql);
+  for (const sql of [...MIGRATIONS, ...AGENT_MIGRATIONS]) await pool.query(sql);
 }
 
 export async function event(table: string | null, action: string, ok: boolean, detail = "") {

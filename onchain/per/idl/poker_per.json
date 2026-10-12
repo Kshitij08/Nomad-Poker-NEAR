@@ -874,6 +874,194 @@
       ]
     },
     {
+      "name": "agent_close",
+      "discriminator": [
+        173,
+        51,
+        73,
+        167,
+        214,
+        201,
+        4,
+        242
+      ],
+      "accounts": [
+        {
+          "name": "play_key",
+          "signer": true
+        },
+        {
+          "name": "wallet"
+        },
+        {
+          "name": "wallet_state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "agent_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "agent_permission",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  114,
+                  109,
+                  105,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110,
+                  58
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "agent_state"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                136,
+                161,
+                10,
+                196,
+                33,
+                152,
+                1,
+                214,
+                246,
+                106,
+                29,
+                60,
+                6,
+                152,
+                192,
+                102,
+                169,
+                175,
+                212,
+                217,
+                180,
+                252,
+                231,
+                71,
+                151,
+                141,
+                209,
+                5,
+                168,
+                212,
+                103,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "sponsor",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  45,
+                  115,
+                  112,
+                  111,
+                  110,
+                  115,
+                  111,
+                  114
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "rollup",
+          "accounts": [
+            {
+              "name": "magic_program",
+              "docs": [
+                "keeps these instructions off L1."
+              ],
+              "address": "Magic11111111111111111111111111111111111111"
+            },
+            {
+              "name": "vault",
+              "writable": true,
+              "address": "MagicVau1t999999999999999999999999999999999"
+            },
+            {
+              "name": "permission_program",
+              "address": "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1"
+            }
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "expires",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "agent_release",
       "discriminator": [
         142,
@@ -912,31 +1100,7 @@
           }
         },
         {
-          "name": "table",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.creator",
-                "account": "Table"
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "Table"
-              }
-            ]
-          }
+          "name": "table"
         },
         {
           "name": "ledger",
@@ -1121,6 +1285,16 @@
               }
             ]
           }
+        },
+        {
+          "name": "vault"
+        },
+        {
+          "name": "vault_token",
+          "docs": [
+            "M12 review M4: only a game balance holding the stake may set an Agent (throwaway wallets can't use up",
+            "the sponsor)."
+          ]
         },
         {
           "name": "rollup",

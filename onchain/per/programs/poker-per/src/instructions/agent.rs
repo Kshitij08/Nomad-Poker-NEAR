@@ -33,7 +33,7 @@ use crate::instructions::table::DELEGATION_PROGRAM_ID;
 use crate::instructions::vault::{vault_gen_seed, verify_play_key, wallet_state_of, VAULT_SEED, WALLET_SEED};
 use crate::private::{write, Sponsor};
 use crate::state::Config;
-use crate::table::{invite_admits, rake_for, Hand, Ledger, Seat, Table, HAND_IDLE, HAND_SEED, LEDGER_SEED, STATUS_OPEN, TABLE_SEED};
+use crate::table::{invite_admits, rake_for, Hand, Ledger, Seat, Table, HAND_IDLE, HAND_SEED, LEDGER_SEED, STATUS_OPEN, TABLE_SEED, WSOL_MINT};
 
 pub const AGENT_SEED: &[u8] = b"agent";
 pub const AGENT_SPONSOR_SEED: &[u8] = b"agent-sponsor";
@@ -186,6 +186,13 @@ pub struct AgentSet<'info> {
     /// CHECK: the Agent sponsor (delegated; pays the record's rent). Checked by its seeds.
     #[account(mut, seeds = [AGENT_SPONSOR_SEED], bump)]
     pub sponsor: UncheckedAccount<'info>,
+    /// CHECK: the wallet's vault PDA (its balance must cover the stake).
+    #[account(seeds = [VAULT_SEED, wallet.key().as_ref(), &vault_gen_seed(&wallet_state)], bump)]
+    pub vault: UncheckedAccount<'info>,
+    /// M12 review M4: only a game balance holding the stake may set an Agent (throwaway wallets can't use up
+    /// the sponsor).
+    #[account(address = get_associated_token_address(&vault.key(), &WSOL_MINT))]
+    pub vault_token: Box<Account<'info, TokenAccount>>,
     pub rollup: RollupPrograms<'info>,
 }
 
@@ -201,6 +208,7 @@ pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64
     if !stopping {
         require!(until > now && until <= now.saturating_add(MAX_AGENT_SECS), PokerError::AgentExpired);
         require!(stake > 0 && agent != wallet && agent != play_key, PokerError::BadAgentSettings);
+        require!(ctx.accounts.vault_token.amount >= stake, PokerError::AgentStakeExceeded);
     }
     let key_set = wallet_state_of(&ctx.accounts.wallet_state)?.0;
     let info = ctx.accounts.agent_state.to_account_info();
@@ -390,10 +398,11 @@ pub struct AgentRelease<'info> {
     /// CHECK: the wallet's Agent record.
     #[account(mut, seeds = [AGENT_SEED, wallet.key().as_ref()], bump)]
     pub agent_state: UncheckedAccount<'info>,
-    #[account(seeds = [TABLE_SEED, table.creator.as_ref(), &table.table_id.to_le_bytes()], bump = table.bump)]
-    pub table: Box<Account<'info, Table>>,
+    /// CHECK: the table on the record (M12 review M1: it may be closed, or reclaimed and empty). Read below.
+    pub table: UncheckedAccount<'info>,
+    /// CHECK: the table's ledger PDA (checked by its seeds); read only while the table is open.
     #[account(seeds = [LEDGER_SEED, table.key().as_ref()], bump)]
-    pub ledger: Box<Account<'info, Ledger>>,
+    pub ledger: UncheckedAccount<'info>,
 }
 
 /// The Agent's seat was left another way (the player cashed it out with their play key, or the table
@@ -405,14 +414,73 @@ pub fn agent_release(ctx: Context<AgentRelease>) -> Result<()> {
     require_keys_eq!(a.wallet, ctx.accounts.wallet.key(), PokerError::NotAgent);
     require_keys_eq!(a.table, ctx.accounts.table.key(), PokerError::NotAgentSeat);
     let idx = a.seat as usize;
-    let gone = ctx.accounts.table.status != STATUS_OPEN
-        || idx >= ctx.accounts.ledger.seats.len()
-        || ctx.accounts.ledger.seats[idx].player != a.wallet
-        || ctx.accounts.ledger.seats[idx].reader != a.reader;
+    let table_info = ctx.accounts.table.to_account_info();
+    // Our table and still open: the seat is gone only if the ledger shows someone else (or nobody) there.
+    let open_table = *table_info.owner == crate::ID
+        && !table_info.data_is_empty()
+        && Table::try_deserialize(&mut &table_info.try_borrow_data()?[..]).map(|t| t.status == STATUS_OPEN).unwrap_or(false);
+    let gone = if !open_table {
+        true
+    } else {
+        let li = ctx.accounts.ledger.to_account_info();
+        require_keys_eq!(*li.owner, crate::ID, PokerError::NotAgentSeat);
+        let ledger = Ledger::try_deserialize(&mut &li.try_borrow_data()?[..])?;
+        idx >= ledger.seats.len() || ledger.seats[idx].player != a.wallet || ledger.seats[idx].reader != a.reader
+    };
     require!(gone, PokerError::AgentBusy);
     a.table = Pubkey::default();
     a.reader = Pubkey::default();
     write(&info, &a)
+}
+
+// ---------------------------------------------------------------------------------------- rollup: close (play key)
+
+#[derive(Accounts)]
+pub struct AgentClose<'info> {
+    pub play_key: Signer<'info>,
+    /// CHECK: the wallet that authorized `play_key`; checked against the signed message.
+    pub wallet: UncheckedAccount<'info>,
+    /// CHECK: the wallet's state (may not exist).
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
+    /// CHECK: the instructions sysvar, for the wallet's signature check.
+    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
+    pub instructions: UncheckedAccount<'info>,
+    /// CHECK: the wallet's Agent record; closed here.
+    #[account(mut, seeds = [AGENT_SEED, wallet.key().as_ref()], bump)]
+    pub agent_state: UncheckedAccount<'info>,
+    /// CHECK: permission PDA of the record; closed here.
+    #[account(mut, seeds = [PERMISSION_SEED, agent_state.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub agent_permission: UncheckedAccount<'info>,
+    /// CHECK: the Agent sponsor; gets the rent back.
+    #[account(mut, seeds = [AGENT_SPONSOR_SEED], bump)]
+    pub sponsor: UncheckedAccount<'info>,
+    pub rollup: RollupPrograms<'info>,
+}
+
+/// M12 review M4: removes the wallet's Agent record (no seat held); its rent goes back to the sponsor.
+pub fn agent_close(ctx: Context<AgentClose>, expires: i64) -> Result<()> {
+    let wallet = ctx.accounts.wallet.key();
+    verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &wallet, &ctx.accounts.play_key.key(), expires)?;
+    let info = ctx.accounts.agent_state.to_account_info();
+    let a = load_agent(&info)?;
+    require_keys_eq!(a.wallet, wallet, PokerError::NotAgent);
+    require!(a.table == Pubkey::default(), PokerError::AgentBusy);
+    let (_, bump) = agent_seeds_of(&wallet);
+    let ab = [bump];
+    let agent_seeds: &[&[u8]] = &[AGENT_SEED, wallet.as_ref(), &ab];
+    let sponsor_info = ctx.accounts.sponsor.to_account_info();
+    let sb = [ctx.bumps.sponsor];
+    let sponsor_seeds: &[&[u8]] = &[AGENT_SPONSOR_SEED, &sb];
+    let (magic, vault, perm) = (ctx.accounts.rollup.magic_program.to_account_info(), ctx.accounts.rollup.vault.to_account_info(), ctx.accounts.rollup.permission_program.to_account_info());
+    let sp = Sponsor { table: &sponsor_info, table_seeds: sponsor_seeds, vault: &vault, magic_program: &magic, permission_program: &perm };
+    let perm_info = ctx.accounts.agent_permission.to_account_info();
+    if !perm_info.data_is_empty() {
+        sp.close_permission(&info, agent_seeds, &perm_info)?;
+    }
+    sp.close_account(&info)?;
+    emit!(AgentChanged { wallet, running: false });
+    Ok(())
 }
 
 #[event]

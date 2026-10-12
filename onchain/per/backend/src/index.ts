@@ -4,6 +4,7 @@ import { app } from "./api";
 import { config } from "./config";
 import { migrate } from "./db";
 import { keeperState, runKeeper } from "./keeper";
+import { stepAgents } from "./agents";
 
 async function main() {
   await migrate();
@@ -16,6 +17,13 @@ async function main() {
       const since = Date.now() - Math.max(keeperState.lastLoopAt, keeperState.startedAt);
       if (since > 180_000) { console.error(`keeper stalled for ${Math.round(since / 1000)} s; exiting`); process.exit(1); }
     }, 30_000).unref();
+    // M12: the Agent runner, one step per running Agent every 1.5 s (each waits for its previous step).
+    let agentsBusy = false;
+    setInterval(() => {
+      if (agentsBusy) return;
+      agentsBusy = true;
+      stepAgents().catch((e) => console.error("agents:", e?.message ?? e)).finally(() => { agentsBusy = false; });
+    }, 1_500).unref();
   }
 }
 
