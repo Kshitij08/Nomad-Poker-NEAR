@@ -77,6 +77,7 @@ test("high-water mark across sessions; losses and own strategies pay nothing", a
   await deployment("dep-own", "creator", 5000);
   await svc.attachCopy("dep-own", "creator", s.strategyId);
   assert.equal(await svc.settle("dep-own"), null);
+  assert.deepEqual(await svc.feeFor("dep-own"), { strategyId: s.strategyId, sessionPnl: 5000, creatorFee: 0, platformFee: 0, feeBase: 0 });
 });
 
 test("track record and creator dashboard come from the settled sessions", async () => {

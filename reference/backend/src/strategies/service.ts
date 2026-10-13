@@ -246,11 +246,22 @@ export class StrategyService {
     return rows.length;
   }
 
-  /** The copier's view of a settlement: what the creator and Nomad took. */
+  /**
+   * The copier's view of a settlement: what the creator and Nomad took. A copied session with no fee due (your own
+   * strategy) says so with zeros; a settlement still owed returns null, so the client waits instead of paying nothing.
+   */
   async feeFor(deploymentId: string) {
     const { rows } = await this.pool.query(`SELECT * FROM copy_fees WHERE deployment_id = $1`, [deploymentId]);
     const f = rows[0];
-    return f ? { strategyId: f.strategy_id, sessionPnl: Number(f.session_pnl), creatorFee: Number(f.creator_fee), platformFee: Number(f.platform_fee), feeBase: Number(f.fee_base) } : null;
+    if (f) return { strategyId: f.strategy_id, sessionPnl: Number(f.session_pnl), creatorFee: Number(f.creator_fee), platformFee: Number(f.platform_fee), feeBase: Number(f.fee_base) };
+    const { rows: d } = await this.pool.query(
+      `SELECT d.strategy_id, d.net_pnl, d.phase, d.owner_id, d.copier_verified, s.creator_id
+         FROM agent_deployments d LEFT JOIN strategies s ON s.strategy_id = d.strategy_id WHERE d.deployment_id = $1`, [deploymentId]);
+    const row = d[0];
+    if (!row?.strategy_id || !["completed", "failed"].includes(row.phase)) return null;
+    if (row.phase === "failed" || row.creator_id === row.owner_id || !row.copier_verified)
+      return { strategyId: row.strategy_id, sessionPnl: Number(row.net_pnl), creatorFee: 0, platformFee: 0, feeBase: 0 };
+    return null;
   }
 }
 

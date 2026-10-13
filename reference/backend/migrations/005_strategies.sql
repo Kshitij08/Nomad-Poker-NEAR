@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS style_decisions (
     table_name TEXT NOT NULL,
     hand_no INT NOT NULL,
     street SMALLINT NOT NULL,             -- 0 preflop, 1 flop, 2 turn, 3 river
-    position SMALLINT NOT NULL,           -- seats after the button (0 = button)
+    position SMALLINT NOT NULL,           -- seats before the button (0 = button, 1 = cutoff, ...)
     opponents SMALLINT NOT NULL,          -- live opponents in the hand
     strength REAL NOT NULL,               -- HandStrength.Estimate minus 0.03 per extra opponent (what the bot sees)
     pot BIGINT NOT NULL,
