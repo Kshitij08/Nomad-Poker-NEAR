@@ -272,7 +272,13 @@ const startPressedAt = new Map<number, number>();
 /** Tables this service hosted for Agents: address -> stake (big blind) and when. */
 const hostedTables = new Map<string, { address: string; big: bigint; at: number }>();
 let hosting: Promise<string | null> | null = null;
-const STAKES = [{ small: 100_000n, big: 200_000n }, { small: 500_000n, big: 1_000_000n }, { small: 1_000_000n, big: 2_000_000n }]; // PerHost.Stakes
+// PerHost.Stakes: the Coins tiers in "$" ($1 = 0.0001 SOL) — Micro $1/$2, Low $2/$5, Mid $10/$25, High $25/$50, Elite $100/$250;
+// buy-ins from the Coins tier's minimum to 100 big blinds, capped at the program's 1 SOL.
+const USD = 100_000n;
+const STAKES = [[1n, 2n, 50n], [2n, 5n, 100n], [10n, 25n, 500n], [25n, 50n, 1000n], [100n, 250n, 5000n]].map(([s, b, m]) => {
+  const big = b * USD, min = m * USD > 10n * big ? m * USD : 10n * big, max = 100n * big < 1_000_000_000n ? 100n * big : 1_000_000_000n;
+  return { small: s * USD, big, min, max };
+});
 const MAX_WAITING_HOSTED = 3;
 const ESPL = new PublicKey("SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2");
 const TEE_VALIDATOR = new PublicKey("MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo");
@@ -281,7 +287,7 @@ const TEE_VALIDATOR = new PublicKey("MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo
  *  (its buy-in in big blinds, at least the 10 BB minimum) fits. One at a time; at most 3 hosted tables waiting. */
 async function hostTableFor(settings: AgentSettings, left: bigint): Promise<string | null> {
   if (hosting) return null;
-  const fits = STAKES.filter((st) => BigInt(Math.max(10, settings.buyInBB)) * st.big <= left);
+  const fits = STAKES.filter((st) => { const bb = BigInt(Math.max(10, settings.buyInBB)) * st.big; return (bb > st.min ? bb : st.min) <= left; });
   if (fits.length === 0) return null;
   const st = fits[fits.length - 1];
   const now = Date.now();
@@ -292,7 +298,7 @@ async function hostTableFor(settings: AgentSettings, left: bigint): Promise<stri
 }
 
 /** Hosts one public 8-seat table at a stake level, the keeper as its creator (it pays and later reclaims the rent). */
-async function hostTableAt(st: { small: bigint; big: bigint }): Promise<string | null> {
+async function hostTableAt(st: { small: bigint; big: bigint; min: bigint; max: bigint }): Promise<string | null> {
   if (hosting) return hosting;
   hosting = (async () => {
     const keeper = config.keeper;
@@ -301,7 +307,7 @@ async function hostTableAt(st: { small: bigint; big: bigint }): Promise<string |
     const table = pda(Buffer.from("table"), keeper.publicKey.toBuffer(), idLe);
     const escrowEata = PublicKey.findProgramAddressSync([table.toBuffer(), NATIVE_MINT.toBuffer()], ESPL)[0];
     const l1Program = new anchor.Program(idl as anchor.Idl, new anchor.AnchorProvider(l1, new anchor.Wallet(keeper), { commitment: "confirmed" }));
-    const params = { smallBlind: new anchor.BN(st.small.toString()), bigBlind: new anchor.BN(st.big.toString()), minBuyIn: new anchor.BN((10n * st.big).toString()), maxBuyIn: new anchor.BN((100n * st.big).toString()), maxSeats: 8, inviteOnly: false };
+    const params = { smallBlind: new anchor.BN(st.small.toString()), bigBlind: new anchor.BN(st.big.toString()), minBuyIn: new anchor.BN(st.min.toString()), maxBuyIn: new anchor.BN(st.max.toString()), maxSeats: 8, inviteOnly: false };
     const create = await l1Program.methods.createTable(new anchor.BN(id.toString()), params)
       .accountsPartial({ creator: keeper.publicKey, config: CONFIG_PDA, table, mint: NATIVE_MINT, escrow: ata(table), escrowEata } as any).instruction();
     const delegate = await l1Program.methods.delegateTable(new anchor.BN(id.toString()), keeper.publicKey)
@@ -414,7 +420,7 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
   const now = Date.now();
   // Tables this service hosted for Agents (newest first): joined even before the lobby index lists them.
   const hostedRows = settings.table ? [] : [...hostedTables.values()].filter((h) => now - h.at < 10 * 60_000).reverse()
-    .map((h) => ({ address: h.address, big_blind: h.big.toString(), min_buy_in: (10n * h.big).toString(), max_buy_in: (100n * h.big).toString(), hosted: true }));
+    .map((h) => ({ address: h.address, big_blind: h.big.toString(), min_buy_in: (STAKES.find((st) => st.big === h.big)?.min ?? 10n * h.big).toString(), max_buy_in: (STAKES.find((st) => st.big === h.big)?.max ?? 100n * h.big).toString(), hosted: true }));
   const candidates = [...hostedRows, ...listed.filter((t: any) => !hostedTables.has(t.address))];
   for (const t of candidates.slice(0, 10)) {
     if ((triedTables.get(`${row.wallet}|${t.address}`) ?? 0) > now - 10 * 60_000) continue;
