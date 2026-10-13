@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { coach } from "../src/strategies/coach.js";
 import { settleCopy } from "../src/strategies/fees.js";
-import { clampProfile, PRESETS, type Profile } from "../src/strategies/profile.js";
+import { clampProfile, effective, lateness, PRESETS, type Profile } from "../src/strategies/profile.js";
 import { fitTwin, matchRate, type Decision } from "../src/strategies/style.js";
 
 // ------------------------------------------------------------------ fees
@@ -46,8 +46,9 @@ test("profiles reject non-numbers and clamp to the bot's limits", () => {
 
 // ------------------------------------------------------------------ twin
 
-/** HeuristicBot.Decide (Assets/Scripts/Bots/HeuristicBot.cs), without the per-decision strength noise. */
-function bot(p: Profile, s: number, toCall: number, pot: number, rnd: () => number): Decision["action"] {
+/** HeuristicBot.Decide (Assets/Scripts/Bots/HeuristicBot.cs), classic brain, without the per-decision strength noise. */
+function bot(profile: Profile, s: number, toCall: number, pot: number, street: number, late: number, rnd: () => number): Decision["action"] {
+  const p = effective(profile, street, late);
   if (toCall <= 0) return (s >= p.raiseAbove && rnd() < p.aggression) || rnd() < p.bluffChance ? "bet" : "check";
   if (s >= p.raiseAbove) return rnd() < p.aggression ? "raise" : "call";
   if (rnd() < p.bluffChance) return "raise";
@@ -62,10 +63,12 @@ function simulate(p: Profile, n: number, seed = 5): Decision[] {
   for (let i = 0; i < n; i++) {
     const strength = rnd(), pot = 100 + Math.floor(rnd() * 900);
     const toCall = rnd() < 0.4 ? 0 : Math.floor(pot * (0.2 + rnd() * 0.8));
-    const action = bot(p, strength, toCall, pot, rnd);
+    const street = i % 4, position = i % 6, opponents = 1 + (i % 5);
+    const action = bot(p, strength, toCall, pot, street, lateness(position, opponents), rnd);
     const minRaiseTo = toCall * 2 || 20;
-    const amount = action === "bet" || action === "raise" ? Math.round(minRaiseTo + (pot + toCall) * p.raiseFractionOfPot) : 0;
-    out.push({ street: i % 4, position: i % 6, opponents: 2, strength, pot, toCall, minRaiseTo, bigBlind: 20, action, amount });
+    const size = effective(p, street, 0).raiseFractionOfPot;
+    const amount = action === "bet" || action === "raise" ? Math.round(minRaiseTo + (pot + toCall) * size) : 0;
+    out.push({ street, position, opponents, strength, pot, toCall, minRaiseTo, bigBlind: 20, action, amount });
   }
   return out;
 }
@@ -95,6 +98,42 @@ test("a fitted twin matches its own player better than a different preset does",
   const ds = simulate(PRESETS.daredevil, 3000, 9);
   const twin = fitTwin(ds);
   assert.ok(matchRate(twin.profile, ds) > matchRate(PRESETS.guardian, ds));
+});
+
+test("a profile without position or streets fits without them", () => {
+  const twin = fitTwin(simulate(PRESETS.guardian, 4000));
+  assert.ok((twin.profile.positionWeight ?? 0) <= 0.2, `positionWeight ${twin.profile.positionWeight}`);
+  assert.equal(twin.profile.streets, undefined);
+});
+
+test("the twin recovers positionWeight, and it raises the match rate", () => {
+  const truth: Profile = { ...PRESETS.tactician, positionWeight: 0.8 };
+  const ds = simulate(truth, 6000, 21);
+  const twin = fitTwin(ds);
+  assert.ok(Math.abs((twin.profile.positionWeight ?? 0) - 0.8) <= 0.25, `positionWeight ${twin.profile.positionWeight}`);
+  assert.ok(Math.abs(twin.profile.foldBelow - truth.foldBelow) < 0.05, `foldBelow ${twin.profile.foldBelow}`);
+  const { positionWeight: _, ...flat } = twin.profile;
+  assert.ok(matchRate(twin.profile, ds) > matchRate(flat, ds), `${matchRate(twin.profile, ds)} vs ${matchRate(flat, ds)}`);
+});
+
+test("the twin finds a street the player plays differently", () => {
+  const truth: Profile = { ...PRESETS.tactician, streets: { river: { ...PRESETS.tactician, bluffChance: 0.2, foldBelow: 0.45 } } };
+  const twin = fitTwin(simulate(truth, 8000, 33));
+  const river = twin.profile.streets?.river;
+  assert.ok(river, "a river profile");
+  assert.ok(Math.abs(river!.bluffChance - 0.2) < 0.04, `river bluff ${river!.bluffChance}`);
+  assert.ok(Math.abs(river!.foldBelow - 0.45) < 0.06, `river foldBelow ${river!.foldBelow}`);
+  assert.ok(Math.abs(twin.profile.bluffChance - 0.07) < 0.02, `overall bluff ${twin.profile.bluffChance}`);
+  assert.equal(twin.profile.streets?.flop, undefined);
+});
+
+test("profiles keep the optional v2 fields, and a profile without them stays five numbers", () => {
+  const p = clampProfile({ ...PRESETS.tactician, positionWeight: 2, brain: 2, streets: { turn: { aggression: 0.9 } as any } });
+  assert.equal(p.positionWeight, 1);
+  assert.equal(p.brain, 2);
+  assert.deepEqual(p.streets?.turn, { ...PRESETS.tactician, aggression: 0.9 });
+  assert.deepEqual(Object.keys(clampProfile(PRESETS.guardian)).sort(), Object.keys(PRESETS.guardian).sort());
+  assert.throws(() => clampProfile({ ...PRESETS.tactician, positionWeight: "lots" as any }));
 });
 
 // ------------------------------------------------------------------ coaching

@@ -8,6 +8,7 @@
     "sync": "node scripts/sync-shared.mjs",
     "check": "tsc --noEmit -p .",
     "start": "node --import tsx src/index.ts",
+    "test": "node --import tsx test/agentBot.test.ts && node --import tsx test/brain.test.ts",
     "test:routes": "node --import tsx test/routes.test.ts"
   },
   "dependencies": {

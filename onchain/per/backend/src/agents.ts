@@ -54,7 +54,9 @@ export function checkSettings(s: any): AgentSettings {
   };
   if (strategy === "custom") {
     const c = s?.custom ?? {};
-    out.custom = clampProfile({ foldBelow: Number(c.foldBelow ?? 0.3), raiseAbove: Number(c.raiseAbove ?? 0.66), aggression: Number(c.aggression ?? 0.5), bluffChance: Number(c.bluffChance ?? 0.07), raiseFractionOfPot: Number(c.raiseFractionOfPot ?? 0.62) });
+    out.custom = clampProfile({ foldBelow: Number(c.foldBelow ?? 0.3), raiseAbove: Number(c.raiseAbove ?? 0.66), aggression: Number(c.aggression ?? 0.5), bluffChance: Number(c.bluffChance ?? 0.07), raiseFractionOfPot: Number(c.raiseFractionOfPot ?? 0.62),
+      // Agents v2 (optional; a profile without them plays as before): position, brain 2, per-street numbers.
+      positionWeight: c.positionWeight === undefined ? undefined : Number(c.positionWeight), brain: Number(c.brain) === 2 ? 2 : undefined, streets: c.streets });
   }
   if (s?.table) out.table = new PublicKey(s.table).toBase58();
   return out;
@@ -564,7 +566,7 @@ async function play(row: any, s: any, wallet: PublicKey, agentKp: Keypair, setti
   const hand = coder.decode("hand", handInfo.data);
   if (toBig(hand.handNo) !== handNo || hand.cards[0] === 255) return;
   const game: Game = {
-    seatCount: g.seatCount, toAct: g.toAct, highBet: toBig(g.highBet), minRaise: toBig(g.minRaise), pot: toBig(g.pot), runout: g.runout,
+    seatCount: g.seatCount, button: g.button, toAct: g.toAct, highBet: toBig(g.highBet), minRaise: toBig(g.minRaise), pot: toBig(g.pot), runout: g.runout,
     board: Array.from(g.board as number[]).slice(0, g.boardLen), boardLen: g.boardLen, bigBlind: toBig(g.bigBlind), street: g.street,
     seats: g.seats.map((x: any) => ({ status: x.status, stack: toBig(x.stack), currentBet: toBig(x.currentBet) })),
   };
