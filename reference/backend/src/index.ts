@@ -12,10 +12,14 @@ import { startIndexer } from "./services/indexer.js";
 import { createPlayFabFromEnv } from "./services/playfab.js";
 import { TournamentService } from "./tournaments/service.js";
 import { createTournamentApiRouter, createTournamentInternalRouter } from "./tournaments/routes.js";
+import { StrategyService } from "./strategies/service.js";
+import { createStrategyApiRouter, createStrategyInternalRouter } from "./strategies/routes.js";
 
 const app = express();
 const pool = createPool();
-const tournaments = new TournamentService(pool, createPlayFabFromEnv());
+const playfab = createPlayFabFromEnv();
+const tournaments = new TournamentService(pool, playfab);
+const strategies = new StrategyService(pool, playfab);
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
@@ -27,10 +31,12 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
-app.use("/api", createApiRouter(pool));
+app.use("/api", createApiRouter(pool, strategies));
 app.use("/api", createTournamentApiRouter(tournaments));
+app.use("/api", createStrategyApiRouter(strategies));
 app.use("/internal/tournaments", requireInternalApiKey, createTournamentInternalRouter(tournaments));
-app.use("/internal", requireInternalApiKey, createInternalRouter(pool));
+app.use("/internal", requireInternalApiKey, createStrategyInternalRouter(strategies));
+app.use("/internal", requireInternalApiKey, createInternalRouter(pool, strategies));
 app.use("/host", requirePlayerJwt, createHostRouter(pool));
 
 const port = Number(process.env.PORT ?? 8787);
@@ -55,6 +61,11 @@ async function main() {
       );
     }
   }
+
+  // Copy-strategy creator payouts that PlayFab couldn't take yet (busy, or the creator not seen since publishing).
+  setInterval(() => {
+    strategies.retryPayouts().catch((err) => console.warn("[strategies] payout retry failed:", err.message ?? err));
+  }, 5 * 60_000).unref();
 
   const connection = createConnection();
   await startIndexer(connection);

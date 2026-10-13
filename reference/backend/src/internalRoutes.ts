@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Pool } from "pg";
 import { createPool } from "./db/pool.js";
+import type { StrategyService } from "./strategies/service.js";
 import {
   beginRound,
   cashOutPlayer,
@@ -19,7 +20,7 @@ import {
   type AgentPhase,
 } from "./services/agentDeployments.js";
 
-export function createInternalRouter(providedPool?: Pool): Router {
+export function createInternalRouter(providedPool?: Pool, strategies?: StrategyService): Router {
   const router = Router();
   const agents = new AgentDeploymentService(providedPool ?? createPool());
 
@@ -213,7 +214,9 @@ export function createInternalRouter(providedPool?: Pool): Router {
     }
     try {
       const result = await agents.complete(session, req.body ?? {});
-      res.json({ ...result, ok: true });
+      // Copied strategy: settle the profit share now (idempotent; a failure here is retried by the next result read).
+      const copyFee = strategies ? await strategies.settle(session).catch((e) => { console.warn("[strategies] settle failed:", e?.message ?? e); return null; }) : null;
+      res.json({ ...result, ok: true, CopyFee: copyFee });
     } catch (err: any) {
       res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
     }

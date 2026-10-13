@@ -1,7 +1,8 @@
 import express from "express";
 import type { Pool } from "pg";
 import { createAuthRouter } from "../auth/routes.js";
-import { hasJwtSecretConfigured, verifyPlayerToken } from "../auth/jwt.js";
+import { hasJwtSecretConfigured, verifyPlayFabToken, verifyPlayerToken } from "../auth/jwt.js";
+import type { StrategyService } from "../strategies/service.js";
 import { createPool } from "../db/pool.js";
 import {
   DEFAULT_DEVNET_RPC,
@@ -20,7 +21,7 @@ import {
 } from "../services/partySessions.js";
 import { AgentDeploymentService } from "../services/agentDeployments.js";
 
-export function createApiRouter(providedPool?: Pool) {
+export function createApiRouter(providedPool?: Pool, strategies?: StrategyService) {
   const router = express.Router();
   const pool = providedPool ?? createPool();
   const agents = new AgentDeploymentService(pool);
@@ -110,8 +111,24 @@ export function createApiRouter(providedPool?: Pool) {
         profitTarget: Math.max(0, Number(req.body?.profitTarget) || 0),
         stake,
       });
+      // Copying a marketplace strategy: the copier must be the signed-in player (the profit share is theirs to pay).
+      const strategyId = optionalString(req.body?.strategyId);
+      if (strategyId && strategies) {
+        let copier: string;
+        try {
+          copier = (await verifyPlayFabToken(bearer(req) ?? "")).sub ?? "";
+        } catch {
+          res.status(401).json({ error: "Sign in to copy a strategy.", code: "sign_in" });
+          return;
+        }
+        if (copier !== ownerId) {
+          res.status(403).json({ error: "You can only copy for your own account." });
+          return;
+        }
+        await strategies.attachCopy(session, copier, strategyId);
+      }
       // No child room needs to boot; "ready" keeps legacy Unity deploy clients compatible.
-      res.json({ ...deployment, status: "ready", kind: "agent" });
+      res.json({ ...deployment, status: "ready", kind: "agent", strategyId: strategyId ?? null });
     } catch (err: any) {
       const status = Number(err?.status) || 400;
       res.status(status).json({ error: err.message ?? String(err) });
@@ -162,7 +179,10 @@ export function createApiRouter(providedPool?: Pool) {
         res.status(404).json({ error: "No result yet" });
         return;
       }
-      res.json(result);
+      // A copied strategy's profit share (the client credits the session result minus these).
+      if (strategies) await strategies.settle(session).catch(() => null); // settles once; a no-op afterwards
+      const copyFee = strategies ? await strategies.feeFor(session) : null;
+      res.json({ ...result, CopyFee: copyFee });
     } catch (err: any) {
       res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
     }
@@ -310,4 +330,9 @@ function pagination(rawLimit: unknown, rawOffset: unknown) {
   const limit = Math.max(1, Math.min(100, Math.trunc(Number(rawLimit) || 25)));
   const offset = Math.max(0, Math.trunc(Number(rawOffset) || 0));
   return { limit, offset };
+}
+
+function bearer(req: express.Request): string | undefined {
+  const header = req.header("authorization")?.trim();
+  return header?.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() || undefined : undefined;
 }
