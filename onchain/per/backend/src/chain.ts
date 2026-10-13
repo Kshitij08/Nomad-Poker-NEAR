@@ -48,6 +48,13 @@ export class TeeSession {
   }
 }
 
+/** Error text that may reach a client or a log: rollup logins (`?token=`), RPC API keys and the RPC hosts
+ *  themselves (a paid RPC URL is a credential), and bearer tokens (deep review: widened from tokens only). */
+export const redact = (s: string) => s
+  .replace(/(?:https?|wss?):\/\/[^\s"'<>)]+/gi, "<rpc>")
+  .replace(/(token|api[-_]?key|apikey|access[-_]?key|secret)=[^&\s"']+/gi, "$1=<redacted>")
+  .replace(/bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer <redacted>");
+
 /** A public (no login) rollup connection, for public accounts only. */
 export const teePublic = new Connection(config.teeUrl, { commitment: "confirmed", fetch: fetchWithTimeout as any });
 

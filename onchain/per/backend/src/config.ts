@@ -36,6 +36,12 @@ export const config = {
   closeAbandoned: process.env.CLOSE_ABANDONED !== "false",
   /** M10 feature flag: the game shows private tables only while this is on (`PRIVATE_TABLES=false` hides them). */
   privateTables: process.env.PRIVATE_TABLES !== "false",
+  /** Deep review #5: tables the keeper hosts (Quick Play, Agents) per wallet and in all, per hour. */
+  hostsPerWalletHour: Number(process.env.HOSTS_PER_WALLET_HOUR ?? 3),
+  hostsPerHour: Number(process.env.HOSTS_PER_HOUR ?? 20),
+  /** Deep review #4: tournaments with no entry fee whose tables the keeper pays for, per host and in all, per hour. */
+  freeTourneysPerHostHour: Number(process.env.FREE_TOURNEYS_PER_HOST_HOUR ?? 1),
+  freeTourneysPerHour: Number(process.env.FREE_TOURNEYS_PER_HOUR ?? 4),
 };
 
 if (config.archiveKey.length !== 32) throw new Error("ARCHIVE_KEY_HEX must be 32 bytes of hex");

@@ -1,5 +1,6 @@
 // poker-per backend: lobby index, hand archive, verify API and the keeper. A separate service
 // from the existing game backend (its own Railway project and database).
+import { Client } from "pg";
 import { app } from "./api";
 import { config } from "./config";
 import { migrate, pool } from "./db";
@@ -10,10 +11,35 @@ async function main() {
   await migrate();
   app().listen(config.port, () => console.log(`listening on ${config.port}; keeper ${config.keeper.publicKey.toBase58()}; auditor ${config.auditor.publicKey.toBase58()}`));
   if (config.keeperEnabled) {
-    runKeeper().catch((e) => { console.error("keeper stopped", e); process.exit(1); });
+    // Deep review: during a deploy the old and new service run together, and both ran the keeper (two
+    // tournament passes hosting and paying for the same steps). Like the Agents below, only the holder of a
+    // Postgres lock runs it; the other stands by (healthy) until the old one exits. The lock lives on its own
+    // connection, outside the pool; losing that connection loses the lock, so the keeper exits and restarts.
+    keeperState.standby = true;
+    (async () => {
+      for (;;) {
+        const c = new Client({ connectionString: config.databaseUrl });
+        c.on("error", () => undefined);
+        try {
+          await c.connect();
+          if ((await c.query("select pg_try_advisory_lock(424213) as ok")).rows[0].ok) {
+            c.removeAllListeners("error");
+            c.on("error", (e) => { console.error("keeper: lost its lock connection; exiting", e.message); process.exit(1); });
+            break;
+          }
+        } catch (e: any) { console.error("keeper lock:", e?.message ?? e); }
+        await c.end().catch(() => undefined);
+        await new Promise((r) => setTimeout(r, 5_000));
+      }
+      console.log("keeper: this instance runs the keeper");
+      keeperState.standby = false;
+      keeperState.startedAt = Date.now();
+      await runKeeper();
+    })().catch((e) => { console.error("keeper stopped", e); process.exit(1); });
     // A keeper stuck for 3 minutes (RPC calls time out after 20 s, so this means something worse)
     // exits, and Railway restarts the service.
     setInterval(() => {
+      if (keeperState.standby) return;
       const since = Date.now() - Math.max(keeperState.lastLoopAt, keeperState.startedAt);
       if (since > 180_000) { console.error(`keeper stalled for ${Math.round(since / 1000)} s; exiting`); process.exit(1); }
     }, 30_000).unref();
