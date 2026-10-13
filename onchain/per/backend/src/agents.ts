@@ -14,6 +14,7 @@ import { CONFIG_PDA, PROGRAM_ID, TeeSession, accountsOf, coder, l1, rollupProgra
 import { config } from "./config";
 import { event, pool } from "./db";
 import { PRESETS, Profile, clampProfile, decide, Game, ST } from "./agentBot";
+import * as market from "./solStrategies";
 import idl from "./shared/poker_per.json";
 
 // ---------------------------------------------------------------------------------------- settings and limits
@@ -33,6 +34,10 @@ export type AgentSettings = {
   profitTarget: number;
   /** A table to play (else the first open public one that fits). */
   table?: string;
+  /** A copied marketplace strategy (solStrategies.ts): its profile is `custom`, and the record must carry its fee terms. */
+  strategyId?: string;
+  /** Its fee terms, set by /agents/prepare (the game sets the same on chain). */
+  terms?: { creator: string; creatorFeeBps: number; platformFeeBps: number };
 };
 
 const MIN_STAKE = 1_000_000, MAX_STAKE = 5_000_000_000;
@@ -57,6 +62,10 @@ export function checkSettings(s: any): AgentSettings {
     out.custom = clampProfile({ foldBelow: Number(c.foldBelow ?? 0.3), raiseAbove: Number(c.raiseAbove ?? 0.66), aggression: Number(c.aggression ?? 0.5), bluffChance: Number(c.bluffChance ?? 0.07), raiseFractionOfPot: Number(c.raiseFractionOfPot ?? 0.62) });
   }
   if (s?.table) out.table = new PublicKey(s.table).toBase58();
+  if (s?.strategyId !== undefined && s?.strategyId !== null) {
+    if (typeof s.strategyId !== "string" || !/^[0-9a-f-]{36}$/.test(s.strategyId)) throw new Error("bad strategyId");
+    out.strategyId = s.strategyId;
+  }
   return out;
 }
 const profileOf = (s: AgentSettings): Profile => (s.strategy === "custom" && s.custom ? s.custom : PRESETS[s.strategy] ?? PRESETS.balanced);
@@ -122,7 +131,8 @@ const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
 const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 const ORACLE_QUEUE = new PublicKey("5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc");
 const ata = (owner: PublicKey) => PublicKey.findProgramAddressSync([owner.toBuffer(), TOKEN_PROGRAM.toBuffer(), NATIVE_MINT.toBuffer()], ATA_PROGRAM)[0];
-const agentStateOf = (wallet: PublicKey) => pda(Buffer.from("agent"), wallet.toBuffer());
+/** Agents v2: the record moved to new seeds for its bigger layout (fee terms and counts). */
+const agentStateOf = (wallet: PublicKey) => pda(Buffer.from("agent2"), wallet.toBuffer());
 const walletStateOf = (wallet: PublicKey) => pda(Buffer.from("wallet"), wallet.toBuffer());
 const handOf = (table: PublicKey, seat: number) => pda(Buffer.from("hand"), table.toBuffer(), Buffer.from([seat]));
 const PLAY_CU = 1_400_000;
@@ -135,9 +145,13 @@ async function walletState(wallet: PublicKey): Promise<{ keySet: number; seed: B
 }
 const vaultOf = (wallet: PublicKey, seed: Buffer) => (seed.every((b) => b === 0) ? pda(Buffer.from("vault"), wallet.toBuffer()) : pda(Buffer.from("vault"), wallet.toBuffer(), seed));
 
-export type AgentRecord = { wallet: PublicKey; agent: PublicKey; expires: number; keySet: number; stake: bigint; committed: bigint; table: PublicKey; seat: number; reader: PublicKey };
+export type AgentRecord = {
+  wallet: PublicKey; agent: PublicKey; expires: number; keySet: number; stake: bigint; committed: bigint; table: PublicKey; seat: number; reader: PublicKey;
+  terms: market.FeeTerms; seatIn: bigint; netIn: bigint; netOut: bigint; highWater: bigint; skipped: number;
+};
+const AGENT_STATE_LEN = 8 + 32 + 32 + 8 + 4 + 8 + 8 + 32 + 1 + 32 + 1 + 32 + 2 + 2 + 8 + 8 + 8 + 8 + 4 + 16;
 export function decodeAgentState(d: Buffer): AgentRecord | null {
-  if (!d || d.length < 8 + 32 + 32 + 8 + 4 + 8 + 8 + 32 + 1 + 32) return null;
+  if (!d || d.length < AGENT_STATE_LEN) return null;
   let o = 8;
   const key = () => { const k = new PublicKey(d.subarray(o, o + 32)); o += 32; return k; };
   const wallet = key(), agent = key();
@@ -148,8 +162,23 @@ export function decodeAgentState(d: Buffer): AgentRecord | null {
   const table = key();
   const seat = d[o]; o += 1;
   const reader = key();
-  return { wallet, agent, expires, keySet, stake, committed, table, seat, reader };
+  o += 1; // bump
+  const creator = key();
+  const creatorFeeBps = d.readUInt16LE(o); o += 2;
+  const platformFeeBps = d.readUInt16LE(o); o += 2;
+  const seatIn = d.readBigUInt64LE(o); o += 8;
+  const netIn = d.readBigUInt64LE(o); o += 8;
+  const netOut = d.readBigUInt64LE(o); o += 8;
+  const highWater = d.readBigInt64LE(o); o += 8;
+  const skipped = d.readUInt32LE(o); o += 4;
+  return { wallet, agent, expires, keySet, stake, committed, table, seat, reader, terms: { creator, creatorFeeBps, platformFeeBps }, seatIn, netIn, netOut, highWater, skipped };
 }
+
+/** The fee terms the Agent's record must carry for these settings (none for the player's own strategy): the ones
+ *  /agents/prepare handed the game, so a later change of Nomad's share doesn't stop a running Agent. */
+const termsOf = (s: AgentSettings): market.FeeTerms => s.strategyId && s.terms
+  ? { creator: new PublicKey(s.terms.creator), creatorFeeBps: s.terms.creatorFeeBps, platformFeeBps: s.terms.platformFeeBps }
+  : market.NO_TERMS;
 
 // ---------------------------------------------------------------------------------------- requests from the game
 
@@ -196,6 +225,13 @@ export function agentRoutes(a: Express) {
    *  key) and calls /agents/start. */
   route("/agents/prepare", async (wallet, data) => {
     const settings = checkSettings(data.settings);
+    // Copying a marketplace strategy: play its profile, and hand the game the fee terms to set on chain with the Agent.
+    if (settings.strategyId) {
+      const c = await market.termsFor(settings.strategyId, wallet);
+      settings.strategy = "custom";
+      settings.custom = clampProfile(c.profile);
+      settings.terms = { creator: c.terms.creator.toBase58(), creatorFeeBps: c.terms.creatorFeeBps, platformFeeBps: c.terms.platformFeeBps };
+    }
     const cur = await pool.query("select status from agents where wallet = $1", [wallet.toBase58()]);
     if (cur.rows[0] && ["running", "stopping"].includes(cur.rows[0].status)) throw new Error("your Agent is still playing: stop it first");
     const seated = await pool.query("select 1 from agent_sessions where wallet = $1 and ended_at is null", [wallet.toBase58()]);
@@ -206,7 +242,7 @@ export function agentRoutes(a: Express) {
       `insert into agents (wallet, agent_pub, agent_secret, settings, status, detail, until, updated_at) values ($1, $2, $3, $4, 'prepared', '', $5, now())
        on conflict (wallet) do update set agent_pub = $2, agent_secret = $3, settings = $4, status = 'prepared', detail = '', until = $5, updated_at = now()`,
       [wallet.toBase58(), kp.publicKey.toBase58(), seal(kp.secretKey), settings, until]);
-    return { agent: kp.publicKey.toBase58(), until, stake: settings.stake };
+    return { agent: kp.publicKey.toBase58(), until, stake: settings.stake, terms: settings.terms ?? null };
   });
 
   /** Step 2: the record on chain names this Agent key; start playing. */
@@ -216,6 +252,8 @@ export function agentRoutes(a: Express) {
     const kp = open(row.agent_secret);
     const rec = decodeAgentState((await (await sessionFor(kp).get()).getAccountInfo(agentStateOf(wallet), "processed"))?.data as Buffer);
     if (!rec || !rec.agent.equals(kp.publicKey) || rec.expires <= Date.now() / 1000) throw new Error("the Agent isn't set on chain yet (agent_set)");
+    // A copied strategy plays only under its fee terms (the program then pays them at every cash-out).
+    if (!market.sameTerms(rec.terms, termsOf(row.settings))) throw new Error("the Agent was set on chain without the strategy's fee terms");
     await pool.query("update agents set status = 'running', detail = 'looking for a table', updated_at = now() where wallet = $1", [wallet.toBase58()]);
     return { status: "running" };
   });
@@ -252,9 +290,19 @@ export function agentRoutes(a: Express) {
     const w = wallet.toBase58();
     const row = (await pool.query("select agent_pub, settings, status, detail, until, updated_at from agents where wallet = $1", [w])).rows[0] ?? null;
     const sessions = (await pool.query(
-      "select id, table_address, seat, buy_in, stack, cash_out, hands, started_at, ended_at, end_reason from agent_sessions where wallet = $1 order by id desc limit 20", [w])).rows;
+      "select id, table_address, seat, buy_in, stack, cash_out, hands, started_at, ended_at, end_reason, strategy_id, creator_fee, platform_fee from agent_sessions where wallet = $1 order by id desc limit 20", [w])).rows;
     return { agent: row, sessions };
   });
+
+  // ---- Agents v2: the SOL copy-strategy marketplace (solStrategies.ts). Browsing is public; publishing, unlisting
+  // and the creator's dashboard are signed by the wallet's play key like every Agent request.
+  const reply = (res: Response, p: Promise<any>) => p.then((v) => res.json(v), (e: any) =>
+    res.status(e instanceof market.StrategyError ? 400 : 500).json({ error: e instanceof market.StrategyError ? e.message : "something went wrong; try again" }));
+  a.get("/sol-strategies", (req: Request, res: Response) => reply(res, market.list(String(req.query.sort ?? "top"), Number(req.query.limit) || 30).then((strategies) => ({ strategies }))));
+  a.get("/sol-strategies/:id", (req: Request, res: Response) => reply(res, market.get(String(req.params.id))));
+  route("/sol-strategies/publish", (wallet, data) => market.publish(wallet, data));
+  route("/sol-strategies/unlist", (wallet, data) => market.unlist(wallet, data?.strategyId));
+  route("/sol-strategies/mine", (wallet) => market.dashboard(wallet));
 }
 
 // ---------------------------------------------------------------------------------------- the runner
@@ -341,6 +389,27 @@ const aloneSince = new Map<number, number>();
 const triedTables = new Map<string, number>(); // wallet|table -> when a buy-in there failed
 export const runnerState = { loops: 0, lastError: "", running: 0 };
 
+/** Accounts of agent_cash_out. Copying a strategy, also where the fees go: the creator's and config.dev_wallet's
+ *  game balances (their current vaults' token accounts). */
+async function agentCashOutAccounts(signer: PublicKey, wallet: PublicKey, terms: market.FeeTerms, table: PublicKey, seat: number) {
+  const vault = vaultOf(wallet, (await walletState(wallet)).seed);
+  const acc = accountsOf(table), hand = handOf(table, seat);
+  const fees: Record<string, PublicKey | null> = { creatorWalletState: null, creatorVaultToken: null, treasuryWalletState: null, treasuryVaultToken: null };
+  if (!terms.creator.equals(PublicKey.default)) {
+    const cfg: any = coder.decode("config", (await l1.getAccountInfo(CONFIG_PDA, "confirmed"))!.data);
+    const treasury: PublicKey = cfg.devWallet;
+    fees.creatorWalletState = walletStateOf(terms.creator);
+    fees.creatorVaultToken = ata(vaultOf(terms.creator, (await walletState(terms.creator)).seed));
+    fees.treasuryWalletState = walletStateOf(treasury);
+    fees.treasuryVaultToken = ata(vaultOf(treasury, (await walletState(treasury)).seed));
+  }
+  return {
+    signer, wallet, agentState: agentStateOf(wallet), vault, walletState: walletStateOf(wallet), vaultToken: ata(vault),
+    table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), hand, handPermission: permissionPdaFromAccount(hand),
+    escrow: ata(table), config: CONFIG_PDA, ...fees, rollup: rollupPrograms, tokenProgram: TOKEN_PROGRAM,
+  } as any;
+}
+
 async function setStatus(wallet: string, status: string, detail: string) {
   await pool.query("update agents set status = $2, detail = $3, updated_at = now() where wallet = $1", [wallet, status, detail]);
 }
@@ -393,6 +462,8 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
   if (rec.expires <= Date.now() / 1000) { await setStatus(row.wallet, "stopped", "its time is up"); return; }
   const { keySet, seed: vaultSeed } = await walletState(wallet);
   if (keySet !== rec.keySet) { await setStatus(row.wallet, "stopped", "you cancelled your play keys"); return; } // review L1
+  // Copying: the record must still carry the strategy's fee terms (the play key could set it again without them).
+  if (!market.sameTerms(rec.terms, termsOf(settings))) { await setStatus(row.wallet, "stopped", "its fee terms on chain no longer match the copied strategy"); return; }
   const program = await sessionFor(agentKp).program();
   // A seat left another way (you cashed it out, the table closed): free the record first. If the seat is in fact
   // still held (one this service lost track of), leave it with the Agent key (review H1).
@@ -402,12 +473,7 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
       await program.methods.agentRelease().accountsPartial({ wallet, agentState: agentStateOf(wallet), table: rec.table, ledger: acc.ledger } as any).rpc();
     } catch (e: any) {
       try {
-        const v = vaultOf(wallet, vaultSeed), hand = handOf(rec.table, rec.seat);
-        await program.methods.agentCashOut(rec.seat).accountsPartial({
-          signer: agentKp.publicKey, wallet, agentState: agentStateOf(wallet), vault: v, walletState: walletStateOf(wallet), vaultToken: ata(v),
-          table: rec.table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), hand, handPermission: permissionPdaFromAccount(hand),
-          escrow: ata(rec.table), rollup: rollupPrograms, tokenProgram: TOKEN_PROGRAM,
-        } as any).rpc();
+        await program.methods.agentCashOut(rec.seat).accountsPartial(await agentCashOutAccounts(agentKp.publicKey, wallet, rec.terms, rec.table, rec.seat)).rpc();
         await event(rec.table.toBase58(), "agent cash-out", true, "a seat this service had lost track of");
       } catch (e2: any) { await setStatus(row.wallet, row.status, "leaving its last seat (between hands)"); }
       return;
@@ -421,7 +487,9 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
   // Tables this service hosted for Agents (newest first): joined even before the lobby index lists them.
   const hostedRows = settings.table ? [] : [...hostedTables.values()].filter((h) => now - h.at < 10 * 60_000).reverse()
     .map((h) => ({ address: h.address, big_blind: h.big.toString(), min_buy_in: (STAKES.find((st) => st.big === h.big)?.min ?? 10n * h.big).toString(), max_buy_in: (STAKES.find((st) => st.big === h.big)?.max ?? 100n * h.big).toString(), hosted: true }));
-  const candidates = [...hostedRows, ...listed.filter((t: any) => !hostedTables.has(t.address))];
+  // Copiers of one strategy, and the creator's own Agent, never share a table (docs §5, collusion).
+  const avoid = await market.tablesToAvoid(row.wallet, settings.strategyId, settings.terms?.creator);
+  const candidates = [...hostedRows, ...listed.filter((t: any) => !hostedTables.has(t.address))].filter((t: any) => !avoid.has(t.address));
   for (const t of candidates.slice(0, 10)) {
     if ((triedTables.get(`${row.wallet}|${t.address}`) ?? 0) > now - 10 * 60_000) continue;
     const bb = BigInt(t.big_blind), min = BigInt(t.min_buy_in), max = BigInt(t.max_buy_in);
@@ -448,8 +516,12 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
     const vault = vaultOf(wallet, seed);
     const acc = accountsOf(table);
     const hand = handOf(table, seat);
-    const pending = (await pool.query("insert into agent_sessions (wallet, agent_pub, table_address, seat, reader_secret, buy_in, stack, last_hand) values ($1, $2, $3, $4, $5, $6, $6, $7) returning id",
-      [row.wallet, row.agent_pub, t.address, seat, seal(reader.secretKey), amount.toString(), tb.handNo.toString()])).rows[0].id;
+    // The record's counts don't change while the Agent holds this seat: with them, its cash-out's fees are known.
+    const pending = (await pool.query(
+      `insert into agent_sessions (wallet, agent_pub, table_address, seat, reader_secret, buy_in, stack, last_hand, strategy_id, fee_net_before, fee_high_water)
+       values ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10) returning id`,
+      [row.wallet, row.agent_pub, t.address, seat, seal(reader.secretKey), amount.toString(), tb.handNo.toString(), settings.strategyId ?? null,
+        (rec.netOut - rec.netIn).toString(), rec.highWater.toString()])).rows[0].id;
     try {
       await program.methods.agentBuyIn(seat, new anchor.BN(amount.toString()), reader.publicKey).accountsPartial({
         agentKey: agentKp.publicKey, wallet, agentState: agentStateOf(wallet), vault, walletState: walletStateOf(wallet), vaultToken: ata(vault),
@@ -578,18 +650,33 @@ async function play(row: any, s: any, wallet: PublicKey, agentKp: Keypair, setti
 }
 
 async function cashOut(row: any, s: any, wallet: PublicKey, agentKp: Keypair, reader: Keypair, table: PublicKey, stack: bigint, reason: string) {
-  const { seed } = await walletState(wallet);
-  const vault = vaultOf(wallet, seed);
-  const acc = accountsOf(table);
   const seat = Number(s.seat);
-  const hand = handOf(table, seat);
+  const settings: AgentSettings = row.settings;
+  const terms = s.strategy_id ? termsOf(settings) : market.NO_TERMS;
   // The seat's table key signs: it works whether or not the Agent was stopped or replaced on chain.
   const program = await sessionFor(reader).program();
-  await program.methods.agentCashOut(seat).accountsPartial({
-    signer: reader.publicKey, wallet, agentState: agentStateOf(wallet), vault, walletState: walletStateOf(wallet), vaultToken: ata(vault),
-    table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), hand, handPermission: permissionPdaFromAccount(hand),
-    escrow: ata(table), rollup: rollupPrograms, tokenProgram: TOKEN_PROGRAM,
-  } as any).rpc();
+  try {
+    await program.methods.agentCashOut(seat).accountsPartial(await agentCashOutAccounts(reader.publicKey, wallet, terms, table, seat)).rpc();
+  } catch (e: any) {
+    const why = redact(String(e?.message ?? e));
+    if (!s.strategy_id || /HandInProgress/.test(why)) throw e;
+    // Copying, and the cash-out with the fees failed: leaving comes first. The seat's table key cashes it out the plain
+    // way; the record then counts the seat as left another way (no fee, no loss carried forward).
+    const { seed } = await walletState(wallet);
+    const vault = vaultOf(wallet, seed), acc = accountsOf(table), hand = handOf(table, seat);
+    await program.methods.vaultCashOut(seat, new anchor.BN(0)).accountsPartial({
+      signer: reader.publicKey, wallet, vault, walletState: walletStateOf(wallet), vaultToken: ata(vault), instructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), hand, handPermission: permissionPdaFromAccount(hand), escrow: ata(table), rollup: rollupPrograms,
+    } as any).rpc();
+    await event(s.table_address, "agent cash-out", false, `with the profit share failed (${why.slice(0, 200)}); left without it`);
+    await endSession(row, s, stack, reason);
+    return;
+  }
+  if (s.strategy_id && s.fee_net_before !== null) {
+    const f = market.settleSol(terms, BigInt(s.fee_net_before), BigInt(s.fee_high_water), BigInt(s.buy_in), stack);
+    await pool.query("update agent_sessions set creator_fee = $2, platform_fee = $3 where id = $1", [s.id, f.creatorFee.toString(), f.platformFee.toString()]);
+    if (f.profit > 0n) await event(s.table_address, "agent copy fee", true, `${f.creatorFee} to the creator, ${f.platformFee} to Nomad, on ${f.profit} new profit`);
+  }
   await event(s.table_address, "agent cash-out", true, `${stack} lamports: ${reason}`);
   await endSession(row, s, stack, reason);
 }

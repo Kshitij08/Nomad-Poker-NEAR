@@ -170,4 +170,10 @@ pub enum PokerError {
     AgentStakeExceeded,
     #[msg("Not the Agent's seat")]
     NotAgentSeat,
+    #[msg("Bad copy-strategy fee terms")]
+    BadFeeTerms,
+    #[msg("The Agent's fee terms can't change while it holds a seat")]
+    FeeTermsLocked,
+    #[msg("Wrong account for a copy-strategy fee")]
+    BadFeeAccount,
 }

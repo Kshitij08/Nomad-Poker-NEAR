@@ -2,6 +2,7 @@
 import { Pool } from "pg";
 import { config } from "./config";
 import { AGENT_MIGRATIONS } from "./agents";
+import { SOL_STRATEGY_MIGRATIONS } from "./solStrategies";
 
 export const pool = new Pool({ connectionString: config.databaseUrl, max: 5 });
 
@@ -67,7 +68,7 @@ const MIGRATIONS: string[] = [
 pool.on("error", (e) => console.error("postgres pool error:", e.message));
 
 export async function migrate() {
-  for (const sql of [...MIGRATIONS, ...AGENT_MIGRATIONS]) await pool.query(sql);
+  for (const sql of [...MIGRATIONS, ...AGENT_MIGRATIONS, ...SOL_STRATEGY_MIGRATIONS]) await pool.query(sql);
 }
 
 export async function event(table: string | null, action: string, ok: boolean, detail = "") {

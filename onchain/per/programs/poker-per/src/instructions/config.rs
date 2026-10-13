@@ -4,7 +4,7 @@ use anchor_lang::system_program::{transfer, Transfer};
 use crate::constants::{CONFIG_SEED, CONFIG_VERSION};
 use crate::errors::PokerError;
 use crate::program::PokerPer;
-use crate::state::{check_settings, Config, ConfigV1, CONFIG_RESERVED};
+use crate::state::{check_settings, Config, ConfigV1, CONFIG_RESERVED, MAX_PLATFORM_FEE_BPS};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct ConfigArgs {
@@ -43,6 +43,7 @@ pub fn initialize_config(ctx: Context<InitializeConfig>, args: ConfigArgs) -> Re
     config.max_buy_in = args.max_buy_in;
     config.paused = args.paused;
     config.escape_idle_secs = args.escape_idle_secs;
+    config.agent_fee_bps = 0;
     config.reserved = [0; CONFIG_RESERVED];
     emit_changed(config);
     Ok(())
@@ -79,6 +80,16 @@ pub fn set_auditor(ctx: Context<AdminOnly>, auditor: Pubkey) -> Result<()> {
     let config = &mut ctx.accounts.config;
     config.auditor = auditor;
     emit!(AuditorSet { auditor });
+    Ok(())
+}
+
+/// Copy strategies: Nomad's share of a copier's new profit, in basis points (0 = the default 2%, at most 5%).
+/// Applies to Agents set from now on; a copier's record keeps the share they agreed to.
+pub fn set_agent_fee(ctx: Context<AdminOnly>, bps: u16) -> Result<()> {
+    require!(bps <= MAX_PLATFORM_FEE_BPS, PokerError::BadFeeTerms);
+    let config = &mut ctx.accounts.config;
+    config.agent_fee_bps = bps;
+    emit!(AgentFeeSet { bps: config.agent_fee_bps() });
     Ok(())
 }
 
@@ -162,6 +173,7 @@ pub fn migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
         paused: old.paused,
         escape_idle_secs: 0,
         auditor: Pubkey::default(),
+        agent_fee_bps: 0,
         reserved: [0; CONFIG_RESERVED],
     };
     let mut data = info.try_borrow_mut_data()?;
@@ -213,4 +225,9 @@ pub struct ConfigMigrated {
 #[event]
 pub struct AuditorSet {
     pub auditor: Pubkey,
+}
+
+#[event]
+pub struct AgentFeeSet {
+    pub bps: u16,
 }

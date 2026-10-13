@@ -4,7 +4,7 @@ use crate::constants::MAX_RAKE_BPS;
 use crate::errors::PokerError;
 
 /// Bytes kept free at the end of Config so later modules can add fields without a realloc.
-pub const CONFIG_RESERVED: usize = 92;
+pub const CONFIG_RESERVED: usize = 90;
 
 /// Default and bounds for `escape_idle_secs` (0 in the account means the default).
 pub const DEFAULT_ESCAPE_IDLE_SECS: u32 = 3_600;
@@ -38,10 +38,22 @@ pub struct Config {
     /// May read finished hands' action logs (`open_log`); default = no auditor. Carved from the
     /// reserved bytes, so existing accounts read "none".
     pub auditor: Pubkey,
+    /// Copy strategies (Agents v2): Nomad's share of a copier's new profit, in basis points; 0 = the default
+    /// (`DEFAULT_PLATFORM_FEE_BPS`). Carved from the reserved bytes, so existing accounts read the default.
+    pub agent_fee_bps: u16,
     pub reserved: [u8; CONFIG_RESERVED],
 }
 
+/// Copy strategies: the platform's share of new profit (default 2%, never above 5%), and the most a creator may ask.
+pub const DEFAULT_PLATFORM_FEE_BPS: u16 = 200;
+pub const MAX_PLATFORM_FEE_BPS: u16 = 500;
+pub const MAX_CREATOR_FEE_BPS: u16 = 2_000;
+
 impl Config {
+    pub fn agent_fee_bps(&self) -> u16 {
+        if self.agent_fee_bps == 0 { DEFAULT_PLATFORM_FEE_BPS } else { self.agent_fee_bps }
+    }
+
     pub fn escape_idle_secs(&self) -> i64 {
         if self.escape_idle_secs == 0 { DEFAULT_ESCAPE_IDLE_SECS as i64 } else { self.escape_idle_secs as i64 }
     }
@@ -114,15 +126,16 @@ mod tests {
             paused: v1.paused,
             escape_idle_secs: 0,
             auditor: Pubkey::default(),
+            agent_fee_bps: 0,
             reserved: [0; CONFIG_RESERVED],
         };
         let mut v2_bytes = Vec::new();
         AnchorSerialize::serialize(&v2, &mut v2_bytes).unwrap();
-        // Same bytes after the version byte, then a zero tail: escape_idle_secs + auditor + reserved,
-        // the same length as before the auditor was carved out of reserved.
+        // Same bytes after the version byte, then a zero tail: escape_idle_secs + auditor + agent_fee_bps +
+        // reserved, the same length as before the auditor and the Agent fee were carved out of reserved.
         assert_eq!(&v2_bytes[1..v1_bytes.len()], &v1_bytes[1..]);
-        assert_eq!(v2_bytes.len(), v1_bytes.len() + 4 + 32 + CONFIG_RESERVED);
-        assert_eq!(32 + CONFIG_RESERVED, 124);
+        assert_eq!(v2_bytes.len(), v1_bytes.len() + 4 + 32 + 2 + CONFIG_RESERVED);
+        assert_eq!(32 + 2 + CONFIG_RESERVED, 124);
         assert!(v2_bytes[v1_bytes.len()..].iter().all(|b| *b == 0));
     }
 }

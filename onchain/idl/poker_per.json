@@ -286,7 +286,8 @@
                   103,
                   101,
                   110,
-                  116
+                  116,
+                  50
                 ]
               },
               {
@@ -612,7 +613,8 @@
                   103,
                   101,
                   110,
-                  116
+                  116,
+                  50
                 ]
               },
               {
@@ -841,6 +843,45 @@
           "writable": true
         },
         {
+          "name": "config",
+          "docs": [
+            "Its dev_wallet gets Nomad's share of copied strategies' profit. Not version-checked: leaving always works."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator_wallet_state",
+          "optional": true
+        },
+        {
+          "name": "creator_vault_token",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "treasury_wallet_state",
+          "optional": true
+        },
+        {
+          "name": "treasury_vault_token",
+          "writable": true,
+          "optional": true
+        },
+        {
           "name": "rollup",
           "accounts": [
             {
@@ -931,7 +972,8 @@
                   103,
                   101,
                   110,
-                  116
+                  116,
+                  50
                 ]
               },
               {
@@ -1089,7 +1131,8 @@
                   103,
                   101,
                   110,
-                  116
+                  116,
+                  50
                 ]
               },
               {
@@ -1185,7 +1228,8 @@
                   103,
                   101,
                   110,
-                  116
+                  116,
+                  50
                 ]
               },
               {
@@ -1297,6 +1341,27 @@
           ]
         },
         {
+          "name": "config",
+          "docs": [
+            "Nomad's share of copied strategies' profit."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "rollup",
           "accounts": [
             {
@@ -1334,6 +1399,14 @@
         {
           "name": "stake",
           "type": "u64"
+        },
+        {
+          "name": "terms",
+          "type": {
+            "defined": {
+              "name": "FeeTerms"
+            }
+          }
         }
       ]
     },
@@ -7931,6 +8004,53 @@
       ]
     },
     {
+      "name": "set_agent_fee",
+      "discriminator": [
+        59,
+        53,
+        219,
+        252,
+        111,
+        65,
+        197,
+        152
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
       "name": "set_auditor",
       "discriminator": [
         90,
@@ -12418,6 +12538,45 @@
       ]
     },
     {
+      "name": "AgentCopying",
+      "discriminator": [
+        184,
+        98,
+        32,
+        40,
+        144,
+        84,
+        37,
+        131
+      ]
+    },
+    {
+      "name": "AgentFeeSet",
+      "discriminator": [
+        92,
+        197,
+        119,
+        103,
+        7,
+        5,
+        44,
+        200
+      ]
+    },
+    {
+      "name": "AgentFeesPaid",
+      "discriminator": [
+        142,
+        181,
+        216,
+        110,
+        173,
+        202,
+        214,
+        247
+      ]
+    },
+    {
       "name": "AuditorSet",
       "discriminator": [
         95,
@@ -13176,6 +13335,21 @@
       "code": 6083,
       "name": "NotAgentSeat",
       "msg": "Not the Agent's seat"
+    },
+    {
+      "code": 6084,
+      "name": "BadFeeTerms",
+      "msg": "Bad copy-strategy fee terms"
+    },
+    {
+      "code": 6085,
+      "name": "FeeTermsLocked",
+      "msg": "The Agent's fee terms can't change while it holds a seat"
+    },
+    {
+      "code": 6086,
+      "name": "BadFeeAccount",
+      "msg": "Wrong account for a copy-strategy fee"
     }
   ],
   "types": [
@@ -13225,6 +13399,78 @@
           {
             "name": "running",
             "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentCopying",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "platform_fee_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentFeeSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentFeesPaid",
+      "docs": [
+        "A copying Agent cashed out: `profit` above the high-water mark, and the shares paid (0 for a balance that",
+        "couldn't take money)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "profit",
+            "type": "u64"
+          },
+          {
+            "name": "creator_fee",
+            "type": "u64"
+          },
+          {
+            "name": "platform_fee",
+            "type": "u64"
+          },
+          {
+            "name": "high_water",
+            "type": "i64"
           }
         ]
       }
@@ -13380,11 +13626,19 @@
             "type": "pubkey"
           },
           {
+            "name": "agent_fee_bps",
+            "docs": [
+              "Copy strategies (Agents v2): Nomad's share of a copier's new profit, in basis points; 0 = the default",
+              "(`DEFAULT_PLATFORM_FEE_BPS`). Carved from the reserved bytes, so existing accounts read the default."
+            ],
+            "type": "u16"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                92
+                90
               ]
             }
           }
@@ -13618,6 +13872,35 @@
                 4
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeeTerms",
+      "docs": [
+        "What the player agrees to pay a copied strategy: shares of new profit (above the high-water mark)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "docs": [
+              "Default = the player's own strategy (both shares 0)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "creator_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "platform_fee_bps",
+            "docs": [
+              "Must be the config's current share (the player sees it before signing)."
+            ],
+            "type": "u16"
           }
         ]
       }

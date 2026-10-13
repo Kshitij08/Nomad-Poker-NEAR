@@ -72,6 +72,10 @@ pub mod poker_per {
         instructions::config::set_auditor(ctx, auditor)
     }
 
+    pub fn set_agent_fee(ctx: Context<AdminOnly>, bps: u16) -> Result<()> {
+        instructions::config::set_agent_fee(ctx, bps)
+    }
+
     pub fn open_log(ctx: Context<OpenLog>) -> Result<()> {
         instructions::play::open_log(ctx)
     }
@@ -276,8 +280,8 @@ pub mod poker_per {
         instructions::agent::delegate_agent_sponsor(ctx)
     }
 
-    pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64, stake: u64) -> Result<()> {
-        instructions::agent::agent_set(ctx, expires, agent, until, stake)
+    pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64, stake: u64, terms: FeeTerms) -> Result<()> {
+        instructions::agent::agent_set(ctx, expires, agent, until, stake, terms)
     }
 
     pub fn agent_buy_in(ctx: Context<AgentBuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Result<()> {

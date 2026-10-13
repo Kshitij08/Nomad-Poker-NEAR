@@ -12,6 +12,13 @@
 //! The record (one per wallet) lives only in the rollup and is private: only the Agent key and the play key
 //! that set it can read it, so nobody can look up a wallet's stake or which seat its Agent holds. Its tiny
 //! rent (32 lamports a byte) comes from the program's Agent sponsor account, set up once by the admin.
+//!
+//! Agents v2 (docs/AGENTS_V2.md §5): an Agent can play a strategy copied from the marketplace. The play key sets
+//! the fee terms with the Agent (the copier's consent): the strategy's creator, their share and Nomad's share of
+//! new profit. Each cash-out of the Agent's seat adds to the record's lifetime buy-ins and cash-outs; when their
+//! difference rises above the highest it has been (the high-water mark), the shares of that new profit go to the
+//! creator's and Nomad's (config.dev_wallet's) game balances, never on losses. The record moved to new seeds
+//! (["agent2", wallet]) for the bigger layout; records under the old seeds are left alone.
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
@@ -30,12 +37,12 @@ use crate::errors::PokerError;
 use crate::instructions::money::*;
 use crate::instructions::money::{buy_in_flow, cash_out_flow};
 use crate::instructions::table::DELEGATION_PROGRAM_ID;
-use crate::instructions::vault::{vault_gen_seed, verify_play_key, wallet_state_of, VAULT_SEED, WALLET_SEED};
+use crate::instructions::vault::{vault_address, vault_gen_seed, verify_play_key, wallet_state_of, VAULT_SEED, WALLET_SEED};
 use crate::private::{write, Sponsor};
-use crate::state::Config;
+use crate::state::{Config, MAX_CREATOR_FEE_BPS, MAX_PLATFORM_FEE_BPS};
 use crate::table::{invite_admits, rake_for, Hand, Ledger, Seat, Table, HAND_IDLE, HAND_SEED, LEDGER_SEED, STATUS_OPEN, TABLE_SEED, WSOL_MINT};
 
-pub const AGENT_SEED: &[u8] = b"agent";
+pub const AGENT_SEED: &[u8] = b"agent2";
 pub const AGENT_SPONSOR_SEED: &[u8] = b"agent-sponsor";
 /// An Agent key's record lasts at most this long; the player sets it again (no wallet prompt) to go on.
 pub const MAX_AGENT_SECS: i64 = 7 * 24 * 60 * 60;
@@ -59,7 +66,93 @@ pub struct AgentState {
     pub seat: u8,
     pub reader: Pubkey,
     pub bump: u8,
+    /// v2, copy strategies: the strategy's creator (default = the player's own strategy, no fee) and the shares
+    /// of new profit the player agreed to, in basis points.
+    pub strategy_creator: Pubkey,
+    pub creator_fee_bps: u16,
+    pub platform_fee_bps: u16,
+    /// Bought in at the current seat; counted into `net_in` when the Agent cashes that seat out.
+    pub seat_in: u64,
+    /// Lifetime (under these terms) buy-ins and cash-outs of the seats the Agent cashed out itself.
+    pub net_in: u64,
+    pub net_out: u64,
+    /// The highest `net_out - net_in` fees were charged up to.
+    pub high_water: i64,
+    /// Seats left another way while copying (the player cashed them out): their result isn't counted.
+    pub skipped: u32,
     pub reserved: [u8; 16],
+}
+
+/// What the player agrees to pay a copied strategy: shares of new profit (above the high-water mark).
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FeeTerms {
+    /// Default = the player's own strategy (both shares 0).
+    pub creator: Pubkey,
+    pub creator_fee_bps: u16,
+    /// Must be the config's current share (the player sees it before signing).
+    pub platform_fee_bps: u16,
+}
+
+/// Terms a player may set: none, or a creator other than themselves with a share within the cap and Nomad's at
+/// the config's rate.
+pub fn check_terms(t: &FeeTerms, wallet: &Pubkey, platform_bps: u16) -> Result<()> {
+    if t.creator == Pubkey::default() {
+        require!(t.creator_fee_bps == 0 && t.platform_fee_bps == 0, PokerError::BadFeeTerms);
+    } else {
+        require!(t.creator != *wallet, PokerError::BadFeeTerms);
+        require!(t.creator_fee_bps <= MAX_CREATOR_FEE_BPS, PokerError::BadFeeTerms);
+        require!(t.platform_fee_bps == platform_bps && platform_bps <= MAX_PLATFORM_FEE_BPS, PokerError::BadFeeTerms);
+    }
+    Ok(())
+}
+
+/// The fees of one cash-out (lamports of wSOL), and the profit they were charged on.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FeeSplit {
+    pub base: u64,
+    pub creator: u64,
+    pub platform: u64,
+}
+
+impl AgentState {
+    pub fn terms(&self) -> FeeTerms {
+        FeeTerms { creator: self.strategy_creator, creator_fee_bps: self.creator_fee_bps, platform_fee_bps: self.platform_fee_bps }
+    }
+
+    /// New terms start the counts afresh (the high-water mark is per player and strategy).
+    pub fn set_terms(&mut self, t: &FeeTerms) {
+        if self.terms() != *t {
+            self.strategy_creator = t.creator;
+            self.creator_fee_bps = t.creator_fee_bps;
+            self.platform_fee_bps = t.platform_fee_bps;
+            self.net_in = 0;
+            self.net_out = 0;
+            self.high_water = 0;
+            self.skipped = 0;
+        }
+    }
+
+    /// The Agent cashed its seat out with `stack`: counts the seat and returns the fees due on profit above the
+    /// high-water mark. They never exceed the stack (new profit is at most this seat's profit).
+    pub fn settle(&mut self, stack: u64) -> Result<FeeSplit> {
+        self.net_in = self.net_in.checked_add(self.seat_in).ok_or(PokerError::MathOverflow)?;
+        self.net_out = self.net_out.checked_add(stack).ok_or(PokerError::MathOverflow)?;
+        self.seat_in = 0;
+        if self.strategy_creator == Pubkey::default() {
+            return Ok(FeeSplit::default());
+        }
+        let pnl = self.net_out as i128 - self.net_in as i128;
+        if pnl <= self.high_water as i128 {
+            return Ok(FeeSplit::default());
+        }
+        let base = pnl - self.high_water as i128;
+        self.high_water = i64::try_from(pnl).map_err(|_| error!(PokerError::MathOverflow))?;
+        let base = u64::try_from(base).map_err(|_| error!(PokerError::MathOverflow))?.min(stack);
+        let share = |bps: u16| ((base as u128 * bps as u128) / 10_000) as u64;
+        let (creator, platform) = (share(self.creator_fee_bps), share(self.platform_fee_bps));
+        require!(creator.saturating_add(platform) <= stack, PokerError::MathOverflow);
+        Ok(FeeSplit { base, creator, platform })
+    }
 }
 
 /// Holds lamports in the rollup to pay Agent records' rent. Program-owned, delegated to the TEE.
@@ -193,13 +286,18 @@ pub struct AgentSet<'info> {
     /// the sponsor).
     #[account(address = get_associated_token_address(&vault.key(), &WSOL_MINT))]
     pub vault_token: Box<Account<'info, TokenAccount>>,
+    /// Nomad's share of copied strategies' profit.
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Box<Account<'info, Config>>,
     pub rollup: RollupPrograms<'info>,
 }
 
 /// Sets the wallet's Agent: `agent` (the runner's key) may play until `until` with at most `stake` at risk.
 /// Replaces any earlier Agent key (one Agent per wallet). `agent` = default stops it. While the Agent holds a
 /// seat, what it has committed stays counted; otherwise the count starts again from 0.
-pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64, stake: u64) -> Result<()> {
+/// `terms`: the copied strategy's fees the player agrees to (default = none). They can't change while the Agent
+/// holds a seat; new terms start the high-water mark afresh. Stopping keeps the record's terms.
+pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64, stake: u64, terms: FeeTerms) -> Result<()> {
     let wallet = ctx.accounts.wallet.key();
     let play_key = ctx.accounts.play_key.key();
     verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &wallet, &play_key, expires)?;
@@ -209,6 +307,7 @@ pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64
         require!(until > now && until <= now.saturating_add(MAX_AGENT_SECS), PokerError::AgentExpired);
         require!(stake > 0 && agent != wallet && agent != play_key, PokerError::BadAgentSettings);
         require!(ctx.accounts.vault_token.amount >= stake, PokerError::AgentStakeExceeded);
+        check_terms(&terms, &wallet, ctx.accounts.config.agent_fee_bps())?;
     }
     let key_set = wallet_state_of(&ctx.accounts.wallet_state)?.0;
     let info = ctx.accounts.agent_state.to_account_info();
@@ -223,7 +322,11 @@ pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64
     let mut a = if info.data_is_empty() {
         require!(!stopping, PokerError::NotAgent);
         sp.create_account(&info, agent_seeds, 8 + AgentState::INIT_SPACE)?;
-        AgentState { wallet, agent: Pubkey::default(), expires: 0, key_set, stake: 0, committed: 0, table: Pubkey::default(), seat: 0, reader: Pubkey::default(), bump, reserved: [0; 16] }
+        AgentState {
+            wallet, agent: Pubkey::default(), expires: 0, key_set, stake: 0, committed: 0, table: Pubkey::default(), seat: 0, reader: Pubkey::default(), bump,
+            strategy_creator: Pubkey::default(), creator_fee_bps: 0, platform_fee_bps: 0, seat_in: 0, net_in: 0, net_out: 0, high_water: 0, skipped: 0,
+            reserved: [0; 16],
+        }
     } else {
         load_agent(&info)?
     };
@@ -234,6 +337,11 @@ pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64
     a.key_set = key_set;
     if a.table == Pubkey::default() {
         a.committed = 0;
+        if !stopping {
+            a.set_terms(&terms);
+        }
+    } else {
+        require!(stopping || a.terms() == terms, PokerError::FeeTermsLocked);
     }
     write(&info, &a)?;
     // Private: only the Agent key and this play key can read it.
@@ -245,6 +353,9 @@ pub fn agent_set(ctx: Context<AgentSet>, expires: i64, agent: Pubkey, until: i64
         sp.set_readers(&info, agent_seeds, &perm_info, &members)?;
     }
     emit!(AgentChanged { wallet, running: !stopping });
+    if !stopping && terms.creator != Pubkey::default() {
+        emit!(AgentCopying { wallet, creator: terms.creator, creator_fee_bps: terms.creator_fee_bps, platform_fee_bps: terms.platform_fee_bps });
+    }
     Ok(())
 }
 
@@ -315,6 +426,7 @@ pub fn agent_buy_in(ctx: Context<AgentBuyIn>, seat: u8, amount: u64, reader: Pub
     }
     a.committed = a.committed.checked_add(amount).ok_or(PokerError::MathOverflow)?;
     require!(a.committed <= a.stake, PokerError::AgentStakeExceeded);
+    a.seat_in = a.seat_in.checked_add(amount).ok_or(PokerError::MathOverflow)?;
     write(&info, &a)?;
     let vault_bump = [ctx.bumps.vault];
     let gen_seed = vault_gen_seed(&ctx.accounts.wallet_state);
@@ -364,12 +476,48 @@ pub struct AgentCashOut<'info> {
     pub hand_permission: UncheckedAccount<'info>,
     #[account(mut, address = get_associated_token_address(&table.key(), &table.mint))]
     pub escrow: Box<Account<'info, TokenAccount>>,
+    /// Its dev_wallet gets Nomad's share of copied strategies' profit. Not version-checked: leaving always works.
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Box<Account<'info, Config>>,
+    /// CHECK: copying only: the creator's wallet state (WALLET_SEED), for their current vault. Checked in `fee_account`.
+    pub creator_wallet_state: Option<UncheckedAccount<'info>>,
+    /// CHECK: copying only: the creator's game balance (their vault's token account). Checked in `fee_account`.
+    #[account(mut)]
+    pub creator_vault_token: Option<UncheckedAccount<'info>>,
+    /// CHECK: copying only: config.dev_wallet's wallet state. Checked in `fee_account`.
+    pub treasury_wallet_state: Option<UncheckedAccount<'info>>,
+    /// CHECK: copying only: config.dev_wallet's game balance. Checked in `fee_account`.
+    #[account(mut)]
+    pub treasury_vault_token: Option<UncheckedAccount<'info>>,
     pub rollup: RollupPrograms<'info>,
     pub token_program: Program<'info, Token>,
 }
 
+/// `wallet`'s game balance for a fee, from its wallet state and token account, which must be the right addresses
+/// (else the instruction fails). None when that balance can't take money in this rollup (never opened, or its
+/// wallet state unreadable): its share then stays with the player rather than block the cash-out.
+fn fee_account<'info>(wallet: &Pubkey, mint: &Pubkey, state: &Option<UncheckedAccount<'info>>, token: &Option<UncheckedAccount<'info>>) -> Result<Option<AccountInfo<'info>>> {
+    let (state, token) = (state.as_ref().ok_or(PokerError::BadFeeAccount)?, token.as_ref().ok_or(PokerError::BadFeeAccount)?);
+    let (state_key, _) = Pubkey::find_program_address(&[WALLET_SEED, wallet.as_ref()], &crate::ID);
+    require_keys_eq!(state.key(), state_key, PokerError::BadFeeAccount);
+    let seed = match wallet_state_of(&state.to_account_info()) {
+        Ok((_, seed)) => seed,
+        Err(_) => return Ok(None),
+    };
+    let (vault, _) = vault_address(wallet, &seed);
+    require_keys_eq!(token.key(), get_associated_token_address(&vault, mint), PokerError::BadFeeAccount);
+    let info = token.to_account_info();
+    if info.data_is_empty() || *info.owner != anchor_spl::token::ID {
+        return Ok(None);
+    }
+    let usable = TokenAccount::try_deserialize(&mut &info.try_borrow_data()?[..]).map(|t| t.mint == *mint && t.owner == vault).unwrap_or(false);
+    Ok(if usable { Some(info) } else { None })
+}
+
 /// The Agent leaves its seat with the whole stack, into the wallet's game balance; what it took out comes
 /// off what it has committed. Works after the Agent was stopped or expired too (leaving is always allowed).
+/// Copying a strategy: the shares of new profit above the high-water mark then go from the game balance to the
+/// creator's and Nomad's game balances.
 pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8) -> Result<()> {
     let wallet = ctx.accounts.wallet.key();
     let signer = ctx.accounts.signer.key();
@@ -385,8 +533,37 @@ pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8) -> Result<()> {
     a.committed = a.committed.saturating_sub(stack);
     a.table = Pubkey::default();
     a.reader = Pubkey::default();
+    let fees = a.settle(stack)?;
     write(&info, &a)?;
-    cash_out_flow!(ctx, seat, |p: Pubkey, _reader: Pubkey| -> Result<()> { require_keys_eq!(p, wallet, PokerError::NotSeated); Ok(()) }, vault_token)
+    let left: Result<()> = cash_out_flow!(ctx, seat, |p: Pubkey, _reader: Pubkey| -> Result<()> { require_keys_eq!(p, wallet, PokerError::NotSeated); Ok(()) }, vault_token);
+    left?;
+    if a.strategy_creator == Pubkey::default() {
+        return Ok(());
+    }
+    let mint = ctx.accounts.table.mint;
+    let creator_to = fee_account(&a.strategy_creator, &mint, &ctx.accounts.creator_wallet_state, &ctx.accounts.creator_vault_token)?;
+    let treasury_to = fee_account(&ctx.accounts.config.dev_wallet, &mint, &ctx.accounts.treasury_wallet_state, &ctx.accounts.treasury_vault_token)?;
+    let vault_bump = [ctx.bumps.vault];
+    let gen_seed = vault_gen_seed(&ctx.accounts.wallet_state);
+    let vault_seeds: &[&[u8]] = &[VAULT_SEED, wallet.as_ref(), &gen_seed, &vault_bump];
+    let mut paid = [0u64; 2];
+    for (i, (to, amount)) in [(creator_to, fees.creator), (treasury_to, fees.platform)].into_iter().enumerate() {
+        let Some(to) = to else { continue };
+        if amount == 0 {
+            continue;
+        }
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                Transfer { from: ctx.accounts.vault_token.to_account_info(), to, authority: ctx.accounts.vault.to_account_info() },
+                &[vault_seeds],
+            ),
+            amount,
+        )?;
+        paid[i] = amount;
+    }
+    emit!(AgentFeesPaid { wallet, creator: a.strategy_creator, profit: fees.base, creator_fee: paid[0], platform_fee: paid[1], high_water: a.high_water });
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------- rollup: release (anyone)
@@ -428,6 +605,11 @@ pub fn agent_release(ctx: Context<AgentRelease>) -> Result<()> {
         idx >= ledger.seats.len() || ledger.seats[idx].player != a.wallet || ledger.seats[idx].reader != a.reader
     };
     require!(gone, PokerError::AgentBusy);
+    // Copying: the seat's result isn't known here, so it counts neither way (no fee, no loss carried forward).
+    if a.strategy_creator != Pubkey::default() && a.seat_in > 0 {
+        a.skipped = a.skipped.saturating_add(1);
+    }
+    a.seat_in = 0;
     a.table = Pubkey::default();
     a.reader = Pubkey::default();
     write(&info, &a)
@@ -487,4 +669,135 @@ pub fn agent_close(ctx: Context<AgentClose>, expires: i64) -> Result<()> {
 pub struct AgentChanged {
     pub wallet: Pubkey,
     pub running: bool,
+}
+
+#[event]
+pub struct AgentCopying {
+    pub wallet: Pubkey,
+    pub creator: Pubkey,
+    pub creator_fee_bps: u16,
+    pub platform_fee_bps: u16,
+}
+
+/// A copying Agent cashed out: `profit` above the high-water mark, and the shares paid (0 for a balance that
+/// couldn't take money).
+#[event]
+pub struct AgentFeesPaid {
+    pub wallet: Pubkey,
+    pub creator: Pubkey,
+    pub profit: u64,
+    pub creator_fee: u64,
+    pub platform_fee: u64,
+    pub high_water: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn copying(creator_bps: u16, platform_bps: u16) -> AgentState {
+        AgentState {
+            wallet: Pubkey::new_unique(), agent: Pubkey::new_unique(), expires: 0, key_set: 0, stake: 0, committed: 0, table: Pubkey::default(), seat: 0,
+            reader: Pubkey::default(), bump: 0, strategy_creator: Pubkey::new_unique(), creator_fee_bps: creator_bps, platform_fee_bps: platform_bps,
+            seat_in: 0, net_in: 0, net_out: 0, high_water: 0, skipped: 0, reserved: [0; 16],
+        }
+    }
+
+    fn session(a: &mut AgentState, buy_in: u64, cash_out: u64) -> FeeSplit {
+        a.seat_in = buy_in;
+        a.settle(cash_out).unwrap()
+    }
+
+    #[test]
+    fn fees_only_on_new_profit() {
+        let mut a = copying(800, 200);
+        assert_eq!(session(&mut a, 10_000, 11_000), FeeSplit { base: 1_000, creator: 80, platform: 20 });
+        assert_eq!(a.high_water, 1_000);
+        // Lose 1000, win it back: nothing new above the peak.
+        assert_eq!(session(&mut a, 10_000, 9_000), FeeSplit::default());
+        assert_eq!(session(&mut a, 10_000, 11_000), FeeSplit::default());
+        assert_eq!(session(&mut a, 10_000, 10_500), FeeSplit { base: 500, creator: 40, platform: 10 });
+        assert_eq!(a.high_water, 1_500);
+        assert_eq!((a.net_in, a.net_out, a.seat_in), (40_000, 41_500, 0));
+    }
+
+    #[test]
+    fn losing_first_pays_nothing_until_recovered() {
+        let mut a = copying(800, 200);
+        assert_eq!(session(&mut a, 10_000, 0), FeeSplit::default());
+        assert_eq!(session(&mut a, 10_000, 19_000), FeeSplit::default()); // still -1000 overall
+        assert_eq!(session(&mut a, 10_000, 12_000).base, 1_000);
+    }
+
+    #[test]
+    fn own_strategy_pays_nothing() {
+        let mut a = copying(0, 0);
+        a.strategy_creator = Pubkey::default();
+        assert_eq!(session(&mut a, 10_000, 50_000), FeeSplit::default());
+        assert_eq!(a.net_out, 50_000);
+    }
+
+    #[test]
+    fn fees_never_exceed_the_stack() {
+        let mut a = copying(MAX_CREATOR_FEE_BPS, MAX_PLATFORM_FEE_BPS);
+        let f = session(&mut a, 1, u64::MAX / 4);
+        assert_eq!(f.base, u64::MAX / 4 - 1);
+        assert!(f.creator + f.platform <= u64::MAX / 4);
+        // Tiny profits round down to nothing.
+        assert_eq!(session(&mut a, 0, 3), FeeSplit { base: 3, creator: 0, platform: 0 });
+    }
+
+    #[test]
+    fn new_terms_start_afresh() {
+        let mut a = copying(800, 200);
+        session(&mut a, 10_000, 5_000);
+        let same = a.terms();
+        a.set_terms(&same);
+        assert_eq!(a.net_in, 10_000);
+        let other = FeeTerms { creator: Pubkey::new_unique(), ..same };
+        a.set_terms(&other);
+        assert_eq!((a.net_in, a.net_out, a.high_water, a.strategy_creator), (0, 0, 0, other.creator));
+    }
+
+    #[test]
+    fn terms_checks() {
+        let (w, c) = (Pubkey::new_unique(), Pubkey::new_unique());
+        let t = |creator: Pubkey, cb: u16, pb: u16| FeeTerms { creator, creator_fee_bps: cb, platform_fee_bps: pb };
+        assert!(check_terms(&FeeTerms::default(), &w, 200).is_ok());
+        assert!(check_terms(&t(Pubkey::default(), 800, 0), &w, 200).is_err());
+        assert!(check_terms(&t(c, 800, 200), &w, 200).is_ok());
+        assert!(check_terms(&t(c, 800, 0), &w, 200).is_err()); // skipping Nomad's share
+        assert!(check_terms(&t(w, 800, 200), &w, 200).is_err()); // copying yourself
+        assert!(check_terms(&t(c, MAX_CREATOR_FEE_BPS + 1, 200), &w, 200).is_err());
+        assert!(check_terms(&t(c, 800, 600), &w, 600).is_err()); // above the cap even if the config said so
+    }
+
+    /// The layout the runner (backend agents.ts decodeAgentState) and the game (PerAgent.State) read: v2 fields at
+    /// fixed offsets after the v1 ones. The record isn't in the IDL (it's a raw rollup account), so it's pinned here.
+    #[test]
+    fn record_layout() {
+        let mut a = copying(0x0320, 0x00c8);
+        a.seat = 7;
+        a.bump = 0xfe;
+        a.seat_in = 0x0101_0101;
+        a.net_in = 0x0202_0202;
+        a.net_out = 0x0303_0303;
+        a.high_water = -5;
+        a.skipped = 9;
+        let mut v = Vec::new();
+        a.try_serialize(&mut v).unwrap();
+        assert_eq!(v.len(), 8 + AgentState::INIT_SPACE);
+        assert_eq!(v.len(), 254);
+        assert_eq!(v[132], 7); // seat
+        assert_eq!(v[165], 0xfe); // bump
+        assert_eq!(&v[166..198], a.strategy_creator.as_ref());
+        assert_eq!(u16::from_le_bytes([v[198], v[199]]), 800);
+        assert_eq!(u16::from_le_bytes([v[200], v[201]]), 200);
+        assert_eq!(u64::from_le_bytes(v[202..210].try_into().unwrap()), 0x0101_0101);
+        assert_eq!(u64::from_le_bytes(v[210..218].try_into().unwrap()), 0x0202_0202);
+        assert_eq!(u64::from_le_bytes(v[218..226].try_into().unwrap()), 0x0303_0303);
+        assert_eq!(i64::from_le_bytes(v[226..234].try_into().unwrap()), -5);
+        assert_eq!(u32::from_le_bytes(v[234..238].try_into().unwrap()), 9);
+        assert!(v[238..].iter().all(|b| *b == 0));
+    }
 }

@@ -5,8 +5,9 @@
 set -e
 SOL=$HOME/.local/share/solana/install/releases/3.1.10/solana-release/bin
 export PATH="$SOL:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
-REPO=/mnt/c/Kshitij/Work/X2C/web3/GitHub/Poker
-export CARGO_TARGET_DIR=$HOME/per-work/m1-target
+# From a git worktree: REPO=/mnt/c/.../Poker/.claude/worktrees/<name>, and a CARGO_TARGET_DIR of its own.
+REPO=${REPO:-/mnt/c/Kshitij/Work/X2C/web3/GitHub/Poker}
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/per-work/m1-target}
 BEFORE_SOL=$(readlink ~/.local/share/solana/install/active_release)
 BEFORE_AVM=$(~/.avm/bin/avm list 2>/dev/null | grep current || true)
 # Program key: v2 since 7 Oct (the TEE stopped loading upgrades of the first id, 6Pzbm2...).
