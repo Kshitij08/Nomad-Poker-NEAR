@@ -15,7 +15,7 @@ import { ComputeBudgetProgram, PublicKey } from "@solana/web3.js";
 import { DELEGATION_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
 import { SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
 import { MAGIC_CONTEXT_ID, MAGIC_PROGRAM_ID, permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
-import { CONFIG_PDA, MAGIC_FEE_VAULT, PROGRAM_ID, TeeSession, accountsOf, coder, l1, rollupPrograms, toPublic } from "./chain";
+import { CONFIG_PDA, MAGIC_FEE_VAULT, PROGRAM_ID, TeeSession, accountsOf, coder, l1, redact, rollupPrograms, toPublic } from "./chain";
 import { config } from "./config";
 import { event, pool } from "./db";
 import { seal } from "./archive";
@@ -30,11 +30,11 @@ const PLAY_CU = 1_400_000;
 const RETRY_AFTER_MS = 30_000;
 const CONCURRENCY = 4;
 
-export const keeperState = { startedAt: Date.now(), lastLoopAt: 0, lastDiscoverAt: 0, loops: 0, tablesTracked: 0, lastError: "", lastErrorAt: 0, auditorMatches: null as boolean | null,
+export const keeperState = { standby: false, startedAt: Date.now(), lastLoopAt: 0, lastDiscoverAt: 0, loops: 0, tablesTracked: 0, lastError: "", lastErrorAt: 0, auditorMatches: null as boolean | null,
   dlp: { slot: null as number | null, expected: null as number | null, changed: false, checkedAt: 0 }, tournaments: 0 };
 
-/** Rollup logins travel as `?token=` in URLs; never let one reach a log, an event or /health. */
-export const redact = (s: string) => s.replace(/token=[^&\s"']+/g, "token=<redacted>");
+/** Rollup logins, RPC keys and hosts never reach a log, an event or /health (chain.ts). */
+export { redact };
 function fail(where: string, e: any) {
   keeperState.lastError = redact(`${where}: ${String(e?.message ?? e)}`).slice(0, 300);
   keeperState.lastErrorAt = Date.now();

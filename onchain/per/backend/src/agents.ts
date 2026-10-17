@@ -10,9 +10,9 @@ import { ComputeBudgetProgram, Keypair, PublicKey, Transaction } from "@solana/w
 import { permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
 import nacl from "tweetnacl";
 import type { Express, Request, Response } from "express";
-import { CONFIG_PDA, PROGRAM_ID, TeeSession, accountsOf, coder, l1, rollupPrograms } from "./chain";
+import { CONFIG_PDA, PROGRAM_ID, TeeSession, accountsOf, coder, l1, redact, rollupPrograms } from "./chain";
 import { config } from "./config";
-import { event, pool } from "./db";
+import { admitSpend, event, pool, settleSpend } from "./db";
 import { PRESETS, Profile, clampProfile, decide, Game, ST } from "./agentBot";
 import * as market from "./solStrategies";
 import idl from "./shared/poker_per.json";
@@ -59,7 +59,12 @@ export function checkSettings(s: any): AgentSettings {
   };
   if (strategy === "custom") {
     const c = s?.custom ?? {};
-    out.custom = clampProfile({ foldBelow: Number(c.foldBelow ?? 0.3), raiseAbove: Number(c.raiseAbove ?? 0.66), aggression: Number(c.aggression ?? 0.5), bluffChance: Number(c.bluffChance ?? 0.07), raiseFractionOfPot: Number(c.raiseFractionOfPot ?? 0.62) });
+    // Deep review: clamp() passes NaN through (every comparison is false), and a NaN profile broke that Agent.
+    const f = (v: any, d: number, name: string) => { const n = Number(v ?? d); if (!Number.isFinite(n)) throw new Error(`${name} must be a number`); return n; };
+    out.custom = clampProfile({ foldBelow: f(c.foldBelow, 0.3, "foldBelow"), raiseAbove: f(c.raiseAbove, 0.66, "raiseAbove"), aggression: f(c.aggression, 0.5, "aggression"),
+      bluffChance: f(c.bluffChance, 0.07, "bluffChance"), raiseFractionOfPot: f(c.raiseFractionOfPot, 0.62, "raiseFractionOfPot"),
+      // Agents v2 (optional; a profile without them plays as before): position, brain 2, per-street numbers.
+      positionWeight: c.positionWeight === undefined ? undefined : f(c.positionWeight, 0, "positionWeight"), brain: Number(c.brain) === 2 ? 2 : undefined, streets: c.streets });
   }
   if (s?.table) out.table = new PublicKey(s.table).toBase58();
   if (s?.strategyId !== undefined && s?.strategyId !== null) {
@@ -121,6 +126,13 @@ export const AGENT_MIGRATIONS = [
      at timestamptz not null default now(),
      primary key (session_id, hand_no)
    )`,
+  // Deep review: one open session per wallet, whatever the runner does (a second buy-in's insert fails). Rows
+  // that already break it (from before) skip the index rather than stop the service starting; it's made on a
+  // later start once they're ended.
+  `do $$ begin
+     create unique index if not exists agent_sessions_one_open on agent_sessions (wallet) where ended_at is null;
+   exception when unique_violation then raise notice 'agent_sessions_one_open not made: a wallet has two open sessions';
+   end $$`,
 ];
 
 // ---------------------------------------------------------------------------------------- addresses
@@ -192,26 +204,42 @@ export const requestMessage = (path: string, ts: number, data: string) => Buffer
 
 /** The wallet behind a signed request, or an error: the wallet authorized this play key (its current key set,
  *  not expired), and the play key signed this request within the last 2 minutes. */
-const seenRequests = new Map<string, number>(); // request signature -> when (review L2: each is accepted once)
-setInterval(() => { const cut = Date.now() - 5 * 60_000; for (const [k, v] of seenRequests) if (v < cut) seenRequests.delete(k); }, 60_000).unref();
+const seenRequests = new Map<string, number>(); // request signature (its bytes, hex) -> when (review L2: each is accepted once)
+setInterval(() => {
+  const cut = Date.now() - 5 * 60_000;
+  for (const [k, v] of seenRequests) if (v < cut) seenRequests.delete(k);
+  for (const [k, v] of failEventAt) if (v < cut) failEventAt.delete(k);
+}, 60_000).unref();
+/** A 64-byte signature in canonical base64. Node's decoder skips bad characters and ignores padding, so one
+ *  signature had many accepted spellings, each new to `seenRequests` (deep review: replay). */
+const SIG_B64 = /^[A-Za-z0-9+/]{86}==$/;
 
 export async function authorize(path: string, body: any): Promise<{ wallet: PublicKey; playKey: PublicKey; data: any }> {
   const { wallet, playKey, expires, keySet, walletSig, ts, data, sig } = body ?? {};
   const now = Math.floor(Date.now() / 1000);
   if (typeof data !== "string" || typeof sig !== "string" || typeof walletSig !== "string" || !Number.isFinite(ts) || Math.abs(now - ts) > 120) throw new Error("stale or malformed request");
+  if (!SIG_B64.test(sig) || !SIG_B64.test(walletSig)) throw new Error("malformed signature");
   if (!Number.isFinite(expires) || expires <= now || !Number.isInteger(keySet) || keySet < 0) throw new Error("play key expired");
   const w = new PublicKey(wallet), k = new PublicKey(playKey);
   // Review L3: both signatures before any network call; then the key set on Solana must still be this one.
   if (!nacl.sign.detached.verify(playKeyMessage(k, expires, keySet), Buffer.from(walletSig, "base64"), w.toBytes())) throw new Error("bad wallet signature");
-  if (!nacl.sign.detached.verify(requestMessage(path, ts, data), Buffer.from(sig, "base64"), k.toBytes())) throw new Error("bad request signature");
-  if (seenRequests.has(sig)) throw new Error("request already used");
-  seenRequests.set(sig, Date.now());
+  const sigBytes = Buffer.from(sig, "base64");
+  if (!nacl.sign.detached.verify(requestMessage(path, ts, data), sigBytes, k.toBytes())) throw new Error("bad request signature");
+  const seen = sigBytes.toString("hex");
+  if (seenRequests.has(seen)) throw new Error("request already used");
+  seenRequests.set(seen, Date.now());
   if ((await walletState(w)).keySet !== keySet) throw new Error("play key cancelled");
   return { wallet: w, playKey: k, data: data ? JSON.parse(data) : {} };
 }
 
-/** Rollup logins travel as `?token=` in URLs; never send one back (review L4). */
-const redact = (m: string) => m.replace(/token=[^&\s"']+/g, "token=<redacted>");
+/** A failure event at most once a minute per key (deep review: an Agent with an empty game balance logged one
+ *  every step, about 57k a day). */
+const failEventAt = new Map<string, number>();
+async function failEvent(key: string, table: string | null, action: string, detail: string) {
+  if ((failEventAt.get(key) ?? 0) > Date.now() - 60_000) return;
+  failEventAt.set(key, Date.now());
+  await event(table, action, false, redact(detail));
+}
 
 export function agentRoutes(a: Express) {
   const route = (path: string, handler: (wallet: PublicKey, data: any) => Promise<any>) =>
@@ -268,7 +296,7 @@ export function agentRoutes(a: Express) {
 
   /** Nomad menu, ONCHAIN Quick Play: a public table at this stake level with a free seat, that is playing or was
    *  opened in the last 10 minutes; else one this service hosts (as for Agents). The game then buys in and sits. */
-  route("/quickplay/onchain", async (_wallet, data) => {
+  route("/quickplay/onchain", async (wallet, data) => {
     const level = Math.max(0, Math.min(STAKES.length - 1, Number(data?.stake ?? 0) | 0));
     const st = STAKES[level];
     const recentTs = Math.floor(Date.now() / 1000) - 600;
@@ -276,13 +304,15 @@ export function agentRoutes(a: Express) {
       `select address from tables where status = 1 and delegated and not invite_only and seated < max_seats and big_blind = $1
          and (hand_state <> 0 or idle_since > $2) order by seated desc, updated_at desc limit 1`, [st.big.toString(), recentTs])).rows;
     if (listed.length) return { table: listed[0].address, hosted: false };
-    const now = Date.now();
-    for (const h of hostedTables.values()) if (h.big === st.big && now - h.at < 10 * 60_000) return { table: h.address, hosted: true };
-    const recent = [...hostedTables.values()].filter((h) => now - h.at < 10 * 60_000);
-    if (recent.length >= MAX_WAITING_HOSTED) throw new Error("too many new tables are waiting for players; try again in a minute");
-    const table = await hostTableAt(st);
-    if (!table) throw new Error("couldn't open a table right now; try again");
-    return { table, hosted: true };
+    // One hosted at this stake in the last 10 minutes (by any instance, deep review #5): join that one.
+    const waiting = (await pool.query(
+      "select table_address from keeper_spend where kind = 'host' and ok and ref = $1 and at > now() - interval '10 minutes' order by id desc", [st.big.toString()])).rows;
+    if (waiting.length) return { table: waiting[0].table_address, hosted: true };
+    const recent = (await pool.query("select count(*)::int as n from keeper_spend where kind = 'host' and ok and at > now() - interval '10 minutes'")).rows[0].n;
+    if (recent >= MAX_WAITING_HOSTED) throw new Error("too many new tables are waiting for players; try again in a minute");
+    // Deep review #5: any fresh key could make the keeper pay for a table. Only a wallet that can buy in there.
+    if ((await gameBalance(wallet)) < st.min) throw new Error(`deposit first: this stake's minimum buy-in is ${st.min} lamports`);
+    return { table: await hostTableAt(st, wallet.toBase58()), hosted: true };
   });
 
   /** Your Agent: settings, status, the current session and the history (yours only). */
@@ -319,7 +349,8 @@ const waitingSince = new Map<string, number>();
 const startPressedAt = new Map<number, number>();
 /** Tables this service hosted for Agents: address -> stake (big blind) and when. */
 const hostedTables = new Map<string, { address: string; big: bigint; at: number }>();
-let hosting: Promise<string | null> | null = null;
+/** Tables being hosted right now, by stake (big blind): a second request at that stake gets the same table. */
+const hosting = new Map<bigint, Promise<string>>();
 // PerHost.Stakes: the Coins tiers in "$" ($1 = 0.0001 SOL) — Micro $1/$2, Low $2/$5, Mid $10/$25, High $25/$50, Elite $100/$250;
 // buy-ins from the Coins tier's minimum to 100 big blinds, capped at the program's 1 SOL.
 const USD = 100_000n;
@@ -333,8 +364,8 @@ const TEE_VALIDATOR = new PublicKey("MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo
 
 /** Hosts a public 8-seat table for an Agent with `left` lamports of stake: the highest stake level whose buy-in
  *  (its buy-in in big blinds, at least the 10 BB minimum) fits. One at a time; at most 3 hosted tables waiting. */
-async function hostTableFor(settings: AgentSettings, left: bigint): Promise<string | null> {
-  if (hosting) return null;
+async function hostTableFor(wallet: string, settings: AgentSettings, left: bigint): Promise<string | null> {
+  if (hosting.size > 0) return null;
   const fits = STAKES.filter((st) => { const bb = BigInt(Math.max(10, settings.buyInBB)) * st.big; return (bb > st.min ? bb : st.min) <= left; });
   if (fits.length === 0) return null;
   const st = fits[fits.length - 1];
@@ -342,46 +373,73 @@ async function hostTableFor(settings: AgentSettings, left: bigint): Promise<stri
   // One waiting at this stake already (hosted in the last 10 minutes)? The Agent joins that one instead.
   const recent = [...hostedTables.values()].filter((h) => now - h.at < 10 * 60_000);
   if (recent.some((h) => h.big === st.big) || recent.length >= MAX_WAITING_HOSTED) return null;
-  return hostTableAt(st);
+  return hostTableAt(st, wallet);
 }
 
-/** Hosts one public 8-seat table at a stake level, the keeper as its creator (it pays and later reclaims the rent). */
-async function hostTableAt(st: { small: bigint; big: bigint; min: bigint; max: bigint }): Promise<string | null> {
-  if (hosting) return hosting;
-  hosting = (async () => {
-    const keeper = config.keeper;
-    const id = BigInt("0x" + randomBytes(8).toString("hex")) & ((1n << 63n) - 1n);
-    const idLe = Buffer.alloc(8); idLe.writeBigUInt64LE(id);
-    const table = pda(Buffer.from("table"), keeper.publicKey.toBuffer(), idLe);
-    const escrowEata = PublicKey.findProgramAddressSync([table.toBuffer(), NATIVE_MINT.toBuffer()], ESPL)[0];
-    const l1Program = new anchor.Program(idl as anchor.Idl, new anchor.AnchorProvider(l1, new anchor.Wallet(keeper), { commitment: "confirmed" }));
-    const params = { smallBlind: new anchor.BN(st.small.toString()), bigBlind: new anchor.BN(st.big.toString()), minBuyIn: new anchor.BN(st.min.toString()), maxBuyIn: new anchor.BN(st.max.toString()), maxSeats: 8, inviteOnly: false };
-    const create = await l1Program.methods.createTable(new anchor.BN(id.toString()), params)
-      .accountsPartial({ creator: keeper.publicKey, config: CONFIG_PDA, table, mint: NATIVE_MINT, escrow: ata(table), escrowEata } as any).instruction();
-    const delegate = await l1Program.methods.delegateTable(new anchor.BN(id.toString()), keeper.publicKey)
-      .accountsPartial({ payer: keeper.publicKey, table, escapePayer: pda(Buffer.from("escape-payer"), table.toBuffer()), validator: TEE_VALIDATOR } as any).instruction();
-    const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 500_000 }), create, delegate);
-    await anchor.web3.sendAndConfirmTransaction(l1, tx, [keeper], { commitment: "confirmed" });
-    // The rollup picks the table up within seconds; then open it (its private ledger, deck, record, log).
-    const keeperProgram = await sessionFor(keeper).program();
-    const acc = accountsOf(table);
-    let opened = false;
-    for (let i = 0; i < 10 && !opened; i++) {
-      await new Promise((r) => setTimeout(r, 3000));
-      try {
-        await keeperProgram.methods.openTable().accountsPartial({
-          payer: keeper.publicKey, table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), deck: acc.deck,
-          deckPermission: permissionPdaFromAccount(acc.deck), record: acc.record, log: acc.log, logPermission: acc.logPermission, rollup: rollupPrograms,
-        } as any).rpc();
-        opened = true;
-      } catch { /* not in the rollup yet */ }
+/** The wallet's game balance (lamports): its vault's wSOL account in the rollup, which any logged-in reader may
+ *  see (a public permission; program vault_balance's note). None yet = 0. */
+async function gameBalance(wallet: PublicKey): Promise<bigint> {
+  const { seed } = await walletState(wallet);
+  const info = await (await sessionFor(config.keeper).get()).getAccountInfo(ata(vaultOf(wallet, seed)), "processed");
+  return info && info.data.length >= 72 ? info.data.readBigUInt64LE(64) : 0n;
+}
+
+/** Hosts one public 8-seat table at a stake level, the keeper as its creator (it pays and later reclaims the rent).
+ *  Deep review #5: every attempt, failed ones too, is recorded in Postgres and counts toward the hourly caps for
+ *  `who` (the wallet asking) and for everyone. */
+async function hostTableAt(st: { small: bigint; big: bigint; min: bigint; max: bigint }, who: string): Promise<string> {
+  const inFlight = hosting.get(st.big);
+  if (inFlight) return inFlight;
+  const job = (async () => {
+    const spend = await admitSpend("host", who, st.big.toString(), config.hostsPerWalletHour, config.hostsPerHour);
+    if (spend === null) throw new Error("too many tables were opened in the last hour; join an open one or try again later");
+    let address: string | null = null;
+    try {
+      address = await createHostedTable(st, (a) => { address = a; });
+      await settleSpend(spend, true, address, `blinds ${st.small}/${st.big}`);
+      return address;
+    } catch (e: any) {
+      await settleSpend(spend, false, address, redact(String(e?.message ?? e))).catch(() => undefined);
+      throw e;
     }
-    if (!opened) throw new Error(`hosted table ${table.toBase58()} didn't open`);
-    hostedTables.set(table.toBase58(), { address: table.toBase58(), big: st.big, at: Date.now() });
-    await event(table.toBase58(), "agent host", true, `blinds ${st.small}/${st.big}`);
-    return table.toBase58();
   })();
-  try { return await hosting; } finally { hosting = null; }
+  hosting.set(st.big, job);
+  try { return await job; } finally { hosting.delete(st.big); }
+}
+
+async function createHostedTable(st: { small: bigint; big: bigint; min: bigint; max: bigint }, created: (address: string) => void): Promise<string> {
+  const keeper = config.keeper;
+  const id = BigInt("0x" + randomBytes(8).toString("hex")) & ((1n << 63n) - 1n);
+  const idLe = Buffer.alloc(8); idLe.writeBigUInt64LE(id);
+  const table = pda(Buffer.from("table"), keeper.publicKey.toBuffer(), idLe);
+  const escrowEata = PublicKey.findProgramAddressSync([table.toBuffer(), NATIVE_MINT.toBuffer()], ESPL)[0];
+  const l1Program = new anchor.Program(idl as anchor.Idl, new anchor.AnchorProvider(l1, new anchor.Wallet(keeper), { commitment: "confirmed" }));
+  const params = { smallBlind: new anchor.BN(st.small.toString()), bigBlind: new anchor.BN(st.big.toString()), minBuyIn: new anchor.BN(st.min.toString()), maxBuyIn: new anchor.BN(st.max.toString()), maxSeats: 8, inviteOnly: false };
+  const create = await l1Program.methods.createTable(new anchor.BN(id.toString()), params)
+    .accountsPartial({ creator: keeper.publicKey, config: CONFIG_PDA, table, mint: NATIVE_MINT, escrow: ata(table), escrowEata } as any).instruction();
+  const delegate = await l1Program.methods.delegateTable(new anchor.BN(id.toString()), keeper.publicKey)
+    .accountsPartial({ payer: keeper.publicKey, table, escapePayer: pda(Buffer.from("escape-payer"), table.toBuffer()), validator: TEE_VALIDATOR } as any).instruction();
+  const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 500_000 }), create, delegate);
+  created(table.toBase58());
+  await anchor.web3.sendAndConfirmTransaction(l1, tx, [keeper], { commitment: "confirmed" });
+  // The rollup picks the table up within seconds; then open it (its private ledger, deck, record, log).
+  const keeperProgram = await sessionFor(keeper).program();
+  const acc = accountsOf(table);
+  let opened = false;
+  for (let i = 0; i < 10 && !opened; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      await keeperProgram.methods.openTable().accountsPartial({
+        payer: keeper.publicKey, table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), deck: acc.deck,
+        deckPermission: permissionPdaFromAccount(acc.deck), record: acc.record, log: acc.log, logPermission: acc.logPermission, rollup: rollupPrograms,
+      } as any).rpc();
+      opened = true;
+    } catch { /* not in the rollup yet */ }
+  }
+  if (!opened) throw new Error(`hosted table ${table.toBase58()} didn't open`);
+  hostedTables.set(table.toBase58(), { address: table.toBase58(), big: st.big, at: Date.now() });
+  await event(table.toBase58(), "agent host", true, `blinds ${st.small}/${st.big}`);
+  return table.toBase58();
 }
 /** Per running session: the hand its seed went in for, and when it last saw another player. */
 const seededFor = new Map<number, bigint>();
@@ -429,10 +487,14 @@ export async function stepAgents() {
     if (busy.has(row.wallet)) continue;
     if (!["running", "stopping"].includes(row.status)) row.status = "stopping"; // a seat to leave
     busy.add(row.wallet);
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("step took too long")), STEP_LIMIT_MS).unref());
-    Promise.race([stepAgent(row), timeout])
+    // Deep review: a timeout used to free the wallet while its step still ran, so a second step could start
+    // beside it (two buy-ins, two sessions). The wallet stays busy until the step itself settles; a slow one is
+    // only reported. (Every RPC call gives up after 20 s, so a step can't hang for good.)
+    const slow = setTimeout(() => { runnerState.lastError = `${row.wallet.slice(0, 6)}: step still running after ${STEP_LIMIT_MS / 1000} s`; }, STEP_LIMIT_MS);
+    slow.unref();
+    stepAgent(row)
       .catch((e: any) => { runnerState.lastError = redact(`${row.wallet.slice(0, 6)}: ${String(e?.message ?? e).slice(0, 200)}`); })
-      .finally(() => busy.delete(row.wallet));
+      .finally(() => { clearTimeout(slow); busy.delete(row.wallet); });
   }
 }
 
@@ -479,7 +541,10 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
       return;
     }
   }
-  const left = rec.stake > rec.committed ? rec.stake - rec.committed : 0n;
+  const stakeLeft = rec.stake > rec.committed ? rec.stake - rec.committed : 0n;
+  // Deep review: the stake on the record isn't money. Buy in (and host) only within what the game balance holds.
+  const balance = await gameBalance(wallet);
+  const left = stakeLeft < balance ? stakeLeft : balance;
   const listed = settings.table
     ? (await pool.query("select * from tables where address = $1 and status = 1 and delegated", [settings.table])).rows
     : (await pool.query("select * from tables where status = 1 and delegated and not invite_only and seated >= 1 and seated < max_seats order by seated desc, updated_at desc limit 30")).rows;
@@ -533,10 +598,11 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
       const after = decodeAgentState((await agentConn.getAccountInfo(agentStateOf(wallet), "processed").catch(() => null))?.data as Buffer);
       if (!(after && after.table.equals(table) && after.reader.equals(reader.publicKey))) {
         await pool.query("delete from agent_sessions where id = $1", [pending]);
-        // Lost a race for the seat (or the table just appeared): try again next step, not in 10 minutes.
-        const lostRace = t.hosted || /SeatTaken|InvalidSeat/.test(String(e?.message ?? e));
-        if (!lostRace) triedTables.set(`${row.wallet}|${t.address}`, now);
-        await event(t.address, "agent buy-in", false, redact(String(e?.message ?? e)));
+        // Lost a race for the seat: try again next step, not in 10 minutes. Deep review: a failed buy-in at a table
+        // this service hosted is a failure too (it was retried, and logged, every step); retried after a minute.
+        const lostRace = /SeatTaken|InvalidSeat/.test(String(e?.message ?? e));
+        if (!lostRace) triedTables.set(`${row.wallet}|${t.address}`, t.hosted ? now - 9 * 60_000 : now);
+        await failEvent(`${row.wallet}|buy-in`, t.address, "agent buy-in", String(e?.message ?? e));
         continue;
       }
     }
@@ -545,13 +611,16 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
     await event(t.address, "agent buy-in", true, `${amount} lamports, seat ${seat}`);
     return;
   }
-  if (left < 1n) { await setStatus(row.wallet, row.status, "its stake is used up"); return; }
+  if (stakeLeft < 1n) { await setStatus(row.wallet, row.status, "its stake is used up"); return; }
+  if (balance < STAKES[0].min) { await setStatus(row.wallet, row.status, "waiting: your game balance is too low to buy in (deposit to play)"); return; }
   // Your playtest: nothing to join, so after a minute of waiting it hosts a public table at its stake (the platform's
   // keeper pays the rent, as for tournament tables, and closes and reclaims it once it's empty). Another Agent or a
   // player can then join; with its host not seated, any seated player may press Start round.
   if (!waitingSince.has(row.wallet)) waitingSince.set(row.wallet, now);
   if (!settings.table && now - waitingSince.get(row.wallet)! >= 60_000) {
-    const hosted = await hostTableFor(settings, left).catch(async (e: any) => { await event(null, "agent host", false, redact(String(e?.message ?? e))); return null; });
+    const hosted = await hostTableFor(row.wallet, settings, left).catch(async (e: any) => { await failEvent(`${row.wallet}|host`, null, "agent host", String(e?.message ?? e)); return null; });
+    // Deep review: a minute before the next try, whatever came of this one (a failed host was retried every step).
+    waitingSince.set(row.wallet, Date.now());
     if (hosted) { await setStatus(row.wallet, row.status, `hosted a table (${hosted.slice(0, 6)}…); sitting down`); return; }
   }
   await setStatus(row.wallet, row.status, "waiting for a table with players at your stake");
@@ -636,7 +705,7 @@ async function play(row: any, s: any, wallet: PublicKey, agentKp: Keypair, setti
   const hand = coder.decode("hand", handInfo.data);
   if (toBig(hand.handNo) !== handNo || hand.cards[0] === 255) return;
   const game: Game = {
-    seatCount: g.seatCount, toAct: g.toAct, highBet: toBig(g.highBet), minRaise: toBig(g.minRaise), pot: toBig(g.pot), runout: g.runout,
+    seatCount: g.seatCount, button: g.button, toAct: g.toAct, highBet: toBig(g.highBet), minRaise: toBig(g.minRaise), pot: toBig(g.pot), runout: g.runout,
     board: Array.from(g.board as number[]).slice(0, g.boardLen), boardLen: g.boardLen, bigBlind: toBig(g.bigBlind), street: g.street,
     seats: g.seats.map((x: any) => ({ status: x.status, stack: toBig(x.stack), currentBet: toBig(x.currentBet) })),
   };
