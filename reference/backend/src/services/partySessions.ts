@@ -81,17 +81,20 @@ function gc(now = Date.now()): void {
   }
 }
 
-function activeCountUnlocked(): number {
+function activeCountUnlocked(kind: PartyKind): number {
   let n = 0;
   for (const room of rooms.values()) {
+    if (room.kind !== kind) continue;
     if (room.status === "pending" || room.status === "claimed" || room.status === "ready") n += 1;
   }
   return n;
 }
 
-function throwIfAtCap(): void {
-  if (activeCountUnlocked() >= MAX_ROOMS) {
-    throw Object.assign(new Error("Too many extra tables right now. Try again in a minute."), {
+// Counted per kind: open stake tables never expire, so a shared count let them lock out Party Create.
+function throwIfAtCap(kind: PartyKind): void {
+  if (activeCountUnlocked(kind) >= MAX_ROOMS) {
+    const what = kind === "private" ? "private rooms are open" : "extra tables are running";
+    throw Object.assign(new Error(`Too many ${what} right now. Try again in a minute.`), {
       status: 503,
     });
   }
@@ -118,7 +121,7 @@ export function startParty(
     return existing;
   }
 
-  throwIfAtCap();
+  throwIfAtCap("private");
 
   const room: PartyRoom = {
     session,
@@ -163,7 +166,7 @@ export function requestOverflow(mode: PartyMode, fullSession?: string, stake?: n
     const key = prefix.toLowerCase();
     const primary = rooms.get(key);
     if (!primary || primary.status === "failed") {
-      throwIfAtCap();
+      throwIfAtCap("quick");
       const room: PartyRoom = {
         session: prefix,
         mode,
@@ -179,7 +182,7 @@ export function requestOverflow(mode: PartyMode, fullSession?: string, stake?: n
       return primary;
   }
 
-  throwIfAtCap();
+  throwIfAtCap("quick");
 
   let session: string | undefined;
   for (let n = 2; n <= MAX_OVERFLOW_INDEX; n++) {
