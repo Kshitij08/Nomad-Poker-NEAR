@@ -8,8 +8,13 @@ SOL=$HOME/.local/share/solana/install/releases/3.1.10/solana-release/bin
 export PATH="$SOL:/usr/local/bin:/usr/bin:/bin"
 K=~/.config/solana/poker-per
 SO=${SO:-$HOME/per-work/m1-target/deploy/poker_per.so}  # another build: SO=<path> (e.g. a pinned release)
-PROGKEY=${PROGRAM_KEY_FILE:-$K/poker_per-program-v2.json}
+# The program must be named: PROGRAM_KEY_FILE=<keypair>. The live program (7q2vxh2…) is refused unless UPGRADE_LIVE=yes
+# (only with the user's explicit OK).
+PROGKEY=${PROGRAM_KEY_FILE:?set PROGRAM_KEY_FILE to the program keypair to upgrade}
 PID=$(solana-keygen pubkey $PROGKEY)
+if [ "$PID" = "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv" ] && [ "${UPGRADE_LIVE:-}" != "yes" ]; then
+  echo "REFUSED: $PID is the LIVE program. Set UPGRADE_LIVE=yes only with an explicit OK."; exit 1
+fi
 DEP=$(solana-keygen pubkey $K/deployer.json)
 BAL=$(solana balance -u devnet $DEP | cut -d' ' -f1)
 echo "deployer before $BAL SOL"
