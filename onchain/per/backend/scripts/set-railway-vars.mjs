@@ -18,8 +18,9 @@ const PROFILES = {
   v3: {
     name: "poker-agents-v2-test", service: "per-api-v3", keeper: "v3-keeper.json", auditor: "v3-auditor.json", archive: "v3-archive-key.hex", admin: "v3-admin-token.txt",
     database: "${{Postgres-per.DATABASE_URL}}",
-    // Agents v2 policy: table hosting fees (requester pays, the measured net rent), and the SOL marketplace's listing minimum.
-    extra: { HOST_FEE_LAMPORTS: "17000000", HOSTS_PER_WALLET_HOUR: "3", LISTING_MIN_HANDS: "100", LISTING_MIN_NET: "1" },
+    // Devnet policy (17 Oct): hosting is free (fees off in the program's config) and only the per-wallet cap applies
+    // (HOSTS_PER_HOUR 0 = no cap for everyone); the SOL marketplace's listing minimum.
+    extra: { HOSTS_PER_WALLET_HOUR: "3", HOSTS_PER_HOUR: "0", LISTING_MIN_HANDS: "100", LISTING_MIN_NET: "1" },
   },
 };
 const p = PROFILES[profile];

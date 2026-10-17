@@ -124,6 +124,10 @@ pub mod poker_per {
         instructions::vault::vault_payout(ctx)
     }
 
+    pub fn vault_payout_to_owner(ctx: Context<VaultPayoutToOwner>) -> Result<()> {
+        instructions::vault::vault_payout_to_owner(ctx)
+    }
+
     pub fn new_vault(ctx: Context<NewVault>, seed: [u8; 8]) -> Result<()> {
         instructions::vault::new_vault(ctx, seed)
     }

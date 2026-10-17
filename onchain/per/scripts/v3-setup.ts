@@ -22,7 +22,7 @@ const SETTINGS = {
   sponsorLamports: 50_000_000n,   // pays Agent records' and host tabs' rent in the rollup (about 0.00001 SOL each)
   platformFeeBps: 200,            // Nomad's share of copiers' new profit
   creatorFeeBps: 800,             // every creator's share
-  maxHostFee: 20_000_000n,        // the most one table hosting fee may be (the backend asks 0.017 SOL, the measured net rent)
+  maxHostFee: 0n,                 // hosting fees off: Quick Play stays free on devnet (the user's call, 17 Oct)
   keeperSol: 1.5,                 // tables cost the keeper 0.030 SOL each until reclaimed (0.013 back); plus commits
 };
 
@@ -52,8 +52,8 @@ async function main() {
       devWallet: deployer.publicKey, rakeBps: SETTINGS.rakeBps, maxBuyIn: new anchor.BN(SETTINGS.maxBuyIn.toString()), paused: false, escapeIdleSecs: 0,
     }).accountsPartial({ authority: deployer.publicKey, config: CONFIG_PDA, program: PROGRAM_ID, programData }).rpc()],
     ["set_auditor (v3-auditor)", !config || !config.auditor.equals(auditor.publicKey), () => l1.methods.setAuditor(auditor.publicKey).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc()],
-    ["set_fees (2% Nomad, 8% creator, hosting fees to the v3 keeper, at most 0.02 SOL)", !config || !config.hostWallet.equals(keeper.publicKey), () => l1.methods.setFees({
-      platformFeeBps: SETTINGS.platformFeeBps, creatorFeeBps: SETTINGS.creatorFeeBps, hostWallet: keeper.publicKey, maxHostFee: new anchor.BN(SETTINGS.maxHostFee.toString()),
+    ["set_fees (2% Nomad, 8% creator, hosting fees off)", !config || config.agentFeeBps !== SETTINGS.platformFeeBps || config.creatorFeeBps !== SETTINGS.creatorFeeBps, () => l1.methods.setFees({
+      platformFeeBps: SETTINGS.platformFeeBps, creatorFeeBps: SETTINGS.creatorFeeBps, hostWallet: PublicKey.default, maxHostFee: new anchor.BN(SETTINGS.maxHostFee.toString()),
     }).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA }).rpc()],
     ["create + delegate the Agent sponsor (0.05 SOL)", !sponsorInfo, async () => {
       await l1.methods.createAgentSponsor(new anchor.BN(SETTINGS.sponsorLamports.toString())).accountsPartial({ admin: deployer.publicKey, config: CONFIG_PDA, sponsor }).rpc();
@@ -65,7 +65,7 @@ async function main() {
     }],
     [`fund the v3 keeper to ${SETTINGS.keeperSol} SOL`, keeperSol < SETTINGS.keeperSol - 0.01, () => sendL1(new Transaction().add(SystemProgram.transfer({
       fromPubkey: deployer.publicKey, toPubkey: keeper.publicKey, lamports: Math.round((SETTINGS.keeperSol - keeperSol) * LAMPORTS_PER_SOL) })), [deployer])],
-    ["open the keeper's game balance (it receives hosting fees)", !keeperVault, async () => sendL1(new Transaction().add(
+    ["open the keeper's game balance (it would receive hosting fees, if they're ever turned on)", !keeperVault, async () => sendL1(new Transaction().add(
       await programFor(keeper).methods.openVault().accountsPartial(openVaultAccounts(keeper.publicKey)).instruction()), [keeper])],
     ["open the treasury's game balance (dev_wallet = deployer: receives Nomad's copy share)", !deployerVault, async () => sendL1(new Transaction().add(
       await programFor(deployer).methods.openVault().accountsPartial(openVaultAccounts(deployer.publicKey)).instruction()), [deployer])],

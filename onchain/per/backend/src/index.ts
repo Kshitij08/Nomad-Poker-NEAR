@@ -6,6 +6,7 @@ import { config } from "./config";
 import { migrate, pool } from "./db";
 import { keeperState, runKeeper } from "./keeper";
 import { stepAgents } from "./agents";
+import { stepPayouts } from "./payouts";
 
 async function main() {
   await migrate();
@@ -62,6 +63,7 @@ async function main() {
           console.log("agents: this instance runs the Agents");
         }
         await stepAgents();
+        await stepPayouts().catch((e) => console.error("payouts:", e?.message ?? e));
       })().catch((e) => console.error("agents:", e?.message ?? e)).finally(() => { agentsBusy = false; });
     }, 1_500).unref();
   }

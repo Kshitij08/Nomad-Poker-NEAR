@@ -12772,6 +12772,66 @@
       "args": []
     },
     {
+      "name": "vault_payout_to_owner",
+      "discriminator": [
+        108,
+        123,
+        65,
+        85,
+        206,
+        149,
+        234,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Any key (the backend's keeper): pays the transaction fee, receives nothing."
+          ],
+          "signer": true
+        },
+        {
+          "name": "wallet",
+          "docs": [
+            "can't name another destination."
+          ],
+          "writable": true
+        },
+        {
+          "name": "wallet_state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  97,
+                  108,
+                  108,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "vault_withdraw",
       "discriminator": [
         98,

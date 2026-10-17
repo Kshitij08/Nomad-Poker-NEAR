@@ -4,6 +4,7 @@ import { config } from "./config";
 import { AGENT_MIGRATIONS } from "./agents";
 import { SOL_STRATEGY_MIGRATIONS } from "./solStrategies";
 import { HOST_FEE_MIGRATIONS } from "./hostFees";
+import { PAYOUT_MIGRATIONS } from "./payouts";
 
 export const pool = new Pool({ connectionString: config.databaseUrl, max: 5 });
 
@@ -82,7 +83,7 @@ const MIGRATIONS: string[] = [
 pool.on("error", (e) => console.error("postgres pool error:", e.message));
 
 export async function migrate() {
-  for (const sql of [...MIGRATIONS, ...AGENT_MIGRATIONS, ...SOL_STRATEGY_MIGRATIONS, ...HOST_FEE_MIGRATIONS]) await pool.query(sql);
+  for (const sql of [...MIGRATIONS, ...AGENT_MIGRATIONS, ...SOL_STRATEGY_MIGRATIONS, ...HOST_FEE_MIGRATIONS, ...PAYOUT_MIGRATIONS]) await pool.query(sql);
 }
 
 /** Admits one keeper-paid attempt of `kind` for `who` (a wallet or host) if fewer than `perWho` of theirs and

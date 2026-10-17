@@ -16,6 +16,7 @@ import { admitSpend, event, pool, settleSpend } from "./db";
 import { PRESETS, Profile, clampProfile, decide, Game, ST } from "./agentBot";
 import * as market from "./solStrategies";
 import { creditOf, decodeHostTab, hostFees, hostTabOf, refundHostFee, reserveHostFee } from "./hostFees";
+import { payoutRoute } from "./payouts";
 import idl from "./shared/poker_per.json";
 
 // ---------------------------------------------------------------------------------------- settings and limits
@@ -348,6 +349,10 @@ export function agentRoutes(a: Express) {
   route("/sol-strategies/publish", (wallet, data) => market.publish(wallet, data));
   route("/sol-strategies/unlist", (wallet, data) => market.unlist(wallet, data?.strategyId));
   route("/sol-strategies/mine", (wallet) => market.dashboard(wallet));
+
+  /** Background withdrawals (payouts.ts): register one (`expected`), or ask to pay out what has arrived (`ready`). The
+   *  keeper sends vault_payout_to_owner, so the money can only go to this wallet. */
+  route("/vault/payout", (wallet, data) => payoutRoute(wallet, data));
 }
 
 // ---------------------------------------------------------------------------------------- the runner

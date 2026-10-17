@@ -665,6 +665,47 @@ pub struct VaultPaidOut {
 }
 
 #[derive(Accounts)]
+pub struct VaultPayoutToOwner<'info> {
+    /// Any key (the backend's keeper): pays the transaction fee, receives nothing.
+    pub payer: Signer<'info>,
+    /// CHECK: the vault's owner and the only possible recipient: the vault's address is derived from it, so a signer
+    /// can't name another destination.
+    #[account(mut)]
+    pub wallet: UncheckedAccount<'info>,
+    /// CHECK: the wallet's state (may not exist: vault 0). Read in `wallet_state_of`.
+    #[account(seeds = [WALLET_SEED, wallet.key().as_ref()], bump)]
+    pub wallet_state: UncheckedAccount<'info>,
+    /// CHECK: the wallet's current vault PDA, a plain system account where `vault_exit`'s SOL lands. It signs.
+    #[account(mut, seeds = [VAULT_SEED, wallet.key().as_ref(), &vault_gen_seed(&wallet_state)], bump)]
+    pub vault: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Finishes a withdrawal without the wallet: moves the SOL `vault_exit` landed on the vault PDA to the vault's own
+/// wallet (L1). Anyone may sign and pay the fee (the backend does it in the background); the money can only go to the
+/// owner. Any wSOL in the vault's token account is left for the wallet-signed `vault_payout`.
+pub fn vault_payout_to_owner(ctx: Context<VaultPayoutToOwner>) -> Result<()> {
+    let wallet = ctx.accounts.wallet.key();
+    let bump = [ctx.bumps.vault];
+    let gen_seed = vault_gen_seed(&ctx.accounts.wallet_state);
+    let seeds: &[&[u8]] = &[VAULT_SEED, wallet.as_ref(), &gen_seed, &bump];
+    let sol = ctx.accounts.vault.lamports();
+    require!(sol > 0, PokerError::NothingToCollect);
+    // The vault PDA must be the plain system account it always is (never a program's account).
+    require_keys_eq!(*ctx.accounts.vault.owner, anchor_lang::solana_program::system_program::ID, PokerError::NothingToCollect);
+    anchor_lang::system_program::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.system_program.key(),
+            anchor_lang::system_program::Transfer { from: ctx.accounts.vault.to_account_info(), to: ctx.accounts.wallet.to_account_info() },
+            &[seeds],
+        ),
+        sol,
+    )?;
+    emit!(VaultPaidOut { wallet, sol, wsol: 0 });
+    Ok(())
+}
+
+#[derive(Accounts)]
 pub struct VaultWithdraw<'info> {
     pub play_key: Signer<'info>,
     /// CHECK: the wallet that authorized `play_key`; the only possible recipient.
