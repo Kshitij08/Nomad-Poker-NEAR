@@ -137,8 +137,9 @@ export class StrategyService {
          LEFT JOIN agent_deployments d ON d.strategy_id = s.strategy_id AND d.phase = 'completed'
         WHERE s.listed
         GROUP BY s.strategy_id
+       HAVING COALESCE(SUM(d.hands_played), 0) >= $2 AND COALESCE(SUM(d.net_pnl), 0) >= $3
         ORDER BY ${order}
-        LIMIT $1`, [Math.min(100, Math.max(1, limit))]);
+        LIMIT $1`, [Math.min(100, Math.max(1, limit)), LISTING.minHands, LISTING.minNet]);
     return rows.map(toPublic);
   }
 
@@ -172,6 +173,9 @@ export class StrategyService {
   /** The profile a copied Agent plays, and marks the deployment as copying it (the copier is the signed-in player). */
   async attachCopy(deploymentId: string, copierId: string, strategyId: string): Promise<Profile> {
     const s = await this.get(strategyId);
+    // Others may copy only a listed strategy with a proven record; its creator may always run it (that builds the record).
+    if (s.creatorId !== copierId && (!s.listed || !s.qualified))
+      throw new StrategyError(403, "not_listed", `That strategy isn't listed yet: it needs ${LISTING.minHands} hands and a profit first.`);
     await this.pool.query(
       `UPDATE agent_deployments SET strategy_id = $2, copier_verified = TRUE WHERE deployment_id = $1 AND owner_id = $3`,
       [deploymentId, strategyId, copierId]);
@@ -267,6 +271,13 @@ export class StrategyService {
 
 // Track record of a strategy: completed Agent sessions that ran it (not self-reported). Score = profit per 100 hands,
 // shrunk toward zero while the sample is small.
+/** What a strategy needs before it's listed and copyable by others: Agent hands played with it, and its total profit
+ *  (whole Coins; "more than 0" = at least 1). LISTING_MIN_HANDS / LISTING_MIN_NET change them. */
+export const LISTING = {
+  minHands: Number(process.env.LISTING_MIN_HANDS ?? 100),
+  minNet: Number(process.env.LISTING_MIN_NET ?? 1),
+};
+
 const TRACK_RECORD_SQL = `
   COUNT(DISTINCT d.owner_id)::int AS copiers,
   COUNT(d.deployment_id)::int AS sessions,
@@ -284,6 +295,8 @@ function toPublic(r: any) {
     profile: profile as Profile, tags: tags(profile),
     record: { copiers: Number(r.copiers ?? 0), sessions: Number(r.sessions ?? 0), hands, net: Number(r.net ?? 0), per100Hands: hands ? Math.round((Number(r.net) * 100) / hands) : 0 },
     verified: hands >= 2000,
+    qualified: hands >= LISTING.minHands && Number(r.net ?? 0) >= LISTING.minNet,
+    listing: { minHands: LISTING.minHands, minNet: LISTING.minNet },
     fees: { creatorPercent: 8, platformPercent: 2 },
     createdAt: r.created_at,
   };

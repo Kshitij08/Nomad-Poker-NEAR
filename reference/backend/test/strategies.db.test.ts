@@ -49,6 +49,19 @@ test("publish a custom strategy; bad input is refused", async () => {
   await assert.rejects(svc.publish("creator", { name: "From twin", fromTwin: true }), /Play a few more hands/);
 });
 
+test("an unproven strategy isn't listed or copyable; the creator's own sessions qualify it", async () => {
+  assert.equal((await svc.list("new")).length, 0);
+  const [s] = (await svc.creatorDashboard("creator")).strategies;
+  assert.equal(s.qualified, false);
+  await deployment("dep-x", "copier", 0);
+  await assert.rejects(svc.attachCopy("dep-x", "copier", s.strategyId), /isn't listed yet/);
+  await deployment("dep-0", "creator", 200, 120); // the creator's own Agent: 120 hands, +200
+  await svc.attachCopy("dep-0", "creator", s.strategyId);
+  const [listed] = await svc.list("new");
+  assert.equal(listed.strategyId, s.strategyId);
+  assert.equal(listed.qualified, true);
+});
+
 test("a copied session settles once: 8% to the creator (paid into Coins), 2% to us", async () => {
   const [s] = await svc.list("new");
   await deployment("dep-1", "copier", 1000);
@@ -82,19 +95,22 @@ test("high-water mark across sessions; losses and own strategies pay nothing", a
 
 test("track record and creator dashboard come from the settled sessions", async () => {
   const [s] = await svc.list("top");
-  assert.equal(s.record.sessions, 4);
+  assert.equal(s.record.sessions, 5);
   assert.equal(s.record.copiers, 2);
-  assert.equal(s.record.net, 1000 - 600 + 800 + 5000);
+  assert.equal(s.record.net, 200 + 1000 - 600 + 800 + 5000);
   const dash = await svc.creatorDashboard("creator");
   assert.equal(dash.earned, 96);
   assert.equal(dash.paid, 96);
 });
 
-test("a new version replaces the old one in the listing", async () => {
-  await svc.publish("creator", { name: "Night Owl", profile: { foldBelow: 0.3, raiseAbove: 0.66, aggression: 0.5, bluffChance: 0.07, raiseFractionOfPot: 0.6 } });
+test("a new version replaces the old one and must prove itself before it's listed", async () => {
+  const v2 = await svc.publish("creator", { name: "Night Owl", profile: { foldBelow: 0.3, raiseAbove: 0.66, aggression: 0.5, bluffChance: 0.07, raiseFractionOfPot: 0.6 } });
+  assert.equal(v2.version, 2);
+  assert.equal((await svc.list("new")).filter((x) => x.name === "Night Owl").length, 0); // v1 unlisted, v2 unproven
+  await deployment("dep-v2", "creator", 50, 100);
+  await svc.attachCopy("dep-v2", "creator", v2.strategyId);
   const listed = (await svc.list("new")).filter((x) => x.name === "Night Owl");
-  assert.equal(listed.length, 1);
-  assert.equal(listed[0].version, 2);
+  assert.deepEqual(listed.map((x) => x.version), [2]);
 });
 
 test("recorded decisions build the twin and the coaching report", async () => {
