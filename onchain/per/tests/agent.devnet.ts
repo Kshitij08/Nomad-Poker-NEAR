@@ -282,15 +282,16 @@ async function main() {
 
   const s1 = await session("session 1", true);
   S.check("session 1 made a profit, so fees were paid", s1.profit > 0n, { profit: s1.profit.toString(), creator: s1.creator.toString() });
-  const s2 = await session("session 2", false);
-  S.check("session 2 lost: no fee on a loss", s2.profit === 0n && s2.creator === 0n, { profit: s2.profit.toString() });
-  const s3 = await session("session 3", true);
-  S.check("session 3: fees only on what's above the earlier peak (the rule's own result, checked above)", true, { profit: s3.profit.toString(), creator: s3.creator.toString() });
-
-  // ---- the player takes the Agent's seat back after a win: no dodge, the same share applies
-  const s4 = await session("session 4", true, true);
-  S.check("session 4 (taken back by the player): fees follow the same rule as any cash-out", true, { profit: s4.profit.toString(), creator: s4.creator.toString() });
-  await S.ok("the copier sets the Agent again with the same terms (counts kept)", () => set(C, G.publicKey, 10_000_000n, TERMS));
+  // ---- the player takes the Agent's seat back after another win above the peak: no dodge, the share is paid
+  const s2 = await session("session 2", true, true);
+  S.check("session 2 (taken back by the player) made new profit above the peak, and the creator and Nomad were paid", s2.profit > 0n && s2.creator > 0n,
+    { profit: s2.profit.toString(), creator: s2.creator.toString(), platform: s2.platform.toString() });
+  await S.ok("the copier sets the Agent again with the same terms (counts kept)", () => set(C, G.publicKey, 40_000_000n, TERMS));
+  const s3 = await session("session 3", false);
+  S.check("session 3 lost: no fee on a loss", s3.profit === 0n && s3.creator === 0n, { profit: s3.profit.toString() });
+  const s4 = await session("session 4", true);
+  S.check("session 4 won back part of the loss: fees only on what's above the earlier peak (the rule's own result, checked above)", true, { profit: s4.profit.toString(), creator: s4.creator.toString() });
+  await S.ok("the Agent's stake for the rest of the run: 0.01 SOL", () => set(C, G.publicKey, 10_000_000n, TERMS));
   await S.err("releasing a record whose seat agent_cash_out already freed: refused (NotAgentSeat)", "NotAgentSeat",
     () => gEr.methods.agentRelease().accountsPartial({ wallet: W(C), agentState: agentStateOf(W(C)), table: T.table, ledger: T.ledger }).rpc());
 

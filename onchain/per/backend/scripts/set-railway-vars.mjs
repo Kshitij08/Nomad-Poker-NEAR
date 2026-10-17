@@ -17,7 +17,8 @@ const PROFILES = {
   live: { name: "poker-per-live", keeper: "live-keeper.json", archive: "live-archive-key.hex", admin: "live-admin-token.txt" },
   v3: {
     name: "poker-agents-v2-test", service: "per-api-v3", keeper: "v3-keeper.json", auditor: "v3-auditor.json", archive: "v3-archive-key.hex", admin: "v3-admin-token.txt",
-    database: "${{Postgres-per.DATABASE_URL}}",
+    // Its own database (Railway named it Postgres-26T0 on creation, 17 Oct; coins-api uses "Postgres").
+    database: "${{Postgres-26T0.DATABASE_URL}}",
     // Devnet policy (17 Oct): hosting is free (fees off in the program's config) and only the per-wallet cap applies
     // (HOSTS_PER_HOUR 0 = no cap for everyone); the SOL marketplace's listing minimum.
     extra: { HOSTS_PER_WALLET_HOUR: "3", HOSTS_PER_HOUR: "0", LISTING_MIN_HANDS: "100", LISTING_MIN_NET: "1" },
