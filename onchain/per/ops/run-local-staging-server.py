@@ -13,11 +13,15 @@ EXE = sys.argv[1] if len(sys.argv) > 1 else r"C:\Kshitij\Work\X2C\web3\GitHub\Po
 
 railway = shutil.which("railway.cmd") or shutil.which("railway.exe") or shutil.which("railway")
 out = subprocess.run([railway, "variables", "-p", PROJECT, "-e", "production", "-s", SERVICE, "--json"], capture_output=True, text=True)
-key = json.loads(out.stdout).get("INTERNAL_API_KEY")
+svc = json.loads(out.stdout)
+key = svc.get("INTERNAL_API_KEY")
 if not key: sys.exit("No INTERNAL_API_KEY on the test coins-api service.")
+# The Coins ledger: the server charges and pays Coins through PlayFab (the same title the test API uses).
+playfab = {k: svc[k] for k in ("PLAYFAB_SECRET_KEY", "PLAYFAB_TITLE_ID") if svc.get(k)}
+if len(playfab) < 2: sys.exit("The test coins-api service has no PlayFab settings.")
 
 APP_VERSION = "1.0-agentsv2-test"  # PokerMatchmaking.StagingAppVersion: our own Photon universe
-env = dict(os.environ, POKER_INTERNAL_API_KEY=key, POKER_BACKEND_URL=BACKEND, POKER_APP_VERSION=APP_VERSION)
+env = dict(os.environ, POKER_INTERNAL_API_KEY=key, POKER_BACKEND_URL=BACKEND, POKER_APP_VERSION=APP_VERSION, **playfab)
 log = os.path.join(os.path.dirname(EXE), "server.log")
 args = [EXE, "-batchmode", "-nographics", "-server", "-free", "-session", "poker-free",
         "-appVersion", APP_VERSION, "-backendUrl", BACKEND, "-logFile", log]
