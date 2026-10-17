@@ -126,7 +126,7 @@ async function main() {
   await S.err("a lower creator share: refused too", "BadFeeTerms", () => set(C, G.publicKey, STAKE, terms(W(K), creatorBps - 100, platformBps)));
   await S.err("shares without a creator: refused", "BadFeeTerms", () => set(C, G.publicKey, STAKE, terms(NONE, creatorBps, platformBps)));
   await S.ok("the copier sets the Agent with the strategy's terms (8% creator, Nomad's share)", () => set(C, G.publicKey, STAKE, TERMS));
-  const readRecord = async (conn = gEr.provider.connection) => decodeAgent((await conn.getAccountInfo(agentStateOf(W(C)), "processed"))?.data);
+  const readRecord = async (conn: any = gEr.provider.connection) => decodeAgent((await conn.getAccountInfo(agentStateOf(W(C)), "processed"))?.data);
   const r0 = await readRecord();
   S.check("the record carries the terms; counts start at zero", !!r0 && r0.creator.equals(W(K)) && r0.creatorFeeBps === creatorBps && r0.platformFeeBps === platformBps && r0.netIn === 0n && r0.highWater === 0n, r0);
 
@@ -134,11 +134,11 @@ async function main() {
   const T = tableApi(deployer, randomTableId());
   const erD = programOn(await teeConnection(deployer), deployer);
   await S.ok("create, delegate and open a table", async () => {
-    await T.create({ smallBlind: BN(1_000_000), bigBlind: BN(2_000_000), minBuyIn: BN(10_000_000), maxBuyIn: BN(40_000_000), maxSeats: 6, inviteOnly: false });
+    await T.create({ smallBlind: BN(1_000_000), bigBlind: BN(2_000_000), minBuyIn: BN(20_000_000), maxBuyIn: BN(40_000_000), maxSeats: 6, inviteOnly: false });
     await T.delegate(); await sleep(4000);
     return T.open(erD, deployer.publicKey);
   });
-  const AG = 0, OPP = 1, BUY = 10_000_000n;
+  const AG = 0, OPP = 1, BUY = 20_000_000n; // 10 big blinds, the program's minimum
   const oReader = Keypair.generate();
   const oEr = programOn(await teeConnection(oReader), oReader);
   await S.ok("the opponent sits down from its game balance (play key)", () => {
@@ -159,17 +159,29 @@ async function main() {
     }).rpc();
   };
   const feeAccounts = { creatorWalletState: walletStateOf(W(K)), creatorVaultToken: vaultTokenOf(W(K)), treasuryWalletState: walletStateOf(treasury), treasuryVaultToken: vaultTokenOf(treasury) };
-  // Signed by the seat's table key (`prog` is logged in as it), as the runner does; or by the copier's play key
-  // (`player`: with its signed message), the player taking the seat back.
+  // Signed by the seat's table key (`prog` is logged in as it), as the runner does; or (`player`) by the copier's play
+  // key, a plain signer: once the Agent is stopped any key may send it.
   const agentCashOut = (prog: any, fees: any = feeAccounts, player = false) => {
     const hand = handOf(T.table, AG);
-    const m = (player ? C.er : prog).methods.agentCashOut(AG, BN(player ? C.exp : 0)).accountsPartial({
-      signer: player ? C.key.publicKey : prog.provider.publicKey, instructions: SYSVAR_INSTRUCTIONS_PUBKEY, wallet: W(C), agentState: agentStateOf(W(C)), vault: vaultOf(W(C)), walletState: walletStateOf(W(C)), vaultToken: vaultTokenOf(W(C)),
+    const m = (player ? C.er : prog).methods.agentCashOut(AG).accountsPartial({
+      signer: player ? C.key.publicKey : prog.provider.publicKey, wallet: W(C), agentState: agentStateOf(W(C)), vault: vaultOf(W(C)), walletState: walletStateOf(W(C)), vaultToken: vaultTokenOf(W(C)),
       table: T.table, ledger: T.ledger, ledgerPermission: permissionPdaFromAccount(T.ledger), hand, handPermission: permissionPdaFromAccount(hand), escrow: T.escrow,
       config: CONFIG_PDA, ...fees, rollup,
     });
-    return (player ? m.preInstructions([proof(C)]) : m).rpc();
+    return m.rpc();
   };
+
+  // The TEE must run the latest upgrade too (agent_cash_out without the play-key arguments): a cash-out while the record
+  // holds no seat is refused as NotAgentSeat by this build; the older one reads the accounts differently and fails before.
+  {
+    let got = "";
+    for (let i = 0; i < 24 && !got.includes("NotAgentSeat"); i++) {
+      got = await agentCashOut(gEr).then(() => "accepted", (e: any) => errName(e));
+      if (!got.includes("NotAgentSeat")) await sleep(5000);
+    }
+    S.check("the TEE runs the latest upgrade (a seatless Agent cash-out is refused as NotAgentSeat)", got.includes("NotAgentSeat"), { got });
+    if (!got.includes("NotAgentSeat")) { S.finish({ aborted: "the TEE doesn't run the latest upgrade yet" }); return; }
+  }
 
   // Plays one heads-up hand. `agentWins`: the opponent folds at its every turn and the Agent checks or calls; else the
   // Agent folds at its turn and the opponent checks or calls. Returns when the hand is over.
@@ -187,10 +199,12 @@ async function main() {
       if (Number(t.handNo) === hand && t.handState === HAND_IDLE) return;
       if (Number(t.handNo) === hand && t.handState === 2) { await T.beginHand(oEr, oReader.publicKey).catch(() => {}); continue; } // dealt: begin (or the keeper does)
       if (Number(t.handNo) === hand && t.handState === HAND_PLAYING) {
-        const g = coder.decode("ledger", (await rawRead(connUrl(oEr.provider.connection), T.ledger)).data!).game;
+        const g = (await readLedger(oEr)).game;
         const toAct = g.toAct;
         const mine = toAct === AG;
-        const folds = mine !== agentWins; // the loser folds
+        // The loser checks or calls preflop and folds at its first turn after the flop, so the winner takes a whole big
+        // blind: more than the 5% rake on a 10-big-blind buy-in (a won small blind only pays the rake back).
+        const folds = mine !== agentWins && g.street > 1; // engine.rs: PREFLOP = 1
         const seatBet = BigInt(g.seats[toAct].currentBet.toString()), high = BigInt(g.highBet.toString());
         const kind = folds ? KIND.fold : seatBet >= high ? KIND.check : KIND.call;
         await (mine ? T.act(aEr, agentReader.publicKey, AG, kind) : T.act(oEr, oReader.publicKey, OPP, kind)).catch(() => {});
@@ -199,13 +213,25 @@ async function main() {
     }
     throw new Error(`hand ${hand} didn't finish in 90 s`);
   };
-  const agentStack = async (aEr: any) => BigInt(coder.decode("ledger", (await rawRead(connUrl(aEr.provider.connection), T.ledger)).data!).seats[AG].stack.toString());
+  // The ledger, read as a seated player (the Agent's table key, else the opponent's); the rollup can take a moment to
+  // add a new reader to the ledger's permission.
+  const readLedger = async (aEr: any) => {
+    for (let i = 0; i < 10; i++) {
+      for (const c of [aEr.provider.connection, oEr.provider.connection]) {
+        const r = await rawRead(connUrl(c), T.ledger);
+        if (r.data) return coder.decode("ledger", r.data);
+      }
+      await sleep(1500);
+    }
+    throw new Error("the ledger isn't readable by the seated players");
+  };
+  const agentStack = async (aEr: any) => BigInt((await readLedger(aEr)).seats[AG].stack.toString());
 
   // One Agent session: buy in, play, cash out with the fee accounts; checks every balance against the rule.
   const session = async (name: string, agentWins: boolean, byPlayer = false) => {
     const reader = Keypair.generate();
     const aEr = programOn(await teeConnection(reader), reader);
-    await S.ok(`${name}: the Agent buys in 0.01 SOL from the copier's balance`, () => agentBuyIn(reader.publicKey));
+    await S.ok(`${name}: the Agent buys in 0.02 SOL from the copier's balance`, () => agentBuyIn(reader.publicKey));
     if (name === "session 1") {
       await S.err("while seated, the terms can't change (FeeTermsLocked)", "FeeTermsLocked", () => set(C, G.publicKey, STAKE, terms(NONE, 0, 0)));
       await S.ok("while seated, setting the same terms again works (renewing the Agent)", () => set(C, G.publicKey, STAKE, TERMS));
@@ -230,19 +256,22 @@ async function main() {
           table: T.table, ledger: T.ledger, ledgerPermission: permissionPdaFromAccount(T.ledger), hand, handPermission: permissionPdaFromAccount(hand), escrow: T.escrow, rollup,
         }).preInstructions([proof(C)]).rpc();
       });
-      await S.err(`${name}: another wallet's play key can't take the Agent's seat`, "NotAgent", () => {
+      await S.err(`${name}: while the Agent runs, another key can't take its seat (NotAgent)`, "NotAgent", () => {
         const hand = handOf(T.table, AG);
-        return O.er.methods.agentCashOut(AG, BN(O.exp)).accountsPartial({
-          signer: O.key.publicKey, instructions: SYSVAR_INSTRUCTIONS_PUBKEY, wallet: W(C), agentState: agentStateOf(W(C)), vault: vaultOf(W(C)), walletState: walletStateOf(W(C)), vaultToken: vaultTokenOf(W(C)),
+        return O.er.methods.agentCashOut(AG).accountsPartial({
+          signer: O.key.publicKey, wallet: W(C), agentState: agentStateOf(W(C)), vault: vaultOf(W(C)), walletState: walletStateOf(W(C)), vaultToken: vaultTokenOf(W(C)),
           table: T.table, ledger: T.ledger, ledgerPermission: permissionPdaFromAccount(T.ledger), hand, handPermission: permissionPdaFromAccount(hand), escrow: T.escrow, config: CONFIG_PDA, ...feeAccounts, rollup,
-        }).preInstructions([proof(O)]).rpc();
+        }).rpc();
       });
+      await S.err(`${name}: ...not even the copier's own play key`, "NotAgent", () => agentCashOut(aEr, feeAccounts, true));
+      await S.ok(`${name}: the copier stops the Agent (play key)`, () => set(C, NONE, 0n, terms(NONE, 0, 0)));
     }
-    await S.ok(byPlayer ? `${name}: the copier takes the seat back with their play key (agent_cash_out: the share applies)`
+    await S.ok(byPlayer ? `${name}: the copier takes the stopped Agent's seat back (agent_cash_out, their key as a plain signer: the share applies)`
       : `${name}: the seat's table key cashes the Agent out (fees to the creator and Nomad)`, () => agentCashOut(aEr, feeAccounts, byPlayer));
     const [c1, k1, t1] = [await balance(C), await balance(K), await treasuryBalance()];
     const want = expectedFees(before!, BUY, stack);
-    const after = await readRecord();
+    // Stopped by the player, the record is readable only by their play key.
+    const after = await readRecord(byPlayer ? C.er.provider.connection : undefined);
     S.check(`${name}: the creator got ${want.creator} (8% of new profit ${want.profit})`, k1 - k0 === want.creator, { stack, profit: want.profit, creatorGot: k1 - k0 });
     if (treasuryOpen) S.check(`${name}: Nomad got ${want.platform} (${platformBps / 100}% of new profit)`, t1 - t0 === want.platform, { nomadGot: t1 - t0 });
     S.check(`${name}: the copier got the stack minus the fees`, c1 - c0 === stack - want.creator - (treasuryOpen ? want.platform : 0n), { copierGot: c1 - c0, stack });
@@ -252,15 +281,16 @@ async function main() {
   };
 
   const s1 = await session("session 1", true);
-  S.check("session 1 made a profit, so fees were paid", s1.profit > 0n, s1);
+  S.check("session 1 made a profit, so fees were paid", s1.profit > 0n, { profit: s1.profit.toString(), creator: s1.creator.toString() });
   const s2 = await session("session 2", false);
-  S.check("session 2 lost: no fee on a loss", s2.profit === 0n && s2.creator === 0n, s2);
+  S.check("session 2 lost: no fee on a loss", s2.profit === 0n && s2.creator === 0n, { profit: s2.profit.toString() });
   const s3 = await session("session 3", true);
-  S.check("session 3: fees only on what's above the earlier peak (the rule's own result, checked above)", true, s3);
+  S.check("session 3: fees only on what's above the earlier peak (the rule's own result, checked above)", true, { profit: s3.profit.toString(), creator: s3.creator.toString() });
 
   // ---- the player takes the Agent's seat back after a win: no dodge, the same share applies
   const s4 = await session("session 4", true, true);
-  S.check("session 4 (taken back by the player): fees follow the same rule as any cash-out", true, s4);
+  S.check("session 4 (taken back by the player): fees follow the same rule as any cash-out", true, { profit: s4.profit.toString(), creator: s4.creator.toString() });
+  await S.ok("the copier sets the Agent again with the same terms (counts kept)", () => set(C, G.publicKey, 10_000_000n, TERMS));
   await S.err("releasing a record whose seat agent_cash_out already freed: refused (NotAgentSeat)", "NotAgentSeat",
     () => gEr.methods.agentRelease().accountsPartial({ wallet: W(C), agentState: agentStateOf(W(C)), table: T.table, ledger: T.ledger }).rpc());
 
@@ -294,7 +324,7 @@ async function main() {
     await S.ok("the Agent pays a hosting fee within its stake (agent_pay_host_fee)", () => hostPay("agent", 5_000_000n));
     const ra = await readRecord();
     S.check("...it counts toward the stake and as a cost of the next seat", !!ra && ra.committed === rb!.committed + 5_000_000n && ra.seatIn === rb!.seatIn + 5_000_000n, { before: rb, after: ra });
-    await S.err("an Agent hosting fee beyond its stake: refused (AgentStakeExceeded)", "AgentStakeExceeded", () => hostPay("agent", STAKE));
+    await S.err("an Agent hosting fee beyond its stake: refused (AgentStakeExceeded)", "AgentStakeExceeded", () => hostPay("agent", 10_000_000n));
     await S.ok("admin: the config's fees back as they were", () => setFees(savedFees));
   }
 
@@ -302,7 +332,7 @@ async function main() {
   await S.ok("the copier stops the Agent (terms passed as none are ignored)", () => set(C, NONE, 0n, terms(NONE, 0, 0)));
   const stopped = await readRecord(C.er.provider.connection);
   S.check("a stopped record keeps its terms and counts (only the play key reads it now)", !!stopped && stopped.agent.equals(NONE) && stopped.creator.equals(W(K)), stopped);
-  await S.ok("the copier sets the Agent with no terms: its own strategy, counts start afresh", () => set(C, G.publicKey, STAKE));
+  await S.ok("the copier sets the Agent with no terms: its own strategy, counts start afresh", () => set(C, G.publicKey, 1_000_000n));
   const own = await readRecord();
   S.check("no terms, zero counts", !!own && own.creator.equals(NONE) && own.netIn === 0n && own.highWater === 0n, own);
   await S.ok("the copier closes the record", () => C.er.methods.agentClose(BN(C.exp)).accountsPartial({
@@ -325,4 +355,4 @@ async function main() {
 
   S.finish({ table: T.table.toBase58(), copier: W(C).toBase58(), creator: W(K).toBase58(), treasury: treasury.toBase58(), treasuryChecked: treasuryOpen, platformBps, creatorBps });
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(e); for (const o of S.outcomes) console.log(`${o.status.padEnd(5)} ${o.name}${o.status === "FAIL" ? "  " + JSON.stringify(o.detail, (_, v) => (typeof v === "bigint" ? v.toString() : v)) : ""}`); process.exit(1); });

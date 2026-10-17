@@ -1,0 +1,779 @@
+{
+  "suite": "agent",
+  "program": "4A3DZW5zvmG6v6C47UqooVbnTvNtgRQJ5fKDMZ62FNMZ",
+  "ranAt": "2026-10-17T10:08:43.289Z",
+  "pass": 67,
+  "fail": 9,
+  "knownPlatformIssues": 0,
+  "table": "8gtE92gRWJGr4oSdEbvqxbnZ9hzy7DLyAZEnoJfVwAdB",
+  "copier": "8Z8PBZ6hXAf7vEkRCNi93yAytiGpopUGvPXycPsVtNcv",
+  "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+  "treasury": "4kiqWY1NRf2syDhw7GQSJkbPzGwCibT2E9GdVC9dh3kD",
+  "treasuryChecked": true,
+  "platformBps": 200,
+  "creatorBps": 800,
+  "outcomes": [
+    {
+      "name": "copier, creator and opponent open their game balances; the copier and opponent deposit 0.06 SOL",
+      "status": "PASS",
+      "detail": {
+        "sig": "8Ve1RtENtcqxM4FfR5XLTefxCCXRAGKxiM6jvkBDgmJ2JiJPh72AwDJAb3fPRNjPyqJNz3h6YvVC2N4nheZ6azJ",
+        "problem": null
+      }
+    },
+    {
+      "name": "the treasury (config.dev_wallet = deployer) has a game balance",
+      "status": "PASS",
+      "detail": {
+        "sig": "4YbqHwXwkiWxe3wVWEEBbYGL8CeVf86nmMmSZh7R9rh7KmQUB9SyRkuFuthmPXoiSoEiUimHT74SzKeCySGgLNEN",
+        "problem": null
+      }
+    },
+    {
+      "name": "the deposits reached the rollup",
+      "status": "PASS",
+      "detail": {
+        "copier": "60000000"
+      }
+    },
+    {
+      "name": "the TEE runs the Agents v2 build (bad terms refused with BadFeeTerms, not a parse error)",
+      "status": "PASS",
+      "detail": {
+        "probe": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "agent_set with fee terms and the wallet's signature check fits Solana's 1,232 bytes",
+      "status": "PASS",
+      "detail": {
+        "bytes": 1057
+      }
+    },
+    {
+      "name": "terms without Nomad's share: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeTerms",
+        "got": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "Nomad's share other than the config's: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeTerms",
+        "got": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "copying yourself: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeTerms",
+        "got": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "a creator share other than the config's (one share for every strategy): refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeTerms",
+        "got": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "a lower creator share: refused too",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeTerms",
+        "got": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "shares without a creator: refused",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeTerms",
+        "got": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "the copier sets the Agent with the strategy's terms (8% creator, Nomad's share)",
+      "status": "PASS",
+      "detail": {
+        "sig": "NG8xZ47wPMe2NwwfC19YdTQAbfKX4ip7HtFo6oM1fZRqkPcHotdKXA8af5esZysdTPKYNaV2kga28igh1oq8a3W",
+        "problem": null
+      }
+    },
+    {
+      "name": "the record carries the terms; counts start at zero",
+      "status": "PASS",
+      "detail": {
+        "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+        "stake": "40000000",
+        "committed": "0",
+        "table": "11111111111111111111111111111111",
+        "seat": 0,
+        "reader": "11111111111111111111111111111111",
+        "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+        "creatorFeeBps": 800,
+        "platformFeeBps": 200,
+        "seatIn": "0",
+        "netIn": "0",
+        "netOut": "0",
+        "highWater": "0"
+      }
+    },
+    {
+      "name": "create, delegate and open a table",
+      "status": "PASS",
+      "detail": {
+        "sig": "4iyrnEjPwcX7iJDRHA4GHJpwnws2KXgM1j6M6aBJ1p5ATgQfH3JmdaKCogvXQ9bZoA3kic9cXJFVyERfC2rU4un6",
+        "problem": null
+      }
+    },
+    {
+      "name": "the opponent sits down from its game balance (play key)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5fYhD6vga6UACtxi9Ug9N63ab7FxZZN9HNTEs6XsYy4jDc57Gh7SzBFuEWryXFJ4KDedkBuEXHkwwSj2PjApPBPY",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 1: the Agent buys in 0.02 SOL from the copier's balance",
+      "status": "PASS",
+      "detail": {
+        "sig": "iHdDtQyQkM3rAjEfj2Y6YJqv7DZaFLkGb4eG1BNQVQbkYbBQJTB9BatjYbgziy7qRza5tgF3Csch3egiFfdCisr",
+        "problem": null
+      }
+    },
+    {
+      "name": "while seated, the terms can't change (FeeTermsLocked)",
+      "status": "PASS",
+      "detail": {
+        "expected": "FeeTermsLocked",
+        "got": "FeeTermsLocked (6085)"
+      }
+    },
+    {
+      "name": "while seated, setting the same terms again works (renewing the Agent)",
+      "status": "PASS",
+      "detail": {
+        "sig": "tqetVeVwga6r2jZC86r9F62HXhMYcLceh9PGWCTNAcCiyMpbPay2mU9MpfGjFYZkzZkPG3gJVq2tm7XWY4tEGM5",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 1: a hand where the opponent folds",
+      "status": "PASS",
+      "detail": {
+        "sig": "played",
+        "problem": null
+      }
+    },
+    {
+      "name": "cash-out of a copying Agent without the fee accounts: refused (BadFeeAccount)",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeAccount",
+        "got": "BadFeeAccount (6086)"
+      }
+    },
+    {
+      "name": "cash-out with someone else's balance as the creator's: refused (BadFeeAccount)",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeAccount",
+        "got": "BadFeeAccount (6086)"
+      }
+    },
+    {
+      "name": "cash-out with the copier's own balance as Nomad's: refused (BadFeeAccount)",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeAccount",
+        "got": "BadFeeAccount (6086)"
+      }
+    },
+    {
+      "name": "session 1: the seat's table key cashes the Agent out (fees to the creator and Nomad)",
+      "status": "PASS",
+      "detail": {
+        "sig": "fUpNJ1nKCJnxVycZG3VikFAdTXJKwWbtx2Fkx52isn36dqbvmLqVTUSvLAbGoTNXeymdaCjbJX3QKg16ihJFd5A",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 1: the creator got 80000 (8% of new profit 1000000)",
+      "status": "PASS",
+      "detail": {
+        "stack": "21000000",
+        "profit": "1000000",
+        "creatorGot": "80000"
+      }
+    },
+    {
+      "name": "session 1: Nomad got 20000 (2% of new profit)",
+      "status": "PASS",
+      "detail": {
+        "nomadGot": "20000"
+      }
+    },
+    {
+      "name": "session 1: the copier got the stack minus the fees",
+      "status": "PASS",
+      "detail": {
+        "copierGot": "20900000",
+        "stack": "21000000"
+      }
+    },
+    {
+      "name": "session 1: the record counts the seat and moves the high-water mark only up",
+      "status": "PASS",
+      "detail": {
+        "before": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "20000000",
+          "table": "8gtE92gRWJGr4oSdEbvqxbnZ9hzy7DLyAZEnoJfVwAdB",
+          "seat": 0,
+          "reader": "EBmPoGt86zaJqJhgurKmKscMdv5f7c5aLevR3EwBFHBQ",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "20000000",
+          "netIn": "0",
+          "netOut": "0",
+          "highWater": "0"
+        },
+        "after": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "0",
+          "table": "11111111111111111111111111111111",
+          "seat": 0,
+          "reader": "11111111111111111111111111111111",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "0",
+          "netIn": "20000000",
+          "netOut": "21000000",
+          "highWater": "1000000"
+        }
+      }
+    },
+    {
+      "name": "session 1 made a profit, so fees were paid",
+      "status": "PASS",
+      "detail": {
+        "profit": "1000000",
+        "creator": "80000",
+        "platform": "20000"
+      }
+    },
+    {
+      "name": "session 2: the Agent buys in 0.02 SOL from the copier's balance",
+      "status": "PASS",
+      "detail": {
+        "sig": "31S7UbQQhucYUXWPkZ7n5a4om7D3EkchbT7JWnf2xBjUauj5gLLvb5oZKwYrnkVrwrYo5b2nNuVFdL3sN4M9nSrY",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 2: a hand where the Agent folds",
+      "status": "PASS",
+      "detail": {
+        "sig": "played",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 2: the seat's table key cashes the Agent out (fees to the creator and Nomad)",
+      "status": "PASS",
+      "detail": {
+        "sig": "21TdHrVr2BmQvb6Kc6dHgVwSkJXG2975jHpjtYkcKGLH5AhqhijUFDNdKYN6Mp8bskdfjqZV1XUa7fcCwUGo8JaD",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 2: the creator got 0 (8% of new profit 0)",
+      "status": "PASS",
+      "detail": {
+        "stack": "17000000",
+        "profit": "0",
+        "creatorGot": "0"
+      }
+    },
+    {
+      "name": "session 2: Nomad got 0 (2% of new profit)",
+      "status": "PASS",
+      "detail": {
+        "nomadGot": "0"
+      }
+    },
+    {
+      "name": "session 2: the copier got the stack minus the fees",
+      "status": "PASS",
+      "detail": {
+        "copierGot": "17000000",
+        "stack": "17000000"
+      }
+    },
+    {
+      "name": "session 2: the record counts the seat and moves the high-water mark only up",
+      "status": "PASS",
+      "detail": {
+        "before": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "20000000",
+          "table": "8gtE92gRWJGr4oSdEbvqxbnZ9hzy7DLyAZEnoJfVwAdB",
+          "seat": 0,
+          "reader": "Bc93zQnbXQ1duC51Kj7fQqn6LeVWbWk8W4VCndfmPXGV",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "20000000",
+          "netIn": "20000000",
+          "netOut": "21000000",
+          "highWater": "1000000"
+        },
+        "after": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "3000000",
+          "table": "11111111111111111111111111111111",
+          "seat": 0,
+          "reader": "11111111111111111111111111111111",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "0",
+          "netIn": "40000000",
+          "netOut": "38000000",
+          "highWater": "1000000"
+        }
+      }
+    },
+    {
+      "name": "session 2 lost: no fee on a loss",
+      "status": "PASS",
+      "detail": {
+        "profit": "0",
+        "creator": "0",
+        "platform": "0"
+      }
+    },
+    {
+      "name": "session 3: the Agent buys in 0.02 SOL from the copier's balance",
+      "status": "PASS",
+      "detail": {
+        "sig": "5T1ckVxDp9pUBvGkKsNMcxCLcMMPLT3cyQv9zx6kXu2FgdMUYpk1CBZbt26zXM67Vm58Wx4MTJdikiiTjLxrg6Ea",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 3: a hand where the opponent folds",
+      "status": "PASS",
+      "detail": {
+        "sig": "played",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 3: the seat's table key cashes the Agent out (fees to the creator and Nomad)",
+      "status": "PASS",
+      "detail": {
+        "sig": "2TtLqyckN1XVDqLurczq2MvAWiKTLqQ6wM9HyP65RjkVXRxbdqf4UGqETAoS3pBkFLF5D93SWUQxufxD6SfVXLnv",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 3: the creator got 0 (8% of new profit 0)",
+      "status": "PASS",
+      "detail": {
+        "stack": "21000000",
+        "profit": "0",
+        "creatorGot": "0"
+      }
+    },
+    {
+      "name": "session 3: Nomad got 0 (2% of new profit)",
+      "status": "PASS",
+      "detail": {
+        "nomadGot": "0"
+      }
+    },
+    {
+      "name": "session 3: the copier got the stack minus the fees",
+      "status": "PASS",
+      "detail": {
+        "copierGot": "21000000",
+        "stack": "21000000"
+      }
+    },
+    {
+      "name": "session 3: the record counts the seat and moves the high-water mark only up",
+      "status": "PASS",
+      "detail": {
+        "before": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "23000000",
+          "table": "8gtE92gRWJGr4oSdEbvqxbnZ9hzy7DLyAZEnoJfVwAdB",
+          "seat": 0,
+          "reader": "8hkCHLhhXwWd1LSX9yB5DsBgCb6RK3fnPCrUjHPnm9A3",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "20000000",
+          "netIn": "40000000",
+          "netOut": "38000000",
+          "highWater": "1000000"
+        },
+        "after": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "2000000",
+          "table": "11111111111111111111111111111111",
+          "seat": 0,
+          "reader": "11111111111111111111111111111111",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "0",
+          "netIn": "60000000",
+          "netOut": "59000000",
+          "highWater": "1000000"
+        }
+      }
+    },
+    {
+      "name": "session 3: fees only on what's above the earlier peak (the rule's own result, checked above)",
+      "status": "PASS",
+      "detail": {
+        "profit": "0",
+        "creator": "0",
+        "platform": "0"
+      }
+    },
+    {
+      "name": "session 4: the Agent buys in 0.02 SOL from the copier's balance",
+      "status": "PASS",
+      "detail": {
+        "sig": "5fN7JQoSUjtgYvgtNxdUPuR5vR91tzLFfcC8AXv63uixGXp6kRxfMZc6ff1LxjE3am3GTBqMBoBgiwVpN1LXPro6",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 4: a hand where the opponent folds",
+      "status": "PASS",
+      "detail": {
+        "sig": "played",
+        "problem": null
+      }
+    },
+    {
+      "name": "session 4: the plain cash-out refuses the Agent's seat, even with the copier's play key (AgentSeat)",
+      "status": "PASS",
+      "detail": {
+        "expected": "AgentSeat",
+        "got": "AgentSeat (6087)"
+      }
+    },
+    {
+      "name": "session 4: another wallet's play key can't take the Agent's seat",
+      "status": "FAIL",
+      "detail": {
+        "expected": "NotAgent",
+        "got": "Transaction too large: 1271 > 1232"
+      }
+    },
+    {
+      "name": "session 4: the copier takes the seat back with their play key (agent_cash_out: the share applies)",
+      "status": "FAIL",
+      "detail": {
+        "unexpectedError": "Transaction too large: 1271 > 1232"
+      }
+    },
+    {
+      "name": "session 4: the creator got 0 (8% of new profit 0)",
+      "status": "PASS",
+      "detail": {
+        "stack": "21000000",
+        "profit": "0",
+        "creatorGot": "0"
+      }
+    },
+    {
+      "name": "session 4: Nomad got 0 (2% of new profit)",
+      "status": "PASS",
+      "detail": {
+        "nomadGot": "0"
+      }
+    },
+    {
+      "name": "session 4: the copier got the stack minus the fees",
+      "status": "FAIL",
+      "detail": {
+        "copierGot": "0",
+        "stack": "21000000"
+      }
+    },
+    {
+      "name": "session 4: the record counts the seat and moves the high-water mark only up",
+      "status": "FAIL",
+      "detail": {
+        "before": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "22000000",
+          "table": "8gtE92gRWJGr4oSdEbvqxbnZ9hzy7DLyAZEnoJfVwAdB",
+          "seat": 0,
+          "reader": "AS53YWWWNikqyjQVGWsjLeK5toCbZELR1bnXKW1duner",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "20000000",
+          "netIn": "60000000",
+          "netOut": "59000000",
+          "highWater": "1000000"
+        },
+        "after": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "22000000",
+          "table": "8gtE92gRWJGr4oSdEbvqxbnZ9hzy7DLyAZEnoJfVwAdB",
+          "seat": 0,
+          "reader": "AS53YWWWNikqyjQVGWsjLeK5toCbZELR1bnXKW1duner",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "20000000",
+          "netIn": "60000000",
+          "netOut": "59000000",
+          "highWater": "1000000"
+        }
+      }
+    },
+    {
+      "name": "session 4 (taken back by the player): fees follow the same rule as any cash-out",
+      "status": "PASS",
+      "detail": {
+        "profit": "0",
+        "creator": "0",
+        "platform": "0"
+      }
+    },
+    {
+      "name": "releasing a record whose seat agent_cash_out already freed: refused (NotAgentSeat)",
+      "status": "FAIL",
+      "detail": {
+        "expected": "NotAgentSeat",
+        "got": "AgentBusy (6081)"
+      }
+    },
+    {
+      "name": "admin: hosting fees on for the run (host wallet = deployer, at most 0.02 SOL)",
+      "status": "PASS",
+      "detail": {
+        "sig": "3v37XX2rWKmVJBq4QQsJowiHwrtYvUVkVSfSBtf92NfNfTxj5yHVCCWUHXsAtbmBHmaszvKTsZFStZS2kqkQgyhx",
+        "problem": null
+      }
+    },
+    {
+      "name": "a hosting fee above the cap: refused (BadHostFee)",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadHostFee",
+        "got": "BadHostFee (6088)"
+      }
+    },
+    {
+      "name": "a zero hosting fee: refused (BadHostFee)",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadHostFee",
+        "got": "BadHostFee (6088)"
+      }
+    },
+    {
+      "name": "the copier's play key pays a 0.017 SOL hosting fee (no wallet prompt)",
+      "status": "PASS",
+      "detail": {
+        "sig": "5WQUknkKjRH6qw77cvKgMf85vVWCrynLHpf8dTxBcQRx4khVPtDBe2P7gKXQBM4gSLXz1X4PkaBkiGPNwdqyYVtm",
+        "problem": null
+      }
+    },
+    {
+      "name": "it moved from the copier's game balance to the host's",
+      "status": "PASS",
+      "detail": {
+        "copier": "17000000",
+        "host": "17000000"
+      }
+    },
+    {
+      "name": "the copier's HostTab says 0.017 SOL paid (read by the host wallet)",
+      "status": "PASS",
+      "detail": {
+        "paid": "17000000"
+      }
+    },
+    {
+      "name": "another wallet can't read it",
+      "status": "PASS",
+      "detail": {
+        "visible": false
+      }
+    },
+    {
+      "name": "the Agent pays a hosting fee within its stake (agent_pay_host_fee)",
+      "status": "PASS",
+      "detail": {
+        "sig": "THpukELeRdxN6aWWf1v54VE1UKHbFwvCqc74UuLiccZrV1Wie17WbjTTpndbAv3RegEjvz17tNmmmxrwZChzgQ7",
+        "problem": null
+      }
+    },
+    {
+      "name": "...it counts toward the stake and as a cost of the next seat",
+      "status": "PASS",
+      "detail": {
+        "before": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "22000000",
+          "table": "8gtE92gRWJGr4oSdEbvqxbnZ9hzy7DLyAZEnoJfVwAdB",
+          "seat": 0,
+          "reader": "AS53YWWWNikqyjQVGWsjLeK5toCbZELR1bnXKW1duner",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "20000000",
+          "netIn": "60000000",
+          "netOut": "59000000",
+          "highWater": "1000000"
+        },
+        "after": {
+          "agent": "4PR8G3J5J3q8eX5Sa3Rhrj5qiZRQq5oETLC4RLGZQECz",
+          "stake": "40000000",
+          "committed": "27000000",
+          "table": "8gtE92gRWJGr4oSdEbvqxbnZ9hzy7DLyAZEnoJfVwAdB",
+          "seat": 0,
+          "reader": "AS53YWWWNikqyjQVGWsjLeK5toCbZELR1bnXKW1duner",
+          "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+          "creatorFeeBps": 800,
+          "platformFeeBps": 200,
+          "seatIn": "25000000",
+          "netIn": "60000000",
+          "netOut": "59000000",
+          "highWater": "1000000"
+        }
+      }
+    },
+    {
+      "name": "an Agent hosting fee beyond its stake: refused (AgentStakeExceeded)",
+      "status": "PASS",
+      "detail": {
+        "expected": "AgentStakeExceeded",
+        "got": "AgentStakeExceeded (6082)"
+      }
+    },
+    {
+      "name": "admin: the config's fees back as they were",
+      "status": "PASS",
+      "detail": {
+        "sig": "3qz9A4GQQM6KSWWn48mQsiNbkXpSDN2bER9rnkmyFXape5Smt6uFVWCajqxUgV3R7xhxYdigMKZpYVEEooYLQQva",
+        "problem": null
+      }
+    },
+    {
+      "name": "the copier stops the Agent (terms passed as none are ignored)",
+      "status": "PASS",
+      "detail": {
+        "sig": "kdwBZ8JqDrZKRYM2xwKSFtsfvfCeQehwKLF1WEdz2VVzWnZ6oFYZu1QJfwNNEmwJQzsRzXh2id2jvxYpJDmFgZQ",
+        "problem": null
+      }
+    },
+    {
+      "name": "a stopped record keeps its terms and counts (only the play key reads it now)",
+      "status": "PASS",
+      "detail": {
+        "agent": "11111111111111111111111111111111",
+        "stake": "0",
+        "committed": "27000000",
+        "table": "8gtE92gRWJGr4oSdEbvqxbnZ9hzy7DLyAZEnoJfVwAdB",
+        "seat": 0,
+        "reader": "AS53YWWWNikqyjQVGWsjLeK5toCbZELR1bnXKW1duner",
+        "creator": "7P4pKe9UCcv5TWgK2q7pXrLsRgv2YLqr9pr76GPsbsev",
+        "creatorFeeBps": 800,
+        "platformFeeBps": 200,
+        "seatIn": "25000000",
+        "netIn": "60000000",
+        "netOut": "59000000",
+        "highWater": "1000000"
+      }
+    },
+    {
+      "name": "the copier sets the Agent with no terms: its own strategy, counts start afresh",
+      "status": "FAIL",
+      "detail": {
+        "unexpectedError": "AgentStakeExceeded (6082)"
+      }
+    },
+    {
+      "name": "no terms, zero counts",
+      "status": "FAIL",
+      "detail": null
+    },
+    {
+      "name": "the copier closes the record",
+      "status": "FAIL",
+      "detail": {
+        "unexpectedError": "AgentBusy (6081)"
+      }
+    },
+    {
+      "name": "Nomad's share above 5%: refused (admin)",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeTerms",
+        "got": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "a creator share above 20%: refused (admin)",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeTerms",
+        "got": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "a hosting-fee cap above 0.05 SOL: refused (admin)",
+      "status": "PASS",
+      "detail": {
+        "expected": "BadFeeTerms",
+        "got": "BadFeeTerms (6084)"
+      }
+    },
+    {
+      "name": "an outsider can't set the fees",
+      "status": "PASS",
+      "detail": {
+        "expected": "NotAdmin",
+        "got": "NotAdmin (6001)"
+      }
+    },
+    {
+      "name": "the opponent leaves; collect rake and close the table",
+      "status": "FAIL",
+      "detail": {
+        "unexpectedError": "TableNotEmpty (6022)"
+      }
+    }
+  ]
+}

@@ -95,7 +95,7 @@ export class Suite {
     const summary = { suite: this.name, program: PROGRAM_ID.toBase58(), ranAt: new Date().toISOString(), pass: this.outcomes.length - failed - known, fail: failed, knownPlatformIssues: known, ...extra, outcomes: this.outcomes };
     const out = path.join(__dirname, "../results", `${this.name}-${Date.now()}.json`);
     fs.writeFileSync(out, JSON.stringify(summary, (_, v) => (typeof v === "bigint" ? v.toString() : v), 2));
-    for (const o of this.outcomes) console.log(`${o.status.padEnd(5)} ${o.name}${o.status === "FAIL" ? "  " + JSON.stringify(o.detail) : ""}`);
+    for (const o of this.outcomes) console.log(`${o.status.padEnd(5)} ${o.name}${o.status === "FAIL" ? "  " + JSON.stringify(o.detail, (_, v) => (typeof v === "bigint" ? v.toString() : v)) : ""}`);
     console.log(`\n${summary.pass} passed, ${failed} failed${known ? `, ${known} known platform issues` : ""} -> ${path.relative(process.cwd(), out)}`);
     process.exit(failed ? 1 : 0);
   }

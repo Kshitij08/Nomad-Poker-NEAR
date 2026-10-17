@@ -292,8 +292,8 @@ pub mod poker_per {
         instructions::agent::agent_buy_in(ctx, seat, amount, reader)
     }
 
-    pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8, expires: i64) -> Result<()> {
-        instructions::agent::agent_cash_out(ctx, seat, expires)
+    pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8) -> Result<()> {
+        instructions::agent::agent_cash_out(ctx, seat)
     }
 
     pub fn pay_host_fee(ctx: Context<PayHostFee>, expires: i64, amount: u64) -> Result<()> {

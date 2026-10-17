@@ -594,13 +594,10 @@
         {
           "name": "signer",
           "docs": [
-            "The Agent key, the seat's table key, or the wallet's play key (with its signed message: `expires` != 0)."
+            "The Agent key or the seat's table key; any key once the Agent can't act any more (stopped, expired, play keys",
+            "cancelled)."
           ],
           "signer": true
-        },
-        {
-          "name": "instructions",
-          "address": "Sysvar1nstructions1111111111111111111111111"
         },
         {
           "name": "wallet"
@@ -915,10 +912,6 @@
         {
           "name": "seat",
           "type": "u8"
-        },
-        {
-          "name": "expires",
-          "type": "i64"
         }
       ]
     },

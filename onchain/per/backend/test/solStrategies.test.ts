@@ -63,9 +63,10 @@ async function main() {
     const seeds = ix.accounts.find((a: any) => a.name === "agent_state").pda.seeds[0].value;
     assert.equal(Buffer.from(seeds).toString(), "agent2");
     const cash = idl.instructions.find((i: any) => i.name === "agent_cash_out").accounts.map((a: any) => a.name);
-    for (const name of ["instructions", "config", "creator_wallet_state", "creator_vault_token", "treasury_wallet_state", "treasury_vault_token"]) assert.ok(cash.includes(name), name);
-    // Every way out of an Agent's seat pays the share: agent_cash_out takes the play key too (expires != 0).
-    assert.deepEqual(idl.instructions.find((i: any) => i.name === "agent_cash_out").args.map((a: any) => a.name), ["seat", "expires"]);
+    for (const name of ["config", "creator_wallet_state", "creator_vault_token", "treasury_wallet_state", "treasury_vault_token"]) assert.ok(cash.includes(name), name);
+    // Every way out of an Agent's seat pays the share: agent_cash_out (any key once the Agent is stopped) is the only one.
+    assert.deepEqual(idl.instructions.find((i: any) => i.name === "agent_cash_out").args.map((a: any) => a.name), ["seat"]);
+    assert.ok(idl.instructions.some((i: any) => i.name === "vault_payout_to_owner"), "vault_payout_to_owner");
     for (const ix of ["pay_host_fee", "agent_pay_host_fee", "set_fees"]) assert.ok(idl.instructions.some((i: any) => i.name === ix), ix);
     const cfg = idl.types.find((t: any) => t.name === "Config").type.fields.map((f: any) => f.name);
     for (const f of ["agent_fee_bps", "creator_fee_bps", "host_wallet", "max_host_fee"]) assert.ok(cfg.includes(f), f);

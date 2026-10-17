@@ -7,7 +7,7 @@ set -e
 SOL=$HOME/.local/share/solana/install/releases/3.1.10/solana-release/bin
 export PATH="$SOL:/usr/local/bin:/usr/bin:/bin"
 K=~/.config/solana/poker-per
-SO=$HOME/per-work/m1-target/deploy/poker_per.so
+SO=${SO:-$HOME/per-work/m1-target/deploy/poker_per.so}  # another build: SO=<path> (e.g. a pinned release)
 PROGKEY=${PROGRAM_KEY_FILE:-$K/poker_per-program-v2.json}
 PID=$(solana-keygen pubkey $PROGKEY)
 DEP=$(solana-keygen pubkey $K/deployer.json)

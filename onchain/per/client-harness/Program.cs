@@ -775,7 +775,9 @@ static class Program
         Check("the Agent sits down again", await Try(() => AgentBuy(3, 10_000_000, r2.PublicKey)));
         Check("releasing a seat that's still there is refused (AgentBusy)", await Refused(() => strangerRpc.Send(new[] { PerAgent.Release(t, w) }, new LocalSigner(stranger)), "AgentBusy"));
         Check("the plain cash-out refuses an Agent's seat, even with the player's play key (AgentSeat)", await Refused(() => owner.KeyRpc.Send(new[] { owner.Key.Check(), PerVault.CashOut(t, owner.Key.Key.PublicKey, w, 3, owner.Key.Expires) }, new LocalSigner(owner.Key.Key)), "AgentSeat"));
-        Check("the player leaves the Agent's seat with their play key (agent_cash_out)", await Try(() => owner.KeyRpc.Send(PerAgent.LeaveAgentSeat(owner.Key, t, 3), new LocalSigner(owner.Key.Key))));
+        Check("while the Agent runs, the player's key can't take its seat (NotAgent)", await Refused(() => owner.KeyRpc.Send(new[] { PerAgent.LeaveAgentSeat(owner.Key, t, 3) }, new LocalSigner(owner.Key.Key)), "NotAgent"));
+        Check("the player stops the Agent", await Try(() => owner.KeyRpc.Send(PerAgent.Stop(owner.Key), new LocalSigner(owner.Key.Key))));
+        Check("...then takes its seat back with their play key (agent_cash_out)", await Try(() => owner.KeyRpc.Send(new[] { PerAgent.LeaveAgentSeat(owner.Key, t, 3) }, new LocalSigner(owner.Key.Key))));
         var st3 = await ReadAs(agentRpc);
         Check("...which frees the record and counts the stack back off what it committed", st3 != null && !st3.HasSeat && st3.Committed < 10_000_000, st3?.Committed);
 
@@ -795,7 +797,11 @@ static class Program
                 catch (Exception) when (i < 8) { await Task.Delay(3000); }
             }
             Check("the Agent sits at a second table", await Try(() => agentRpc.Send(new[] { PerAgent.BuyIn(t2, agentKey.PublicKey, w, 0, 2_000_000, new Account().PublicKey) }, new LocalSigner(agentKey))));
-            Check("the player takes its seat back (play key, agent_cash_out)", await Try(() => owner.KeyRpc.Send(PerAgent.LeaveAgentSeat(owner.Key, t2, 0), new LocalSigner(owner.Key.Key))));
+            Check("the player stops the Agent and takes its seat back (play key, agent_cash_out)", await Try(async () =>
+            {
+                await owner.KeyRpc.Send(PerAgent.Stop(owner.Key), new LocalSigner(owner.Key.Key));
+                return await owner.KeyRpc.Send(new[] { PerAgent.LeaveAgentSeat(owner.Key, t2, 0) }, new LocalSigner(owner.Key.Key));
+            }));
             await host.KeyRpc.Send(new[] { host.Key.Check(), PerHost.CloseKeyed(t2, host.Key, devWallet) }, new LocalSigner(host.Key.Key));
             bool reclaimed = false;
             for (int i = 0; i < 24 && !reclaimed; i++)

@@ -21,8 +21,11 @@
 //! (["agent2", wallet]) for the bigger layout; records under the old seeds are left alone.
 //!
 //! Every way out of an Agent's seat pays the share: the table marks the seat (`agent_mask`), the plain cash-outs
-//! refuse it, and `agent_cash_out` takes the Agent key, the seat's table key, or the player's play key (so the
-//! player can always leave, and leaving isn't free on profit). Both shares are the config's (one creator share for
+//! refuse it, and `agent_cash_out` is the only way out. The Agent key or the seat's table key may send it; once the
+//! Agent can't act any more (the player stopped it, it expired, or the play keys were cancelled) any key may, so the
+//! player can always leave (Stop, then the cash-out), and leaving isn't free on profit. A play-key signature check
+//! doesn't fit in that transaction (1,271 of 1,232 bytes, measured on devnet 17 Oct), and isn't needed: the money
+//! can only go to the wallet's game balance and the fee recipients. Both shares are the config's (one creator share for
 //! every strategy).
 //!
 //! Table hosting fees (Quick Play): a player's play key, or their Agent within its stake, pays a capped fee from
@@ -454,11 +457,9 @@ pub fn agent_buy_in(ctx: Context<AgentBuyIn>, seat: u8, amount: u64, reader: Pub
 #[derive(Accounts)]
 #[instruction(seat: u8)]
 pub struct AgentCashOut<'info> {
-    /// The Agent key, the seat's table key, or the wallet's play key (with its signed message: `expires` != 0).
+    /// The Agent key or the seat's table key; any key once the Agent can't act any more (stopped, expired, play keys
+    /// cancelled).
     pub signer: Signer<'info>,
-    /// CHECK: the instructions sysvar (used when a play key signs).
-    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
-    pub instructions: UncheckedAccount<'info>,
     /// CHECK: the wallet the Agent plays for.
     pub wallet: UncheckedAccount<'info>,
     /// CHECK: the wallet's Agent record; read and checked in the handler.
@@ -526,13 +527,12 @@ fn fee_account<'info>(wallet: &Pubkey, mint: &Pubkey, state: &Option<UncheckedAc
 }
 
 /// The Agent's seat leaves with the whole stack, into the wallet's game balance; what it took out comes off what
-/// it has committed. Works after the Agent was stopped or expired too (leaving is always allowed), and the player's
-/// play key may sign it (`expires` != 0): the only way the player takes an Agent's seat back. Copying a strategy:
+/// it has committed. Leaving is always allowed: the Agent key or the seat's table key may send it, and once the Agent
+/// can't act any more, anyone (the player takes an Agent's seat back by stopping it, then this). Copying a strategy:
 /// the shares of new profit above the high-water mark then go to the creator's and Nomad's game balances.
-pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8, expires: i64) -> Result<()> {
+pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8) -> Result<()> {
     let wallet = ctx.accounts.wallet.key();
     let signer = ctx.accounts.signer.key();
-    let player_signed = expires != 0 && verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &wallet, &signer, expires).is_ok();
     let info = ctx.accounts.agent_state.to_account_info();
     let mut a = load_agent(&info)?;
     require_keys_eq!(a.wallet, wallet, PokerError::NotAgent);
@@ -541,7 +541,9 @@ pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8, expires: i64) -> Res
     let (player, reader, stack) = { let s = &ctx.accounts.ledger.seats[idx]; (s.player, s.reader, s.stack) };
     // Only the Agent's own seat: the one on its record, still the wallet's, still with its table key.
     require!(a.table == ctx.accounts.table.key() && a.seat == seat && player == wallet && reader == a.reader, PokerError::NotAgentSeat);
-    require!((a.agent != Pubkey::default() && signer == a.agent) || signer == a.reader || player_signed, PokerError::NotAgent);
+    // An Agent that can't act any more (stopped, expired, play keys cancelled): anyone may take its seat out.
+    let stopped = a.agent == Pubkey::default() || Clock::get()?.unix_timestamp >= a.expires || wallet_state_of(&ctx.accounts.wallet_state)?.0 != a.key_set;
+    require!((a.agent != Pubkey::default() && signer == a.agent) || signer == a.reader || stopped, PokerError::NotAgent);
     a.committed = a.committed.saturating_sub(stack);
     a.table = Pubkey::default();
     a.reader = Pubkey::default();

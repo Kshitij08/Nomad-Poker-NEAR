@@ -523,7 +523,7 @@ async function agentCashOutAccounts(signer: PublicKey, wallet: PublicKey, terms:
     fees.treasuryVaultToken = ata(vaultOf(treasury, (await walletState(treasury)).seed));
   }
   return {
-    signer, instructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, wallet, agentState: agentStateOf(wallet), vault, walletState: walletStateOf(wallet), vaultToken: ata(vault),
+    signer, wallet, agentState: agentStateOf(wallet), vault, walletState: walletStateOf(wallet), vaultToken: ata(vault),
     table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), hand, handPermission: permissionPdaFromAccount(hand),
     escrow: ata(table), config: CONFIG_PDA, ...fees, rollup: rollupPrograms, tokenProgram: TOKEN_PROGRAM,
   } as any;
@@ -596,7 +596,7 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
       await program.methods.agentRelease().accountsPartial({ wallet, agentState: agentStateOf(wallet), table: rec.table, ledger: acc.ledger } as any).rpc();
     } catch (e: any) {
       try {
-        await program.methods.agentCashOut(rec.seat, new anchor.BN(0)).accountsPartial(await agentCashOutAccounts(agentKp.publicKey, wallet, rec.terms, rec.table, rec.seat)).rpc();
+        await program.methods.agentCashOut(rec.seat).accountsPartial(await agentCashOutAccounts(agentKp.publicKey, wallet, rec.terms, rec.table, rec.seat)).rpc();
         await event(rec.table.toBase58(), "agent cash-out", true, "a seat this service had lost track of");
       } catch (e2: any) { await setStatus(row.wallet, row.status, "leaving its last seat (between hands)"); }
       return;
@@ -787,7 +787,7 @@ async function cashOut(row: any, s: any, wallet: PublicKey, agentKp: Keypair, re
   // An Agent's seat leaves only through agent_cash_out (the plain cash-outs refuse it), so a copied strategy's share
   // applies whichever key signs. A fee balance that can't take money never blocks it (the program skips that share).
   const program = await sessionFor(reader).program();
-  await program.methods.agentCashOut(seat, new anchor.BN(0)).accountsPartial(await agentCashOutAccounts(reader.publicKey, wallet, terms, table, seat)).rpc();
+  await program.methods.agentCashOut(seat).accountsPartial(await agentCashOutAccounts(reader.publicKey, wallet, terms, table, seat)).rpc();
   if (s.strategy_id && s.fee_net_before !== null) {
     const f = market.settleSol(terms, BigInt(s.fee_net_before), BigInt(s.fee_high_water), BigInt(s.buy_in), stack);
     await pool.query("update agent_sessions set creator_fee = $2, platform_fee = $3 where id = $1", [s.id, f.creatorFee.toString(), f.platformFee.toString()]);
