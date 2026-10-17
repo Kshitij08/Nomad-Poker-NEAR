@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { config } from "./config";
 import { AGENT_MIGRATIONS } from "./agents";
 import { SOL_STRATEGY_MIGRATIONS } from "./solStrategies";
+import { HOST_FEE_MIGRATIONS } from "./hostFees";
 
 export const pool = new Pool({ connectionString: config.databaseUrl, max: 5 });
 
@@ -81,7 +82,7 @@ const MIGRATIONS: string[] = [
 pool.on("error", (e) => console.error("postgres pool error:", e.message));
 
 export async function migrate() {
-  for (const sql of [...MIGRATIONS, ...AGENT_MIGRATIONS, ...SOL_STRATEGY_MIGRATIONS]) await pool.query(sql);
+  for (const sql of [...MIGRATIONS, ...AGENT_MIGRATIONS, ...SOL_STRATEGY_MIGRATIONS, ...HOST_FEE_MIGRATIONS]) await pool.query(sql);
 }
 
 /** Admits one keeper-paid attempt of `kind` for `who` (a wallet or host) if fewer than `perWho` of theirs and
@@ -94,7 +95,8 @@ export async function admitSpend(kind: string, who: string, ref: string, perWho:
     await c.query("select pg_advisory_xact_lock(424214)");
     const n = (await c.query(
       "select count(*) filter (where who = $2)::int as mine, count(*)::int as everyone from keeper_spend where kind = $1 and at > now() - interval '1 hour'", [kind, who])).rows[0];
-    if (n.mine >= perWho || n.everyone >= total) { await c.query("rollback"); return null; }
+    // total <= 0: no cap for everyone (only the per-wallet one).
+    if (n.mine >= perWho || (total > 0 && n.everyone >= total)) { await c.query("rollback"); return null; }
     const id = Number((await c.query("insert into keeper_spend (kind, who, ref) values ($1, $2, $3) returning id", [kind, who, ref])).rows[0].id);
     await c.query("commit");
     return id;

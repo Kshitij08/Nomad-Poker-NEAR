@@ -19,7 +19,7 @@ pub mod tourney;
 
 use instructions::*;
 
-declare_id!("7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv");
+declare_id!("4A3DZW5zvmG6v6C47UqooVbnTvNtgRQJ5fKDMZ62FNMZ");
 
 #[ephemeral]
 #[program]
@@ -72,8 +72,8 @@ pub mod poker_per {
         instructions::config::set_auditor(ctx, auditor)
     }
 
-    pub fn set_agent_fee(ctx: Context<AdminOnly>, bps: u16) -> Result<()> {
-        instructions::config::set_agent_fee(ctx, bps)
+    pub fn set_fees(ctx: Context<AdminOnly>, fees: FeeSettings) -> Result<()> {
+        instructions::config::set_fees(ctx, fees)
     }
 
     pub fn open_log(ctx: Context<OpenLog>) -> Result<()> {
@@ -288,8 +288,16 @@ pub mod poker_per {
         instructions::agent::agent_buy_in(ctx, seat, amount, reader)
     }
 
-    pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8) -> Result<()> {
-        instructions::agent::agent_cash_out(ctx, seat)
+    pub fn agent_cash_out(ctx: Context<AgentCashOut>, seat: u8, expires: i64) -> Result<()> {
+        instructions::agent::agent_cash_out(ctx, seat, expires)
+    }
+
+    pub fn pay_host_fee(ctx: Context<PayHostFee>, expires: i64, amount: u64) -> Result<()> {
+        instructions::agent::pay_host_fee(ctx, expires, amount)
+    }
+
+    pub fn agent_pay_host_fee(ctx: Context<AgentPayHostFee>, amount: u64) -> Result<()> {
+        instructions::agent::agent_pay_host_fee(ctx, amount)
     }
 
     pub fn agent_release(ctx: Context<AgentRelease>) -> Result<()> {

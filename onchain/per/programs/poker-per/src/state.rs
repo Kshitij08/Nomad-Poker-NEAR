@@ -4,7 +4,7 @@ use crate::constants::MAX_RAKE_BPS;
 use crate::errors::PokerError;
 
 /// Bytes kept free at the end of Config so later modules can add fields without a realloc.
-pub const CONFIG_RESERVED: usize = 90;
+pub const CONFIG_RESERVED: usize = 48;
 
 /// Default and bounds for `escape_idle_secs` (0 in the account means the default).
 pub const DEFAULT_ESCAPE_IDLE_SECS: u32 = 3_600;
@@ -41,6 +41,13 @@ pub struct Config {
     /// Copy strategies (Agents v2): Nomad's share of a copier's new profit, in basis points; 0 = the default
     /// (`DEFAULT_PLATFORM_FEE_BPS`). Carved from the reserved bytes, so existing accounts read the default.
     pub agent_fee_bps: u16,
+    /// Copy strategies: every creator's share of a copier's new profit (one value for all strategies); 0 = the
+    /// default (`DEFAULT_CREATOR_FEE_BPS`).
+    pub creator_fee_bps: u16,
+    /// Quick Play hosting: the wallet whose game balance receives table hosting fees (the keeper that pays the
+    /// tables' rent), and the most one fee may be. Default / 0 = no hosting fees.
+    pub host_wallet: Pubkey,
+    pub max_host_fee: u64,
     pub reserved: [u8; CONFIG_RESERVED],
 }
 
@@ -48,10 +55,17 @@ pub struct Config {
 pub const DEFAULT_PLATFORM_FEE_BPS: u16 = 200;
 pub const MAX_PLATFORM_FEE_BPS: u16 = 500;
 pub const MAX_CREATOR_FEE_BPS: u16 = 2_000;
+pub const DEFAULT_CREATOR_FEE_BPS: u16 = 800;
+/// Hard ceiling for a table hosting fee (0.05 SOL; a hosted table's rent nets about 0.017 SOL).
+pub const MAX_HOST_FEE_CEILING: u64 = 50_000_000;
 
 impl Config {
     pub fn agent_fee_bps(&self) -> u16 {
         if self.agent_fee_bps == 0 { DEFAULT_PLATFORM_FEE_BPS } else { self.agent_fee_bps }
+    }
+
+    pub fn creator_fee_bps(&self) -> u16 {
+        if self.creator_fee_bps == 0 { DEFAULT_CREATOR_FEE_BPS } else { self.creator_fee_bps }
     }
 
     pub fn escape_idle_secs(&self) -> i64 {
@@ -127,6 +141,9 @@ mod tests {
             escape_idle_secs: 0,
             auditor: Pubkey::default(),
             agent_fee_bps: 0,
+            creator_fee_bps: 0,
+            host_wallet: Pubkey::default(),
+            max_host_fee: 0,
             reserved: [0; CONFIG_RESERVED],
         };
         let mut v2_bytes = Vec::new();
@@ -134,8 +151,8 @@ mod tests {
         // Same bytes after the version byte, then a zero tail: escape_idle_secs + auditor + agent_fee_bps +
         // reserved, the same length as before the auditor and the Agent fee were carved out of reserved.
         assert_eq!(&v2_bytes[1..v1_bytes.len()], &v1_bytes[1..]);
-        assert_eq!(v2_bytes.len(), v1_bytes.len() + 4 + 32 + 2 + CONFIG_RESERVED);
-        assert_eq!(32 + 2 + CONFIG_RESERVED, 124);
+        assert_eq!(v2_bytes.len(), v1_bytes.len() + 4 + 32 + 2 + 2 + 32 + 8 + CONFIG_RESERVED);
+        assert_eq!(32 + 2 + 2 + 32 + 8 + CONFIG_RESERVED, 124);
         assert!(v2_bytes[v1_bytes.len()..].iter().all(|b| *b == 0));
     }
 }

@@ -6,7 +6,10 @@ import { ASSOCIATED_TOKEN_PROGRAM_ID, NATIVE_MINT, TOKEN_PROGRAM_ID, createAssoc
 import * as sdk from "@magicblock-labs/ephemeral-rollups-sdk";
 
 const s: any = sdk;
-export const PROGRAM_ID = new PublicKey("7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv");
+// The devnet suites (Node) use the program the repo's IDL names (scripts/lib.ts sets PER_PROGRAM_ID); the web pages keep
+// the live program.
+const programFromEnv = typeof process !== "undefined" ? process.env?.PER_PROGRAM_ID : undefined;
+export const PROGRAM_ID = new PublicKey(programFromEnv ?? "7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv");
 export const TEE_VALIDATOR = new PublicKey("MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo");
 export const ESPL = new PublicKey("SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2");
 export const DLP = new PublicKey("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");

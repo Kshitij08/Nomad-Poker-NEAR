@@ -769,16 +769,15 @@ static class Program
         Check("the Agent can't cash out the player's own seat (NotAgentSeat)", await Refused(() => agentRpc.Send(new[] { PerAgent.CashOut(t, agentKey.PublicKey, w, 5) }, new LocalSigner(agentKey)), "NotAgentSeat"));
         Check("the player leaves", await Try(() => owner.KeyRpc.Send(new[] { owner.Key.Check(), PerVault.CashOut(t, owner.Key.Key.PublicKey, w, 5, owner.Key.Expires) }, new LocalSigner(owner.Key.Key))));
 
-        // ---- the player takes the Agent's seat back with their play key; anyone frees the record
+        // ---- the player takes the Agent's seat back with their play key (Agents v2: only through agent_cash_out)
         Check("the player sets the Agent again (the count starts anew)", await Try(() => owner.KeyRpc.Send(PerAgent.Set(owner.Key, agentKey.PublicKey, Now() + 3600, Stake), new LocalSigner(owner.Key.Key))));
         var r2 = new Account();
         Check("the Agent sits down again", await Try(() => AgentBuy(3, 10_000_000, r2.PublicKey)));
         Check("releasing a seat that's still there is refused (AgentBusy)", await Refused(() => strangerRpc.Send(new[] { PerAgent.Release(t, w) }, new LocalSigner(stranger)), "AgentBusy"));
-        Check("the player cashes the Agent's seat out with their play key", await Try(() => owner.KeyRpc.Send(new[] { owner.Key.Check(), PerVault.CashOut(t, owner.Key.Key.PublicKey, w, 3, owner.Key.Expires) }, new LocalSigner(owner.Key.Key))));
-        Check("the record still holds the old seat: a new seat is refused (AgentBusy)", await Refused(() => AgentBuy(4, 1_000_000, new Account().PublicKey), "AgentBusy"));
-        Check("anyone frees it once the seat is gone (agent_release)", await Try(() => strangerRpc.Send(new[] { PerAgent.Release(t, w) }, new LocalSigner(stranger))));
+        Check("the plain cash-out refuses an Agent's seat, even with the player's play key (AgentSeat)", await Refused(() => owner.KeyRpc.Send(new[] { owner.Key.Check(), PerVault.CashOut(t, owner.Key.Key.PublicKey, w, 3, owner.Key.Expires) }, new LocalSigner(owner.Key.Key)), "AgentSeat"));
+        Check("the player leaves the Agent's seat with their play key (agent_cash_out)", await Try(() => owner.KeyRpc.Send(PerAgent.LeaveAgentSeat(owner.Key, t, 3), new LocalSigner(owner.Key.Key))));
         var st3 = await ReadAs(agentRpc);
-        Check("...without lowering what it had committed (0.01 SOL still counts)", st3 != null && !st3.HasSeat && st3.Committed == 10_000_000, st3?.Committed);
+        Check("...which frees the record and counts the stack back off what it committed", st3 != null && !st3.HasSeat && st3.Committed < 10_000_000, st3?.Committed);
 
         // ---- review M4: a stake the game balance can't cover is refused
         Check("an Agent with a stake above the game balance is refused (review M4)", await Refused(() => owner.KeyRpc.Send(PerAgent.Set(owner.Key, agentKey.PublicKey, Now() + 3600, 10_000_000_000), new LocalSigner(owner.Key.Key)), "AgentStakeExceeded"));
@@ -796,7 +795,7 @@ static class Program
                 catch (Exception) when (i < 8) { await Task.Delay(3000); }
             }
             Check("the Agent sits at a second table", await Try(() => agentRpc.Send(new[] { PerAgent.BuyIn(t2, agentKey.PublicKey, w, 0, 2_000_000, new Account().PublicKey) }, new LocalSigner(agentKey))));
-            Check("the player takes its seat back (play key)", await Try(() => owner.KeyRpc.Send(new[] { owner.Key.Check(), PerVault.CashOut(t2, owner.Key.Key.PublicKey, w, 0, owner.Key.Expires) }, new LocalSigner(owner.Key.Key))));
+            Check("the player takes its seat back (play key, agent_cash_out)", await Try(() => owner.KeyRpc.Send(PerAgent.LeaveAgentSeat(owner.Key, t2, 0), new LocalSigner(owner.Key.Key))));
             await host.KeyRpc.Send(new[] { host.Key.Check(), PerHost.CloseKeyed(t2, host.Key, devWallet) }, new LocalSigner(host.Key.Key));
             bool reclaimed = false;
             for (int i = 0; i < 24 && !reclaimed; i++)
@@ -806,7 +805,8 @@ static class Program
             }
             Check("the host closes that table and reclaims it (its account is gone)", reclaimed);
             await Task.Delay(5000);
-            Check("the Agent record is freed even though its table no longer exists (review M1)", await Try(() => strangerRpc.Send(new[] { PerAgent.Release(t2, w) }, new LocalSigner(stranger))));
+            // Agents v2: leaving through agent_cash_out freed the record already (the table closing needs no release).
+            Check("releasing it is refused: the record names no seat (NotAgentSeat)", await Refused(() => strangerRpc.Send(new[] { PerAgent.Release(t2, w) }, new LocalSigner(stranger)), "NotAgentSeat"));
             var st4 = await ReadAs(agentRpc);
             Check("...it holds no seat", st4 != null && !st4.HasSeat);
             Check("the player removes the record (agent_close; its rent goes back to the sponsor)", await Try(() => owner.KeyRpc.Send(PerAgent.Close(owner.Key), new LocalSigner(owner.Key.Key))));

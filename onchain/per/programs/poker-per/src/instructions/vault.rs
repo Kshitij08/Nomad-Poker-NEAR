@@ -436,7 +436,7 @@ fn vault_buy_in_with(ctx: Context<VaultBuyIn>, seat: u8, amount: u64, reader: Pu
     verify_play_key(&ctx.accounts.instructions, &ctx.accounts.wallet_state, &wallet, &ctx.accounts.play_key.key(), expires)?;
     let vault_bump = [ctx.bumps.vault];
     let gen_seed = vault_gen_seed(&ctx.accounts.wallet_state);
-    buy_in_flow!(ctx, seat, amount, reader, wallet, code, token::transfer(
+    buy_in_flow!(ctx, seat, amount, reader, wallet, code, false, token::transfer(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
             Transfer { from: ctx.accounts.vault_token.to_account_info(), to: ctx.accounts.escrow.to_account_info(), authority: ctx.accounts.vault.to_account_info() },
@@ -495,7 +495,7 @@ pub fn vault_cash_out(ctx: Context<VaultCashOut>, seat: u8, expires: i64) -> Res
         require_keys_eq!(p, wallet, PokerError::NotSeated);
         require!(signer == reader || wallet_vouched, PokerError::NotSeatKey);
         Ok(())
-    }, vault_token)
+    }, vault_token, false)
 }
 
 // ---------------------------------------------------------------------------------------- rollup: withdraw, balance

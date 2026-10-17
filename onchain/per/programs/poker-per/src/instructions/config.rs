@@ -4,7 +4,7 @@ use anchor_lang::system_program::{transfer, Transfer};
 use crate::constants::{CONFIG_SEED, CONFIG_VERSION};
 use crate::errors::PokerError;
 use crate::program::PokerPer;
-use crate::state::{check_settings, Config, ConfigV1, CONFIG_RESERVED, MAX_PLATFORM_FEE_BPS};
+use crate::state::{check_settings, Config, ConfigV1, CONFIG_RESERVED, MAX_CREATOR_FEE_BPS, MAX_HOST_FEE_CEILING, MAX_PLATFORM_FEE_BPS};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct ConfigArgs {
@@ -44,6 +44,9 @@ pub fn initialize_config(ctx: Context<InitializeConfig>, args: ConfigArgs) -> Re
     config.paused = args.paused;
     config.escape_idle_secs = args.escape_idle_secs;
     config.agent_fee_bps = 0;
+    config.creator_fee_bps = 0;
+    config.host_wallet = Pubkey::default();
+    config.max_host_fee = 0;
     config.reserved = [0; CONFIG_RESERVED];
     emit_changed(config);
     Ok(())
@@ -83,13 +86,29 @@ pub fn set_auditor(ctx: Context<AdminOnly>, auditor: Pubkey) -> Result<()> {
     Ok(())
 }
 
-/// Copy strategies: Nomad's share of a copier's new profit, in basis points (0 = the default 2%, at most 5%).
-/// Applies to Agents set from now on; a copier's record keeps the share they agreed to.
-pub fn set_agent_fee(ctx: Context<AdminOnly>, bps: u16) -> Result<()> {
-    require!(bps <= MAX_PLATFORM_FEE_BPS, PokerError::BadFeeTerms);
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct FeeSettings {
+    /// Nomad's share of a copier's new profit, basis points (0 = the default 2%, at most 5%).
+    pub platform_fee_bps: u16,
+    /// Every strategy creator's share (0 = the default 8%, at most 20%).
+    pub creator_fee_bps: u16,
+    /// Receives table hosting fees (default = no hosting fees).
+    pub host_wallet: Pubkey,
+    /// The most one hosting fee may be (lamports; at most 0.05 SOL).
+    pub max_host_fee: u64,
+}
+
+/// Fees: copy-strategy shares and table hosting. Shares apply to Agents set from now on; a copier's record keeps
+/// the shares they agreed to.
+pub fn set_fees(ctx: Context<AdminOnly>, f: FeeSettings) -> Result<()> {
+    require!(f.platform_fee_bps <= MAX_PLATFORM_FEE_BPS && f.creator_fee_bps <= MAX_CREATOR_FEE_BPS, PokerError::BadFeeTerms);
+    require!(f.max_host_fee <= MAX_HOST_FEE_CEILING, PokerError::BadFeeTerms);
     let config = &mut ctx.accounts.config;
-    config.agent_fee_bps = bps;
-    emit!(AgentFeeSet { bps: config.agent_fee_bps() });
+    config.agent_fee_bps = f.platform_fee_bps;
+    config.creator_fee_bps = f.creator_fee_bps;
+    config.host_wallet = f.host_wallet;
+    config.max_host_fee = f.max_host_fee;
+    emit!(FeesSet { platform_fee_bps: config.agent_fee_bps(), creator_fee_bps: config.creator_fee_bps(), host_wallet: f.host_wallet, max_host_fee: f.max_host_fee });
     Ok(())
 }
 
@@ -174,6 +193,9 @@ pub fn migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
         escape_idle_secs: 0,
         auditor: Pubkey::default(),
         agent_fee_bps: 0,
+        creator_fee_bps: 0,
+        host_wallet: Pubkey::default(),
+        max_host_fee: 0,
         reserved: [0; CONFIG_RESERVED],
     };
     let mut data = info.try_borrow_mut_data()?;
@@ -228,6 +250,9 @@ pub struct AuditorSet {
 }
 
 #[event]
-pub struct AgentFeeSet {
-    pub bps: u16,
+pub struct FeesSet {
+    pub platform_fee_bps: u16,
+    pub creator_fee_bps: u16,
+    pub host_wallet: Pubkey,
+    pub max_host_fee: u64,
 }

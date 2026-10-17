@@ -193,7 +193,7 @@ pub struct BuyIn<'info> {
 /// Buy-in shared by `buy_in` (the wallet signs and pays) and `vault_buy_in` (a play key signs and the
 /// wallet's game vault pays): everything but who pays. `$transfer` moves `amount` into the escrow.
 macro_rules! buy_in_flow {
-    ($ctx:ident, $seat:expr, $amount:expr, $reader:expr, $player:expr, $code:expr, $transfer:expr) => {{
+    ($ctx:ident, $seat:expr, $amount:expr, $reader:expr, $player:expr, $code:expr, $agent:expr, $transfer:expr) => {{
     let (seat, amount, reader): (u8, u64, Pubkey) = ($seat, $amount, $reader);
     let config = &$ctx.accounts.config;
     require!(!config.paused, PokerError::Paused);
@@ -279,6 +279,9 @@ macro_rules! buy_in_flow {
     let table = &mut $ctx.accounts.table;
     if sitting_down {
         table.seat_mask |= 1 << idx;
+        // Agents v2: whether an Agent holds the seat (a reused seat starts clear).
+        let agent: bool = $agent;
+        if agent { table.agent_mask |= 1 << idx; } else { table.agent_mask &= !(1u16 << idx); }
     }
     stamp(table, fp)?;
     emit!(BoughtIn { table: table_key, seat, amount, rake, stack });
@@ -293,7 +296,7 @@ pub(crate) use buy_in_flow;
 /// reader chosen at sit-down and ignores `reader`.
 pub fn buy_in(ctx: Context<BuyIn>, seat: u8, amount: u64, reader: Pubkey) -> Result<()> {
     let player = ctx.accounts.player.key();
-    buy_in_flow!(ctx, seat, amount, reader, player, None, token::transfer(
+    buy_in_flow!(ctx, seat, amount, reader, player, None, false, token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.key(),
             Transfer { from: ctx.accounts.player_token.to_account_info(), to: ctx.accounts.escrow.to_account_info(), authority: ctx.accounts.player.to_account_info() },
@@ -335,8 +338,11 @@ pub struct CashOut<'info> {
 /// seat's wallet and reader and errors if the signer may not cash that seat out; `$to` names the
 /// account that receives the stack.
 macro_rules! cash_out_flow {
-    ($ctx:ident, $seat:expr, $authorize:expr, $to:ident) => {{
+    ($ctx:ident, $seat:expr, $authorize:expr, $to:ident, $agent_path:expr) => {{
     let seat: u8 = $seat;
+    // Agents v2: an Agent's seat leaves only through agent_cash_out (a copied strategy's profit share applies there).
+    let agent_path: bool = $agent_path;
+    require!(agent_path || $ctx.accounts.table.agent_mask & (1u16 << seat) == 0, PokerError::AgentSeat);
     require!($ctx.accounts.table.kind == crate::tourney::KIND_CASH, PokerError::TourneyTable);
     require!($ctx.accounts.table.hand_state == HAND_IDLE, PokerError::HandInProgress);
     let idx = seat as usize;
@@ -379,6 +385,7 @@ macro_rules! cash_out_flow {
     let fp = settle_check(&mut $ctx.accounts.escrow, &mut $ctx.accounts.ledger)?;
     let table = &mut $ctx.accounts.table;
     table.seat_mask &= !(1u16 << idx);
+    table.agent_mask &= !(1u16 << idx);
     stamp(table, fp)?;
     emit!(CashedOut { table: table.key(), seat, amount });
     Ok(())
@@ -390,7 +397,7 @@ pub(crate) use cash_out_flow;
 /// the ledger's readers and closes your hand.
 pub fn cash_out(ctx: Context<CashOut>, seat: u8) -> Result<()> {
     let player = ctx.accounts.player.key();
-    cash_out_flow!(ctx, seat, |p: Pubkey, _reader: Pubkey| -> Result<()> { require!(p == player, PokerError::NotSeated); Ok(()) }, player_token)
+    cash_out_flow!(ctx, seat, |p: Pubkey, _reader: Pubkey| -> Result<()> { require!(p == player, PokerError::NotSeated); Ok(()) }, player_token, false)
 }
 
 

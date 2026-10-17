@@ -15,6 +15,7 @@ import { config } from "./config";
 import { admitSpend, event, pool, settleSpend } from "./db";
 import { PRESETS, Profile, clampProfile, decide, Game, ST } from "./agentBot";
 import * as market from "./solStrategies";
+import { creditOf, decodeHostTab, hostFees, hostTabOf, refundHostFee, reserveHostFee } from "./hostFees";
 import idl from "./shared/poker_per.json";
 
 // ---------------------------------------------------------------------------------------- settings and limits
@@ -159,9 +160,9 @@ const vaultOf = (wallet: PublicKey, seed: Buffer) => (seed.every((b) => b === 0)
 
 export type AgentRecord = {
   wallet: PublicKey; agent: PublicKey; expires: number; keySet: number; stake: bigint; committed: bigint; table: PublicKey; seat: number; reader: PublicKey;
-  terms: market.FeeTerms; seatIn: bigint; netIn: bigint; netOut: bigint; highWater: bigint; skipped: number;
+  terms: market.FeeTerms; seatIn: bigint; netIn: bigint; netOut: bigint; highWater: bigint;
 };
-const AGENT_STATE_LEN = 8 + 32 + 32 + 8 + 4 + 8 + 8 + 32 + 1 + 32 + 1 + 32 + 2 + 2 + 8 + 8 + 8 + 8 + 4 + 16;
+const AGENT_STATE_LEN = 8 + 32 + 32 + 8 + 4 + 8 + 8 + 32 + 1 + 32 + 1 + 32 + 2 + 2 + 8 + 8 + 8 + 8 + 20;
 export function decodeAgentState(d: Buffer): AgentRecord | null {
   if (!d || d.length < AGENT_STATE_LEN) return null;
   let o = 8;
@@ -182,8 +183,7 @@ export function decodeAgentState(d: Buffer): AgentRecord | null {
   const netIn = d.readBigUInt64LE(o); o += 8;
   const netOut = d.readBigUInt64LE(o); o += 8;
   const highWater = d.readBigInt64LE(o); o += 8;
-  const skipped = d.readUInt32LE(o); o += 4;
-  return { wallet, agent, expires, keySet, stake, committed, table, seat, reader, terms: { creator, creatorFeeBps, platformFeeBps }, seatIn, netIn, netOut, highWater, skipped };
+  return { wallet, agent, expires, keySet, stake, committed, table, seat, reader, terms: { creator, creatorFeeBps, platformFeeBps }, seatIn, netIn, netOut, highWater };
 }
 
 /** The fee terms the Agent's record must carry for these settings (none for the player's own strategy): the ones
@@ -258,7 +258,8 @@ export function agentRoutes(a: Express) {
       const c = await market.termsFor(settings.strategyId, wallet);
       settings.strategy = "custom";
       settings.custom = clampProfile(c.profile);
-      settings.terms = { creator: c.terms.creator.toBase58(), creatorFeeBps: c.terms.creatorFeeBps, platformFeeBps: c.terms.platformFeeBps };
+      // The creator running their own: no fee (its record grows). Anyone else: the config's shares.
+      if (c.terms) settings.terms = { creator: c.terms.creator.toBase58(), creatorFeeBps: c.terms.creatorFeeBps, platformFeeBps: c.terms.platformFeeBps };
     }
     const cur = await pool.query("select status from agents where wallet = $1", [wallet.toBase58()]);
     if (cur.rows[0] && ["running", "stopping"].includes(cur.rows[0].status)) throw new Error("your Agent is still playing: stop it first");
@@ -311,8 +312,22 @@ export function agentRoutes(a: Express) {
     const recent = (await pool.query("select count(*)::int as n from keeper_spend where kind = 'host' and ok and at > now() - interval '10 minutes'")).rows[0].n;
     if (recent >= MAX_WAITING_HOSTED) throw new Error("too many new tables are waiting for players; try again in a minute");
     // Deep review #5: any fresh key could make the keeper pay for a table. Only a wallet that can buy in there.
-    if ((await gameBalance(wallet)) < st.min) throw new Error(`deposit first: this stake's minimum buy-in is ${st.min} lamports`);
-    return { table: await hostTableAt(st, wallet.toBase58()), hosted: true };
+    const fees = await hostFees();
+    const need = st.min + (fees.on ? fees.fee : 0n);
+    if ((await gameBalance(wallet)) < need) throw new Error(`deposit first: this stake's minimum buy-in is ${st.min} lamports${fees.on ? `, plus ${fees.fee} to open the table` : ""}`);
+    // Requester pays: the table's rent comes from the asker's game balance (pay_host_fee, signed by the play key; no
+    // wallet prompt), before the keeper spends anything. The game pays it when told to, then asks again.
+    const w = wallet.toBase58();
+    if (fees.on) {
+      const paid = await hostTabPaid(wallet);
+      if (!(await reserveHostFee(w, fees.fee, paid))) return { needHostFee: fees.fee.toString(), hostWallet: fees.hostWallet.toBase58(), credit: (await creditOf(w, paid)).toString() };
+    }
+    try {
+      return { table: await hostTableAt(st, w), hosted: true, hostFee: fees.on ? fees.fee.toString() : "0" };
+    } catch (e) {
+      if (fees.on) await refundHostFee(w, fees.fee); // kept as credit for the next table
+      throw e;
+    }
   });
 
   /** Your Agent: settings, status, the current session and the history (yours only). */
@@ -364,16 +379,55 @@ const TEE_VALIDATOR = new PublicKey("MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo
 
 /** Hosts a public 8-seat table for an Agent with `left` lamports of stake: the highest stake level whose buy-in
  *  (its buy-in in big blinds, at least the 10 BB minimum) fits. One at a time; at most 3 hosted tables waiting. */
-async function hostTableFor(wallet: string, settings: AgentSettings, left: bigint): Promise<string | null> {
+async function hostTableFor(wallet: string, settings: AgentSettings, left: bigint, agentKp?: Keypair): Promise<string | null> {
   if (hosting.size > 0) return null;
-  const fits = STAKES.filter((st) => { const bb = BigInt(Math.max(10, settings.buyInBB)) * st.big; return (bb > st.min ? bb : st.min) <= left; });
+  // Requester pays: the Agent pays the table's rent within its stake (agent_pay_host_fee), so a buy-in must fit after it.
+  const fees = await hostFees();
+  const fee = fees.on ? fees.fee : 0n;
+  const fits = STAKES.filter((st) => { const bb = BigInt(Math.max(10, settings.buyInBB)) * st.big; return (bb > st.min ? bb : st.min) + fee <= left; });
   if (fits.length === 0) return null;
   const st = fits[fits.length - 1];
   const now = Date.now();
   // One waiting at this stake already (hosted in the last 10 minutes)? The Agent joins that one instead.
   const recent = [...hostedTables.values()].filter((h) => now - h.at < 10 * 60_000);
   if (recent.some((h) => h.big === st.big) || recent.length >= MAX_WAITING_HOSTED) return null;
+  if (fees.on) {
+    const w = new PublicKey(wallet);
+    let paid = await hostTabPaid(w);
+    if (!(await reserveHostFee(wallet, fee, paid))) {
+      if (!agentKp) return null;
+      await agentPayHostFee(w, agentKp, fee);
+      paid = await hostTabPaid(w);
+      if (!(await reserveHostFee(wallet, fee, paid))) return null;
+    }
+    try { return await hostTableAt(st, wallet); }
+    catch (e) { await refundHostFee(wallet, fee); throw e; }
+  }
   return hostTableAt(st, wallet);
+}
+
+/** What the wallet has paid in hosting fees (its HostTab, which the keeper reads). */
+async function hostTabPaid(wallet: PublicKey): Promise<bigint> {
+  return decodeHostTab((await (await sessionFor(config.keeper).get()).getAccountInfo(hostTabOf(wallet), "processed"))?.data as Buffer);
+}
+
+/** The Agent pays a hosting fee from the player's game balance, within its stake (program agent_pay_host_fee). */
+async function agentPayHostFee(wallet: PublicKey, agentKp: Keypair, fee: bigint) {
+  const fees = await hostFees();
+  const host = fees.hostWallet;
+  const vault = vaultOf(wallet, (await walletState(wallet)).seed);
+  const program = await sessionFor(agentKp).program();
+  await program.methods.agentPayHostFee(new anchor.BN(fee.toString())).accountsPartial({
+    agentKey: agentKp.publicKey,
+    pay: {
+      wallet, walletState: walletStateOf(wallet), vault, vaultToken: ata(vault), config: CONFIG_PDA,
+      hostWalletState: walletStateOf(host), hostVaultToken: ata(vaultOf(host, (await walletState(host)).seed)),
+      hostTab: hostTabOf(wallet), hostTabPermission: permissionPdaFromAccount(hostTabOf(wallet)), sponsor: pda(Buffer.from("agent-sponsor")),
+      rollup: rollupPrograms, tokenProgram: TOKEN_PROGRAM,
+    },
+    agentState: agentStateOf(wallet),
+  } as any).rpc();
+  await event(null, "agent host fee", true, `${wallet.toBase58().slice(0, 6)}… paid ${fee}`);
 }
 
 /** The wallet's game balance (lamports): its vault's wSOL account in the rollup, which any logged-in reader may
@@ -391,7 +445,9 @@ async function hostTableAt(st: { small: bigint; big: bigint; min: bigint; max: b
   const inFlight = hosting.get(st.big);
   if (inFlight) return inFlight;
   const job = (async () => {
-    const spend = await admitSpend("host", who, st.big.toString(), config.hostsPerWalletHour, config.hostsPerHour);
+    // Requester pays (hostFees.ts): with hosting fees on, each table is paid for before the keeper spends, so only the
+    // per-wallet cap stays; the cap for everyone applies only while fees are off.
+    const spend = await admitSpend("host", who, st.big.toString(), config.hostsPerWalletHour, (await hostFees()).on ? 0 : config.hostsPerHour);
     if (spend === null) throw new Error("too many tables were opened in the last hour; join an open one or try again later");
     let address: string | null = null;
     try {
@@ -462,7 +518,7 @@ async function agentCashOutAccounts(signer: PublicKey, wallet: PublicKey, terms:
     fees.treasuryVaultToken = ata(vaultOf(treasury, (await walletState(treasury)).seed));
   }
   return {
-    signer, wallet, agentState: agentStateOf(wallet), vault, walletState: walletStateOf(wallet), vaultToken: ata(vault),
+    signer, instructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, wallet, agentState: agentStateOf(wallet), vault, walletState: walletStateOf(wallet), vaultToken: ata(vault),
     table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), hand, handPermission: permissionPdaFromAccount(hand),
     escrow: ata(table), config: CONFIG_PDA, ...fees, rollup: rollupPrograms, tokenProgram: TOKEN_PROGRAM,
   } as any;
@@ -535,7 +591,7 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
       await program.methods.agentRelease().accountsPartial({ wallet, agentState: agentStateOf(wallet), table: rec.table, ledger: acc.ledger } as any).rpc();
     } catch (e: any) {
       try {
-        await program.methods.agentCashOut(rec.seat).accountsPartial(await agentCashOutAccounts(agentKp.publicKey, wallet, rec.terms, rec.table, rec.seat)).rpc();
+        await program.methods.agentCashOut(rec.seat, new anchor.BN(0)).accountsPartial(await agentCashOutAccounts(agentKp.publicKey, wallet, rec.terms, rec.table, rec.seat)).rpc();
         await event(rec.table.toBase58(), "agent cash-out", true, "a seat this service had lost track of");
       } catch (e2: any) { await setStatus(row.wallet, row.status, "leaving its last seat (between hands)"); }
       return;
@@ -618,7 +674,7 @@ async function sitDown(row: any, wallet: PublicKey, agentKp: Keypair, settings: 
   // player can then join; with its host not seated, any seated player may press Start round.
   if (!waitingSince.has(row.wallet)) waitingSince.set(row.wallet, now);
   if (!settings.table && now - waitingSince.get(row.wallet)! >= 60_000) {
-    const hosted = await hostTableFor(row.wallet, settings, left).catch(async (e: any) => { await failEvent(`${row.wallet}|host`, null, "agent host", String(e?.message ?? e)); return null; });
+    const hosted = await hostTableFor(row.wallet, settings, left, agentKp).catch(async (e: any) => { await failEvent(`${row.wallet}|host`, null, "agent host", String(e?.message ?? e)); return null; });
     // Deep review: a minute before the next try, whatever came of this one (a failed host was retried every step).
     waitingSince.set(row.wallet, Date.now());
     if (hosted) { await setStatus(row.wallet, row.status, `hosted a table (${hosted.slice(0, 6)}…); sitting down`); return; }
@@ -723,24 +779,10 @@ async function cashOut(row: any, s: any, wallet: PublicKey, agentKp: Keypair, re
   const settings: AgentSettings = row.settings;
   const terms = s.strategy_id ? termsOf(settings) : market.NO_TERMS;
   // The seat's table key signs: it works whether or not the Agent was stopped or replaced on chain.
+  // An Agent's seat leaves only through agent_cash_out (the plain cash-outs refuse it), so a copied strategy's share
+  // applies whichever key signs. A fee balance that can't take money never blocks it (the program skips that share).
   const program = await sessionFor(reader).program();
-  try {
-    await program.methods.agentCashOut(seat).accountsPartial(await agentCashOutAccounts(reader.publicKey, wallet, terms, table, seat)).rpc();
-  } catch (e: any) {
-    const why = redact(String(e?.message ?? e));
-    if (!s.strategy_id || /HandInProgress/.test(why)) throw e;
-    // Copying, and the cash-out with the fees failed: leaving comes first. The seat's table key cashes it out the plain
-    // way; the record then counts the seat as left another way (no fee, no loss carried forward).
-    const { seed } = await walletState(wallet);
-    const vault = vaultOf(wallet, seed), acc = accountsOf(table), hand = handOf(table, seat);
-    await program.methods.vaultCashOut(seat, new anchor.BN(0)).accountsPartial({
-      signer: reader.publicKey, wallet, vault, walletState: walletStateOf(wallet), vaultToken: ata(vault), instructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-      table, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), hand, handPermission: permissionPdaFromAccount(hand), escrow: ata(table), rollup: rollupPrograms,
-    } as any).rpc();
-    await event(s.table_address, "agent cash-out", false, `with the profit share failed (${why.slice(0, 200)}); left without it`);
-    await endSession(row, s, stack, reason);
-    return;
-  }
+  await program.methods.agentCashOut(seat, new anchor.BN(0)).accountsPartial(await agentCashOutAccounts(reader.publicKey, wallet, terms, table, seat)).rpc();
   if (s.strategy_id && s.fee_net_before !== null) {
     const f = market.settleSol(terms, BigInt(s.fee_net_before), BigInt(s.fee_high_water), BigInt(s.buy_in), stack);
     await pool.query("update agent_sessions set creator_fee = $2, platform_fee = $3 where id = $1", [s.id, f.creatorFee.toString(), f.platformFee.toString()]);

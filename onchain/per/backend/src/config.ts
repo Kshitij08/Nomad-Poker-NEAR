@@ -36,7 +36,8 @@ export const config = {
   closeAbandoned: process.env.CLOSE_ABANDONED !== "false",
   /** M10 feature flag: the game shows private tables only while this is on (`PRIVATE_TABLES=false` hides them). */
   privateTables: process.env.PRIVATE_TABLES !== "false",
-  /** Deep review #5: tables the keeper hosts (Quick Play, Agents) per wallet and in all, per hour. */
+  /** Deep review #5: tables the keeper hosts (Quick Play, Agents) per wallet and in all, per hour. The cap for everyone
+   *  applies only while hosting fees are off (with them on, the asker pays each table first). */
   hostsPerWalletHour: Number(process.env.HOSTS_PER_WALLET_HOUR ?? 3),
   hostsPerHour: Number(process.env.HOSTS_PER_HOUR ?? 20),
   /** Deep review #4: tournaments with no entry fee whose tables the keeper pays for, per host and in all, per hour. */

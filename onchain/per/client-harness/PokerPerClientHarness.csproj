@@ -8,6 +8,8 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <LangVersion>9.0</LangVersion>
+    <!-- The harness tests the new internal test program (PerIds.Program), never the live one. -->
+    <DefineConstants>$(DefineConstants);PER_TEST_PROGRAM</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />

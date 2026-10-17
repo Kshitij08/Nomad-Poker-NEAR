@@ -3,15 +3,24 @@
 // with the Agent (agent_set), and each agent_cash_out pays the creator's 8% and Nomad's 2% of new profit above the
 // high-water mark straight into their game balances. This service only lists strategies, hands the terms to the
 // game, checks the Agent it runs was set with them, and keeps the track records.
+// Both shares are the program config's (one creator share for every strategy). A strategy is listed and copyable by
+// others only after LISTING_MIN_HANDS Agent hands with a total profit of at least LISTING_MIN_NET lamports; its
+// creator can always run it (without fees), which is how it builds that record.
 import { randomUUID } from "crypto";
 import { PublicKey } from "@solana/web3.js";
 import { CONFIG_PDA, coder, l1, PROGRAM_ID } from "./chain";
 import { pool } from "./db";
 import { clampProfile, Profile } from "./agentBot";
 
-export const CREATOR_FEE_BPS = 800;
-/** The program's default platform share (config.agent_fee_bps = 0). */
+/** The program's defaults (config.agent_fee_bps / creator_fee_bps = 0). */
 export const DEFAULT_PLATFORM_FEE_BPS = 200;
+export const DEFAULT_CREATOR_FEE_BPS = 800;
+/** What a strategy needs before others can see and copy it: Agent hands played with it, and its total profit
+ *  (lamports; "more than 0" = at least 1). As the Coins marketplace (backend/src/strategies LISTING). */
+export const LISTING = {
+  minHands: Number(process.env.LISTING_MIN_HANDS ?? 100),
+  minNet: Number(process.env.LISTING_MIN_NET ?? 1),
+};
 /** A track record counts as verified after this many hands (docs: minimum before ranking). */
 const VERIFIED_HANDS = 2000;
 
@@ -24,7 +33,6 @@ export const SOL_STRATEGY_MIGRATIONS = [
      description text not null default '',
      version int not null,
      profile jsonb not null,
-     creator_fee_bps int not null,
      listed boolean not null default true,
      created_at timestamptz not null default now()
    )`,
@@ -57,17 +65,22 @@ export function settleSol(terms: FeeTerms, netBefore: bigint, highWater: bigint,
   return { profit, creatorFee: (profit * BigInt(terms.creatorFeeBps)) / 10_000n, platformFee: (profit * BigInt(terms.platformFeeBps)) / 10_000n, highWater: net };
 }
 
-let platformCache: { at: number; bps: number } | null = null;
-/** Nomad's share now (config.agent_fee_bps; 0 = the default). Cached for a minute. */
-export async function platformFeeBps(): Promise<number> {
-  if (platformCache && Date.now() - platformCache.at < 60_000) return platformCache.bps;
+export type FeeRates = { platformBps: number; creatorBps: number };
+let ratesCache: { at: number; v: FeeRates } | null = null;
+/** Both shares now (config.agent_fee_bps / creator_fee_bps; 0 = the defaults). Cached for a minute. */
+export async function feeRates(): Promise<FeeRates> {
+  if (ratesCache && Date.now() - ratesCache.at < 60_000) return ratesCache.v;
   const info = await l1.getAccountInfo(CONFIG_PDA, "confirmed");
   if (!info) throw new Error("the program's config isn't readable");
   const c: any = coder.decode("config", info.data);
-  const bps = Number(c.agentFeeBps ?? 0) || DEFAULT_PLATFORM_FEE_BPS;
-  platformCache = { at: Date.now(), bps };
-  return bps;
+  const v = { platformBps: Number(c.agentFeeBps ?? 0) || DEFAULT_PLATFORM_FEE_BPS, creatorBps: Number(c.creatorFeeBps ?? 0) || DEFAULT_CREATOR_FEE_BPS };
+  ratesCache = { at: Date.now(), v };
+  return v;
 }
+const ratesOrDefault = () => feeRates().catch(() => ({ platformBps: DEFAULT_PLATFORM_FEE_BPS, creatorBps: DEFAULT_CREATOR_FEE_BPS }));
+
+/** Whether others may see and copy a strategy with this record. */
+export const qualifies = (hands: number, net: number) => hands >= LISTING.minHands && net >= LISTING.minNet;
 
 // ---------------------------------------------------------------------------------------- the marketplace
 
@@ -105,8 +118,8 @@ export async function publish(wallet: PublicKey, body: any) {
   const prev = (await pool.query("select coalesce(max(version), 0) as v from sol_strategies where creator = $1 and name = $2", [w, name])).rows[0];
   const id = randomUUID();
   await pool.query(
-    `insert into sol_strategies (strategy_id, creator, creator_name, name, description, version, profile, creator_fee_bps) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [id, w, creatorName, name, description, Number(prev.v) + 1, JSON.stringify(profile), CREATOR_FEE_BPS]);
+    `insert into sol_strategies (strategy_id, creator, creator_name, name, description, version, profile) values ($1, $2, $3, $4, $5, $6, $7)`,
+    [id, w, creatorName, name, description, Number(prev.v) + 1, JSON.stringify(profile)]);
   if (Number(prev.v) > 0) await pool.query("update sol_strategies set listed = false where creator = $1 and name = $2 and strategy_id <> $3", [w, name, id]);
   return get(id);
 }
@@ -130,51 +143,59 @@ const TRACK_RECORD_SQL = `
        else (sum(a.cash_out - a.buy_in)::float8 * 100 / sum(a.hands)) * (sum(a.hands)::float8 / (sum(a.hands) + 500)) end as score`;
 const FROM_SQL = `from sol_strategies s left join agent_sessions a on a.strategy_id = s.strategy_id and a.ended_at is not null and a.cash_out is not null`;
 
-function toPublic(r: any) {
+function toPublic(r: any, rates: FeeRates) {
   const profile: Profile = typeof r.profile === "string" ? JSON.parse(r.profile) : r.profile;
-  const hands = Number(r.hands ?? 0);
+  const hands = Number(r.hands ?? 0), net = Number(r.net ?? 0);
   return {
     strategyId: r.strategy_id, name: r.name, description: r.description, version: r.version, creator: r.creator, creatorName: r.creator_name,
     listed: r.listed, profile, tags: tags(profile),
-    record: { copiers: Number(r.copiers ?? 0), sessions: Number(r.sessions ?? 0), hands, net: Number(r.net ?? 0), per100Hands: hands ? Math.round((Number(r.net) * 100) / hands) : 0 },
+    record: { copiers: Number(r.copiers ?? 0), sessions: Number(r.sessions ?? 0), hands, net, per100Hands: hands ? Math.round((net * 100) / hands) : 0 },
     verified: hands >= VERIFIED_HANDS,
-    fees: { creatorBps: r.creator_fee_bps, creatorPercent: r.creator_fee_bps / 100, platformPercent: DEFAULT_PLATFORM_FEE_BPS / 100 },
+    // Others may copy it once its record qualifies (the creator's own Agent runs build it).
+    qualified: qualifies(hands, net),
+    copyable: r.listed && qualifies(hands, net),
+    listing: { minHands: LISTING.minHands, minNet: LISTING.minNet, handsLeft: Math.max(0, LISTING.minHands - hands), profitable: net >= LISTING.minNet },
+    fees: { creatorBps: rates.creatorBps, creatorPercent: rates.creatorBps / 100, platformBps: rates.platformBps, platformPercent: rates.platformBps / 100 },
     createdAt: r.created_at,
   };
 }
+// Others see a strategy only once it qualifies (as in toPublic: hands and total profit over finished sessions).
+const QUALIFIES_SQL = `coalesce(sum(a.hands), 0) >= $2 and coalesce(sum(a.cash_out - a.buy_in), 0) >= $3`;
 
 export async function list(sort = "top", limit = 30) {
   const order = sort === "new" ? "s.created_at desc" : sort === "popular" ? "copiers desc, s.created_at desc" : "score desc nulls last, s.created_at desc";
-  const rows = (await pool.query(`select s.*, ${TRACK_RECORD_SQL} ${FROM_SQL} where s.listed group by s.strategy_id order by ${order} limit $1`,
-    [Math.min(100, Math.max(1, Math.trunc(Number(limit)) || 30))])).rows;
-  const bps = await platformFeeBps().catch(() => DEFAULT_PLATFORM_FEE_BPS);
-  return rows.map((r) => withPlatform(toPublic(r), bps));
+  const rows = (await pool.query(
+    `select s.*, ${TRACK_RECORD_SQL} ${FROM_SQL} where s.listed group by s.strategy_id having ${QUALIFIES_SQL} order by ${order} limit $1`,
+    [Math.min(100, Math.max(1, Math.trunc(Number(limit)) || 30)), LISTING.minHands, LISTING.minNet])).rows;
+  const rates = await ratesOrDefault();
+  return rows.map((r) => toPublic(r, rates));
 }
 
 export async function get(strategyId: unknown) {
   if (!isId(strategyId)) throw new StrategyError("bad strategy id");
   const r = (await pool.query(`select s.*, ${TRACK_RECORD_SQL} ${FROM_SQL} where s.strategy_id = $1 group by s.strategy_id`, [strategyId])).rows[0];
   if (!r) throw new StrategyError("that strategy doesn't exist");
-  return withPlatform(toPublic(r), await platformFeeBps().catch(() => DEFAULT_PLATFORM_FEE_BPS));
+  return toPublic(r, await ratesOrDefault());
 }
-const withPlatform = <T extends { fees: any }>(s: T, bps: number) => ({ ...s, fees: { ...s.fees, platformBps: bps, platformPercent: bps / 100 } });
 
 /** The creator's strategies and what their copiers' Agents paid them (lamports). */
 export async function dashboard(wallet: PublicKey) {
   const w = wallet.toBase58();
   const rows = (await pool.query(`select s.*, ${TRACK_RECORD_SQL} ${FROM_SQL} where s.creator = $1 group by s.strategy_id order by s.created_at desc`, [w])).rows;
   const earned = rows.reduce((sum, r) => sum + BigInt(r.creator_fees ?? 0), 0n);
-  return { strategies: rows.map(toPublic), earned: earned.toString() };
+  const rates = await ratesOrDefault();
+  return { strategies: rows.map((r) => toPublic(r, rates)), earned: earned.toString(), listing: LISTING };
 }
 
-/** The strategy a copier's Agent plays and the fee terms its record must carry. */
-export async function termsFor(strategyId: unknown, copier: PublicKey): Promise<{ profile: Profile; terms: FeeTerms; name: string }> {
-  if (!isId(strategyId)) throw new StrategyError("bad strategy id");
-  const r = (await pool.query("select * from sol_strategies where strategy_id = $1", [strategyId])).rows[0];
-  if (!r) throw new StrategyError("that strategy doesn't exist");
-  if (r.creator === copier.toBase58()) throw new StrategyError("that's your own strategy: deploy it as Custom (no fee)");
-  const profile: Profile = typeof r.profile === "string" ? JSON.parse(r.profile) : r.profile;
-  return { profile, name: r.name, terms: { creator: new PublicKey(r.creator), creatorFeeBps: r.creator_fee_bps, platformFeeBps: await platformFeeBps() } };
+/** The strategy an Agent plays and the fee terms its record must carry: none when the creator runs their own
+ *  (always allowed: that builds its record); for anyone else only once it's listed and qualifies. */
+export async function termsFor(strategyId: unknown, copier: PublicKey): Promise<{ profile: Profile; terms: FeeTerms | null; name: string }> {
+  const s = await get(strategyId);
+  if (s.creator === copier.toBase58()) return { profile: s.profile, name: s.name, terms: null };
+  if (!s.copyable) throw new StrategyError(!s.listed ? "that strategy isn't listed any more"
+    : `that strategy can't be copied yet: it needs ${LISTING.minHands} Agent hands (${s.record.hands} so far) and a profit`);
+  const rates = await feeRates();
+  return { profile: s.profile, name: s.name, terms: { creator: new PublicKey(s.creator), creatorFeeBps: rates.creatorBps, platformFeeBps: rates.platformBps } };
 }
 
 /** Tables a copier's Agent must avoid: where another Agent copying the same strategy, or the creator's own Agent,

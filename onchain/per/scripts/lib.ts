@@ -10,6 +10,8 @@ export const RPC_URL = process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.
 export const connection = new Connection(RPC_URL, "confirmed");
 export const idl = JSON.parse(fs.readFileSync(path.join(__dirname, "../idl/poker_per.json"), "utf8"));
 export const PROGRAM_ID = new PublicKey(idl.address);
+// client-web/vault.ts derives addresses with this program too (its web pages keep the live one).
+process.env.PER_PROGRAM_ID ??= PROGRAM_ID.toBase58();
 export const CONFIG_PDA = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID)[0];
 
 export function loadKey(name: string): Keypair {

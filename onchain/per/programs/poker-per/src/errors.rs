@@ -176,4 +176,8 @@ pub enum PokerError {
     FeeTermsLocked,
     #[msg("Wrong account for a copy-strategy fee")]
     BadFeeAccount,
+    #[msg("An Agent holds this seat: it leaves with agent_cash_out (the player's play key may sign it)")]
+    AgentSeat,
+    #[msg("Hosting fees are off, or that fee is above the cap")]
+    BadHostFee,
 }

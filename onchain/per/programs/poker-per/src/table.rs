@@ -17,7 +17,7 @@ pub const TABLE_VERSION: u8 = 2;
 /// M4 and M5 took 60 of the original 96 reserved bytes for the hand fields. M6 added
 /// `last_record`, which grew the account: tables created before M6 can't be read by this layout
 /// (only `reclaim_table` handles them), so none may be open when this build is deployed.
-pub const TABLE_RESERVED: usize = 10;
+pub const TABLE_RESERVED: usize = 8;
 pub const MAX_INVITES: usize = 16;
 
 /// Created on L1, not yet live in the rollup.
@@ -197,6 +197,10 @@ pub struct Table {
     /// M11 review M2: at a tournament table, set when a hand ends and cleared by `tourney_sync` (blinds,
     /// eliminations, the end of the table's round); the next hand starts only after the sync.
     pub needs_sync: u8,
+    /// Agents v2: seats an Agent holds (bit per seat). Such a seat leaves only through `agent_cash_out`, which
+    /// charges a copied strategy's profit share; the player can still leave it there with their play key. Taken
+    /// from the reserved bytes (the account keeps its size).
+    pub agent_mask: u16,
     pub reserved: [u8; TABLE_RESERVED],
 }
 
