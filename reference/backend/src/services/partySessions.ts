@@ -36,6 +36,7 @@ const MAX_OVERFLOW_INDEX = 20;
 
 const SESSION_RE = /^[A-Z0-9]{4,16}$/;
 const OVERFLOW_RE = /^(poker-free|poker-money)(-st[1-9][0-9]*)?-[1-9][0-9]*$/i;
+const STAKE_PRIMARY_RE = /^(poker-free|poker-money)-st[1-9][0-9]*$/i;
 const RESERVED = new Set(["POKERFREE", "POKERMONEY", "POKER-FREE", "POKER-MONEY"]);
 
 export function normalizePartySession(raw: string): string {
@@ -43,7 +44,8 @@ export function normalizePartySession(raw: string): string {
 }
 
 export function isOverflowSessionName(raw: string): boolean {
-  return OVERFLOW_RE.test(String(raw ?? "").trim());
+  const name = String(raw ?? "").trim();
+  return OVERFLOW_RE.test(name) || STAKE_PRIMARY_RE.test(name);
 }
 
 export function isPartySessionName(raw: string): boolean {
@@ -153,6 +155,29 @@ export function requestOverflow(mode: PartyMode, fullSession?: string, stake?: n
     }
   }
   if (reusable) return reusable;
+
+  // Non-default stakes have no long-lived process. Start poker-free-st100 itself
+  // before opening poker-free-st100-2.
+  const root = mode === "chain" ? "poker-money" : "poker-free";
+  if (prefix !== root) {
+    const key = prefix.toLowerCase();
+    const primary = rooms.get(key);
+    if (!primary || primary.status === "failed") {
+      throwIfAtCap();
+      const room: PartyRoom = {
+        session: prefix,
+        mode,
+        kind: "quick",
+        status: "pending",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      rooms.set(key, room);
+      return room;
+    }
+    if (!primary.full && (primary.status === "pending" || primary.status === "claimed" || primary.status === "ready"))
+      return primary;
+  }
 
   throwIfAtCap();
 
