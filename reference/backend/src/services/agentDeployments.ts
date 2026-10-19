@@ -47,6 +47,8 @@ export interface AgentHandInput {
   result: string;
   showdown: boolean;
   publicActions: unknown;
+  /** The hand's replay timeline (already parsed and size-checked: see agentReplay.ts). Null: none. */
+  replay?: Record<string, unknown> | null;
   completedAt?: Date;
 }
 
@@ -144,7 +146,13 @@ function cardsText(value: unknown): string {
   }
 }
 
-function toHandPublic(row: AgentRow) {
+/**
+ * Unity-compatible hand shape. The replay goes out as a JSON string (ReplayJson) because JsonUtility cannot read an
+ * arbitrary object; HasReplay is false for hands recorded before replays existed. Lists polled every few seconds
+ * (RecentHands on the live status) leave the replay text out.
+ */
+function toHandPublic(row: AgentRow, includeReplay = false) {
+  const hasReplay = row.replay_json != null && typeof row.replay_json === "object";
   return {
     DeploymentId: String(row.deployment_id),
     HandNumber: integer(row.hand_number),
@@ -159,6 +167,8 @@ function toHandPublic(row: AgentRow) {
     Result: String(row.result ?? ""),
     Showdown: Boolean(row.showdown),
     PublicActionsJson: JSON.stringify(row.public_actions ?? []),
+    HasReplay: hasReplay,
+    ReplayJson: includeReplay && hasReplay ? JSON.stringify(row.replay_json) : "",
     CompletedUnix: unix(row.completed_at),
     completedUnix: unix(row.completed_at),
   };
@@ -457,8 +467,8 @@ export class AgentDeploymentService {
       await client.query(
         `INSERT INTO agent_hands (
            deployment_id, hand_number, start_stack, end_stack, net_pnl,
-           hole_cards, board_cards, pot, result, showdown, public_actions, completed_at
-         ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11::jsonb,COALESCE($12,NOW()))
+           hole_cards, board_cards, pot, result, showdown, public_actions, completed_at, replay_json
+         ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11::jsonb,COALESCE($12,NOW()),$13::jsonb)
          ON CONFLICT (deployment_id, hand_number) DO UPDATE SET
            start_stack = EXCLUDED.start_stack,
            end_stack = EXCLUDED.end_stack,
@@ -469,7 +479,8 @@ export class AgentDeploymentService {
            result = EXCLUDED.result,
            showdown = EXCLUDED.showdown,
            public_actions = EXCLUDED.public_actions,
-           completed_at = EXCLUDED.completed_at`,
+           completed_at = EXCLUDED.completed_at,
+           replay_json = COALESCE(EXCLUDED.replay_json, agent_hands.replay_json)`,
         [
           deploymentId,
           hand.handNumber,
@@ -483,6 +494,7 @@ export class AgentDeploymentService {
           hand.showdown,
           JSON.stringify(hand.publicActions ?? []),
           hand.completedAt ?? null,
+          hand.replay ? JSON.stringify(hand.replay) : null,
         ]
       );
       const updated = await client.query(
@@ -580,7 +592,7 @@ export class AgentDeploymentService {
     return rows.map(toAgentPublic);
   }
 
-  async hands(ownerId: string, deploymentId: string, limit: number, offset: number) {
+  async hands(ownerId: string, deploymentId: string, limit: number, offset: number, includeReplay = true) {
     await this.assertOwner(deploymentId, ownerId);
     const { rows } = await this.pool.query(
       `SELECT * FROM agent_hands
@@ -589,7 +601,17 @@ export class AgentDeploymentService {
         LIMIT $2 OFFSET $3`,
       [deploymentId, limit, offset]
     );
-    return rows.map(toHandPublic);
+    return rows.map((row) => toHandPublic(row, includeReplay));
+  }
+
+  /** One hand with its replay, or null. Owner-checked like the lists. */
+  async hand(ownerId: string, deploymentId: string, handNumber: number) {
+    await this.assertOwner(deploymentId, ownerId);
+    const { rows } = await this.pool.query(
+      `SELECT * FROM agent_hands WHERE deployment_id = $1 AND hand_number = $2`,
+      [deploymentId, handNumber]
+    );
+    return rows[0] ? toHandPublic(rows[0], true) : null;
   }
 
   async count(ownerId: string) {
@@ -618,7 +640,7 @@ export class AgentDeploymentService {
         LIMIT $2`,
       [deploymentId, limit]
     );
-    return rows.reverse().map(toHandPublic);
+    return rows.reverse().map((row) => toHandPublic(row));
   }
 
   private async requireDeployment(deploymentId: string): Promise<AgentRow> {

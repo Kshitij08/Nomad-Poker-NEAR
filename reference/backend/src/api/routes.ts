@@ -228,6 +228,27 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
     }
   });
 
+  /** One Agent hand with its replay (ReplayJson; empty for hands recorded before replays existed). */
+  router.get("/agent/hand", async (req, res) => {
+    const ownerId = String(req.query.ownerId ?? "").trim();
+    const deploymentId = String(req.query.deploymentId ?? "").trim();
+    const handNumber = Number(req.query.handNumber);
+    if (!ownerId || !deploymentId || !Number.isInteger(handNumber) || handNumber <= 0) {
+      res.status(400).json({ error: "ownerId, deploymentId and a positive handNumber required" });
+      return;
+    }
+    try {
+      const hand = await agents.hand(ownerId, deploymentId, handNumber);
+      if (!hand) {
+        res.status(404).json({ error: "Unknown hand" });
+        return;
+      }
+      res.json({ Hand: hand, hand });
+    } catch (err: any) {
+      res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
+    }
+  });
+
   router.get("/party/status", (req, res) => {
     const session = String(req.query.session ?? "");
     if (!isTrackedSessionName(session)) {
