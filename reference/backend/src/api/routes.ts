@@ -109,6 +109,12 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
         res.status(503).json({ error: "Coins aren't available on this server right now.", code: "coins_unavailable" });
         return;
       }
+      // One Agent at a time: a client that lost its note of the running one would otherwise pay a second bankroll.
+      const running = await agents.running(ownerId, session);
+      if (running) {
+        res.status(409).json({ error: "Your Agent is already playing. Stop it before deploying again.", code: "already_running", deploymentId: running.deploymentId });
+        return;
+      }
       const stake = Math.max(50, Number(req.body?.stake) || 1000);
       const bankroll = Math.max(stake, Math.floor(Number(req.body?.bankroll) || 5000));
       // The bankroll leaves the owner's Coins before the Agent is queued (a short balance refuses it); a queueing
@@ -215,6 +221,17 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
       if (agentMoney) await agentMoney.settle(session).catch((e) => console.warn(`[agent-money] settle ${session}: ${e?.message ?? e}`));
       const coins = agentMoney ? await agentMoney.summary(session) : null;
       res.json({ ...result, CopyFee: copyFee, Coins: coins, ServerSettled: coins != null && coins.taken > 0 });
+    } catch (err: any) {
+      res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
+    }
+  });
+
+  /** The owner's Agent that is still queued or playing, if any ({ active: null } when none). */
+  router.get("/agent/active", async (req, res) => {
+    const ownerId = await agentOwner(req, res, req.query.ownerId);
+    if (!ownerId) return;
+    try {
+      res.json({ active: await agents.running(ownerId) });
     } catch (err: any) {
       res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
     }

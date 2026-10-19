@@ -628,6 +628,18 @@ export class AgentDeploymentService {
     return rows[0] ? toHandPublic(rows[0], true) : null;
   }
 
+  /** The owner's Agent that is still queued or playing (newest first), or null. The client asks for it when it has
+   *  lost its own note of the running Agent (cleared storage, another device): the bankroll is with this one. */
+  async running(ownerId: string, exceptDeploymentId?: string) {
+    const { rows } = await this.pool.query(
+      `SELECT * FROM agent_deployments
+        WHERE owner_id = $1 AND phase = ANY($2::text[]) AND deployment_id <> $3
+        ORDER BY created_at DESC LIMIT 1`,
+      [ownerId, [...ACTIVE_PHASES], exceptDeploymentId ?? ""]
+    );
+    return rows[0] ? toAgentPublic(rows[0]) : null;
+  }
+
   async count(ownerId: string) {
     const { rows } = await this.pool.query(
       `SELECT COUNT(*)::int AS total FROM agent_deployments
