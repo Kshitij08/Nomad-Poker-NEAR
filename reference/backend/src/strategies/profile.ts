@@ -1,3 +1,4 @@
+import { styleTags } from "./styleTags.js";
 // The Agent's strategy: the five numbers HeuristicBot (Assets/Scripts/Bots) and agentBot.ts play by, plus the
 // optional v2 fields (docs/AGENTS_V2.md phase 2). A profile without the optional fields plays exactly as before.
 
@@ -110,14 +111,7 @@ export function effective(p: Profile, street: number, late: number): Numbers {
   };
 }
 
-/** Style tags for the marketplace cards. */
+/** Style tags for the marketplace cards: from what the strategy does (styleTags.ts), not one raw number. */
 export function tags(p: Profile): string[] {
-  const out: string[] = [];
-  out.push(p.foldBelow >= 0.34 ? "Tight" : p.foldBelow <= 0.25 ? "Loose" : "Balanced");
-  out.push(p.aggression >= 0.6 ? "Aggressive" : p.aggression <= 0.38 ? "Passive" : "Steady");
-  if (p.bluffChance >= 0.1) out.push("Bluffer");
-  if (p.raiseFractionOfPot >= 0.85) out.push("Big bets");
-  if ((p.positionWeight ?? 0) >= 0.5) out.push("Positional");
-  if (p.brain === 2) out.push("Pot odds");
-  return out;
+  return styleTags(p as any);
 }

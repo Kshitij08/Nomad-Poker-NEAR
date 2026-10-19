@@ -1,6 +1,6 @@
 // M12b: the Agent's bot (agentBot.ts), against hand-made positions. Run: node --import tsx test/agentBot.test.ts
 import assert from "node:assert/strict";
-import { category, decide, legal, preflop, PRESETS, clampProfile, Game } from "../src/agentBot";
+import { category, decide, legal, preflop, PRESETS, clampProfile, Game, headsUpEquivalent } from "../src/agentBot";
 
 // Cards: rank = c % 13 (0 = two .. 12 = ace), suit = c / 13.
 const c = (rank: string, suit: string) => "23456789TJQKA".indexOf(rank) + 13 * "cdhs".indexOf(suit);
@@ -54,5 +54,14 @@ t("decide: aces raise or call; 72o folds to a big bet; never an illegal amount",
 t("custom profiles are clamped to the legal range", () => {
   const p = clampProfile({ foldBelow: 5, raiseAbove: -1, aggression: 2, bluffChance: 1, raiseFractionOfPot: 9 });
   assert.deepEqual(p, { foldBelow: 0.55, raiseAbove: 0.45, aggression: 0.95, bluffChance: 0.25, raiseFractionOfPot: 1.2 });
+});
+t("table size: an equity against n opponents maps to the heads-up equity at the same percentile of hands", () => {
+  assert.equal(headsUpEquivalent(0.4, 1), 0.4);
+  // The median starting hand against 4 opponents (0.187) is the heads-up median (0.500); aces stay the best.
+  assert.ok(Math.abs(headsUpEquivalent(0.187, 4) - 0.5) < 1e-9);
+  assert.ok(Math.abs(headsUpEquivalent(0.561, 4) - 0.854) < 1e-9);
+  let prev = -1;
+  for (let k = 0; k <= 100; k++) { const h = headsUpEquivalent(k / 100, 7); assert.ok(h >= prev - 1e-12 && h >= 0 && h <= 1); prev = h; }
+  assert.equal(headsUpEquivalent(1, 7), 1);
 });
 console.log(`${n} passed`);

@@ -296,10 +296,37 @@ function sizeWager(fractionOfPot: number, l: Legal, g: Game, rnd: () => number):
 /** How often brain 2 bets or raises a hand at or above raiseAbove: aggression at the threshold, 1 at the nuts. */
 const valueRate = (p: Numbers, h: number) => p.aggression + (1 - p.aggression) * clamp((h - p.raiseAbove) / Math.max(0.05, 1 - p.raiseAbove), 0, 1);
 
+/**
+ * Equity against n opponents as the heads-up equity at the same percentile of starting hands, so one raiseAbove plays the
+ * same share of hands at any table size (HeuristicBot.HeadsUpEquivalent, same table: quantiles at 0, 5, ..., 100% of
+ * every starting hand's equity against 1..7 random opponents).
+ */
+const EQUITY_QUANTILES: number[][] = [
+[ 0.326, 0.349, 0.374, 0.392, 0.408, 0.420, 0.434, 0.453, 0.469, 0.481, 0.500, 0.511, 0.523, 0.536, 0.551, 0.571, 0.579, 0.600, 0.620, 0.653, 0.854 ],
+  [ 0.197, 0.221, 0.233, 0.247, 0.258, 0.266, 0.283, 0.288, 0.300, 0.309, 0.320, 0.334, 0.342, 0.359, 0.369, 0.383, 0.400, 0.413, 0.442, 0.472, 0.732 ],
+  [ 0.142, 0.154, 0.169, 0.179, 0.188, 0.196, 0.206, 0.212, 0.218, 0.230, 0.236, 0.249, 0.255, 0.265, 0.276, 0.291, 0.306, 0.323, 0.342, 0.373, 0.637 ],
+  [ 0.103, 0.119, 0.129, 0.137, 0.148, 0.154, 0.162, 0.167, 0.172, 0.181, 0.187, 0.198, 0.203, 0.211, 0.219, 0.227, 0.247, 0.262, 0.280, 0.309, 0.561 ],
+  [ 0.088, 0.096, 0.105, 0.113, 0.120, 0.126, 0.130, 0.138, 0.145, 0.151, 0.154, 0.166, 0.168, 0.174, 0.185, 0.191, 0.207, 0.220, 0.234, 0.268, 0.490 ],
+  [ 0.071, 0.077, 0.088, 0.095, 0.101, 0.107, 0.112, 0.118, 0.122, 0.126, 0.133, 0.141, 0.145, 0.149, 0.160, 0.165, 0.183, 0.191, 0.204, 0.233, 0.445 ],
+  [ 0.061, 0.068, 0.076, 0.083, 0.087, 0.090, 0.097, 0.100, 0.107, 0.111, 0.117, 0.123, 0.126, 0.133, 0.139, 0.145, 0.161, 0.169, 0.178, 0.211, 0.388 ],
+];
+
+export function headsUpEquivalent(eq: number, n: number): number {
+  n = Math.max(1, Math.min(7, n));
+  if (n === 1) return eq;
+  const q = EQUITY_QUANTILES[n - 1], h = EQUITY_QUANTILES[0], last = q.length - 1;
+  if (eq <= q[0]) return (h[0] * eq) / q[0];
+  if (eq >= q[last]) return h[last] + ((1 - h[last]) * (eq - q[last])) / Math.max(1e-9, 1 - q[last]);
+  let i = 1;
+  while (q[i] < eq) i++;
+  const t = q[i] > q[i - 1] ? (eq - q[i - 1]) / (q[i] - q[i - 1]) : 0;
+  return h[i - 1] + t * (h[i] - h[i - 1]);
+}
+
 function decideV2(p: Numbers, l: Legal, hole: number[], board: number[], g: Game, opponents: number, rnd: () => number): Decision {
   const n = Math.max(1, opponents);
   const eq = equity(hole, board, n, rnd);
-  const hu = clamp(Math.pow(eq, 1 / n) + (rnd() - 0.5) * 0.04, 0, 1); // heads-up-equivalent equity
+  const hu = clamp(headsUpEquivalent(eq, n) + (rnd() - 0.5) * 0.04, 0, 1); // heads-up-equivalent equity
   const toCall = l.callAmount;
   const pot = Number(g.pot), call = Number(toCall);
   const spr = Number(g.seats[g.toAct].stack - toCall) / Math.max(1, pot + call);
@@ -329,7 +356,7 @@ function decideV2(p: Numbers, l: Legal, hole: number[], board: number[], g: Game
   const blindOnly = street === 0 && g.highBet <= g.bigBlind;
   const betRatio = call / Math.max(1, pot - call);
   const vsRange = blindOnly ? eq : Math.pow(eq, 1 + 0.3 + 0.7 * Math.min(1.5, betRatio));
-  const vsRangeHu = Math.pow(vsRange, 1 / n);
+  const vsRangeHu = headsUpEquivalent(vsRange, n);
   const need = potOdds + 0.5 * (p.foldBelow - 0.3); // tighter profiles want a margin, looser ones give some
 
   if (vsRangeHu >= p.raiseAbove) {

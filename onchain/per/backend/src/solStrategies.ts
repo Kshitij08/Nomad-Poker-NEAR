@@ -11,6 +11,7 @@ import { PublicKey } from "@solana/web3.js";
 import { CONFIG_PDA, coder, l1, PROGRAM_ID } from "./chain";
 import { pool } from "./db";
 import { clampProfile, Profile } from "./agentBot";
+import { styleTags } from "./styleTags";
 
 /** The program's defaults (config.agent_fee_bps / creator_fee_bps = 0). */
 export const DEFAULT_PLATFORM_FEE_BPS = 200;
@@ -207,11 +208,7 @@ export async function tablesToAvoid(wallet: string, strategyId: string | undefin
   return new Set(rows.map((r) => r.table_address));
 }
 
+/** Marketplace style tags from what the strategy does (styleTags.ts, the same as the Coins marketplace). */
 function tags(p: Profile): string[] {
-  const out: string[] = [];
-  out.push(p.foldBelow >= 0.34 ? "Tight" : p.foldBelow <= 0.25 ? "Loose" : "Balanced");
-  out.push(p.aggression >= 0.6 ? "Aggressive" : p.aggression <= 0.38 ? "Passive" : "Steady");
-  if (p.bluffChance >= 0.1) out.push("Bluffer");
-  if (p.raiseFractionOfPot >= 0.85) out.push("Big bets");
-  return out;
+  return styleTags(p as any);
 }
