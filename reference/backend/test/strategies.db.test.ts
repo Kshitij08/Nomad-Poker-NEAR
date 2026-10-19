@@ -22,6 +22,8 @@ function poolOver(db: PGlite): Pool {
 }
 
 let db: PGlite, pool: Pool, playfab: FakePlayFab, svc: StrategyService;
+let now = new Date("2026-10-20T12:00:00Z");
+const days = (n: number) => { now = new Date(now.getTime() + n * 86_400_000); };
 
 before(async () => {
   db = new PGlite();
@@ -29,7 +31,7 @@ before(async () => {
     await db.exec(fs.readFileSync(path.join(here, "..", "migrations", f), "utf8"));
   pool = poolOver(db);
   playfab = new FakePlayFab();
-  svc = new StrategyService(pool, playfab);
+  svc = new StrategyService(pool, playfab, () => now);
   await pool.query(`INSERT INTO pf_players (playfab_id, title_player_account_id, display_name) VALUES ('creator', 'TPA-creator', 'Ace'), ('copier', 'TPA-copier', 'Bo')`);
 });
 
@@ -49,21 +51,50 @@ test("publish a custom strategy; bad input is refused", async () => {
   await assert.rejects(svc.publish("creator", { name: "From twin", fromTwin: true }), /Play a few more hands/);
 });
 
-test("an unproven strategy isn't listed or copyable; the creator's own sessions qualify it", async () => {
-  assert.equal((await svc.list("new")).length, 0);
+/** A deployment's hands: `count` hands alternating +win/-loss Coins around `perHand` (big blind 50 at stake 1,000). */
+async function hands(deploymentId: string, count: number, perHand: number, spread = 500) {
+  await pool.query(
+    `INSERT INTO agent_hands (deployment_id, hand_number, start_stack, end_stack, net_pnl, result)
+     SELECT $1, g, 0, 0, CASE WHEN g % 2 = 0 THEN $2::bigint + $4::bigint ELSE $2::bigint - $4::bigint END, 'x' FROM generate_series(1, $3) g`,
+    [deploymentId, perHand, count, spread]);
+}
+
+test("a new strategy can't be copied until 2,000 hands, 7 days and a record that beats Autopilot", async () => {
   const [s] = (await svc.creatorDashboard("creator")).strategies;
   assert.equal(s.qualified, false);
   await deployment("dep-x", "copier", 0);
-  await assert.rejects(svc.attachCopy("dep-x", "copier", s.strategyId), /isn't listed yet/);
-  await deployment("dep-0", "creator", 200, 120); // the creator's own Agent: 120 hands, +200
+  await assert.rejects(svc.attachCopy("dep-x", "copier", s.strategyId), /can't be copied yet/);
+  // The creator's own Agent: 2,000 hands at +5 big blinds a hand (+500 per 100, Autopilot is +386).
+  await deployment("dep-0", "creator", 200, 2000);
   await svc.attachCopy("dep-0", "creator", s.strategyId);
-  const [listed] = await svc.list("new");
+  await hands("dep-0", 2000, 250);
+  assert.equal((await svc.list("top")).length, 0); // too young
+  const [promising] = await svc.list("new"); // New and promising shows it, not yet copyable
+  assert.equal(promising.strategyId, s.strategyId);
+  assert.equal(promising.qualified, false);
+  assert.equal(promising.record.bb100, 500);
+  days(8);
+  const [listed] = await svc.list("top");
   assert.equal(listed.strategyId, s.strategyId);
   assert.equal(listed.qualified, true);
+  assert.equal(listed.record.vsHouse, 500 - 386);
+  assert.ok(listed.record.score > 0);
+});
+
+test("a record that doesn't beat Autopilot by more than its margin isn't copyable; stakes don't decide the ranking", async () => {
+  const weak = await svc.publish("bob", { name: "Plodder", profile: { foldBelow: 0.5, raiseAbove: 0.64, aggression: 0.2, bluffChance: 0, raiseFractionOfPot: 0.4 } });
+  await deployment("dep-weak", "bob", 0, 2000);
+  await svc.attachCopy("dep-weak", "bob", weak.strategyId);
+  await hands("dep-weak", 2000, 150); // +3 bb a hand: +300 per 100, under Autopilot's +386
+  days(8);
+  const w = await svc.get(weak.strategyId);
+  assert.equal(w.qualified, false);
+  assert.equal(w.record.bb100, 300);
+  assert.ok(!(await svc.list("top")).some((x) => x.strategyId === weak.strategyId));
 });
 
 test("a copied session settles once: 8% to the creator (paid into Coins), 2% to us", async () => {
-  const [s] = await svc.list("new");
+  const [s] = (await svc.list("top")).filter((x) => x.name === "Night Owl");
   await deployment("dep-1", "copier", 1000);
   await svc.attachCopy("dep-1", "copier", s.strategyId);
   const fee = await svc.settle("dep-1");
@@ -78,7 +109,7 @@ test("a copied session settles once: 8% to the creator (paid into Coins), 2% to 
 });
 
 test("high-water mark across sessions; losses and own strategies pay nothing", async () => {
-  const [s] = await svc.list("new");
+  const [s] = (await svc.list("top")).filter((x) => x.name === "Night Owl");
   await deployment("dep-2", "copier", -600);
   await svc.attachCopy("dep-2", "copier", s.strategyId);
   assert.equal(Number((await svc.settle("dep-2")).creator_fee), 0);
@@ -93,23 +124,45 @@ test("high-water mark across sessions; losses and own strategies pay nothing", a
   assert.deepEqual(await svc.feeFor("dep-own"), { strategyId: s.strategyId, sessionPnl: 5000, creatorFee: 0, platformFee: 0, feeBase: 0 });
 });
 
-test("track record and creator dashboard come from the settled sessions", async () => {
-  const [s] = await svc.list("top");
+test("track record counts every hand its Agents played; the dashboard shows what copiers earned", async () => {
+  const [s] = (await svc.list("top")).filter((x) => x.name === "Night Owl");
   assert.equal(s.record.sessions, 5);
   assert.equal(s.record.copiers, 2);
-  assert.equal(s.record.net, 200 + 1000 - 600 + 800 + 5000);
+  assert.equal(s.record.hands, 2000);
+  assert.equal(s.record.net, 2000 * 250);
   const dash = await svc.creatorDashboard("creator");
   assert.equal(dash.earned, 96);
   assert.equal(dash.paid, 96);
 });
 
+test("a strategy that plays like a listed one is refused; a different style is accepted and gets its own style lane", async () => {
+  // Night Owl v1: .36 / .70 / .60 / .05 / .70. A copy with tiny changes plays the same.
+  await assert.rejects(
+    svc.publish("bob", { name: "Owl Clone", profile: { foldBelow: 0.37, raiseAbove: 0.7, aggression: 0.62, bluffChance: 0.05, raiseFractionOfPot: 0.72 } }),
+    /plays like "Night Owl"/);
+  const loose = await svc.publish("bob", { name: "Wild Thing", profile: { foldBelow: 0.15, raiseAbove: 0.5, aggression: 0.85, bluffChance: 0.06, raiseFractionOfPot: 0.95 } });
+  assert.notEqual(loose.style, (await svc.list("top"))[0].style);
+  await deployment("dep-wild", "bob", 0, 2000);
+  await svc.attachCopy("dep-wild", "bob", loose.strategyId);
+  await hands("dep-wild", 2000, 300);
+  days(8);
+  const lanes = await svc.list("styles");
+  assert.equal(new Set(lanes.map((x) => x.style)).size, lanes.length); // one per style
+  assert.ok(lanes.some((x) => x.strategyId === loose.strategyId));
+  assert.equal((await svc.list("top", 30, loose.style))[0].strategyId, loose.strategyId);
+  const detail = await svc.get(loose.strategyId);
+  assert.ok(Array.isArray(detail.similar));
+});
+
 test("a new version replaces the old one and must prove itself before it's listed", async () => {
   const v2 = await svc.publish("creator", { name: "Night Owl", profile: { foldBelow: 0.3, raiseAbove: 0.66, aggression: 0.5, bluffChance: 0.07, raiseFractionOfPot: 0.6 } });
   assert.equal(v2.version, 2);
-  assert.equal((await svc.list("new")).filter((x) => x.name === "Night Owl").length, 0); // v1 unlisted, v2 unproven
-  await deployment("dep-v2", "creator", 50, 100);
+  assert.equal((await svc.list("top")).filter((x) => x.name === "Night Owl").length, 0); // v1 unlisted, v2 unproven
+  await deployment("dep-v2", "creator", 50, 2000);
   await svc.attachCopy("dep-v2", "creator", v2.strategyId);
-  const listed = (await svc.list("new")).filter((x) => x.name === "Night Owl");
+  await hands("dep-v2", 2000, 250);
+  days(8);
+  const listed = (await svc.list("top")).filter((x) => x.name === "Night Owl");
   assert.deepEqual(listed.map((x) => x.version), [2]);
 });
 

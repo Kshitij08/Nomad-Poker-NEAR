@@ -344,7 +344,8 @@ export function agentRoutes(a: Express) {
   // and the creator's dashboard are signed by the wallet's play key like every Agent request.
   const reply = (res: Response, p: Promise<any>) => p.then((v) => res.json(v), (e: any) =>
     res.status(e instanceof market.StrategyError ? 400 : 500).json({ error: e instanceof market.StrategyError ? e.message : "something went wrong; try again" }));
-  a.get("/sol-strategies", (req: Request, res: Response) => reply(res, market.list(String(req.query.sort ?? "top"), Number(req.query.limit) || 30).then((strategies) => ({ strategies }))));
+  a.get("/sol-strategies", (req: Request, res: Response) => reply(res, market.list(String(req.query.sort ?? "top"), Number(req.query.limit) || 30,
+    typeof req.query.style === "string" && req.query.style.trim() ? req.query.style.trim() : undefined).then((strategies) => ({ strategies }))));
   a.get("/sol-strategies/:id", (req: Request, res: Response) => reply(res, market.get(String(req.params.id))));
   route("/sol-strategies/publish", (wallet, data) => market.publish(wallet, data));
   route("/sol-strategies/unlist", (wallet, data) => market.unlist(wallet, data?.strategyId));

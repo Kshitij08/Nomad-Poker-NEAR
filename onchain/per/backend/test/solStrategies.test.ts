@@ -81,12 +81,13 @@ async function main() {
     assert.equal(checkSettings({ stake: 10_000_000 }).strategyId, undefined);
   });
 
-  await t("listing: others see and copy a strategy only after the minimum hands and a profit (defaults 100, 1 lamport)", () => {
-    assert.equal(LISTING.minHands, 100); assert.equal(LISTING.minNet, 1);
-    assert.equal(qualifies(99, 5_000_000), false);
-    assert.equal(qualifies(100, 0), false);
-    assert.equal(qualifies(100, 1), true);
-    assert.equal(qualifies(5_000, -1), false);
+  await t("listing: others copy a strategy only after 2,000 hands, 7 days and a win rate beating Autopilot by more than its margin", () => {
+    assert.equal(LISTING.minHands, 2000); assert.equal(LISTING.minDays, 7);
+    assert.equal(qualifies(1_999, 30, 500, 20), false);    // too few hands
+    assert.equal(qualifies(5_000, 6, 500, 20), false);     // too young
+    assert.equal(qualifies(5_000, 30, 60, 20), false);     // +60 bb/100 vs Autopilot's +45: within the margin
+    assert.equal(qualifies(5_000, 30, 80, 20), true);      // +35 over the house, margin 20
+    assert.equal(qualifies(5_000, 30, 500, Infinity), false);
   });
 
   await t("decodeHostTab reads what a wallet has paid in hosting fees (none = 0)", () => {

@@ -12,7 +12,8 @@ function fail(res: Response, err: any) {
 export function createStrategyApiRouter(svc: StrategyService): Router {
   const r = Router();
   r.get("/strategies", optionalPlayFabJwt, async (req, res) => {
-    try { res.json({ strategies: await svc.list(String(req.query.sort ?? "top"), Number(req.query.limit) || 30) }); } catch (e) { fail(res, e); }
+    const style = typeof req.query.style === "string" && req.query.style.trim() ? req.query.style.trim() : undefined;
+    try { res.json({ strategies: await svc.list(String(req.query.sort ?? "top"), Number(req.query.limit) || 30, style) }); } catch (e) { fail(res, e); }
   });
   r.get("/strategies/mine", requirePlayFabJwt, async (req: PlayFabRequest, res) => {
     try { res.json(await svc.creatorDashboard(req.playFabId!)); } catch (e) { fail(res, e); }

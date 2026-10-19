@@ -7,6 +7,7 @@ import { claudeNote, coach, type HandResult, type Report } from "./coach.js";
 import { settleCopy } from "./fees.js";
 import { clampProfile, PRESETS, tags, type Profile } from "./profile.js";
 import { fitTwin, type Action, type Decision, type Twin } from "./style.js";
+import { alike, behaviour, distance, styleCell, type Behaviour } from "./styleTags.js";
 
 export class StrategyError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message); }
@@ -109,6 +110,14 @@ export class StrategyService {
       try { profile = clampProfile(body?.profile ?? {}); } catch (e: any) { throw new StrategyError(400, "bad_profile", e.message); }
       source = "custom";
     }
+    // A strategy that plays like one already listed by someone else isn't a new strategy (review 20 Oct: without this
+    // the list fills with near-copies of whatever ranks first). Its own earlier versions don't count.
+    const mine = behaviour(profile as any);
+    for (const other of await this.records(`s.listed AND s.creator_id <> $1`, [creatorId])) {
+      if (other.qualified && alike(mine, other.behaviour))
+        throw new StrategyError(409, "too_similar",
+          `That plays like "${other.name}" by ${other.creatorName}, which is already listed. Change how many hands it plays, its pressure, bluffing or bet size.`);
+    }
     const { rows: who } = await this.pool.query(`SELECT display_name FROM pf_players WHERE playfab_id = $1`, [creatorId]);
     const creatorName = String(who[0]?.display_name ?? `Player ${creatorId.slice(-4)}`);
     const { rows: prev } = await this.pool.query(
@@ -128,46 +137,67 @@ export class StrategyService {
     if (!r.rowCount) throw new StrategyError(404, "not_found", "Not your strategy.");
   }
 
-  /** Listed strategies with their track record (Agent sessions that ran them), best first. */
-  async list(sort = "top", limit = 30) {
-    const order = sort === "new" ? "s.created_at DESC" : sort === "popular" ? "copiers DESC, s.created_at DESC" : "score DESC NULLS LAST, s.created_at DESC";
-    const { rows } = await this.pool.query(
-      `SELECT s.*, ${TRACK_RECORD_SQL}
-         FROM strategies s
-         LEFT JOIN agent_deployments d ON d.strategy_id = s.strategy_id AND d.phase = 'completed'
-        WHERE s.listed
-        GROUP BY s.strategy_id
-       HAVING COALESCE(SUM(d.hands_played), 0) >= $2 AND COALESCE(SUM(d.net_pnl), 0) >= $3
-        ORDER BY ${order}
-        LIMIT $1`, [Math.min(100, Math.max(1, limit)), LISTING.minHands, LISTING.minNet]);
-    return rows.map(toPublic);
+  /**
+   * The marketplace lists (review 20 Oct):
+   * - "top": qualified strategies by score (risk-adjusted, see toPublic);
+   * - "styles": the best qualified strategy of each style cell (hands played x pressure), so every style shows;
+   * - "new": New and promising: under 30 days old with at least 300 hands, by score, qualified or not (it says which);
+   * - "popular": qualified strategies by copiers.
+   * `style` keeps one cell ("Loose Aggressive"...).
+   */
+  async list(sort = "top", limit = 30, style?: string) {
+    let all = await this.records(`s.listed`, []);
+    if (style) all = all.filter((x) => x.style === style);
+    const byScore = (a: any, b: any) => (b.record.score ?? -1e9) - (a.record.score ?? -1e9);
+    const n = Math.min(100, Math.max(1, limit));
+    if (sort === "new") {
+      const since = this.clock().getTime() - NEW_DAYS * 86_400_000;
+      return all.filter((x) => new Date(x.createdAt).getTime() >= since && x.record.hands >= NEW_MIN_HANDS).sort(byScore).slice(0, n);
+    }
+    const qualified = all.filter((x) => x.qualified);
+    if (sort === "popular") return qualified.sort((a, b) => b.record.copiers - a.record.copiers || byScore(a, b)).slice(0, n);
+    if (sort === "styles") {
+      const best = new Map<string, any>();
+      for (const x of qualified.sort(byScore)) if (!best.has(x.style)) best.set(x.style, x);
+      return [...best.values()].slice(0, n);
+    }
+    return qualified.sort(byScore).slice(0, n);
   }
 
   async get(strategyId: string) {
-    const { rows } = await this.pool.query(
-      `SELECT s.*, ${TRACK_RECORD_SQL}
-         FROM strategies s
-         LEFT JOIN agent_deployments d ON d.strategy_id = s.strategy_id AND d.phase = 'completed'
-        WHERE s.strategy_id = $1
-        GROUP BY s.strategy_id`, [strategyId]);
+    const rows = await this.records(`s.strategy_id = $1`, [strategyId]);
     if (!rows[0]) throw new StrategyError(404, "not_found", "That strategy doesn't exist.");
-    return toPublic(rows[0]);
+    const s = rows[0];
+    // The listed strategies that play most like it (so a copier can compare).
+    const others = (await this.records(`s.listed AND s.strategy_id <> $1`, [strategyId]))
+      .map((o) => ({ o, d: distance(s.behaviour, o.behaviour) }))
+      .filter((x) => x.d <= 2).sort((a, b) => a.d - b.d).slice(0, 3)
+      .map(({ o }) => ({ strategyId: o.strategyId, name: o.name, creatorName: o.creatorName, style: o.style, record: o.record }));
+    return { ...s, similar: others };
   }
 
   /** The creator's dashboard: their strategies and what copiers earned them. */
   async creatorDashboard(creatorId: string) {
-    const { rows: mine } = await this.pool.query(
-      `SELECT s.*, ${TRACK_RECORD_SQL}
-         FROM strategies s
-         LEFT JOIN agent_deployments d ON d.strategy_id = s.strategy_id AND d.phase = 'completed'
-        WHERE s.creator_id = $1
-        GROUP BY s.strategy_id ORDER BY s.created_at DESC`, [creatorId]);
+    const mine = (await this.records(`s.creator_id = $1`, [creatorId])).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
     const { rows: fees } = await this.pool.query(
       `SELECT COALESCE(SUM(creator_fee), 0)::bigint AS earned,
               COALESCE(SUM(creator_fee) FILTER (WHERE creator_paid), 0)::bigint AS paid,
               COUNT(*)::int AS settlements
          FROM copy_fees WHERE creator_id = $1`, [creatorId]);
-    return { strategies: mine.map(toPublic), earned: Number(fees[0].earned), paid: Number(fees[0].paid), settlements: fees[0].settlements };
+    return { strategies: mine, earned: Number(fees[0].earned), paid: Number(fees[0].paid), settlements: fees[0].settlements };
+  }
+
+  /** Strategies matching `where` (on s.*) with their track record, in public form. */
+  private async records(where: string, params: unknown[]) {
+    const { rows } = await this.pool.query(
+      `SELECT s.*, ${TRACK_RECORD_SQL}
+         FROM strategies s
+         LEFT JOIN agent_deployments d ON d.strategy_id = s.strategy_id AND d.phase IN ('completed', 'failed')
+         LEFT JOIN agent_hands h ON h.deployment_id = d.deployment_id
+        WHERE ${where}
+        GROUP BY s.strategy_id`, params);
+    const now = this.clock();
+    return rows.map((r: any) => toPublic(r, now));
   }
 
   /** The profile a copied Agent plays, and marks the deployment as copying it (the copier is the signed-in player). */
@@ -175,7 +205,8 @@ export class StrategyService {
     const s = await this.get(strategyId);
     // Others may copy only a listed strategy with a proven record; its creator may always run it (that builds the record).
     if (s.creatorId !== copierId && (!s.listed || !s.qualified))
-      throw new StrategyError(403, "not_listed", `That strategy isn't listed yet: it needs ${LISTING.minHands} hands and a profit first.`);
+      throw new StrategyError(403, "not_listed",
+        `That strategy can't be copied yet: it needs ${LISTING.minHands.toLocaleString("en-US")} hands over ${LISTING.minDays} days and a result that beats Autopilot.`);
     await this.pool.query(
       `UPDATE agent_deployments SET strategy_id = $2, copier_verified = TRUE WHERE deployment_id = $1 AND owner_id = $3`,
       [deploymentId, strategyId, copierId]);
@@ -269,34 +300,57 @@ export class StrategyService {
   }
 }
 
-// Track record of a strategy: completed Agent sessions that ran it (not self-reported). Score = profit per 100 hands,
-// shrunk toward zero while the sample is small.
-/** What a strategy needs before it's listed and copyable by others: Agent hands played with it, and its total profit
- *  (whole Coins; "more than 0" = at least 1). LISTING_MIN_HANDS / LISTING_MIN_NET change them. */
+// Track record of a strategy (review 20 Oct): every hand its Agents played (sessions that were stopped or failed
+// included, so a creator can't hide the bad ones), in big blinds, so stakes don't decide the ranking.
+/** What a strategy needs before others can copy it: hands, days since it was published, and a win rate that beats the
+ *  house's Autopilot by more than its standard error. LISTING_MIN_HANDS / LISTING_MIN_DAYS change the first two. */
 export const LISTING = {
-  minHands: Number(process.env.LISTING_MIN_HANDS ?? 100),
-  minNet: Number(process.env.LISTING_MIN_NET ?? 1),
+  minHands: Number(process.env.LISTING_MIN_HANDS ?? 2000),
+  minDays: Number(process.env.LISTING_MIN_DAYS ?? 7),
 };
+/** Autopilot's win rate at a Coins table, big blinds per 100 hands (docs/AGENTS_V2.md section 9, against the filler
+ *  bots); HOUSE_BB100 overrides it once real Autopilot records exist. */
+export const HOUSE_BB100 = Number(process.env.HOUSE_BB100 ?? 386);
+/** New and promising: younger than this, with at least this many hands. */
+const NEW_DAYS = 30, NEW_MIN_HANDS = 300;
+/** Hands at which the score counts for half (it's shrunk toward zero below that). */
+const SCORE_HALF_HANDS = 2000;
+
+/** The stake's big blind (StakeCatalog.cs tiers), else buy-in / 20. */
+const BB_SQL = `CASE d.stake WHEN 50 THEN 2 WHEN 100 THEN 5 WHEN 500 THEN 25 WHEN 1000 THEN 50 WHEN 5000 THEN 250 WHEN 10000 THEN 500 ELSE GREATEST(1, d.stake / 20) END`;
 
 const TRACK_RECORD_SQL = `
   COUNT(DISTINCT d.owner_id)::int AS copiers,
-  COUNT(d.deployment_id)::int AS sessions,
-  COALESCE(SUM(d.hands_played), 0)::bigint AS hands,
-  COALESCE(SUM(d.net_pnl), 0)::bigint AS net,
-  CASE WHEN COALESCE(SUM(d.hands_played), 0) = 0 THEN NULL
-       ELSE (SUM(d.net_pnl)::float8 * 100 / SUM(d.hands_played)) * (SUM(d.hands_played)::float8 / (SUM(d.hands_played) + 500)) END AS score`;
+  COUNT(DISTINCT d.deployment_id)::int AS sessions,
+  COUNT(h.id)::bigint AS hands,
+  COALESCE(SUM(h.net_pnl), 0)::bigint AS net,
+  AVG(h.net_pnl::float8 / (${BB_SQL})) AS mean_bb,
+  STDDEV_SAMP(h.net_pnl::float8 / (${BB_SQL})) AS sd_bb`;
 
-function toPublic(r: any) {
-  const profile = typeof r.profile === "string" ? JSON.parse(r.profile) : r.profile;
+function toPublic(r: any, now: Date) {
+  const profile = (typeof r.profile === "string" ? JSON.parse(r.profile) : r.profile) as Profile;
   const hands = Number(r.hands ?? 0);
+  const mean = r.mean_bb == null ? 0 : Number(r.mean_bb), sd = r.sd_bb == null ? 0 : Number(r.sd_bb);
+  const bb100 = mean * 100, se100 = hands > 1 ? (sd / Math.sqrt(hands)) * 100 : Infinity;
+  // Score: win rate per unit of swing (a copier with a stop loss lives the swings, not the average), counted fully
+  // only with enough hands.
+  const score = hands > 1 && sd > 0 ? (mean / sd) * (hands / (hands + SCORE_HALF_HANDS)) : null;
+  const ageDays = (now.getTime() - new Date(r.created_at).getTime()) / 86_400_000;
+  const vsHouse = bb100 - HOUSE_BB100;
+  const b: Behaviour = behaviour(profile as any);
   return {
     strategyId: r.strategy_id, name: r.name, description: r.description, version: r.version,
     creatorId: r.creator_id, creatorName: r.creator_name, source: r.source, listed: r.listed,
-    profile: profile as Profile, tags: tags(profile),
-    record: { copiers: Number(r.copiers ?? 0), sessions: Number(r.sessions ?? 0), hands, net: Number(r.net ?? 0), per100Hands: hands ? Math.round((Number(r.net) * 100) / hands) : 0 },
-    verified: hands >= 2000,
-    qualified: hands >= LISTING.minHands && Number(r.net ?? 0) >= LISTING.minNet,
-    listing: { minHands: LISTING.minHands, minNet: LISTING.minNet },
+    profile, tags: tags(profile), behaviour: b, style: styleCell(b),
+    record: {
+      copiers: Number(r.copiers ?? 0), sessions: Number(r.sessions ?? 0), hands, net: Number(r.net ?? 0),
+      per100Hands: hands ? Math.round((Number(r.net) * 100) / hands) : 0,
+      bb100: Math.round(bb100), se100: Number.isFinite(se100) ? Math.round(se100) : null, swing: Math.round(sd * 10) / 10,
+      vsHouse: Math.round(vsHouse), score: score == null ? null : Math.round(score * 1000) / 1000,
+    },
+    verified: hands >= LISTING.minHands,
+    qualified: hands >= LISTING.minHands && ageDays >= LISTING.minDays && Number.isFinite(se100) && vsHouse > se100,
+    listing: { minHands: LISTING.minHands, minDays: LISTING.minDays, house: HOUSE_BB100 },
     fees: { creatorPercent: 8, platformPercent: 2 },
     createdAt: r.created_at,
   };
