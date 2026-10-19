@@ -100,6 +100,7 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
           aggression: Number(req.body?.aggression) || 0,
           bluffChance: Number(req.body?.bluffChance) || 0,
           raiseFractionOfPot: Number(req.body?.raiseFractionOfPot) || 0,
+          ...agentProfileV2(req.body),
         },
         bankroll: Math.max(stake, Number(req.body?.bankroll) || 5000),
         maxHands: Math.max(1, Math.min(5000, Number(req.body?.maxHands) || 100)),
@@ -319,6 +320,29 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
   });
 
   return router;
+}
+
+/**
+ * The Agents v2 strategy fields (docs/AGENTS_V2.md), all optional: how much the seat changes play (0..1), the brain
+ * (2 = smart), and up to four betting rounds with their own five numbers. Non-numbers become 0; the game server
+ * clamps every number to the bot's range (BotProfile.Clamped).
+ */
+export function agentProfileV2(body: any): { positionWeight: number; brain: number; streets: unknown[] } {
+  const finite = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const pw = finite(body?.positionWeight);
+  const streets = Array.isArray(body?.streets) ? body.streets.slice(0, 4) : [];
+  return {
+    positionWeight: Math.max(0, Math.min(1, pw)),
+    brain: Number(body?.brain) === 2 ? 2 : 0,
+    streets: streets.map((s: any) => ({
+      HasValue: Boolean(s?.HasValue),
+      FoldBelow: finite(s?.FoldBelow),
+      RaiseAbove: finite(s?.RaiseAbove),
+      Aggression: finite(s?.Aggression),
+      BluffChance: finite(s?.BluffChance),
+      RaiseFractionOfPot: finite(s?.RaiseFractionOfPot),
+    })),
+  };
 }
 
 function optionalString(value: unknown): string | undefined {
