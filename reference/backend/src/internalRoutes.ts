@@ -19,6 +19,7 @@ import {
   AgentDeploymentService,
   type AgentPhase,
 } from "./services/agentDeployments.js";
+import { parseReplay, REPLAY_MAX_BYTES } from "./services/agentReplay.js";
 
 export function createInternalRouter(providedPool?: Pool, strategies?: StrategyService): Router {
   const router = Router();
@@ -176,9 +177,15 @@ export function createInternalRouter(providedPool?: Pool, strategies?: StrategyS
       res.status(400).json({ error: "session and positive handNumber required" });
       return;
     }
+    // Too large / not an object: the hand is still stored, without its replay (see agentReplay.ts for why).
+    const replay = parseReplay(req.body?.ReplayJson ?? req.body?.replayJson ?? req.body?.Replay ?? req.body?.replay);
+    if (replay.dropped) {
+      console.warn(
+        `[agent] hand ${handNumber} of ${session}: replay dropped (${replay.dropped}; cap ${REPLAY_MAX_BYTES} bytes)`
+      );
+    }
     try {
-      res.json(
-        await agents.upsertHand(session, {
+      const saved = await agents.upsertHand(session, {
           handNumber,
           startStack: requiredNumber(
             req.body?.StartingStack ?? req.body?.StartStack ?? req.body?.startStack
@@ -198,8 +205,9 @@ export function createInternalRouter(providedPool?: Pool, strategies?: StrategyS
             req.body?.publicActions ??
             [],
           completedAt: optionalDate(req.body?.CompletedUnix ?? req.body?.completedUnix),
-        }, optionalString(req.body?.AssignedTable ?? req.body?.assignedTable))
-      );
+          replay: replay.replay,
+        }, optionalString(req.body?.AssignedTable ?? req.body?.assignedTable));
+      res.json({ ...saved, ReplayStored: replay.replay != null, ReplayDropped: replay.dropped ?? "" });
     } catch (err: any) {
       res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
     }
