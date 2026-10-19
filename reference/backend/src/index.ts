@@ -5,7 +5,7 @@ import { createConnection, hasSettlementKeypair } from "./config/solana.js";
 import { createInternalRouter } from "./internalRoutes.js";
 import { createHostRouter } from "./hostRoutes.js";
 import { hasJwtSecretConfigured } from "./auth/jwt.js";
-import { requireInternalApiKey, warnIfInternalApiKeyMissing } from "./middleware/internalAuth.js";
+import { requireInternalApiKey, requireInternalApiKeyConfigured } from "./middleware/internalAuth.js";
 import { requirePlayerJwt } from "./middleware/playerAuth.js";
 import { createPool } from "./db/pool.js";
 import { startIndexer } from "./services/indexer.js";
@@ -42,7 +42,7 @@ app.use("/host", requirePlayerJwt, createHostRouter(pool));
 const port = Number(process.env.PORT ?? 8787);
 
 async function main() {
-  warnIfInternalApiKeyMissing();
+  requireInternalApiKeyConfigured();
 
   if (!hasJwtSecretConfigured()) {
     console.warn(

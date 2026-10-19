@@ -16,15 +16,19 @@ function readApiKey(req: Request): string | undefined {
   return undefined;
 }
 
+/** Local development only: INTERNAL_API_KEY_OPTIONAL=1 lets /internal/* run open without a key. */
+const keyOptional = () => process.env.INTERNAL_API_KEY_OPTIONAL === "1";
+
 /**
- * Protects /internal/* routes. When INTERNAL_API_KEY is set, every request must
- * present it via `X-API-Key` or `Authorization: Bearer <key>`.
- * When unset (local dev only), routes remain open with a startup warning.
+ * Protects /internal/* routes: every request must present INTERNAL_API_KEY via `X-API-Key` or
+ * `Authorization: Bearer <key>`. Without a key configured they're refused (review A3: they used to be open), unless
+ * INTERNAL_API_KEY_OPTIONAL=1 (local development).
  */
 export function requireInternalApiKey(req: Request, res: Response, next: NextFunction) {
   const expected = process.env.INTERNAL_API_KEY?.trim();
   if (!expected) {
-    next();
+    if (keyOptional()) { next(); return; }
+    res.status(503).json({ error: "Internal routes are disabled: INTERNAL_API_KEY is not configured" });
     return;
   }
 
@@ -37,11 +41,14 @@ export function requireInternalApiKey(req: Request, res: Response, next: NextFun
   next();
 }
 
-export function warnIfInternalApiKeyMissing() {
-  if (!process.env.INTERNAL_API_KEY?.trim()) {
-    console.warn(
-      "[backend] INTERNAL_API_KEY is not set — /internal/* routes are unauthenticated. " +
-        "Set INTERNAL_API_KEY before exposing the backend publicly."
-    );
+/** At startup: no INTERNAL_API_KEY means no start (the game servers' routes would be open), unless
+ *  INTERNAL_API_KEY_OPTIONAL=1 (local development), which only warns. */
+export function requireInternalApiKeyConfigured() {
+  if (process.env.INTERNAL_API_KEY?.trim()) return;
+  if (keyOptional()) {
+    console.warn("[backend] INTERNAL_API_KEY is not set and INTERNAL_API_KEY_OPTIONAL=1: /internal/* routes are open (local development only).");
+    return;
   }
+  console.error("[backend] INTERNAL_API_KEY is not set: refusing to start. Set it (or INTERNAL_API_KEY_OPTIONAL=1 for local development).");
+  process.exit(1);
 }
