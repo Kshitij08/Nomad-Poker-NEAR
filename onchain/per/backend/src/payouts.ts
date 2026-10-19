@@ -21,12 +21,16 @@ export const PAYOUT_MIGRATIONS = [
      last_paid_at timestamptz,
      done boolean not null default false
    )`,
+  `alter table vault_payouts add column if not exists last_checked_at timestamptz`,
 ];
 
 /** As the game (PerWithdrawal.cs): when only part arrived and nothing more for a while, that part is paid out. */
 const PARTIAL_QUIET_MS = 60_000, PARTIAL_MIN_MS = 90_000;
 /** A registered withdrawal nothing arrives for is dropped after this long. */
 const GIVE_UP_MS = 60 * 60_000;
+/** After a partial payout, the rest is watched this long after the last activity (as PerWithdrawal.cs), then the row
+ *  finishes: less can land than the game expected (fees on the way), and an open row must not wait forever. */
+const PAID_QUIET_MS = 15 * 60_000;
 
 const pda = (...s: Buffer[]) => PublicKey.findProgramAddressSync(s, PROGRAM_ID)[0];
 
@@ -56,7 +60,7 @@ async function payOut(wallet: PublicKey): Promise<bigint> {
   return before;
 }
 
-type Row = { wallet: string; expected: string; paid: string; landed: string; registered_at: Date; landed_changed_at: Date; done: boolean };
+type Row = { wallet: string; expected: string; paid: string; landed: string; registered_at: Date; landed_changed_at: Date; last_paid_at: Date | null; done: boolean };
 
 /** Updates a registered withdrawal from its vault and pays out when it's ready (or when `ready`, the game's own call). */
 async function step(row: Row, ready = false): Promise<Row> {
@@ -74,8 +78,13 @@ async function step(row: Row, ready = false): Promise<Row> {
     const total = paid + got;
     row = (await pool.query("update vault_payouts set paid = $2, landed = 0, last_paid_at = now(), done = $3 where wallet = $1 returning *",
       [row.wallet, total.toString(), total >= expected])).rows[0];
-  } else if (paid === 0n && now - new Date(row.registered_at).getTime() > GIVE_UP_MS) {
-    row = (await pool.query("update vault_payouts set done = true where wallet = $1 returning *", [row.wallet])).rows[0];
+  } else {
+    // Review H6: a row with a partial payout used to stay open for good (only paid = 0 ever gave up), and 20 such rows
+    // stopped background withdrawals for everyone. Any row finishes once nothing has happened for a while.
+    const last = Math.max(new Date(row.registered_at).getTime(), new Date(row.landed_changed_at).getTime(),
+      row.last_paid_at ? new Date(row.last_paid_at).getTime() : 0);
+    if (now - last > (paid > 0n ? PAID_QUIET_MS : GIVE_UP_MS))
+      row = (await pool.query("update vault_payouts set done = true where wallet = $1 returning *", [row.wallet])).rows[0];
   }
   return row;
 }
@@ -91,7 +100,9 @@ export async function payoutRoute(wallet: PublicKey, data: any) {
     await pool.query(
       `insert into vault_payouts (wallet, expected) values ($1, $2)
        on conflict (wallet) do update set expected = $2, paid = 0, landed = 0, registered_at = now(), landed_changed_at = now(), last_paid_at = null, done = false
-       where vault_payouts.done`, [w, expected.toString()]);
+       where vault_payouts.done
+          or greatest(vault_payouts.registered_at, vault_payouts.landed_changed_at, coalesce(vault_payouts.last_paid_at, vault_payouts.registered_at)) < now() - interval '15 minutes'`,
+      [w, expected.toString()]);
   }
   let row: Row | undefined = (await pool.query("select * from vault_payouts where wallet = $1", [w])).rows[0];
   if (!row) return { registered: false, paid: "0", done: true, landed: (await landedOf(wallet)).toString() };
@@ -104,7 +115,9 @@ let lastRun = 0;
 export async function stepPayouts() {
   if (Date.now() - lastRun < 10_000) return;
   lastRun = Date.now();
-  const rows: Row[] = (await pool.query("select * from vault_payouts where not done order by registered_at limit 20")).rows;
+  // Round-robin: the rows checked longest ago first, so a few slow rows can't starve the rest.
+  const rows: Row[] = (await pool.query(
+    "update vault_payouts set last_checked_at = now() where wallet in (select wallet from vault_payouts where not done order by last_checked_at nulls first limit 20) returning *")).rows;
   for (const r of rows) {
     try { await step(r); } catch (e: any) { await event(null, "vault payout", false, `${r.wallet.slice(0, 6)}…: ${String(e?.message ?? e).slice(0, 200)}`); }
   }
