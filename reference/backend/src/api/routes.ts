@@ -20,11 +20,33 @@ import {
   toPublic,
 } from "../services/partySessions.js";
 import { AgentDeploymentService } from "../services/agentDeployments.js";
+import { AgentMoneyError, type AgentMoneyService } from "../services/agentMoney.js";
 
-export function createApiRouter(providedPool?: Pool, strategies?: StrategyService) {
+export function createApiRouter(providedPool?: Pool, strategies?: StrategyService, agentMoney?: AgentMoneyService) {
   const router = express.Router();
   const pool = providedPool ?? createPool();
   const agents = new AgentDeploymentService(pool);
+
+  /**
+   * Agent routes act for the signed-in player (review A2/H2: they trusted any ownerId): the PlayFab token from
+   * POST /api/auth/playfab names the owner, and a different ownerId in the request is refused. Sends the error and
+   * returns null without a valid token.
+   */
+  async function agentOwner(req: express.Request, res: express.Response, claimed: unknown): Promise<string | null> {
+    let sub: string;
+    try {
+      sub = (await verifyPlayFabToken(bearer(req) ?? "")).sub ?? "";
+    } catch {
+      res.status(401).json({ error: "Sign in to manage your Agent.", code: "sign_in" });
+      return null;
+    }
+    const asked = typeof claimed === "string" ? claimed.trim() : "";
+    if (!sub || (asked && asked !== sub)) {
+      res.status(403).json({ error: "That Agent belongs to another account." });
+      return null;
+    }
+    return sub;
+  }
 
   router.use(createAuthRouter(pool));
 
@@ -81,13 +103,21 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
     }
 
     try {
-      const ownerId = String(req.body?.ownerId ?? "").trim();
-      if (!ownerId) {
-        res.status(400).json({ error: "ownerId required" });
+      const ownerId = await agentOwner(req, res, req.body?.ownerId);
+      if (!ownerId) return;
+      if (!agentMoney?.enabled) {
+        res.status(503).json({ error: "Coins aren't available on this server right now.", code: "coins_unavailable" });
         return;
       }
       const stake = Math.max(50, Number(req.body?.stake) || 1000);
-      const deployment = await agents.enqueue({
+      const bankroll = Math.max(stake, Math.floor(Number(req.body?.bankroll) || 5000));
+      // The bankroll leaves the owner's Coins before the Agent is queued (a short balance refuses it); a queueing
+      // failure after that gives it straight back.
+      await agentMoney.fund(session, ownerId, bankroll);
+      let deployment;
+      try {
+        deployment = await agents.enqueue({
+        funded: true,
         deploymentId: session,
         ownerId,
         agentName: String(req.body?.agentName ?? "Agent"),
@@ -102,7 +132,7 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
           raiseFractionOfPot: Number(req.body?.raiseFractionOfPot) || 0,
           ...agentProfileV2(req.body),
         },
-        bankroll: Math.max(stake, Number(req.body?.bankroll) || 5000),
+        bankroll,
         maxHands: Math.max(1, Math.min(5000, Number(req.body?.maxHands) || 100)),
         maxRuntimeSeconds: Math.max(
           60,
@@ -111,26 +141,18 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
         stopLoss: Math.max(0, Number(req.body?.stopLoss) || 0),
         profitTarget: Math.max(0, Number(req.body?.profitTarget) || 0),
         stake,
-      });
-      // Copying a marketplace strategy: the copier must be the signed-in player (the profit share is theirs to pay).
-      const strategyId = optionalString(req.body?.strategyId);
-      if (strategyId && strategies) {
-        let copier: string;
-        try {
-          copier = (await verifyPlayFabToken(bearer(req) ?? "")).sub ?? "";
-        } catch {
-          res.status(401).json({ error: "Sign in to copy a strategy.", code: "sign_in" });
-          return;
-        }
-        if (copier !== ownerId) {
-          res.status(403).json({ error: "You can only copy for your own account." });
-          return;
-        }
-        await strategies.attachCopy(session, copier, strategyId);
+        });
+      } catch (err) {
+        await agentMoney.refund(session).catch((e) => console.warn(`[agent-money] refund ${session}: ${e?.message ?? e}`));
+        throw err;
       }
+      // Copying a marketplace strategy (the signed-in owner pays its profit share).
+      const strategyId = optionalString(req.body?.strategyId);
+      if (strategyId && strategies) await strategies.attachCopy(session, ownerId, strategyId);
       // No child room needs to boot; "ready" keeps legacy Unity deploy clients compatible.
       res.json({ ...deployment, status: "ready", kind: "agent", strategyId: strategyId ?? null });
     } catch (err: any) {
+      if (err instanceof AgentMoneyError) { res.status(err.status).json({ error: err.message, code: err.code }); return; }
       const status = Number(err?.status) || 400;
       res.status(status).json({ error: err.message ?? String(err) });
     }
@@ -144,7 +166,9 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
       return;
     }
     try {
-      await agents.assertOwner(session, optionalString(req.query.ownerId));
+      const owner = await agentOwner(req, res, req.query.ownerId);
+      if (!owner) return;
+      await agents.assertOwner(session, owner);
       const live = await agents.get(session);
       res.json(live ? { ...live, RecentHands: await agents.recentHands(session, 10) } : live);
     } catch (err: any) {
@@ -160,7 +184,9 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
       return;
     }
     try {
-      res.json(await agents.requestStop(session, optionalString(req.body?.ownerId)));
+      const owner = await agentOwner(req, res, req.body?.ownerId);
+      if (!owner) return;
+      res.json(await agents.requestStop(session, owner));
     } catch (err: any) {
       res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
     }
@@ -174,7 +200,9 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
       return;
     }
     try {
-      await agents.assertOwner(session, optionalString(req.query.ownerId));
+      const owner = await agentOwner(req, res, req.query.ownerId);
+      if (!owner) return;
+      await agents.assertOwner(session, owner);
       const result = await agents.getResult(session);
       if (!result) {
         res.status(404).json({ error: "No result yet" });
@@ -183,18 +211,18 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
       // A copied strategy's profit share (the client credits the session result minus these).
       if (strategies) await strategies.settle(session).catch(() => null); // settles once; a no-op afterwards
       const copyFee = strategies ? await strategies.feeFor(session) : null;
-      res.json({ ...result, CopyFee: copyFee });
+      // The backend pays the stack back to the owner's Coins (once); the client only reads its balance again.
+      if (agentMoney) await agentMoney.settle(session).catch((e) => console.warn(`[agent-money] settle ${session}: ${e?.message ?? e}`));
+      const coins = agentMoney ? await agentMoney.summary(session) : null;
+      res.json({ ...result, CopyFee: copyFee, Coins: coins, ServerSettled: coins != null && coins.taken > 0 });
     } catch (err: any) {
       res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });
     }
   });
 
   router.get("/agent/history", async (req, res) => {
-    const ownerId = String(req.query.ownerId ?? "").trim();
-    if (!ownerId) {
-      res.status(400).json({ error: "ownerId required" });
-      return;
-    }
+    const ownerId = await agentOwner(req, res, req.query.ownerId);
+    if (!ownerId) return;
     const { limit, offset } = pagination(req.query.limit, req.query.offset);
     try {
       const sessions = await agents.list(ownerId, limit, offset);
@@ -206,10 +234,11 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
   });
 
   router.get("/agent/hands", async (req, res) => {
-    const ownerId = String(req.query.ownerId ?? "").trim();
+    const ownerId = await agentOwner(req, res, req.query.ownerId);
+    if (!ownerId) return;
     const deploymentId = String(req.query.deploymentId ?? "").trim();
-    if (!ownerId || !deploymentId) {
-      res.status(400).json({ error: "ownerId and deploymentId required" });
+    if (!deploymentId) {
+      res.status(400).json({ error: "deploymentId required" });
       return;
     }
     const { limit, offset } = pagination(req.query.limit, req.query.offset);
@@ -231,11 +260,12 @@ export function createApiRouter(providedPool?: Pool, strategies?: StrategyServic
 
   /** One Agent hand with its replay (ReplayJson; empty for hands recorded before replays existed). */
   router.get("/agent/hand", async (req, res) => {
-    const ownerId = String(req.query.ownerId ?? "").trim();
+    const ownerId = await agentOwner(req, res, req.query.ownerId);
+    if (!ownerId) return;
     const deploymentId = String(req.query.deploymentId ?? "").trim();
     const handNumber = Number(req.query.handNumber);
-    if (!ownerId || !deploymentId || !Number.isInteger(handNumber) || handNumber <= 0) {
-      res.status(400).json({ error: "ownerId, deploymentId and a positive handNumber required" });
+    if (!deploymentId || !Number.isInteger(handNumber) || handNumber <= 0) {
+      res.status(400).json({ error: "deploymentId and a positive handNumber required" });
       return;
     }
     try {

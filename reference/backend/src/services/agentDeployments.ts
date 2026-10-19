@@ -11,6 +11,8 @@ export type AgentPhase =
 
 export interface EnqueueAgentInput {
   deploymentId: string;
+  /** The backend took the bankroll from the owner's Coins (agentMoney.ts): it pays the stack back when it ends. */
+  funded?: boolean;
   ownerId: string;
   agentName: string;
   profile: string;
@@ -185,8 +187,8 @@ export class AgentDeploymentService {
       `INSERT INTO agent_deployments (
          deployment_id, owner_id, agent_name, profile, strategy_version,
          strategy_config, bankroll, max_hands, max_runtime_seconds,
-         stop_loss, profit_target, stake, stack
-       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$7)
+         stop_loss, profit_target, stake, stack, funded
+       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$7,$13)
        ON CONFLICT (deployment_id) DO NOTHING`,
       [
         input.deploymentId,
@@ -201,6 +203,7 @@ export class AgentDeploymentService {
         input.stopLoss,
         input.profitTarget,
         input.stake,
+        input.funded === true,
       ]
     );
     const row = await this.requireDeployment(input.deploymentId);

@@ -13,6 +13,9 @@ import { createApiRouter } from "../src/api/routes.js";
 import { createInternalRouter } from "../src/internalRoutes.js";
 import { AgentDeploymentService } from "../src/services/agentDeployments.js";
 import { parseReplay, REPLAY_MAX_BYTES } from "../src/services/agentReplay.js";
+import { signPlayFabToken } from "../src/auth/jwt.js";
+
+process.env.JWT_SECRET ??= "test-secret-for-agent-routes-0123456789";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -76,10 +79,14 @@ function handBody(deploymentId: string, handNumber: number, extra: Record<string
   };
 }
 
+/** Owner routes need the owner's sign-in token: signed here for the ownerId the request names. */
 async function call(method: string, route: string, body?: unknown) {
+  const owner = new URL(base + route).searchParams.get("ownerId");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (owner && route.startsWith("/api/")) headers.Authorization = "Bearer " + (await signPlayFabToken(owner));
   const res = await fetch(base + route, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: res.status, json: (await res.json()) as any };

@@ -20,8 +20,9 @@ import {
   type AgentPhase,
 } from "./services/agentDeployments.js";
 import { parseReplay, REPLAY_MAX_BYTES } from "./services/agentReplay.js";
+import type { AgentMoneyService } from "./services/agentMoney.js";
 
-export function createInternalRouter(providedPool?: Pool, strategies?: StrategyService): Router {
+export function createInternalRouter(providedPool?: Pool, strategies?: StrategyService, agentMoney?: AgentMoneyService): Router {
   const router = Router();
   const agents = new AgentDeploymentService(providedPool ?? createPool());
 
@@ -224,6 +225,8 @@ export function createInternalRouter(providedPool?: Pool, strategies?: StrategyS
       const result = await agents.complete(session, req.body ?? {});
       // Copied strategy: settle the profit share now (idempotent; a failure here is retried by the next result read).
       const copyFee = strategies ? await strategies.settle(session).catch((e) => { console.warn("[strategies] settle failed:", e?.message ?? e); return null; }) : null;
+      // Then the stack goes back to the owner's Coins (after the fee, once; the worker retries what PlayFab refuses).
+      if (agentMoney) await agentMoney.settle(session).catch((e) => console.warn(`[agent-money] settle ${session}: ${e?.message ?? e}`));
       res.json({ ...result, ok: true, CopyFee: copyFee });
     } catch (err: any) {
       res.status(Number(err?.status) || 400).json({ error: err.message ?? String(err) });

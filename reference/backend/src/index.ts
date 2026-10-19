@@ -13,6 +13,7 @@ import { createPlayFabFromEnv } from "./services/playfab.js";
 import { TournamentService } from "./tournaments/service.js";
 import { createTournamentApiRouter, createTournamentInternalRouter } from "./tournaments/routes.js";
 import { StrategyService } from "./strategies/service.js";
+import { AgentMoneyService } from "./services/agentMoney.js";
 import { createStrategyApiRouter, createStrategyInternalRouter } from "./strategies/routes.js";
 
 const app = express();
@@ -20,6 +21,7 @@ const pool = createPool();
 const playfab = createPlayFabFromEnv();
 const tournaments = new TournamentService(pool, playfab);
 const strategies = new StrategyService(pool, playfab);
+const agentMoney = new AgentMoneyService(pool, playfab);
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
@@ -31,12 +33,12 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
-app.use("/api", createApiRouter(pool, strategies));
+app.use("/api", createApiRouter(pool, strategies, agentMoney));
 app.use("/api", createTournamentApiRouter(tournaments));
 app.use("/api", createStrategyApiRouter(strategies));
 app.use("/internal/tournaments", requireInternalApiKey, createTournamentInternalRouter(tournaments));
 app.use("/internal", requireInternalApiKey, createStrategyInternalRouter(strategies));
-app.use("/internal", requireInternalApiKey, createInternalRouter(pool, strategies));
+app.use("/internal", requireInternalApiKey, createInternalRouter(pool, strategies, agentMoney));
 app.use("/host", requirePlayerJwt, createHostRouter(pool));
 
 const port = Number(process.env.PORT ?? 8787);
@@ -66,6 +68,11 @@ async function main() {
   setInterval(() => {
     strategies.retryPayouts().catch((err) => console.warn("[strategies] payout retry failed:", err.message ?? err));
   }, 5 * 60_000).unref();
+
+  // Coins Agents: bankroll moves PlayFab couldn't take yet, ended deployments to pay back, orphaned debits to refund.
+  setInterval(() => {
+    agentMoney.runDue().catch((err) => console.warn("[agent-money] worker failed:", err.message ?? err));
+  }, 30_000).unref();
 
   const connection = createConnection();
   await startIndexer(connection);
