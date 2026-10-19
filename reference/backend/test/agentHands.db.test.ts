@@ -94,7 +94,7 @@ async function call(method: string, route: string, body?: unknown) {
 
 before(async () => {
   db = new PGlite();
-  for (const f of ["003_agent_deployments.sql", "006_agent_hand_replays.sql"])
+  for (const f of ["003_agent_deployments.sql", "006_agent_hand_replays.sql", "008_agent_rooms.sql"])
     await db.exec(fs.readFileSync(path.join(here, "..", "migrations", f), "utf8"));
   // Re-running a migration is how every deploy starts: it must be a no-op.
   await db.exec(fs.readFileSync(path.join(here, "..", "migrations", "006_agent_hand_replays.sql"), "utf8"));

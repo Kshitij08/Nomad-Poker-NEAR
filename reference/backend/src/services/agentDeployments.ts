@@ -56,6 +56,10 @@ export interface AgentHandInput {
 
 type AgentRow = Record<string, any>;
 
+/** The table types a Coins Agent's filler bots can be (BotProfile.Rooms in Unity). */
+export const AGENT_ROOMS = ["mixed", "tight", "loose", "wild"] as const;
+export type AgentRoom = (typeof AGENT_ROOMS)[number];
+
 const ACTIVE_PHASES = new Set<AgentPhase>([
   "queued",
   "seated",
@@ -107,6 +111,8 @@ export function toAgentPublic(row: AgentRow) {
     stopLoss: integer(row.stop_loss),
     profitTarget: integer(row.profit_target),
     stake: integer(row.stake),
+    room: String(row.room ?? "mixed"),
+    Room: String(row.room ?? "mixed"),
     hasCustom: Boolean(strategy.hasCustom),
     foldBelow: number(strategy.foldBelow),
     raiseAbove: number(strategy.raiseAbove),
@@ -187,8 +193,10 @@ export class AgentDeploymentService {
       `INSERT INTO agent_deployments (
          deployment_id, owner_id, agent_name, profile, strategy_version,
          strategy_config, bankroll, max_hands, max_runtime_seconds,
-         stop_loss, profit_target, stake, stack, funded
-       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$7,$13)
+         stop_loss, profit_target, stake, stack, funded, room
+       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$7,$13,
+         -- The owner's sessions take the table types in turn (AGENT_ROOMS).
+         (ARRAY['mixed','tight','loose','wild'])[1 + (SELECT COUNT(*) FROM agent_deployments WHERE owner_id = $2) % 4])
        ON CONFLICT (deployment_id) DO NOTHING`,
       [
         input.deploymentId,

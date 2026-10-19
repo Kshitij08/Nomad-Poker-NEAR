@@ -8,6 +8,7 @@ import { settleCopy } from "./fees.js";
 import { clampProfile, PRESETS, tags, type Profile } from "./profile.js";
 import { fitTwin, type Action, type Decision, type Twin } from "./style.js";
 import { alike, behaviour, distance, styleCell, type Behaviour } from "./styleTags.js";
+import { AGENT_ROOMS, type AgentRoom } from "../services/agentDeployments.js";
 
 export class StrategyError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message); }
@@ -143,11 +144,15 @@ export class StrategyService {
    * - "styles": the best qualified strategy of each style cell (hands played x pressure), so every style shows;
    * - "new": New and promising: under 30 days old with at least 300 hands, by score, qualified or not (it says which);
    * - "popular": qualified strategies by copiers.
-   * `style` keeps one cell ("Loose Aggressive"...).
+   * `style` keeps one cell ("Loose Aggressive"...). `room` ranks by the record at one table type (mixed, tight, loose,
+   * wild): strategies with at least 300 hands there, its numbers in `record`.
    */
-  async list(sort = "top", limit = 30, style?: string) {
+  async list(sort = "top", limit = 30, style?: string, room?: string) {
     let all = await this.records(`s.listed`, []);
     if (style) all = all.filter((x) => x.style === style);
+    if (room && (AGENT_ROOMS as readonly string[]).includes(room))
+      all = all.filter((x) => x.byRoom[room as AgentRoom].hands >= NEW_MIN_HANDS)
+        .map((x) => ({ ...x, room, record: { ...x.record, ...x.byRoom[room as AgentRoom] } }));
     const byScore = (a: any, b: any) => (b.record.score ?? -1e9) - (a.record.score ?? -1e9);
     const n = Math.min(100, Math.max(1, limit));
     if (sort === "new") {
@@ -308,9 +313,14 @@ export const LISTING = {
   minHands: Number(process.env.LISTING_MIN_HANDS ?? 2000),
   minDays: Number(process.env.LISTING_MIN_DAYS ?? 7),
 };
-/** Autopilot's win rate at a Coins table, big blinds per 100 hands (docs/AGENTS_V2.md section 9, against the filler
- *  bots); HOUSE_BB100 overrides it once real Autopilot records exist. */
-export const HOUSE_BB100 = Number(process.env.HOUSE_BB100 ?? 386);
+/** Autopilot's win rate at each Coins table type, big blinds per 100 hands (docs/AGENTS_V2.md section 10, measured
+ *  against BotProfile.ForRoom fillers); HOUSE_BB100 overrides the mixed one once real Autopilot records exist. A
+ *  strategy's bar is these weighted by where its hands were played, so the table types it happened to get don't
+ *  decide whether it beats Autopilot. */
+export const HOUSE_BY_ROOM: Record<AgentRoom, number> = {
+  mixed: Number(process.env.HOUSE_BB100 ?? 371), tight: 312, loose: 757, wild: 378,
+};
+export const HOUSE_BB100 = HOUSE_BY_ROOM.mixed;
 /** New and promising: younger than this, with at least this many hands. */
 const NEW_DAYS = 30, NEW_MIN_HANDS = 300;
 /** Hands at which the score counts for half (it's shrunk toward zero below that). */
@@ -325,18 +335,38 @@ const TRACK_RECORD_SQL = `
   COUNT(h.id)::bigint AS hands,
   COALESCE(SUM(h.net_pnl), 0)::bigint AS net,
   AVG(h.net_pnl::float8 / (${BB_SQL})) AS mean_bb,
-  STDDEV_SAMP(h.net_pnl::float8 / (${BB_SQL})) AS sd_bb`;
+  STDDEV_SAMP(h.net_pnl::float8 / (${BB_SQL})) AS sd_bb,
+  ${AGENT_ROOMS.map((r) => `
+  COUNT(h.id) FILTER (WHERE d.room = '${r}')::bigint AS ${r}_hands,
+  AVG(h.net_pnl::float8 / (${BB_SQL})) FILTER (WHERE d.room = '${r}') AS ${r}_mean,
+  STDDEV_SAMP(h.net_pnl::float8 / (${BB_SQL})) FILTER (WHERE d.room = '${r}') AS ${r}_sd`).join(",")}`;
 
-function toPublic(r: any, now: Date) {
-  const profile = (typeof r.profile === "string" ? JSON.parse(r.profile) : r.profile) as Profile;
-  const hands = Number(r.hands ?? 0);
-  const mean = r.mean_bb == null ? 0 : Number(r.mean_bb), sd = r.sd_bb == null ? 0 : Number(r.sd_bb);
+/** A record from hand count, mean and standard deviation in big blinds, against `house` bb/100. */
+function stats(hands: number, mean: number, sd: number, house: number) {
   const bb100 = mean * 100, se100 = hands > 1 ? (sd / Math.sqrt(hands)) * 100 : Infinity;
   // Score: win rate per unit of swing (a copier with a stop loss lives the swings, not the average), counted fully
   // only with enough hands.
   const score = hands > 1 && sd > 0 ? (mean / sd) * (hands / (hands + SCORE_HALF_HANDS)) : null;
+  return { hands, bb100, se100, sd, score, vsHouse: bb100 - house };
+}
+const rounded = (x: ReturnType<typeof stats>, house: number) => ({
+  hands: x.hands, bb100: Math.round(x.bb100), se100: Number.isFinite(x.se100) ? Math.round(x.se100) : null,
+  swing: Math.round(x.sd * 10) / 10, vsHouse: Math.round(x.vsHouse), house: Math.round(house),
+  score: x.score == null ? null : Math.round(x.score * 1000) / 1000,
+});
+
+function toPublic(r: any, now: Date) {
+  const profile = (typeof r.profile === "string" ? JSON.parse(r.profile) : r.profile) as Profile;
+  const hands = Number(r.hands ?? 0);
+  const num = (x: unknown) => (x == null ? 0 : Number(x));
+  const byRoom = Object.fromEntries(AGENT_ROOMS.map((room) => [room,
+    rounded(stats(num(r[`${room}_hands`]), num(r[`${room}_mean`]), num(r[`${room}_sd`]), HOUSE_BY_ROOM[room]), HOUSE_BY_ROOM[room])])) as
+    Record<AgentRoom, ReturnType<typeof rounded>>;
+  // Autopilot's expected result at the same mix of table types.
+  const house = hands > 0 ? AGENT_ROOMS.reduce((t, room) => t + byRoom[room].hands * HOUSE_BY_ROOM[room], 0) / hands : HOUSE_BB100;
+  const all = stats(hands, num(r.mean_bb), num(r.sd_bb), house);
+  const { bb100, se100, sd, score, vsHouse } = all;
   const ageDays = (now.getTime() - new Date(r.created_at).getTime()) / 86_400_000;
-  const vsHouse = bb100 - HOUSE_BB100;
   const b: Behaviour = behaviour(profile as any);
   return {
     strategyId: r.strategy_id, name: r.name, description: r.description, version: r.version,
@@ -346,11 +376,12 @@ function toPublic(r: any, now: Date) {
       copiers: Number(r.copiers ?? 0), sessions: Number(r.sessions ?? 0), hands, net: Number(r.net ?? 0),
       per100Hands: hands ? Math.round((Number(r.net) * 100) / hands) : 0,
       bb100: Math.round(bb100), se100: Number.isFinite(se100) ? Math.round(se100) : null, swing: Math.round(sd * 10) / 10,
-      vsHouse: Math.round(vsHouse), score: score == null ? null : Math.round(score * 1000) / 1000,
+      vsHouse: Math.round(vsHouse), house: Math.round(house), score: score == null ? null : Math.round(score * 1000) / 1000,
     },
+    byRoom,
     verified: hands >= LISTING.minHands,
     qualified: hands >= LISTING.minHands && ageDays >= LISTING.minDays && Number.isFinite(se100) && vsHouse > se100,
-    listing: { minHands: LISTING.minHands, minDays: LISTING.minDays, house: HOUSE_BB100 },
+    listing: { minHands: LISTING.minHands, minDays: LISTING.minDays, house: Math.round(house) },
     fees: { creatorPercent: 8, platformPercent: 2 },
     createdAt: r.created_at,
   };

@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import type { Pool } from "pg";
 import { FakePlayFab } from "../src/services/playfab.js";
-import { StrategyError, StrategyService } from "../src/strategies/service.js";
+import { HOUSE_BY_ROOM, StrategyError, StrategyService } from "../src/strategies/service.js";
+import { AgentDeploymentService } from "../src/services/agentDeployments.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -27,7 +28,7 @@ const days = (n: number) => { now = new Date(now.getTime() + n * 86_400_000); };
 
 before(async () => {
   db = new PGlite();
-  for (const f of ["003_agent_deployments.sql", "004_tournaments.sql", "005_strategies.sql"])
+  for (const f of ["003_agent_deployments.sql", "004_tournaments.sql", "005_strategies.sql", "007_agent_money.sql", "008_agent_rooms.sql"])
     await db.exec(fs.readFileSync(path.join(here, "..", "migrations", f), "utf8"));
   pool = poolOver(db);
   playfab = new FakePlayFab();
@@ -35,10 +36,10 @@ before(async () => {
   await pool.query(`INSERT INTO pf_players (playfab_id, title_player_account_id, display_name) VALUES ('creator', 'TPA-creator', 'Ace'), ('copier', 'TPA-copier', 'Bo')`);
 });
 
-async function deployment(id: string, owner: string, netPnl: number, hands = 100) {
+async function deployment(id: string, owner: string, netPnl: number, hands = 100, room = "mixed") {
   await pool.query(
-    `INSERT INTO agent_deployments (deployment_id, owner_id, bankroll, max_hands, max_runtime_seconds, stake, stack, phase, net_pnl, hands_played)
-     VALUES ($1, $2, 5000, 100, 3600, 1000, $3, 'completed', $4, $5)`, [id, owner, 5000 + netPnl, netPnl, hands]);
+    `INSERT INTO agent_deployments (deployment_id, owner_id, bankroll, max_hands, max_runtime_seconds, stake, stack, phase, net_pnl, hands_played, room)
+     VALUES ($1, $2, 5000, 100, 3600, 1000, $3, 'completed', $4, $5, $6)`, [id, owner, 5000 + netPnl, netPnl, hands, room]);
 }
 
 test("publish a custom strategy; bad input is refused", async () => {
@@ -64,7 +65,7 @@ test("a new strategy can't be copied until 2,000 hands, 7 days and a record that
   assert.equal(s.qualified, false);
   await deployment("dep-x", "copier", 0);
   await assert.rejects(svc.attachCopy("dep-x", "copier", s.strategyId), /can't be copied yet/);
-  // The creator's own Agent: 2,000 hands at +5 big blinds a hand (+500 per 100, Autopilot is +386).
+  // The creator's own Agent: 2,000 hands at +5 big blinds a hand (+500 per 100, Autopilot is +371 at mixed tables).
   await deployment("dep-0", "creator", 200, 2000);
   await svc.attachCopy("dep-0", "creator", s.strategyId);
   await hands("dep-0", 2000, 250);
@@ -77,7 +78,7 @@ test("a new strategy can't be copied until 2,000 hands, 7 days and a record that
   const [listed] = await svc.list("top");
   assert.equal(listed.strategyId, s.strategyId);
   assert.equal(listed.qualified, true);
-  assert.equal(listed.record.vsHouse, 500 - 386);
+  assert.equal(listed.record.vsHouse, 500 - HOUSE_BY_ROOM.mixed);
   assert.ok(listed.record.score > 0);
 });
 
@@ -85,7 +86,7 @@ test("a record that doesn't beat Autopilot by more than its margin isn't copyabl
   const weak = await svc.publish("bob", { name: "Plodder", profile: { foldBelow: 0.5, raiseAbove: 0.64, aggression: 0.2, bluffChance: 0, raiseFractionOfPot: 0.4 } });
   await deployment("dep-weak", "bob", 0, 2000);
   await svc.attachCopy("dep-weak", "bob", weak.strategyId);
-  await hands("dep-weak", 2000, 150); // +3 bb a hand: +300 per 100, under Autopilot's +386
+  await hands("dep-weak", 2000, 150); // +3 bb a hand: +300 per 100, under Autopilot's +371
   days(8);
   const w = await svc.get(weak.strategyId);
   assert.equal(w.qualified, false);
@@ -187,4 +188,46 @@ test("recorded decisions build the twin and the coaching report", async () => {
   assert.equal(report.note, null); // no ANTHROPIC_API_KEY in tests
   const fromTwin = await svc.publish("creator", { name: "My Twin", fromTwin: true });
   assert.equal(fromTwin.source, "twin");
+});
+
+test("an owner's sessions take the table types in turn, and the claim carries it", async () => {
+  const agents = new AgentDeploymentService(pool);
+  const rooms: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    const d = await agents.enqueue({ deploymentId: `rot-${i}`, ownerId: "rotator", agentName: "R", profile: "balanced", strategyVersion: "v2",
+      strategyConfig: {}, bankroll: 5000, maxHands: 100, maxRuntimeSeconds: 600, stopLoss: 0, profitTarget: 0, stake: 1000 });
+    rooms.push(d.room);
+  }
+  assert.deepEqual(rooms, ["mixed", "tight", "loose", "wild", "mixed"]);
+  // A retried enqueue keeps the table type it was given.
+  const again = await agents.enqueue({ deploymentId: "rot-1", ownerId: "rotator", agentName: "R", profile: "balanced", strategyVersion: "v2",
+    strategyConfig: {}, bankroll: 5000, maxHands: 100, maxRuntimeSeconds: 600, stopLoss: 0, profitTarget: 0, stake: 1000 });
+  assert.equal(again.room, "tight");
+  const claimed = await agents.claim("table-1", 1000);
+  assert.equal(claimed?.room, "mixed");
+});
+
+test("records split by table type; the bar is Autopilot at the same mix of tables", async () => {
+  const s = await svc.publish("loosey", { name: "Station Hunter", profile: { foldBelow: 0.1, raiseAbove: 0.6, aggression: 0.95, bluffChance: 0, raiseFractionOfPot: 1.2 } });
+  await deployment("dep-mix", "loosey", 0, 1000, "mixed");
+  await svc.attachCopy("dep-mix", "loosey", s.strategyId);
+  await hands("dep-mix", 1000, 250); // +500 bb/100 at mixed tables
+  await deployment("dep-loose", "loosey", 0, 1000, "loose");
+  await svc.attachCopy("dep-loose", "loosey", s.strategyId);
+  await hands("dep-loose", 1000, 400); // +800 at loose tables
+  const d = await svc.get(s.strategyId);
+  assert.equal(d.byRoom.mixed.hands, 1000);
+  assert.equal(d.byRoom.mixed.bb100, 500);
+  assert.equal(d.byRoom.loose.bb100, 800);
+  assert.equal(d.byRoom.loose.vsHouse, 800 - HOUSE_BY_ROOM.loose);
+  assert.equal(d.byRoom.tight.hands, 0);
+  assert.equal(d.record.bb100, 650);
+  assert.equal(d.listing.house, Math.round((HOUSE_BY_ROOM.mixed + HOUSE_BY_ROOM.loose) / 2));
+  assert.equal(d.record.vsHouse, 650 - d.listing.house);
+  days(8);
+  const [loose] = (await svc.list("top", 30, undefined, "loose")).filter((x: any) => x.strategyId === s.strategyId);
+  assert.equal(loose.room, "loose");
+  assert.equal(loose.record.bb100, 800);
+  assert.equal(loose.record.copiers, 1);
+  assert.ok(!(await svc.list("top", 30, undefined, "tight")).some((x: any) => x.strategyId === s.strategyId)); // no hands there
 });
