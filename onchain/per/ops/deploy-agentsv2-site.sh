@@ -14,6 +14,12 @@ mkdir -p "$S"
 find "$S" -mindepth 1 -maxdepth 1 ! -name .vercel -exec rm -rf {} +
 cp -r "$BUILD/." "$S/"
 cp "$REPO/per/ops/test-site/vercel.json" "$REPO/per/client-web/rollup-wallet.html" "$REPO/per/client-web/rollup-wallet.js" "$S/"
+# The template's service worker serves Build/ files cache-first under a cache named after the product, version and data
+# file, which don't change between builds: returning players kept the old build. Name the cache after this build's
+# wasm, so the new sw.js replaces the old one and its activate step deletes the old cache.
+BUILD_ID=$(cat "$BUILD"/Build/*.wasm* | sha256sum | cut -c1-12)
+sed -i -E "s/^(const CACHE_NAME = \"[^\"]*)\";/\1-$BUILD_ID\";/" "$S/sw.js"
+grep -q "$BUILD_ID" "$S/sw.js" || { echo "sw.js cache name not updated"; exit 1; }
 cd "$S"
 if [ ! -f .vercel/project.json ]; then npx --yes vercel@latest link --yes --project "$PROJECT" >/dev/null; fi
 grep -q "\"projectName\":\"$PROJECT\"" .vercel/project.json || { echo "staging folder is linked to another project"; exit 1; }
