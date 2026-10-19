@@ -101,7 +101,11 @@ export function createInternalRouter(providedPool?: Pool, strategies?: StrategyS
       return;
     }
     try {
-      const deployment = await agents.claim(table, Math.trunc(stake));
+      // Newer game servers say how many Agents sit there and how many fit (Agents play each other: AgentFarmLink).
+      const seated = Number(req.query.agents), cap = Number(req.query.cap);
+      const seating = Number.isFinite(seated) && Number.isFinite(cap) && cap > 0
+        ? { agents: Math.max(0, Math.trunc(seated)), cap: Math.trunc(cap) } : undefined;
+      const deployment = await agents.claim(table, Math.trunc(stake), seating);
       res.json(
         deployment
           ? { ...deployment, found: true, status: "claimed", kind: "agent" }

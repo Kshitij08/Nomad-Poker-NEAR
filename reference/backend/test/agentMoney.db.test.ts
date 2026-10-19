@@ -32,7 +32,7 @@ let server: ReturnType<express.Express["listen"]>, base: string;
 
 before(async () => {
   db = new PGlite();
-  for (const f of ["003_agent_deployments.sql", "004_tournaments.sql", "005_strategies.sql", "006_agent_hand_replays.sql", "007_agent_money.sql", "008_agent_rooms.sql"])
+  for (const f of ["003_agent_deployments.sql", "004_tournaments.sql", "005_strategies.sql", "006_agent_hand_replays.sql", "007_agent_money.sql"])
     await db.exec(fs.readFileSync(path.join(here, "..", "migrations", f), "utf8"));
   await db.exec(fs.readFileSync(path.join(here, "..", "migrations", "007_agent_money.sql"), "utf8")); // re-run: a no-op
   pool = poolOver(db);

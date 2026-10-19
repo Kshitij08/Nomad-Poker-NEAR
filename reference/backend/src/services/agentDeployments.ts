@@ -56,9 +56,8 @@ export interface AgentHandInput {
 
 type AgentRow = Record<string, any>;
 
-/** The table types a Coins Agent's filler bots can be (BotProfile.Rooms in Unity). */
-export const AGENT_ROOMS = ["mixed", "tight", "loose", "wild"] as const;
-export type AgentRoom = (typeof AGENT_ROOMS)[number];
+/** How long a queued Agent waits for a table that already has Agents before an empty table may take it. */
+export const JOIN_WAIT_SECONDS = Number(process.env.AGENT_JOIN_WAIT_SECONDS ?? 45);
 
 const ACTIVE_PHASES = new Set<AgentPhase>([
   "queued",
@@ -111,8 +110,6 @@ export function toAgentPublic(row: AgentRow) {
     stopLoss: integer(row.stop_loss),
     profitTarget: integer(row.profit_target),
     stake: integer(row.stake),
-    room: String(row.room ?? "mixed"),
-    Room: String(row.room ?? "mixed"),
     hasCustom: Boolean(strategy.hasCustom),
     foldBelow: number(strategy.foldBelow),
     raiseAbove: number(strategy.raiseAbove),
@@ -193,10 +190,8 @@ export class AgentDeploymentService {
       `INSERT INTO agent_deployments (
          deployment_id, owner_id, agent_name, profile, strategy_version,
          strategy_config, bankroll, max_hands, max_runtime_seconds,
-         stop_loss, profit_target, stake, stack, funded, room
-       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$7,$13,
-         -- The owner's sessions take the table types in turn (AGENT_ROOMS).
-         (ARRAY['mixed','tight','loose','wild'])[1 + (SELECT COUNT(*) FROM agent_deployments WHERE owner_id = $2) % 4])
+         stop_loss, profit_target, stake, stack, funded
+       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$7,$13)
        ON CONFLICT (deployment_id) DO NOTHING`,
       [
         input.deploymentId,
@@ -221,7 +216,13 @@ export class AgentDeploymentService {
     return toAgentPublic(row);
   }
 
-  async claim(table: string, stake: number) {
+  /**
+   * The next queued Agent for this table. Agents play each other (review 20 Oct, option 2): while another table at
+   * this stake has Agents and room, a table with none takes an Agent only JOIN_WAIT_SECONDS after it was first queued
+   * (first, so one bounced between claims still gets a seat), and they sit together instead of one per table.
+   * `seating` is what the table reports: Agents there and how many fit (older game servers send neither).
+   */
+  async claim(table: string, stake: number, seating?: { agents: number; cap: number }) {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -257,15 +258,36 @@ export class AgentDeploymentService {
             AND hands_played = 0
             AND updated_at < NOW() - INTERVAL '2 minutes'`
       );
+      if (seating && seating.agents >= seating.cap) {
+        await client.query("COMMIT");
+        return null;
+      }
+      let waitSeconds = 0;
+      if (seating && seating.agents === 0) {
+        const busy = await client.query(
+          `SELECT assigned_table
+             FROM agent_deployments
+            WHERE phase IN ('seated', 'playing', 'stop_requested')
+              AND (stake = $1 OR stake = 0)
+              AND assigned_table IS NOT NULL AND assigned_table <> $2
+              AND updated_at > NOW() - INTERVAL '1 minute'
+            GROUP BY assigned_table
+           HAVING COUNT(*) < $3
+            LIMIT 1`,
+          [stake, table, seating.cap]
+        );
+        if (busy.rows[0]) waitSeconds = JOIN_WAIT_SECONDS;
+      }
       const selected = await client.query(
         `SELECT *
            FROM agent_deployments
           WHERE phase = 'queued'
             AND (stake = $1 OR stake = 0)
+            AND created_at <= NOW() - make_interval(secs => $2)
           ORDER BY CASE WHEN stake = $1 THEN 0 ELSE 1 END, created_at
           FOR UPDATE SKIP LOCKED
           LIMIT 1`,
-        [stake]
+        [stake, waitSeconds]
       );
       if (!selected.rows[0]) {
         // Help ops: stake mismatch is the usual reason a WebGL deploy stays "Queued" forever.
