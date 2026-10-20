@@ -185,6 +185,8 @@ export class AgentMoneyService {
       const e = err instanceof PlayFabError ? err : new PlayFabError(String(err), "Unknown", false);
       if (debit && e.final) { await this.finish(move, "failed", `${e.code}: ${e.message}`); return "failed"; }
       if (!debit && e.final) console.error(`[agent-money] credit ${move.idempotency_key} refused (${e.code}); will keep retrying.`);
+      // A pending move is what turns a start into "Coins are busy": say what PlayFab answered.
+      else console.warn(`[agent-money] ${move.kind} ${move.idempotency_key} attempt ${move.attempts} pending: ${e.code}: ${e.message}`);
       await this.retryLater(move, `${e.code}: ${e.message}`);
       return "pending";
     }
