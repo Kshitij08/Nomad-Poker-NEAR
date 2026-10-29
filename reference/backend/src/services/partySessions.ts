@@ -36,6 +36,7 @@ const MAX_OVERFLOW_INDEX = 20;
 
 const SESSION_RE = /^[A-Z0-9]{4,16}$/;
 const OVERFLOW_RE = /^(poker-free|poker-money)(-st[1-9][0-9]*)?-[1-9][0-9]*$/i;
+const STAKE_PRIMARY_RE = /^(poker-free|poker-money)-st[1-9][0-9]*$/i;
 const RESERVED = new Set(["POKERFREE", "POKERMONEY", "POKER-FREE", "POKER-MONEY"]);
 
 export function normalizePartySession(raw: string): string {
@@ -43,7 +44,8 @@ export function normalizePartySession(raw: string): string {
 }
 
 export function isOverflowSessionName(raw: string): boolean {
-  return OVERFLOW_RE.test(String(raw ?? "").trim());
+  const name = String(raw ?? "").trim();
+  return OVERFLOW_RE.test(name) || STAKE_PRIMARY_RE.test(name);
 }
 
 export function isPartySessionName(raw: string): boolean {
@@ -79,17 +81,20 @@ function gc(now = Date.now()): void {
   }
 }
 
-function activeCountUnlocked(): number {
+function activeCountUnlocked(kind: PartyKind): number {
   let n = 0;
   for (const room of rooms.values()) {
+    if (room.kind !== kind) continue;
     if (room.status === "pending" || room.status === "claimed" || room.status === "ready") n += 1;
   }
   return n;
 }
 
-function throwIfAtCap(): void {
-  if (activeCountUnlocked() >= MAX_ROOMS) {
-    throw Object.assign(new Error("Too many extra tables right now. Try again in a minute."), {
+// Counted per kind: open stake tables never expire, so a shared count let them lock out Party Create.
+function throwIfAtCap(kind: PartyKind): void {
+  if (activeCountUnlocked(kind) >= MAX_ROOMS) {
+    const what = kind === "private" ? "private rooms are open" : "extra tables are running";
+    throw Object.assign(new Error(`Too many ${what} right now. Try again in a minute.`), {
       status: 503,
     });
   }
@@ -116,7 +121,7 @@ export function startParty(
     return existing;
   }
 
-  throwIfAtCap();
+  throwIfAtCap("private");
 
   const room: PartyRoom = {
     session,
@@ -154,7 +159,30 @@ export function requestOverflow(mode: PartyMode, fullSession?: string, stake?: n
   }
   if (reusable) return reusable;
 
-  throwIfAtCap();
+  // Non-default stakes have no long-lived process. Start poker-free-st100 itself
+  // before opening poker-free-st100-2.
+  const root = mode === "chain" ? "poker-money" : "poker-free";
+  if (prefix !== root) {
+    const key = prefix.toLowerCase();
+    const primary = rooms.get(key);
+    if (!primary || primary.status === "failed") {
+      throwIfAtCap("quick");
+      const room: PartyRoom = {
+        session: prefix,
+        mode,
+        kind: "quick",
+        status: "pending",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      rooms.set(key, room);
+      return room;
+    }
+    if (!primary.full && (primary.status === "pending" || primary.status === "claimed" || primary.status === "ready"))
+      return primary;
+  }
+
+  throwIfAtCap("quick");
 
   let session: string | undefined;
   for (let n = 2; n <= MAX_OVERFLOW_INDEX; n++) {
