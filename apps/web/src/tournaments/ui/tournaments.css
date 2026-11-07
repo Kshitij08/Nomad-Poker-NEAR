@@ -1,0 +1,22 @@
+/* RetentionUi look (TMP default font = LiberationSans SDF) for the tournament overlay and panel. */
+.trn-canvas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.trn-root { position: absolute; left: 0; top: 0; transform-origin: 0 0; font-family: 'UnityLiberationSans', 'Liberation Sans', Arial, sans-serif; }
+.trn-root * { box-sizing: border-box; }
+.trn-group { display: flex; min-width: 0; min-height: 0; }
+.trn-label { display: flex; align-items: center; min-width: 0; line-height: 1.2; overflow: hidden; white-space: pre-line; pointer-events: none; }
+.trn-label > span { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; }
+.trn-button {
+  pointer-events: auto; border: 0; margin: 0; padding: 0 8px; cursor: pointer; display: flex; align-items: stretch; justify-content: center;
+  background: var(--trn-btn); font-family: inherit; min-width: 0;
+}
+.trn-button:hover { background: var(--trn-btn-hi); }
+.trn-button:active { background: var(--trn-btn-press); }
+.trn-button > .trn-label { flex: 1 1 auto; justify-content: center; }
+.trn-panel { pointer-events: auto; }
+.trn-scroll { overflow-y: auto; overflow-x: hidden; pointer-events: auto; flex: 0 0 auto; }
+.trn-scroll > .trn-group { min-height: 100%; }
+.trn-input {
+  pointer-events: auto; width: 100%; background: rgba(0, 0, 0, 0.45); color: #fff; border: 1px solid rgba(255, 255, 255, 0.18);
+  font: 18px 'UnityLiberationSans', Arial, sans-serif; padding: 0 12px;
+}
+.trn-hidden { display: none !important; }

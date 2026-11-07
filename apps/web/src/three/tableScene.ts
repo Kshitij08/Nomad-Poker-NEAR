@@ -1,5 +1,7 @@
 import {
   AmbientLight,
+  BufferAttribute,
+  BufferGeometry,
   Color,
   DirectionalLight,
   DoubleSide,
@@ -13,6 +15,7 @@ import {
   Quaternion,
   Scene,
   SRGBColorSpace,
+  type Texture,
   TextureLoader,
   Vector3,
 } from 'three';
@@ -203,6 +206,44 @@ export interface TableScene {
   dealer: { dealSpeed: number; holeStagger: number };
   cardOptions: { faceUpLocalEuler: { x: number; y: number; z: number }; faceDownLocalEuler: { x: number; y: number; z: number } };
   update(dt: number): void;
+  /**
+   * THEME HOOKS (theming module). setFelt: ThemeManager.ApplyTableFelt (Table_Canvas/Image sprite = pack.board).
+   * setBackground: ThemeManager.ApplyByName("Background_Image", pack.tableBackground) — the backdrop plane far below
+   * the felt. The plane is only created on the first call, so the table looks exactly as before until a theme is
+   * applied. Textures swap in once loaded (no blank frame).
+   */
+  setFelt(url: string): void;
+  setBackground(url: string): void;
+}
+
+/** Unity's built-in Plane: 10×10 in XZ, normal +Y, UVs against the axes (u = 0.5 − x/10, v = 0.5 − z/10). */
+function unityPlaneGeometry(): BufferGeometry {
+  const g = new BufferGeometry();
+  const p = [-5, 0, -5, 5, 0, -5, 5, 0, 5, -5, 0, 5];
+  const uv: number[] = [];
+  for (let i = 0; i < 4; i++) uv.push(0.5 - p[i * 3] / 10, 0.5 - p[i * 3 + 2] / 10);
+  g.setAttribute('position', new BufferAttribute(new Float32Array(p), 3));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]), 3));
+  g.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2));
+  g.setIndex([0, 2, 1, 0, 3, 2]);
+  return g;
+}
+
+/** Loads `url` and assigns it to `mat.map` when ready; a newer request for the same material wins. */
+function swapMap(mat: MeshBasicMaterial, url: string, loader: TextureLoader): void {
+  if (mat.userData.themeUrl === url) return;
+  mat.userData.themeUrl = url;
+  loader.load(url, (t: Texture) => {
+    if (mat.userData.themeUrl !== url) return t.dispose();
+    t.colorSpace = SRGBColorSpace;
+    t.anisotropy = 8;
+    const old = mat.map;
+    mat.map = t;
+    mat.visible = true;
+    mat.needsUpdate = true;
+    if (old && old.userData.themeOwned) old.dispose();
+    t.userData.themeOwned = true;
+  });
 }
 
 export function buildTableScene(): TableScene {
@@ -261,6 +302,24 @@ export function buildTableScene(): TableScene {
   const fu = s.card.cardView.faceUpLocalEuler;
   const fd = s.card.cardView.faceDownLocalEuler;
 
+  // THEME HOOK: Background/Background_Image (built-in Plane, bg.mat: unlit texture, rotated 180° about Y), lazily.
+  const themeLoader = new TextureLoader();
+  let backdrop: Mesh<BufferGeometry, MeshBasicMaterial> | null = null;
+  const setBackground = (url: string) => {
+    if (!backdrop) {
+      const o = s.table.objects.find((x) => x.name === 'Background_Image' && x.activeInHierarchy);
+      if (!o) return;
+      backdrop = new Mesh(unityPlaneGeometry(), new MeshBasicMaterial({ side: DoubleSide }));
+      backdrop.material.visible = false; // until the first texture arrives
+      backdrop.matrixAutoUpdate = false;
+      backdrop.matrix.fromArray((o as { worldMatrix: number[] }).worldMatrix);
+      backdrop.name = 'Background/Background_Image';
+      backdrop.renderOrder = -1;
+      world.add(backdrop);
+    }
+    swapMap(backdrop.material, url, themeLoader);
+  };
+
   return {
     scene,
     camera,
@@ -272,5 +331,7 @@ export function buildTableScene(): TableScene {
     update(dt: number) {
       for (const slot of slots) slot.player.update(dt);
     },
+    setFelt: (url: string) => swapMap(felt.material, url, themeLoader),
+    setBackground,
   };
 }

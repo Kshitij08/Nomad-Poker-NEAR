@@ -1,0 +1,21 @@
+/* Nomad menu (uGUI → DOM). Canvas roots carry the CanvasScaler transform; nodes are canvas units. */
+.screen-menu { background: #000; overflow: hidden; }
+.nm-screens, .nm-screen { position: absolute; inset: 0; overflow: hidden; }
+.nm-screens { user-select: none; -webkit-user-select: none; }
+.nm-layer { position: fixed; inset: 0; overflow: hidden; pointer-events: none; user-select: none; -webkit-user-select: none; }
+.nm-modal-layer { z-index: 960; pointer-events: auto; }
+.nm-connecting-layer { z-index: 700; pointer-events: auto; }
+.nm-table-layer { position: absolute; z-index: 5; }
+.nm-canvas { transform-origin: 0 0; }
+.nm-screens .u-node, .nm-layer .u-node { position: absolute; box-sizing: border-box; pointer-events: none; }
+/* Raycast targets (Image / TMP raycastTarget, EnsureClickable) block clicks; Selectables take them. */
+.nm-screens .u-node.nm-hit, .nm-layer .u-node.nm-hit { pointer-events: auto; }
+.nm-screens .u-node.nm-interactive, .nm-layer .u-node.nm-interactive { pointer-events: auto; cursor: pointer; touch-action: none; }
+.nm-screens .u-node.nm-nohit, .nm-layer .u-node.nm-nohit { pointer-events: none; }
+.nm-screens .u-node.nm-nohit *, .nm-layer .u-node.nm-nohit * { pointer-events: none !important; }
+.nm-ornament { position: absolute; background: no-repeat center / contain; pointer-events: none; }
+.nm-input { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; margin: 0; padding: 0;
+  border: 0; outline: 0; background: transparent; pointer-events: auto; cursor: text; }
+.nm-input::placeholder { color: var(--nm-ph, rgba(160, 170, 210, 0.8)); font-style: italic; opacity: 1; }
+/* Mask with showMaskGraphic off: the graphic only clips its children. */
+.nm-hide-gfx > .u-gfx { visibility: hidden; }

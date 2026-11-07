@@ -5,6 +5,7 @@ import { TableStage } from './table/tableStage';
 import { TableScreen, type TableScreenParams } from './table/tableScreen';
 import { ticker } from './anim/tween';
 import { MODULES } from './modules';
+import { bindThemeToTable } from './theming/install';
 import type { CardFace } from './table/cardView';
 
 /**
@@ -46,6 +47,7 @@ router.register('table', (c) => new TableScreen(c, stage));
 
 async function boot(): Promise<void> {
   for (const install of MODULES) await install(ctx);
+  bindThemeToTable(stage, ctx.services.theme);
   if (params.get('demo') === '1') {
     stage.setVisible(true);
     runDemoHand();

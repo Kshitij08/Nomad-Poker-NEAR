@@ -10,6 +10,7 @@ script in `web/tools/` instead of hand-copying numbers.
   it), `src/core/*` outside a subfolder your brief gives you, or another module's folder. If you need a change
   there, put the exact diff in your report.
 - Never run git commands that change the index or the working tree (no add/commit/stash/checkout/reset/clean).
+- Use only the built-in browser tools (`mcp__Claude_Browser__*`), never Claude in Chrome (the user's own browser).
 - Don't start another dev server. One runs at http://localhost:5180 (`npm run dev` in web/). If the browser pane is
   hidden, animation frames are throttled: load with `?paused=1` and drive time with `__poker.step(seconds)` in small
   chunks with `await new Promise(r => setTimeout(r, 0))` between them.
@@ -17,7 +18,8 @@ script in `web/tools/` instead of hand-copying numbers.
 
 ## App shell (read these first)
 - `src/app/app.ts`: `Screen`, `Router` (navigate / push overlays / back), `Services` (extend it with
-  `declare module '../app/app' { interface Services { … } }`), `EventBus` (`ctx.events`).
+  `declare module '../app/app' { interface Services { myThing?: MyThing } }` — ALWAYS optional (`?`): main.ts
+  creates the registry with only `account`, and modules fill theirs in at install), `EventBus` (`ctx.events`).
 - `src/app/services.ts`: `PlayerPrefs` (localStorage, use the SAME keys as the C#), `VirtualWallet`, `RewardGrant`,
   `AccountService`, `LocalAccount`.
 - `src/<module>/install.ts`: your module's entry point. `src/modules.ts` installs modules in this order: theming,

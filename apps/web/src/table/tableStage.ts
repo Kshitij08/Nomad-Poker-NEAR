@@ -1,4 +1,4 @@
-import { Clock, SRGBColorSpace, WebGLRenderer, type Object3D } from 'three';
+import { SRGBColorSpace, WebGLRenderer, type Object3D } from 'three';
 import { ticker } from '../anim/tween';
 import { buildTableScene, type TableScene } from '../three/tableScene';
 import { CardModelVisual, preloadCardTextures } from '../three/cardModel';
@@ -77,12 +77,29 @@ export class TableStage {
     window.addEventListener('resize', () => this.resize());
     this.resize();
 
-    const clock = new Clock();
-    this.renderer.setAnimationLoop(() => {
-      const raw = Math.min(clock.getDelta(), 0.1);
-      if (!this.paused) this.advance(raw);
-      if (this.visible) this.render();
-    });
+    // One clock for both drivers: animation frames while the tab is visible, and a timer fallback when the
+    // browser stops sending frames (background tab / hidden pane), so game time — engine waits, turn timers,
+    // the network client's pacing — keeps running like Unity's runInBackground. Frames are clamped to 0.1 s;
+    // long gaps are replayed in 0.1 s steps so tween and event order stay intact.
+    let last = performance.now();
+    const tick = (render: boolean) => {
+      const now = performance.now();
+      let gap = (now - last) / 1000;
+      last = now;
+      if (!this.paused) {
+        gap = Math.min(gap, 5);
+        while (gap > 0) {
+          const dt = Math.min(gap, 0.1);
+          this.advance(dt);
+          gap -= dt;
+        }
+      }
+      if (render && this.visible) this.render();
+    };
+    this.renderer.setAnimationLoop(() => tick(true));
+    setInterval(() => {
+      if (performance.now() - last > 250) tick(false);
+    }, 250);
     this.setVisible(false);
   }
 

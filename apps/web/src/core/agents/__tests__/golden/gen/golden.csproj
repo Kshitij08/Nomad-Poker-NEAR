@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Golden vectors for web/src/core/agents from the REAL Unity C# sources (Core/Agents, Net/Agents/AgentSessionHost,
+       Net/NomadUi/AgentStrategyWords), with a tiny UnityEngine shim (UnityShim.cs: Mathf/Time/Debug, same formulas as
+       Unity's reference source). Run: dotnet run -c Release (output path argument: ../agents-golden.json) -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>CS1574;CS1584;CS1581;CS1580;CS0618;CS8632</NoWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="UnityShim.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Core/Cards/*.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Core/Evaluation/*.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Core/Actions/*.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Core/State/*.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Core/Engine/*.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Core/Events/PokerEvent.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Core/Events/PokerTokenHash.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Core/Social/AvatarCatalog.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Bots/*.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Core/Agents/*.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Net/Agents/AgentSessionHost.cs" />
+    <Compile Include="../../../../../../../Assets/Scripts/Net/NomadUi/AgentStrategyWords.cs" />
+  </ItemGroup>
+</Project>

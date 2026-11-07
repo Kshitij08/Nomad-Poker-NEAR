@@ -1,0 +1,24 @@
+{
+  "name": "nomad-poker-local-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local authoritative table server for the web port (port of PokerServerGame + the Fusion session layer). Runs on localhost only.",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

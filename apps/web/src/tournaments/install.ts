@@ -1,4 +1,43 @@
 import type { AppContext } from '../app/app';
+import { addTableChrome } from '../table/tableScreen';
+import { tournamentOverlayChrome } from './overlay/tournamentOverlay';
+import { TournamentsPanelScreen } from './hud/tournamentsPanel';
+import { TournamentsService } from './service';
+import { registerNomadPartial } from '../menu/host';
+import { nomadTournamentsPartial } from './menu/nomadTournaments';
 
-/** Installs the tournaments module: its services on ctx.services and its screens on ctx.router. (Stub — being ported.) */
-export function install(_ctx: AppContext): void {}
+/**
+ * Installs the tournaments module:
+ * - ctx.services.tournaments (TournamentsService): browse / mine / host / code / register against the demo data
+ *   (or the backend's /api/tournaments when `?tournaments=live&tournamentBackend=<url>` — off by default), the
+ *   live TournamentClientState, joining, and the offline practice tournament;
+ * - screen 'tournaments' (overlay): the Tournaments panel (TournamentsHud), with a Practice tab;
+ * - table chrome: the in-table tournament overlay (TournamentTableOverlay), visible only at a tournament table;
+ * - the Nomad menu partial (NomadUiHost.Tournaments): Tournaments_Browse / MyTournaments / Host / JoinByCode and the
+ *   Leaderboard, bound to this service.
+ * Debug: `?practice=5|8|16` jumps straight into a practice tournament.
+ */
+export function install(ctx: AppContext): void {
+  const live = ctx.params.get('tournaments') === 'live';
+  const service = new TournamentsService(ctx, {
+    live,
+    backendUrl: ctx.params.get('tournamentBackend') ?? '',
+    sessionTicket: () => sessionTicketOf(ctx),
+    playFabId: () => (live ? ctx.services.account?.playerId ?? null : null),
+  });
+  ctx.services.tournaments = service;
+  ctx.router.register('tournaments', (c) => new TournamentsPanelScreen(c));
+  addTableChrome(tournamentOverlayChrome(service.state));
+  // NomadUiHost.Tournaments: the Nomad menu's Tournaments_* screens and the Leaderboard.
+  registerNomadPartial(nomadTournamentsPartial);
+  if (live) service.startPolling();
+
+  const practice = Number.parseInt(ctx.params.get('practice') ?? '', 10);
+  if (practice >= 2) setTimeout(() => void service.startPractice(practice), 0);
+}
+
+/** The PlayFab session ticket, if the account service exposes one (the PlayFab account port may add it). */
+function sessionTicketOf(ctx: AppContext): string | null {
+  const account = ctx.services.account as unknown as { sessionTicket?: string | null; playFabSessionTicket?: string | null } | undefined;
+  return account?.sessionTicket ?? account?.playFabSessionTicket ?? null;
+}

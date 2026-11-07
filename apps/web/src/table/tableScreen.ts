@@ -11,6 +11,11 @@ import { tickerWait, type TableView } from './tableView';
 export interface TableSession {
   start(): void | Promise<void>;
   stop(): void;
+  /**
+   * Optional: runs when the player chooses to leave, BEFORE stop(), while the table is still live — e.g. an
+   * on-chain cash-out that must finish at the table (PER/escrow). leave() awaits it, then stops the session.
+   */
+  requestLeave?(): Promise<void>;
 }
 
 export interface TableSessionHost {
@@ -80,6 +85,11 @@ export class TableScreen implements Screen {
   }
 
   private async leave(to?: string): Promise<void> {
+    try {
+      await this.session?.requestLeave?.();
+    } catch (err) {
+      console.warn('[table] requestLeave failed; leaving anyway', err);
+    }
     this.session?.stop();
     this.session = null;
     await this.params.onLeave?.();

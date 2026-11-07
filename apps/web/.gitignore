@@ -1,2 +1,6 @@
 node_modules
 dist
+# .NET golden-value generators: keep the projects (the repo root ignores *.csproj for Unity), drop build output
+!*.csproj
+bin/
+obj/

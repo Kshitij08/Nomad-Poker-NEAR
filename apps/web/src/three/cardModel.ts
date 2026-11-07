@@ -154,6 +154,32 @@ export class CardModelVisual implements CardVisual {
   }
 }
 
+/**
+ * THEME HOOK (theming module): CardLibrary.ApplyBackTexture / ApplyFoldedTexture. Every card shares the back and
+ * folded materials, so swapping their texture re-skins all cards at once (call SplineCardDealer.refreshCardBacks
+ * afterwards, as ThemeManager.ApplyCardBacks does). A url of null leaves that texture as it is. The new texture is
+ * swapped in once it has loaded, so the cards never flash blank.
+ */
+export function setCardBackTextures(backUrl: string | null, foldedUrl: string | null): void {
+  const m = materials();
+  const swap = (mat: MeshStandardMaterial, url: string | null) => {
+    if (!url) return;
+    const t = loader.load(url, () => {
+      if (mat.userData.themeUrl !== url) return; // a later theme won the race
+      const old = mat.map;
+      mat.map = t;
+      mat.needsUpdate = true;
+      if (old && old.userData.themeOwned) old.dispose();
+    });
+    t.colorSpace = SRGBColorSpace;
+    t.anisotropy = 8;
+    t.userData.themeOwned = true;
+    mat.userData.themeUrl = url;
+  };
+  swap(m.back, backUrl);
+  swap(m.folded, foldedUrl);
+}
+
 /** Preloads every card texture so the first deal doesn't pop. */
 export function preloadCardTextures(): void {
   materials();

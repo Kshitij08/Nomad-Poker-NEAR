@@ -8,6 +8,7 @@
  * Unity's own numbers, untouched.
  */
 import hudData from '../data/unity-hud.json';
+import { applyThemeSlots, classifyThemeDefault, getActiveHudTheme, trackThemedNode, type DefaultThemeKeys, type NodeThemeSlots } from './hudTheme';
 
 // ---------------------------------------------------------------- data types (the parts of unity-hud.json we read)
 
@@ -79,6 +80,7 @@ export interface NodeData {
     canvasGroup?: { alpha: number };
   };
   themeDefault?: {
+    rules?: string[];
     image?: { sprite?: string; type?: string; color?: ColorData; pixelsPerUnitMultiplier?: number };
     text?: { color?: ColorData };
   };
@@ -93,11 +95,11 @@ export interface CanvasData {
   scaler: { referenceResolution: Vec2; matchWidthOrHeight: number };
   root: NodeData;
 }
-interface FontData {
+export interface FontData {
   name: string;
   faceInfo: { pointSize: number; lineHeight: number; ascentLine: number; descentLine: number };
 }
-interface MaterialData {
+export interface MaterialData {
   underlay?: { enabled: boolean; color: ColorData; dilate: number };
 }
 
@@ -107,8 +109,16 @@ const data = hudData as unknown as {
   fonts: Record<string, FontData>;
   materials: Record<string, MaterialData>;
   tableView: { seatViews: { slot: number; canvas: string; mirrored: boolean; fields: Record<string, unknown> }[] };
+  theme: { default: string; packs: { theme: string; pot: string; menuButton: string; buttonLabelColor: ColorData; accentColor: ColorData }[] };
 };
 export const HUD_DATA = data;
+
+// THEME HOOK: the default pack's keys/colours, so buildNode can record which baked values are pack-dependent.
+const DEFAULT_THEME_KEYS: DefaultThemeKeys = (() => {
+  const p = data.theme.packs.find((k) => k.theme === data.theme.default) ?? data.theme.packs[0]!;
+  const c = (x: ColorData) => ({ r: x.rgba[0], g: x.rgba[1], b: x.rgba[2], a: x.rgba[3] });
+  return { pot: p.pot, menuButton: p.menuButton, label: c(p.buttonLabelColor), accent: c(p.accentColor) };
+})();
 
 export const ASSET_BASE = import.meta.env.BASE_URL ?? '/';
 export const assetUrl = (file: string): string => ASSET_BASE + file;
@@ -194,6 +204,11 @@ const FONT_FAMILY: Record<string, string> = {
   'LiberationSans SDF': "'UnityLiberationSans'",
 };
 
+/** Maps a TMP font asset name to a CSS font-family (for UI extracted by other tools, e.g. the menu scene). */
+export function registerTmpFont(tmpAssetName: string, cssFamily: string): void {
+  FONT_FAMILY[tmpAssetName] = cssFamily;
+}
+
 let measureCtx: CanvasRenderingContext2D | null = null;
 function measure(text: string, font: string): number {
   measureCtx ??= document.createElement('canvas').getContext('2d')!;
@@ -257,6 +272,28 @@ export interface TextState {
   wrap: boolean;
   margin: [number, number, number, number];
   underlay: RGBA | null;
+  /** TMP rich text (<b>, <i>, <color=#..>, <size=N%>, <br>): rendered as HTML (escaped, known tags only). Menu dialogs. */
+  rich?: boolean;
+  /** TMP overflow Ellipsis: text that still does not fit at its smallest size ends with "…". */
+  ellipsis?: boolean;
+}
+
+/** Strips TMP rich-text tags (for measuring). */
+export function stripTmpTags(s: string): string {
+  return s.replace(/<\/?(b|i|u|s|color|size|alpha|br|mark|sup|sub|font-weight|cspace|nobr|noparse|lowercase|uppercase|smallcaps)(=[^>]*)?>/gi, (m) => (/^<br/i.test(m) ? '\n' : ''));
+}
+
+/** TMP rich text → safe HTML: everything escaped, then the supported tags turned back into spans. */
+export function tmpRichToHtml(s: string): string {
+  const esc = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return esc
+    .replace(/&lt;br\s*\/?&gt;/gi, '\n')
+    .replace(/&lt;b&gt;/gi, '<b>').replace(/&lt;\/b&gt;/gi, '</b>')
+    .replace(/&lt;i&gt;/gi, '<i>').replace(/&lt;\/i&gt;/gi, '</i>')
+    .replace(/&lt;u&gt;/gi, '<u>').replace(/&lt;\/u&gt;/gi, '</u>')
+    .replace(/&lt;color=(?:&quot;)?(#[0-9a-f]{3,8}|[a-z]+)(?:&quot;)?&gt;/gi, (_m, c: string) => `<span style="color:${c}">`)
+    .replace(/&lt;size=(\d+(?:\.\d+)?)(%|px)?&gt;/gi, (_m, v: string, u: string | undefined) => `<span style="font-size:${u === '%' ? `${v}%` : `${v}px`}">`)
+    .replace(/&lt;\/(color|size)&gt;/gi, '</span>');
 }
 
 let uid = 0;
@@ -288,6 +325,8 @@ export class UNode {
   /** SeatView fold greyscale: non-null = brightness applied to every colour under the fold root. */
   foldBrightness: number | null = null;
   maskWithGraphic = false;
+  /** THEME HOOK: which theme-pack values this node's baked default-theme override used (see hudTheme.ts). */
+  themeSlots: NodeThemeSlots | null = null;
   /** Canvas roots only: screen px per canvas unit (sliced sprites are rasterised at this resolution). */
   renderScale = 1;
 
@@ -458,6 +497,13 @@ export class UNode {
 
     if (!sp || isWhiteCircle(sp) || !sp.file) {
       // No sprite (plain quad) / white disc / Unity built-in rounded "Background": colour + radius.
+      g.backgroundImage = '';
+      g.filter = '';
+      if (this.sliceCanvas) {
+        this.sliceCanvas.remove();
+        this.sliceCanvas = null;
+        this.sliceKey = '';
+      }
       g.backgroundColor = cssColor({ ...c, a: 1 });
       if (!sp) g.borderRadius = '0';
       else if (!sp.file) {
@@ -469,15 +515,29 @@ export class UNode {
         const fy = Math.min(1, h / (B + T || 1));
         g.borderRadius = `${L * fx}px / ${T * fy}px`;
       } else g.borderRadius = '50%';
+      if (this.maskWithGraphic) {
+        // Mask over a white disc / rounded plate: clip the children to the same rounded shape.
+        this.el.style.overflow = 'hidden';
+        this.el.style.borderRadius = g.borderRadius;
+      }
       return;
     }
 
+    // THEME HOOK: a sprite swapped in at runtime (theme packs) must not keep the plain-quad fill / radius.
+    g.backgroundColor = '';
+    g.borderRadius = '';
     const grey = Math.abs(c.r - c.g) < 0.002 && Math.abs(c.g - c.b) < 0.002;
     g.filter = grey && c.r < 0.999 ? `brightness(${c.r})` : '';
     if (img.type === 'Sliced') {
       // CSS border-image seams under a scaled transform, so the 9-slice is drawn into a canvas at screen resolution.
+      g.backgroundImage = '';
       this.drawSliced(sp, img.ppuM, grey ? null : c);
     } else {
+      if (this.sliceCanvas) {
+        this.sliceCanvas.remove();
+        this.sliceCanvas = null;
+        this.sliceKey = '';
+      }
       const url = grey ? assetUrl(sp.file) : tintedUrl(sp.file, c, () => this.render());
       if (!url) return;
       g.backgroundImage = `url("${url}")`;
@@ -568,7 +628,7 @@ export class UNode {
     const key = `${shown}|${availW.toFixed(2)}|${availH.toFixed(2)}`;
     if (key !== this.lastFit) {
       this.lastFit = key;
-      this.fittedSize = t.autoSize ? this.fit(shown.replace(/\n+$/, ''), availW, availH) : t.fontSize;
+      this.fittedSize = t.autoSize ? this.fit((t.rich ? stripTmpTags(shown) : shown).replace(/\n+$/, ''), availW, availH) : t.fontSize;
       const b = this.textBox.style;
       b.left = `${ml}px`;
       b.top = `${mt}px`;
@@ -581,7 +641,20 @@ export class UNode {
       b.fontWeight = t.bold ? '700' : '400';
       b.lineHeight = String(t.lineRatio);
       b.fontSize = `${this.fittedSize}px`;
-      this.textSpan!.textContent = shown.replace(/\n+$/, '');
+      if (t.rich) this.textSpan!.innerHTML = tmpRichToHtml(shown.replace(/\n+$/, ''));
+      else this.textSpan!.textContent = shown.replace(/\n+$/, '');
+      if (t.ellipsis) {
+        const sp = this.textSpan!.style;
+        sp.overflow = 'hidden';
+        sp.textOverflow = 'ellipsis';
+        sp.maxWidth = '100%';
+        const lines = Math.max(1, Math.floor((availH + 0.5) / (t.lineRatio * this.fittedSize)));
+        if (t.wrap && lines > 1) {
+          sp.display = '-webkit-box';
+          sp.webkitBoxOrient = 'vertical';
+          sp.webkitLineClamp = String(lines);
+        } else sp.whiteSpace = t.wrap ? 'nowrap' : 'pre';
+      }
     }
     const fold = this.fold();
     const c = fold !== null ? foldGrey(t.color, fold) : t.color;
@@ -638,6 +711,12 @@ export class UNode {
 export interface BuildOptions {
   /** Node names (not paths) to leave out entirely. */
   skip?: (n: NodeData) => boolean;
+  /** Sprite / font / material tables for trees from other extractors (default: unity-hud.json's). */
+  sprites?: Record<string, SpriteData>;
+  fonts?: Record<string, FontData>;
+  materials?: Record<string, MaterialData>;
+  /** Called for every node built (after its children), with the data it came from (menu: attaches widgets). */
+  onNode?: (n: UNode, d: NodeData) => void;
 }
 
 /** Builds the DOM tree for a node (authored values + the default SOLANA theme overrides). */
@@ -659,7 +738,7 @@ export function buildNode(d: NodeData, opts: BuildOptions = {}): UNode {
   if (im && im.enabled !== false) {
     const th = d.themeDefault?.image;
     const spriteKey = th?.sprite ?? im.sprite;
-    const sprite = spriteKey ? (data.sprites[spriteKey] ?? null) : null;
+    const sprite = spriteKey ? ((opts.sprites ?? data.sprites)[spriteKey] ?? null) : null;
     n.image = {
       sprite: sprite ?? (spriteKey ? { name: 'Background', ppu: 100, rect: [0, 0, 32, 32], border: [10, 10, 10, 10] } : null),
       type: th?.type ?? im.type,
@@ -675,9 +754,9 @@ export function buildNode(d: NodeData, opts: BuildOptions = {}): UNode {
   if (comp.mask?.enabled) n.maskWithGraphic = true;
   const tx = comp.text;
   if (tx && tx.enabled !== false) {
-    const font = data.fonts[tx.font];
+    const font = (opts.fonts ?? data.fonts)[tx.font];
     const fi = font?.faceInfo;
-    const mat = tx.material ? data.materials[tx.material] : undefined;
+    const mat = tx.material ? (opts.materials ?? data.materials)[tx.material] : undefined;
     n.text = {
       text: tx.text,
       family: FONT_FAMILY[font?.name ?? ''] ?? "'UnityNotoSansBold'",
@@ -696,6 +775,13 @@ export function buildNode(d: NodeData, opts: BuildOptions = {}): UNode {
       underlay: mat?.underlay?.enabled ? rgba(mat.underlay.color) : null,
     };
   }
+  // THEME HOOK: remember the pack-dependent overrides; a theme picked before this tree was built applies now.
+  n.themeSlots = classifyThemeDefault(d.themeDefault, DEFAULT_THEME_KEYS);
+  const activeTheme = getActiveHudTheme();
+  if (n.themeSlots) {
+    trackThemedNode(n);
+    if (activeTheme) applyThemeSlots(n, activeTheme);
+  }
   for (const c of d.children ?? []) {
     if (!c.rect) continue; // particle VFX transforms (not RectTransforms)
     if (opts.skip?.(c)) continue;
@@ -706,6 +792,7 @@ export function buildNode(d: NodeData, opts: BuildOptions = {}): UNode {
     (n as unknown as { activeSelfFlag: boolean }).activeSelfFlag = false;
     n.el.style.display = 'none';
   }
+  opts.onNode?.(n, d);
   return n;
 }
 

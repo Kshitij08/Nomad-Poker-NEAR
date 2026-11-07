@@ -8,9 +8,15 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "server": "npm --prefix server install --no-audit --no-fund --silent && npm --prefix server run dev"
   },
   "dependencies": {
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
+    "@solana/web3.js": "1.98.4",
+    "bs58": "6.0.0",
+    "buffer": "6.0.3",
     "three": "^0.170.0"
   },
   "devDependencies": {

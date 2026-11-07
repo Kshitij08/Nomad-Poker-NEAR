@@ -11,6 +11,7 @@ export class WebAudio implements AudioPort {
   private readonly ctx = new AudioContext();
   private readonly buffers = new Map<PokerSound, AudioBuffer>();
   private readonly lastPlayed = new Map<PokerSound, number>();
+  private readonly masterGain: GainNode;
   private readonly sfxGain: GainNode;
   private readonly musicGain: GainNode;
   private timerSource: AudioBufferSourceNode | null = null;
@@ -20,7 +21,7 @@ export class WebAudio implements AudioPort {
     private readonly base = `${import.meta.env.BASE_URL}assets/sfx/`,
     volumes = DEFAULT_VOLUMES,
   ) {
-    const master = this.ctx.createGain();
+    const master = (this.masterGain = this.ctx.createGain());
     master.gain.value = volumes.master;
     master.connect(this.ctx.destination);
     this.sfxGain = this.ctx.createGain();
@@ -38,6 +39,13 @@ export class WebAudio implements AudioPort {
     };
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
+  }
+
+  /** PokerVolumeControl: master / music / sfx levels (0..1), applied immediately. */
+  setVolumes(master: number, music: number, sfx: number): void {
+    this.masterGain.gain.value = master;
+    this.musicGain.gain.value = music;
+    this.sfxGain.gain.value = sfx;
   }
 
   /** Fetches and decodes every mapped clip. */
