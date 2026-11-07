@@ -228,6 +228,25 @@ export const PerAgent = {
     return j;
   },
 
+  /**
+   * A public GET from the same backend (NomadUiHost.LoadSol's unsigned path: the SOL marketplace listings). The JSON
+   * object, or an error with the backend's `error` (else "HTTP <code>").
+   */
+  async get(http: PerHttp, backendUrl: string, path: string): Promise<AgentJson> {
+    if (!backendUrl) throw new Error(NO_PER_BACKEND);
+    const { status, body } = await http.get(backendUrl + path);
+    let j: AgentJson;
+    try {
+      const parsed: unknown = JSON.parse(body);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+      j = parsed as AgentJson;
+    } catch {
+      throw new Error(`HTTP ${status}`);
+    }
+    if (status !== 200) throw new Error(j.error != null ? String(j.error) : `HTTP ${status}`);
+    return j;
+  },
+
   /** Rollup, anyone: the Agent's seat was left another way; free its record for a new seat. */
   release: (t: PerTableAddresses, wallet: PublicKey): TransactionInstruction =>
     buildPerIx('agent_release', {}, { wallet, agent_state: stateAddress(wallet), table: t.table, ledger: t.ledger }),

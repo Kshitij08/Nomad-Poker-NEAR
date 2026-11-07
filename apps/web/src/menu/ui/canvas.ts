@@ -7,6 +7,7 @@ import { UNode, whenFontsReady, type RGBA } from '../../hud/unityUi';
 import { MENU_DATA, nodeDataAt, type MenuComponents, type MenuNodeData } from '../data';
 import { buildTree, runLayout, type TreeEnv } from './tree';
 import { PokerSound } from '../../core';
+import { menuReference, portraitMenuLayout } from '../../layout/portraitMenu';
 
 export type Vec2 = [number, number];
 
@@ -15,7 +16,9 @@ export type Vec2 = [number, number];
  * height on wide screens, by width on tall ones, so the whole reference layout stays on screen.
  */
 export function expandScale(w: number, h: number, ref: Vec2 = [1920, 1080]): number {
-  return Math.min(w / ref[0], h / ref[1]);
+  // Portrait (layout/portraitMenu.ts): a 1080×1920 reference instead of the 16:9 one.
+  const r = menuReference(ref);
+  return Math.min(w / r[0], h / r[1]);
 }
 
 /** A full-viewport canvas root inside `host` (an element covering the viewport). */
@@ -50,6 +53,7 @@ export class ScreenCanvas {
     this.root.sizeDelta = [w / s, h / s];
     this.root.renderScale = s;
     this.root.el.style.transform = `scale(${s})`;
+    portraitMenuLayout(this.root); // portrait: re-anchors the screen's nodes into one column (landscape: restores)
     this.root.layout();
   }
 

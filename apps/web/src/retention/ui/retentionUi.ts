@@ -9,6 +9,7 @@ import { HUD_DATA, assetUrl, buildNode, rgba, type NodeData, type RGBA, type Spr
 import { PokerSound } from '../../core/orchestration/pokerSound';
 import type { AppContext } from '../../app/app';
 import './retention.css';
+import { portraitMenuLayout, portraitScaleFor } from '../../layout/portraitMenu';
 
 interface ColorData {
   hex: string;
@@ -208,6 +209,8 @@ export const chipsScaler = (): ScalerData => DATA.canvases.chips?.scaler ?? { mo
 export function scaleFactor(scaler: ScalerData, w: number, h: number): number {
   const [rw, rh] = scaler.referenceResolution;
   if (scaler.mode !== 1) return 1;
+  const portrait = portraitScaleFor(scaler.referenceResolution, w, h); // layout/portraitMenu.ts
+  if (portrait !== null) return portrait;
   return Math.pow(2, (1 - scaler.match) * Math.log2(w / rw) + scaler.match * Math.log2(h / rh));
 }
 
@@ -253,6 +256,7 @@ export class OverlayCanvas {
     r.scale = [1, 1];
     r.sizeDelta = [w / s, h / s];
     r.renderScale = s;
+    portraitMenuLayout(r, 'panels'); // portrait: centred panels fill the 1080 column (layout/portraitMenu.ts)
     r.layout(); // sizes first, so fitters can read parent rects
     for (const f of this.fitters) applyAspectFitter(f.node, f.mode, f.ratio);
     for (const fn of this.beforeLayout) fn();

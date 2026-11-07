@@ -5,6 +5,7 @@ import { TournamentsPanelScreen } from './hud/tournamentsPanel';
 import { TournamentsService } from './service';
 import { registerNomadPartial } from '../menu/host';
 import { nomadTournamentsPartial } from './menu/nomadTournaments';
+import { endpointParam } from '../app/flags';
 
 /**
  * Installs the tournaments module:
@@ -21,7 +22,7 @@ export function install(ctx: AppContext): void {
   const live = ctx.params.get('tournaments') === 'live';
   const service = new TournamentsService(ctx, {
     live,
-    backendUrl: ctx.params.get('tournamentBackend') ?? '',
+    backendUrl: endpointParam(ctx.params, 'tournamentBackend') ?? '',
     sessionTicket: () => sessionTicketOf(ctx),
     playFabId: () => (live ? ctx.services.account?.playerId ?? null : null),
   });

@@ -8,6 +8,7 @@ import { installReplayChrome } from './replaySession';
 import type { AgentMoney } from './server/agentFarm';
 import { registerNomadPartial } from '../menu/host';
 import { agentsPartial } from './nomad/agentsPartial';
+import { endpointParam } from '../app/flags';
 
 declare module '../app/app' {
   interface Services {
@@ -73,7 +74,7 @@ export function install(ctx: AppContext): void {
   let deploy: AgentDeployService | null = null;
 
   // The real backend only when explicitly asked for (?agentBackend=https://…); never by default (PORTING-RULES).
-  const remote = ctx.params.get('agentBackend');
+  const remote = endpointParam(ctx.params, 'agentBackend');
   const backend: AgentBackend = remote
     ? new HttpAgentBackend(remote, async () => null)
     : new LocalAgentBackend({

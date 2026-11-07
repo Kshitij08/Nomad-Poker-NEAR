@@ -22,6 +22,8 @@ import { evaluateCurve, type Keyframe } from '../anim/animCurve';
 import { Ease, ticker, type Tween } from '../anim/tween';
 import { animatorOnEnable, uiClip } from './uiClips';
 import { buildNode, HUD_DATA, UNode, type RGBA } from './unityUi';
+import { overlayScale } from '../layout/portraitRects';
+import { portraitBettingRects } from '../layout/portraitHud';
 
 // ---------------------------------------------------------------- Selectable transitions
 
@@ -203,6 +205,7 @@ export class BettingPanelView implements BettingPanelPort {
   private holdTimer = 0;
   showing = false;
   scaleFactor = 1;
+  private portraitRects: ReturnType<typeof portraitBettingRects> | null = null;
 
   constructor(parent: HTMLElement) {
     const canvas = HUD_DATA.canvases.find((c) => c.role === 'screen-hud')!;
@@ -274,10 +277,12 @@ export class BettingPanelView implements BettingPanelPort {
 
   /** CanvasScaler (Scale With Screen Size, 1920×1080, match 0.5) → root size in canvas units + CSS scale. */
   layout(w: number, h: number): void {
-    const s = Math.pow(2, 0.5 * Math.log2(w / 1920) + 0.5 * Math.log2(h / 1080));
+    // Portrait (layout/portraitHud.ts): 720-wide reference and a thumb-sized row + stacked raise panel.
+    const s = overlayScale(w, h);
     this.scaleFactor = s;
     this.root.sizeDelta = [w / s, h / s];
     this.root.renderScale = s;
+    (this.portraitRects ??= portraitBettingRects(this.root)).apply();
     this.root.layout();
     this.root.el.style.transform = `scale(${s})`;
   }

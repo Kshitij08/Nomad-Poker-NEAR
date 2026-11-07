@@ -138,6 +138,12 @@ export const cssColor = (c: RGBA): string =>
 const mul = (a: RGBA, b: RGBA): RGBA => ({ r: a.r * b.r, g: a.g * b.g, b: a.b * b.b, a: a.a * b.a });
 
 /** SeatView.Greyscale: luminance (.299/.587/.114) × foldedBrightness, alpha kept (foldedGrayscale is 1 in the scene). */
+/** How a TMP face colour appears in this Linear-space project: each channel sRGB→linear (alpha unchanged). */
+export function tmpFaceColor(c: RGBA): RGBA {
+  const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  return { r: lin(c.r), g: lin(c.g), b: lin(c.b), a: c.a };
+}
+
 export function foldGrey(c: RGBA, brightness: number): RGBA {
   const l = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) * brightness;
   return { r: l, g: l, b: l, a: c.a };
@@ -658,7 +664,11 @@ export class UNode {
     }
     const fold = this.fold();
     const c = fold !== null ? foldGrey(t.color, fold) : t.color;
-    this.textBox.style.color = cssColor(c);
+    // The project renders in Linear colour space and TMP's SDF shader uses the vertex colour without gamma
+    // correction, so on screen a TMP face colour appears as sRGB→linear of the authored value (measured against
+    // Unity frames: Town label #6d5711 shows as #2A1801). Image colours are unaffected; underlay/outline colours
+    // come from the material and are corrected by Unity, so only the face colour is converted.
+    this.textBox.style.color = cssColor(tmpFaceColor(c));
     if (t.underlay) {
       // NotoSans-Bold SDF_Stroke: underlay ON, dilate 1, offset 0 → a thin black rim behind the face.
       const u = fold !== null ? foldGrey(t.underlay, fold) : t.underlay;

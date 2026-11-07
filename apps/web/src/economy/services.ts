@@ -276,7 +276,7 @@ export const avatarService: AvatarService = {
   fromUrl: (u) => AvatarUrl.fromUrl(u),
   spriteUrl: (a) => {
     const id = AvatarCatalog.idOf(a);
-    return id ? `${import.meta.env.BASE_URL ?? '/'}assets/ui/Test/UI/Common_UI/Pro_Pic/${id}.png` : null;
+    return id ? `${import.meta.env.BASE_URL ?? '/'}assets/ui/Test/UI/Common_UI/Pro_Pic/${id}.webp` : null;
   },
 };
 

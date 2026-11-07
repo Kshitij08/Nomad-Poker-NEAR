@@ -1,0 +1,43 @@
+frame	t	event	detail
+0	0.000	HandStartedEvent	HandNumber=1 ButtonSeat=0 SmallBlindSeat=1 BigBlindSeat=2 Seats=[Poker.Core.SeatSnapshot,Poker.Core.SeatSnapshot,Poker.Core.SeatSnapshot,Poker.Core.SeatSnapshot,Poker.Core.SeatSnapshot,Poker.Core.SeatSnapshot,Poker.Core.SeatSnapshot]
+0	0.000	BlindPostedEvent	Seat=1 Amount=25 IsSmallBlind=True StackAfter=4975 PotAfter=25
+8	0.133	BlindPostedEvent	Seat=2 Amount=50 IsSmallBlind=False StackAfter=4950 PotAfter=75
+16	0.267	HoleCardsDealtEvent	Seat=0 Card0=Five of Spades Card1=Seven of Hearts
+24	0.400	HoleCardsDealtEvent	Seat=1 Card0=King of Clubs Card1=Queen of Hearts
+32	0.533	HoleCardsDealtEvent	Seat=2 Card0=King of Hearts Card1=Two of Clubs
+40	0.667	HoleCardsDealtEvent	Seat=3 Card0=Seven of Spades Card1=Four of Hearts
+48	0.800	HoleCardsDealtEvent	Seat=4 Card0=Six of Clubs Card1=Eight of Spades
+56	0.933	HoleCardsDealtEvent	Seat=5 Card0=Two of Diamonds Card1=Eight of Hearts
+64	1.067	HoleCardsDealtEvent	Seat=6 Card0=Three of Spades Card1=Ten of Diamonds
+72	1.200	BettingRoundChangedEvent	Round=Preflop
+372	6.200	ActionRequestedEvent	Seat=3 Legal=Poker.Core.LegalActions
+433	7.217	PlayerActedEvent	Seat=3 Action=Fold Amount=0 StackAfter=5000 PotAfter=75
+458	7.633	ActionRequestedEvent	Seat=4 Legal=Poker.Core.LegalActions
+519	8.650	PlayerActedEvent	Seat=4 Action=Fold Amount=0 StackAfter=5000 PotAfter=75
+544	9.067	ActionRequestedEvent	Seat=5 Legal=Poker.Core.LegalActions
+605	10.083	PlayerActedEvent	Seat=5 Action=Fold Amount=0 StackAfter=5000 PotAfter=75
+630	10.500	ActionRequestedEvent	Seat=6 Legal=Poker.Core.LegalActions
+691	11.517	PlayerActedEvent	Seat=6 Action=Raise Amount=150 StackAfter=4850 PotAfter=225
+716	11.933	ActionRequestedEvent	Seat=0 Legal=Poker.Core.LegalActions
+1616	26.933	PlayerActedEvent	Seat=0 Action=Fold Amount=0 StackAfter=5000 PotAfter=225
+1641	27.350	ActionRequestedEvent	Seat=1 Legal=Poker.Core.LegalActions
+1702	28.367	PlayerActedEvent	Seat=1 Action=Call Amount=150 StackAfter=4850 PotAfter=350
+1727	28.783	ActionRequestedEvent	Seat=2 Legal=Poker.Core.LegalActions
+1788	29.800	PlayerActedEvent	Seat=2 Action=Raise Amount=500 StackAfter=4500 PotAfter=800
+1813	30.217	ActionRequestedEvent	Seat=6 Legal=Poker.Core.LegalActions
+1874	31.233	PlayerActedEvent	Seat=6 Action=Raise Amount=1550 StackAfter=3450 PotAfter=2200
+1899	31.650	ActionRequestedEvent	Seat=1 Legal=Poker.Core.LegalActions
+1960	32.667	PlayerActedEvent	Seat=1 Action=Raise Amount=5000 StackAfter=0 PotAfter=7050
+1985	33.083	ActionRequestedEvent	Seat=2 Legal=Poker.Core.LegalActions
+2046	34.100	PlayerActedEvent	Seat=2 Action=Call Amount=5000 StackAfter=0 PotAfter=11550
+2071	34.517	ActionRequestedEvent	Seat=6 Legal=Poker.Core.LegalActions
+2132	35.533	PlayerActedEvent	Seat=6 Action=Call Amount=5000 StackAfter=0 PotAfter=15000
+2157	35.950	BettingRoundChangedEvent	Round=Flop
+2157	35.950	CommunityDealtEvent	Round=Flop NewCards=[Jack of Clubs,Three of Hearts,Four of Diamonds] Board=[Jack of Clubs,Three of Hearts,Four of Diamonds]
+2457	40.950	BettingRoundChangedEvent	Round=Turn
+2457	40.950	CommunityDealtEvent	Round=Turn NewCards=[Jack of Diamonds] Board=[Jack of Clubs,Three of Hearts,Four of Diamonds,Jack of Diamonds]
+2757	45.950	BettingRoundChangedEvent	Round=River
+2757	45.950	CommunityDealtEvent	Round=River NewCards=[Six of Hearts] Board=[Jack of Clubs,Three of Hearts,Four of Diamonds,Jack of Diamonds,Six of Hearts]
+3057	50.950	ShowdownEvent	Entries=[Poker.Core.ShowdownEntry,Poker.Core.ShowdownEntry,Poker.Core.ShowdownEntry] Board=[Jack of Clubs,Three of Hearts,Four of Diamonds,Jack of Diamonds,Six of Hearts]
+3177	52.950	PotAwardedEvent	Seat=6 SeatName=Bot 6 Amount=15000 StackAfter=15000 PotAfter=0 Reason=Pot
+3297	54.950	HandEndedEvent	HandNumber=1

@@ -184,7 +184,7 @@ describe('extracted theme data', () => {
       expect(spriteFor(p, 'Pot')!.border).toEqual([500, 406, 406, 415]);
     }
     // The default pack reuses the very files the table loads today (assets/3d).
-    expect(spriteFor(getPack('Default'), 'Board')!.file).toBe('assets/3d/Board.png');
-    expect(spriteFor(getPack('Default'), 'CardBack')!.file).toBe('assets/3d/card_back_side.png');
+    expect(spriteFor(getPack('Default'), 'Board')!.file).toBe('assets/3d/Board.webp');
+    expect(spriteFor(getPack('Default'), 'CardBack')!.file).toBe('assets/3d/card_back_side.webp');
   });
 });

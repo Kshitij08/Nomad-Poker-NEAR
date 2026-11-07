@@ -30,6 +30,8 @@ import type { Stakes } from '../per/entry';
 import { NomadPlayMode } from '../solana/identity';
 import { w3 } from '../services';
 import { copyText } from '../ui/perUi';
+import { marketOnchain, marketState, solProfile, type AgentStrategyLike } from '../../menu/screens/market';
+import { copyTerms, deployBusyText, deployedText, withCopiedStrategy } from './solAgentCopy';
 
 /** 0.5 devnet SOL (the playtest's Deposit). */
 const DEPOSIT_LAMPORTS = 500_000_000n;
@@ -723,6 +725,33 @@ class OnchainPartial {
       this.pollSolAgent();
     };
     agentsOnchain.paintFields = (root) => this.paintAgentFields(root);
+    // The SOL marketplace (NomadUiHost.Market's ONCHAIN half): its requests, the wallet that decides SolCopy.Own, $.
+    marketOnchain.loadSol = (title, path, show, signed, data) => void this.loadSol(title, path, show, signed, data);
+    marketOnchain.walletAddress = () => this.solana.address;
+    marketOnchain.sol = (lamports) => sol(lamports);
+  }
+
+  /** NomadUiHost.LoadSol: the SOL marketplace (per/backend solStrategies.ts): public GETs, or requests signed by the play key. */
+  private async loadSol(title: string, path: string, show: (j: Record<string, unknown>) => void, signed: boolean, data: Record<string, unknown> | null): Promise<void> {
+    const host = this.host;
+    try {
+      let j: Record<string, unknown>;
+      if (signed) {
+        if (!(await this.connectWallet())) return;
+        const per = await this.loadPer();
+        const key = await per.gameWallet.playKey((s) => host.busy(title, s));
+        host.busy(title, 'Loading…');
+        j = await per.agent.call(per.http, per.config.perBackendUrl, key, path, data);
+      } else {
+        host.busy(title, 'Loading…');
+        const per = await this.loadPer();
+        j = await per.agent.get(per.http, per.config.perBackendUrl, path);
+      }
+      show(j);
+    } catch (e) {
+      host.message(title, friendly(e));
+      console.error(e);
+    }
   }
 
   /** The Overview's setup fields mean SOL in ONCHAIN mode (stake, stop-loss, profit target). */
@@ -792,21 +821,24 @@ class OnchainPartial {
       if (!ready) return;
       const { per, key } = ready;
       const maxMinutes = Math.trunc(this.readField(root, 'MaxMinutesField', 60));
-      const settings = {
+      // Agents v2: a copied marketplace strategy (Market panel). The service plays its profile; the fee terms go on
+      // chain with the Agent below.
+      const copy = marketState.copiedSol;
+      const settings = withCopiedStrategy({
         strategy: 'custom',
-        custom: this.solProfile(),
+        custom: solProfile(this.strategy),
         stake: Number(stake), buyInBB: 50, maxHands: Math.trunc(this.readField(root, 'MaxHandsField', 100)), maxMinutes,
         stopLoss: Number(this.readSol(root, 'StopLossField', 0)), profitTarget: Number(this.readSol(root, 'ProfitField', 0)),
-      };
+      }, copy);
       host.busy('Your Agent', 'Getting an Agent key from the Agent service…');
       const prep = await per.agent.call(per.http, per.config.perBackendUrl, key, '/agents/prepare', { settings });
       if (BigInt(String(prep.stake)) !== stake) throw new Error('the Agent service answered with a different stake');
-      // A copied marketplace SOL strategy (NomadUiHost.Market CopiedSol) isn't ported: own strategy, no fee terms.
-      if (prep.terms && typeof prep.terms === 'object') throw new Error('the Agent service asked for fees on your own strategy');
-      const until = BigInt(Math.floor(Date.now() / 1000) + Math.min(maxMinutes * 60 + 15 * 60, per.agent.MAX_SECONDS - 60));
-      host.busy('Your Agent', 'Setting your Agent on chain (your play key signs; no wallet prompt)…');
       const { PublicKey } = await import('@solana/web3.js');
-      await per.gameWallet.sendAsKey(key, per.agent.set(key, new PublicKey(String(prep.agent)), until, stake, null)[1]!);
+      // Sign only the terms the player was shown (none for their own strategy).
+      const terms = copyTerms(copy, this.solana.address, prep.terms, (creator, c, p) => per.agent.terms(new PublicKey(creator), c, p));
+      const until = BigInt(Math.floor(Date.now() / 1000) + Math.min(maxMinutes * 60 + 15 * 60, per.agent.MAX_SECONDS - 60));
+      host.busy('Your Agent', deployBusyText(copy));
+      await per.gameWallet.sendAsKey(key, per.agent.set(key, new PublicKey(String(prep.agent)), until, stake, terms)[1]!);
       let last: unknown = null;
       for (let i = 0; i < 6; i++) {
         await wait(2000);
@@ -819,7 +851,7 @@ class OnchainPartial {
         }
       }
       if (last) throw last;
-      host.message('Agent deployed', `It plays SOL tables with up to ${sol(stake)} at risk. If no table has players, it opens one.`);
+      host.message('Agent deployed', deployedText(sol(stake), copy));
       this.nextSolAgentPoll = 0;
     } catch (e) {
       host.message('Agent', friendly(e));
@@ -827,23 +859,9 @@ class OnchainPartial {
     }
   }
 
-  /** The Strategy tab as per/backend's profile (agentBot.ts Profile). */
-  private solProfile(): Record<string, unknown> {
-    const st = (this.ctx.services as unknown as { agentStrategy?: { values: number[]; positionWeight: number; brain: number; streets: (number[] | null)[]; hasStreets: boolean } }).agentStrategy;
-    const v = st?.values ?? [0.3, 0.7, 0.5, 0.1, 0.5];
-    const five = (x: number[]) => ({ foldBelow: x[0], raiseAbove: x[1], aggression: x[2], bluffChance: x[3], raiseFractionOfPot: x[4] });
-    const p: Record<string, unknown> = five(v);
-    if (st && st.positionWeight > 0) p.positionWeight = st.positionWeight;
-    if (st?.brain === 2) p.brain = 2;
-    if (st?.hasStreets) {
-      const keys = ['preflop', 'flop', 'turn', 'river'];
-      const streets: Record<string, unknown> = {};
-      st.streets.forEach((s, i) => {
-        if (s) streets[keys[i]!] = five(s);
-      });
-      p.streets = streets;
-    }
-    return p;
+  /** AgentStrategyState (agents module), for SolProfile (menu/screens/market.ts solProfile). */
+  private get strategy(): AgentStrategyLike | undefined {
+    return (this.ctx.services as unknown as { agentStrategy?: AgentStrategyLike }).agentStrategy;
   }
 
   private pollSolAgent(): void {

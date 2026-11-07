@@ -10,6 +10,7 @@ import { UNode } from '../../hud/unityUi';
 import { AvatarCatalog } from '../../core/social/avatarCatalog';
 import type { AppContext } from '../../app/app';
 import { PokerSound } from '../../core/orchestration/pokerSound';
+import { portraitMenuLayout, portraitScaleFor } from '../../layout/portraitMenu';
 
 interface ScalerData {
   mode: number;
@@ -90,6 +91,8 @@ export function avatarSprite(avatar: number, name: string | null): SpriteData | 
 export function scaleFactor(s: ScalerData, w: number, h: number): number {
   const [rw, rh] = s.referenceResolution;
   if (s.mode !== 1) return 1;
+  const portrait = portraitScaleFor(s.referenceResolution, w, h); // layout/portraitMenu.ts
+  if (portrait !== null) return portrait;
   return Math.pow(2, (1 - s.match) * Math.log2(w / rw) + s.match * Math.log2(h / rh));
 }
 
@@ -127,6 +130,7 @@ export class OverlayCanvas {
     r.pivot = [0.5, 0.5];
     r.sizeDelta = [w / s, h / s];
     r.renderScale = s;
+    portraitMenuLayout(r, 'panels'); // portrait: centred panels fill the 1080 column (layout/portraitMenu.ts)
     r.layout();
     for (const fn of this.before) fn();
     r.layout();

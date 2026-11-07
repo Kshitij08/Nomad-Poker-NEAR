@@ -63,15 +63,15 @@
     "mainTexture": "Assets/Test/UI/Common_UI/010.png"
    },
    "texture": {
-    "file": "010.png",
+    "file": "010.webp",
     "source": "Assets/Test/UI/Common_UI/010.png",
     "sourcePixels": [
      1805,
      1663
     ],
     "exportedPixels": [
-     512,
-     472
+     256,
+     236
     ]
    }
   },
@@ -120,15 +120,15 @@
     0
    ],
    "coin": {
-    "file": "coin_05.png",
+    "file": "coin_05.webp",
     "source": "Assets/Test/UI/Common_UI/coin_05.png",
     "sourcePixels": [
      3979,
      4020
     ],
     "exportedPixels": [
-     507,
-     512
+     254,
+     256
     ],
     "pixelsPerUnit": 100,
     "worldSize": [
@@ -147,15 +147,15 @@
     -0.334
    ],
    "coin": {
-    "file": "coin_06.png",
+    "file": "coin_06.webp",
     "source": "Assets/Test/UI/Common_UI/coin_06.png",
     "sourcePixels": [
      3979,
      4020
     ],
     "exportedPixels": [
-     507,
-     512
+     254,
+     256
     ],
     "pixelsPerUnit": 100,
     "worldSize": [
@@ -174,15 +174,15 @@
     -0.334
    ],
    "coin": {
-    "file": "coin_01.png",
+    "file": "coin_01.webp",
     "source": "Assets/Test/UI/Common_UI/coin_01.png",
     "sourcePixels": [
      3979,
      4020
     ],
     "exportedPixels": [
-     507,
-     512
+     254,
+     256
     ],
     "pixelsPerUnit": 100,
     "worldSize": [
@@ -201,15 +201,15 @@
     -0.044
    ],
    "coin": {
-    "file": "coin_03.png",
+    "file": "coin_03.webp",
     "source": "Assets/Test/UI/Common_UI/coin_03.png",
     "sourcePixels": [
      3979,
      4020
     ],
     "exportedPixels": [
-     507,
-     512
+     254,
+     256
     ],
     "pixelsPerUnit": 100,
     "worldSize": [
@@ -228,15 +228,15 @@
     -0.044
    ],
    "coin": {
-    "file": "coin_04.png",
+    "file": "coin_04.webp",
     "source": "Assets/Test/UI/Common_UI/coin_04.png",
     "sourcePixels": [
      3979,
      4020
     ],
     "exportedPixels": [
-     507,
-     512
+     254,
+     256
     ],
     "pixelsPerUnit": 100,
     "worldSize": [
@@ -255,15 +255,15 @@
     -0.396
    ],
    "coin": {
-    "file": "coin_02.png",
+    "file": "coin_02.webp",
     "source": "Assets/Test/UI/Common_UI/coin_02.png",
     "sourcePixels": [
      3979,
      4020
     ],
     "exportedPixels": [
-     507,
-     512
+     254,
+     256
     ],
     "pixelsPerUnit": 100,
     "worldSize": [

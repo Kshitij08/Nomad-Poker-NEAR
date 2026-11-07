@@ -25,7 +25,7 @@ const loader = new TextureLoader();
 const textures = new Map<string, Texture>();
 
 function texture(unityPath: string): Texture {
-  const file = unityPath.split('/').pop()!;
+  const file = unityPath.split('/').pop()!.replace(/\.(png|jpe?g)$/i, '.webp'); // shipped as WebP (tools/optimize-assets.mjs)
   let t = textures.get(file);
   if (!t) {
     t = loader.load(ASSET_BASE + encodeURIComponent(file));

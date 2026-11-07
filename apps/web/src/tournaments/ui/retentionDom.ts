@@ -6,6 +6,7 @@
  */
 import { tmpRichToHtml } from '../../hud/unityUi';
 import './tournaments.css';
+import { overlayScale } from '../../layout/portraitRects';
 
 type C = [number, number, number, number];
 const css = ([r, g, b, a]: C): string => `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
@@ -38,7 +39,8 @@ export function overlayCanvas(parent: HTMLElement, sortingOrder: number): { root
   const layout = () => {
     const w = host.clientWidth || window.innerWidth;
     const h = host.clientHeight || window.innerHeight;
-    const s = Math.pow(2, 0.5 * Math.log2(w / 1920) + 0.5 * Math.log2(h / 1080));
+    const s = overlayScale(w, h); // portrait: 720-wide reference (layout/portraitRects.ts)
+    root.style.setProperty('--canvas-scale', String(s));
     root.style.width = `${w / s}px`;
     root.style.height = `${h / s}px`;
     root.style.transform = `scale(${s})`;

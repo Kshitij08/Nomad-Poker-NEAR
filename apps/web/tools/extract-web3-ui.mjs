@@ -25,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UnityProject, buildHierarchy, normId, parseUnityFile, readMeta, imageSize } from './lib/unity-yaml.mjs';
 import { decodePng, resizeRgba, encodePng } from './lib/png.mjs';
+import { optimizeAssets } from './optimize-assets.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(HERE, '..');
@@ -365,3 +366,6 @@ if (notCopied.length) { md += '\n## Not copied\n\n'; for (const [k, s] of notCop
 md += '\nThe cash-out dialog uses the table HUD\'s sprites (`assets/ui/…`, extract-unity-hud.mjs).\n';
 if (COPY) { fs.mkdirSync(OUT_ASSETS, { recursive: true }); fs.writeFileSync(path.join(OUT_ASSETS, 'MANIFEST.md'), md); }
 console.log(`Assets: ${copies.length} files, ${(bytes / 1024).toFixed(1)} KB${COPY ? ' copied' : ' (dry run)'}`);
+
+// WebP + right-size what was just copied (or, without copying, point the JSON at the existing WebP files).
+await optimizeAssets({ dirs: ['web3'], convert: COPY });

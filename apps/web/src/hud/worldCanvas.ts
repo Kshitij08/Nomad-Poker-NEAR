@@ -1,4 +1,5 @@
 import { Vector3, type PerspectiveCamera } from 'three';
+import { worldCanvasSpace } from '../layout/canvasSpace';
 import { evaluateCurve, type Keyframe } from '../anim/animCurve';
 import { Ease, ticker, type Tween } from '../anim/tween';
 import type { UNode } from './unityUi';
@@ -44,6 +45,7 @@ export class Shaker {
 
 const tmp = new Vector3();
 
+
 /**
  * A world-space canvas lying flat on the table (rotation 90° about X), seen by the straight-down camera. Its root
  * node is `size` canvas units square; each frame the canvas plane is projected (origin, +x, +y) and the root gets
@@ -69,21 +71,26 @@ export class WorldCanvas {
   }
 
   private projectPoint(x: number, y: number, z: number, camera: PerspectiveCamera, w: number, h: number): [number, number] {
-    // Unity → three: z negated.
-    tmp.set(x, y, -z).project(camera);
+    // Unity → three: the Unity root's transform (z negated; turned/scaled by the portrait table).
+    tmp.set(x, y, z).applyMatrix4(worldCanvasSpace.matrix).project(camera);
     return [((tmp.x + 1) / 2) * w, ((1 - tmp.y) / 2) * h];
   }
 
   /** Re-projects the canvas onto the viewport (CSS px). Call after the camera moved / the viewport resized. */
   update(camera: PerspectiveCamera, w: number, h: number): void {
-    const [px, py, pz] = this.position;
+    const [px, py, pz] = worldCanvasSpace.positions.get(this) ?? this.position;
     const d = 100 * this.unitScale;
     const o = this.projectPoint(px, py, pz, camera, w, h);
     const ex = this.projectPoint(px + d, py, pz, camera, w, h);
     const ey = this.projectPoint(px, py, pz + d, camera, w, h);
     // Screen delta per canvas unit along canvas +x and canvas +y (= Unity world +z = screen up).
-    const X = [(ex[0] - o[0]) / 100, (ex[1] - o[1]) / 100];
-    const Y = [(ey[0] - o[0]) / 100, (ey[1] - o[1]) / 100];
+    let X = [(ex[0] - o[0]) / 100, (ex[1] - o[1]) / 100];
+    let Y = [(ey[0] - o[0]) / 100, (ey[1] - o[1]) / 100];
+    if (worldCanvasSpace.upright) {
+      const k = Math.hypot(X[0], X[1]) * (worldCanvasSpace.scales.get(this) ?? worldCanvasSpace.hudScale);
+      X = [k, 0];
+      Y = [0, -k];
+    }
     // Sliced sprites rasterise at this resolution; re-render only when it drifts noticeably (resize, big zoom).
     const pxPerUnit = Math.hypot(X[0], X[1]);
     const prev = this.root.renderScale;

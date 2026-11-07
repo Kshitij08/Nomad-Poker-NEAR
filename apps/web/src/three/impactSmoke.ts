@@ -13,7 +13,7 @@ import type { Rng } from '../anim/feel';
  *  - Limit Velocity: speed limit 1, dampen 0.3, drag 0.05 x size x velocity;
  *  - Size over Lifetime curve (0,0) -> (0.631, 0.993) -> (1, 0);
  *  - billboard renderer, material "cfxr ww smoke bright hdr ab" (alpha blended, texture copied to
- *    public/assets/vfx/cfxr-ww-smoke-bright.png).
+ *    public/assets/vfx/cfxr-ww-smoke-bright.webp).
  *
  * Approximations: Unity's limit-velocity dampen is applied here as a frame-rate independent
  * 1 - (1 - 0.3)^(dt * 60) per frame; drag uses the start size; the CFXR soft-particle fade and
@@ -34,7 +34,7 @@ export const IMPACT_SMOKE = {
     { time: 0.63094693, value: 0.99279994, inSlope: 1.2745562, outSlope: 1.2745562 },
     { time: 1, value: 0, inSlope: 0, outSlope: 0 },
   ] as Keyframe[],
-  texture: 'assets/vfx/cfxr-ww-smoke-bright.png',
+  texture: 'assets/vfx/cfxr-ww-smoke-bright.webp',
 };
 
 interface Puff {

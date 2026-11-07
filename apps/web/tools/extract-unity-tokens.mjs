@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readUnityYaml, num, vec3, quat } from './unity-yaml.mjs';
 import { decodePng, resizeRgba, encodePng } from './lib/png.mjs';
+import { optimizeAssets } from './optimize-assets.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, '../..');
@@ -131,3 +132,6 @@ const result = {
 fs.writeFileSync(outJson, JSON.stringify(result, null, 1));
 console.log(`wrote ${outJson}`);
 console.log(JSON.stringify({ settings: result.settings, plane: result.prefab.plane.material, coins: denominations.map((d) => [d.value, d.coin.file, d.coin.worldSize]) }, null, 1));
+
+// WebP + right-size what was just copied (or, without copying, point the JSON at the existing WebP files).
+await optimizeAssets({ dirs: ['tokens'], convert: true });

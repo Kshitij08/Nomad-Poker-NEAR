@@ -29,6 +29,7 @@ import { FreePlayLeaderboardMath } from '../core/leaderboards/freePlayLeaderboar
 import { RewardGrant } from '../app/services';
 import { VirtualEconomy } from '../economy/virtualEconomy';
 import type { TournamentClientState } from '../tournaments/clientState';
+import { buildEndpoint, endpointParam } from '../app/flags';
 
 const LastSessionKey = 'Poker.Net.LastSession';
 
@@ -297,7 +298,7 @@ export class NetService {
 
   constructor(private readonly ctx: AppContext) {
     const host = typeof location !== 'undefined' ? location.hostname || '127.0.0.1' : '127.0.0.1';
-    this.serverUrl = ctx.params.get('netServer') ?? `ws://${host}:${DEFAULT_SERVER_PORT}`;
+    this.serverUrl = endpointParam(ctx.params, 'netServer') ?? buildEndpoint('VITE_NET_SERVER') ?? `ws://${host}:${DEFAULT_SERVER_PORT}`;
     this.wallet = browserWallet(ctx);
     this.identity = browserIdentity(ctx, this.wallet);
     this.voiceEnabled = ctx.params.get('voice') === '1';

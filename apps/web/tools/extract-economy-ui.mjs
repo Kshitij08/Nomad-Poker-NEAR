@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { UnityProject, buildHierarchy, normId, parseUnityFile, readMeta, imageSize } from './lib/unity-yaml.mjs';
 import { decodePng, resizeRgba, encodePng } from './lib/png.mjs';
+import { optimizeAssets } from './optimize-assets.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(HERE, '..');
@@ -465,3 +466,6 @@ if (missing.length) { md += `\n## Not copied\n\n`; for (const [k, s] of missing)
 if (COPY) fs.writeFileSync(path.join(WEB, 'public', OUT_DIR, 'MANIFEST.md'), md);
 console.log(`Wrote ${rel(OUT_JSON)} (${(fs.statSync(OUT_JSON).size / 1024).toFixed(0)} KB); assets: ${files} files, ${(bytes / 1024 / 1024).toFixed(2)} MB${COPY ? '' : ' (dry run)'}`);
 if (missing.length) console.warn('Sprites not copied:', missing.map(([, s]) => s.name + ' ' + (s.note || '')).join(', '));
+
+// WebP + right-size what was just copied (or, without copying, point the JSON at the existing WebP files).
+await optimizeAssets({ dirs: ['economy'], convert: COPY });

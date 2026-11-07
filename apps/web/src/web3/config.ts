@@ -11,6 +11,7 @@
  *    `cd backend && npm run dev` on http://localhost:8787), else "not configured";
  *  - mainnet is refused outright (`assertAllowedUrl`).
  */
+import { endpointParam } from '../app/flags';
 
 export type Cluster = 'devnet';
 
@@ -82,14 +83,14 @@ export function makeConfig(params: URLSearchParams = new URLSearchParams()): Web
   const allowDeployed = params.get('web3deployed') === '1';
   // Test builds of Unity (editor, POKER_STAGING) use the test program; the web port is a test build.
   const perIsTestProgram = params.get('perprogram') !== 'live';
-  const gameBackendUrl = clean(params.get('web3backend')) ?? (allowDeployed ? DEPLOYED.gameBackend : '');
+  const gameBackendUrl = clean(endpointParam(params, 'web3backend')) ?? (allowDeployed ? DEPLOYED.gameBackend : '');
   const perBackendUrl =
-    clean(params.get('perbackend')) ?? (allowDeployed ? (perIsTestProgram ? DEPLOYED.perAgentsV2Backend : DEPLOYED.perTestBackend) : '');
+    clean(endpointParam(params, 'perbackend')) ?? (allowDeployed ? (perIsTestProgram ? DEPLOYED.perAgentsV2Backend : DEPLOYED.perTestBackend) : '');
   const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
   return Object.freeze({
     cluster: 'devnet',
-    solanaRpcUrl: clean(params.get('web3rpc')) ?? 'https://api.devnet.solana.com',
-    escrowRpcUrl: clean(params.get('web3rpc')) ?? 'https://api.devnet.solana.com',
+    solanaRpcUrl: clean(endpointParam(params, 'web3rpc')) ?? 'https://api.devnet.solana.com',
+    escrowRpcUrl: clean(endpointParam(params, 'web3rpc')) ?? 'https://api.devnet.solana.com',
     teeUrl: 'https://devnet-tee.magicblock.app',
     perProgram: perIsTestProgram ? IDS.perTestProgram : IDS.perLiveProgram,
     perIsTestProgram,

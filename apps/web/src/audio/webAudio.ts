@@ -3,7 +3,9 @@ import { DEFAULT_VOLUMES, PokerSound, SFX_LIBRARY, type AudioPort } from '../cor
 /**
  * Port of PokerAudio / PokerAudioRuntime on the Web Audio API. One-shots play at
  * master × sfx × clip trim, with each clip's retrigger guard (unscaled time). Music plays the intro,
- * then the loop scheduled seamlessly after it. The turn-timer bed starts so its last tick lands on the
+ * then the loop. Music is STREAMED through <audio> elements routed into the music gain — decoding the two
+ * ~2-minute tracks would hold ~90 MB of PCM, too much on phones; the cost is a few-ms seam at the intro→loop
+ * hand-off and at loop wrap on some browsers (Unity schedules them sample-accurately). The turn-timer bed starts so its last tick lands on the
  * timeout. Browsers only allow audio after a user gesture, so everything is unlocked on the first
  * pointer/key press (Unity's WebGL build has the same constraint).
  */
@@ -48,10 +50,12 @@ export class WebAudio implements AudioPort {
     this.sfxGain.gain.value = sfx;
   }
 
-  /** Fetches and decodes every mapped clip. */
+  /** Fetches and decodes every mapped clip except the music, which streams. */
   async load(): Promise<void> {
     await Promise.all(
       Object.entries(SFX_LIBRARY).map(async ([key, entry]) => {
+        const sound = Number(key) as PokerSound;
+        if (sound === PokerSound.MusicIntro || sound === PokerSound.MusicLoop) return;
         try {
           const res = await fetch(this.base + encodeURIComponent(entry!.file));
           const buf = await this.ctx.decodeAudioData(await res.arrayBuffer());
@@ -98,20 +102,25 @@ export class WebAudio implements AudioPort {
 
   private startMusic(): void {
     if (this.musicStarted) return;
-    const intro = this.buffers.get(PokerSound.MusicIntro);
-    const loop = this.buffers.get(PokerSound.MusicLoop);
-    if (!intro && !loop) return;
+    const introEntry = SFX_LIBRARY[PokerSound.MusicIntro];
+    const loopEntry = SFX_LIBRARY[PokerSound.MusicLoop];
+    if (!introEntry && !loopEntry) return;
     this.musicStarted = true;
-    let at = this.ctx.currentTime + 0.05;
-    if (intro) {
-      this.source(intro, SFX_LIBRARY[PokerSound.MusicIntro]!.volume, this.musicGain).start(at);
-      at += intro.duration;
-    }
-    if (loop) {
-      const src = this.source(loop, SFX_LIBRARY[PokerSound.MusicLoop]!.volume, this.musicGain);
-      src.loop = true;
-      src.start(at);
-    }
+    const stream = (file: string, volume: number, loop: boolean): HTMLAudioElement => {
+      const el = new Audio(this.base + encodeURIComponent(file));
+      el.preload = 'auto';
+      el.loop = loop;
+      const g = this.ctx.createGain();
+      g.gain.value = volume;
+      this.ctx.createMediaElementSource(el).connect(g).connect(this.musicGain);
+      return el;
+    };
+    const loop = loopEntry ? stream(loopEntry.file, loopEntry.volume, true) : null;
+    if (introEntry) {
+      const intro = stream(introEntry.file, introEntry.volume, false);
+      intro.addEventListener('ended', () => void loop?.play().catch(() => {}), { once: true });
+      void intro.play().catch(() => {});
+    } else void loop?.play().catch(() => {});
   }
 
   private source(buf: AudioBuffer, volume: number, out: AudioNode): AudioBufferSourceNode {

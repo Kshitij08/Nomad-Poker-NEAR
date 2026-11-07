@@ -1,0 +1,147 @@
+[
+ {
+  "shot": "00-hand-start",
+  "meanAbs": 50.27,
+  "pctOver40": 60.56
+ },
+ {
+  "shot": "01-deal-a",
+  "meanAbs": 5.53,
+  "pctOver40": 3.43
+ },
+ {
+  "shot": "02-deal-b",
+  "meanAbs": 5.48,
+  "pctOver40": 3.34
+ },
+ {
+  "shot": "03-deal-c",
+  "meanAbs": 5.43,
+  "pctOver40": 3.19
+ },
+ {
+  "shot": "04-cards-landed",
+  "meanAbs": 5.59,
+  "pctOver40": 3.22
+ },
+ {
+  "shot": "05-fold-grey",
+  "meanAbs": 5.63,
+  "pctOver40": 3.31
+ },
+ {
+  "shot": "06-flop-a",
+  "meanAbs": 5.33,
+  "pctOver40": 2.95
+ },
+ {
+  "shot": "07-flop-b",
+  "meanAbs": 5.61,
+  "pctOver40": 3.18
+ },
+ {
+  "shot": "08-flop-c",
+  "meanAbs": 6.31,
+  "pctOver40": 4.02
+ },
+ {
+  "shot": "09-flop-d",
+  "meanAbs": 5.22,
+  "pctOver40": 2.83
+ },
+ {
+  "shot": "10-turn-a",
+  "meanAbs": 5.41,
+  "pctOver40": 2.96
+ },
+ {
+  "shot": "11-turn-b",
+  "meanAbs": 5.24,
+  "pctOver40": 2.84
+ },
+ {
+  "shot": "12-river-a",
+  "meanAbs": 5.78,
+  "pctOver40": 3.7
+ },
+ {
+  "shot": "13-river-b",
+  "meanAbs": 6.27,
+  "pctOver40": 4.3
+ },
+ {
+  "shot": "14-river-c",
+  "meanAbs": 6.91,
+  "pctOver40": 4.78
+ },
+ {
+  "shot": "15-river-d",
+  "meanAbs": 16.67,
+  "pctOver40": 13.23
+ },
+ {
+  "shot": "16-river-e",
+  "meanAbs": 27.93,
+  "pctOver40": 25.42
+ },
+ {
+  "shot": "17-river-f",
+  "meanAbs": 5.78,
+  "pctOver40": 3.33
+ },
+ {
+  "shot": "18-showdown-a",
+  "meanAbs": 6.41,
+  "pctOver40": 3.56
+ },
+ {
+  "shot": "19-showdown-b",
+  "meanAbs": 5.21,
+  "pctOver40": 2.82
+ },
+ {
+  "shot": "20-showdown-c",
+  "meanAbs": 5.21,
+  "pctOver40": 2.82
+ },
+ {
+  "shot": "21-award-a",
+  "meanAbs": 5.34,
+  "pctOver40": 2.95
+ },
+ {
+  "shot": "22-award-b",
+  "meanAbs": 5.41,
+  "pctOver40": 3.03
+ },
+ {
+  "shot": "23-award-c",
+  "meanAbs": 5.88,
+  "pctOver40": 3.46
+ },
+ {
+  "shot": "24-award-d",
+  "meanAbs": 5.99,
+  "pctOver40": 3.83
+ },
+ {
+  "shot": "25-return-a",
+  "meanAbs": 6.66,
+  "pctOver40": 4.28
+ },
+ {
+  "shot": "26-return-b",
+  "meanAbs": 6.21,
+  "pctOver40": 3.69
+ },
+ {
+  "shot": "27-return-c",
+  "meanAbs": 5.96,
+  "pctOver40": 3.35
+ },
+ {
+  "shot": "28-return-d",
+  "meanAbs": 5.7,
+  "pctOver40": 3.66
+ }
+]

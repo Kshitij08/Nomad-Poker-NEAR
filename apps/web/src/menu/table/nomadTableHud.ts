@@ -15,6 +15,8 @@ import type { TableChrome, TableSessionHost } from '../../table/tableScreen';
 import { buildNode, HUD_DATA, UNode, whenFontsReady, type NodeData } from '../../hud/unityUi';
 import { PokerSound } from '../../core';
 import type { NomadHost } from '../host';
+import { overlayScale } from '../../layout/portraitRects';
+import { portraitNomadTableRects } from '../../layout/portraitHud';
 
 /** RetentionMenuHud.BarSuppressed: set by NomadUiHost.Init and never cleared. */
 export const barSuppressed = true;
@@ -80,12 +82,14 @@ export function nomadTableChrome(nomad: NomadHost): TableChrome {
       // CanvasScaler as the betting panel's (Scale With Screen Size, 1920×1080, match 0.5).
       const w = holder.clientWidth || window.innerWidth;
       const h = holder.clientHeight || window.innerHeight;
-      const s = Math.pow(2, 0.5 * Math.log2(w / 1920) + 0.5 * Math.log2(h / 1080));
+      const s = overlayScale(w, h); // portrait: layout/portraitHud.ts
       root.sizeDelta = [w / s, h / s];
       root.renderScale = s;
       root.el.style.transform = `scale(${s})`;
+      portrait.apply();
       root.layout();
     };
+    const portrait = portraitNomadTableRects(root);
     layout();
     whenFontsReady([root]);
     window.addEventListener('resize', layout);

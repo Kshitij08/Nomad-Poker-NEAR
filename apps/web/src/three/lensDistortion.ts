@@ -134,8 +134,16 @@ export class LensDistortionRenderer implements LensDistortionSettings {
   }
 
   render(scene: Object3D, camera: Camera): void {
+    this.renderWith(() => this.renderer.render(scene, camera));
+  }
+
+  /**
+   * Runs `draw` (one or more renderer.render calls) into the current output — or, while the effect is active, into
+   * the distortion target, then distorts it to the output. hudDepth.ts uses it for its multi-render overlay pass.
+   */
+  renderWith(draw: () => void): void {
     if (!this.active) {
-      this.renderer.render(scene, camera);
+      draw();
       return;
     }
     this.renderer.getDrawingBufferSize(this.size);
@@ -152,7 +160,7 @@ export class LensDistortionRenderer implements LensDistortionSettings {
 
     const prev = this.renderer.getRenderTarget();
     this.renderer.setRenderTarget(this.target);
-    this.renderer.render(scene, camera);
+    draw();
     this.renderer.setRenderTarget(prev);
     this.renderer.render(this.quadScene, this.quadCamera);
   }

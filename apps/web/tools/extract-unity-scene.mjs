@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readUnityYaml, parsePlainYaml, num, vec3, quat, col } from './unity-yaml.mjs';
 import { summarizeFbx } from './fbx-binary.mjs';
+import { optimizeAssets } from './optimize-assets.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(HERE, '..');
@@ -1131,6 +1132,8 @@ function copyAssets(scene) {
     const prev = usedNames.get(name.toLowerCase());
     if (prev && prev !== rel) name = path.basename(path.dirname(rel)) + '__' + name;
     usedNames.set(name.toLowerCase(), rel);
+    // The FBX is not loaded at runtime (card-mesh.json is): export-card-mesh.mjs reads it from the Unity project.
+    if (/\.fbx$/i.test(rel)) continue;
     fs.copyFileSync(abs(rel), path.join(ASSET_DIR, name));
     const bytes = fs.statSync(abs(rel)).size;
     total += bytes;
@@ -1160,9 +1163,9 @@ function copyAssets(scene) {
     '## Notes',
     '',
     '- Card faces map to card indices through `card.library.entries` in unity-scene.json (Card.Index = suit*13 + rank-2; Clubs, Diamonds, Hearts, Spades).',
-    '- The card FBX is binary FBX 7.4 authored in inches (UnitScaleFactor 2.54); Unity scales it by `fileScale` (0.0254) and mirrors X. three.js FBXLoader does not apply the unit scale — apply it yourself (see `card.size`).',
+    '- The card FBX is binary FBX 7.4 authored in inches (UnitScaleFactor 2.54); Unity scales it by `fileScale` (0.0254) and mirrors X. three.js FBXLoader does not apply the unit scale — apply it yourself (see `card.size`). It is not copied here: `tools/export-card-mesh.mjs` reads it from the Unity project and writes `src/data/card-mesh.json`, which is what the web loads.',
     '- Materials are Built-in Standard shader; colours/floats per material are in unity-scene.json.',
-    '- Textures are the source files; Unity may downsize them on import (`maxTextureSize` in each texture\'s import info). Several card faces are ~1.5-1.9 MB JPEGs; consider resizing/compressing (e.g. KTX2/WebP at 1024px) for production.',
+    '- Textures are the source files; Unity may downsize them on import (`maxTextureSize` in each texture\'s import info). The web build ships them as WebP at 1024 px (see the generated section below).',
     '',
     '## Not copied: referenced only by INACTIVE objects in Test.unity',
     '',
@@ -1199,7 +1202,7 @@ const fmt = (v) => '(' + v.map((x) => x.toFixed(3)).join(', ') + ')';
 
 // =============================================================================================
 
-function main() {
+async function main() {
   const { scene, anims } = extract();
   fs.mkdirSync(path.dirname(OUT_SCENE), { recursive: true });
   fs.writeFileSync(OUT_SCENE, JSON.stringify(scene, null, 1));
@@ -1208,6 +1211,7 @@ function main() {
   console.log(`wrote ${path.relative(ROOT, OUT_ANIMS)} (${(fs.statSync(OUT_ANIMS).size / 1024).toFixed(0)} KB)`);
   if (process.argv.includes('--copy')) {
     const r = copyAssets(scene);
+    await optimizeAssets({ dirs: ['3d'] }); // WebP, card textures right-sized (the 3D loaders map Unity basenames to .webp)
     console.log(`copied ${r.files} asset files (${(r.totalBytes / 1048576).toFixed(1)} MB) to ${path.relative(ROOT, ASSET_DIR)}`);
   }
   console.log(sanity(scene));
@@ -1216,4 +1220,4 @@ function main() {
 
 export { flattenFile, Graph, Q, V, M, readSpline, clip, controller };
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

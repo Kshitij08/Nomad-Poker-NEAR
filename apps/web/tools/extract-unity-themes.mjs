@@ -18,6 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UnityProject, buildHierarchy, normId, parseUnityFile, readMeta, imageSize } from './lib/unity-yaml.mjs';
 import { decodePng, resizeRgba, encodePng } from './lib/png.mjs';
+import { optimizeAssets } from './optimize-assets.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(HERE, '..');
@@ -345,3 +346,6 @@ const md = [
 ];
 if (COPY) { fs.mkdirSync(OUT_DIR, { recursive: true }); fs.writeFileSync(path.join(OUT_DIR, 'MANIFEST.md'), md.join('\n')); }
 console.log(`copied ${rows.length} files, ${(bytes / 1e6).toFixed(2)} MB`);
+
+// WebP + right-size what was just copied (or, without copying, point the JSON at the existing WebP files).
+await optimizeAssets({ dirs: ['theming'], convert: COPY });

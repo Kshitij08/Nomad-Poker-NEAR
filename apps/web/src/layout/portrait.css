@@ -1,0 +1,14 @@
+/* Portrait layout rules (docs/portrait-design.md). Everything here is scoped to html[data-orient='portrait'];
+   landscape is untouched. Canvas-unit overlays expose their CanvasScaler factor as --canvas-scale. */
+
+/* Tournament table overlay: the banner drops under the top chrome row (LEAVE / settings) and fits the 720 canvas. */
+html[data-orient='portrait'] .trn-overlay > .trn-panel:first-child {
+  left: 10px !important;
+  width: calc(100% - 20px) !important;
+  top: calc(100px + env(safe-area-inset-top, 0px) / var(--canvas-scale, 1)) !important;
+  height: 104px !important;
+}
+
+/* Phones (both orientations): no double-tap zoom / pull-to-refresh / iOS text inflation on the game surface. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { overscroll-behavior: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }

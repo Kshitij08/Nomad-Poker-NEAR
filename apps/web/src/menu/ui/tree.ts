@@ -8,7 +8,7 @@
  * Raycasts: like uGUI, a node takes pointer input when its Image / TMP has raycastTarget on or it is a Selectable;
  * everything else lets clicks through (the art's generator turns raycasts off on decorative images and labels).
  */
-import { buildNode, assetUrl, cssColor, rgba, type UNode, type NodeData, type SpriteData } from '../../hud/unityUi';
+import { buildNode, assetUrl, cssColor, rgba, tmpFaceColor, type UNode, type NodeData, type SpriteData } from '../../hud/unityUi';
 import { PokerSound } from '../../core';
 import { MENU_DATA, scriptOf, type MenuNodeData, type PersistentCall, type RefData, type SelectableData } from '../data';
 
@@ -404,7 +404,7 @@ export class MInput {
     if (t) {
       input.style.fontFamily = t.family;
       input.style.fontSize = `${t.fontSize}px`;
-      input.style.color = cssColor(t.color);
+      input.style.color = cssColor(tmpFaceColor(t.color)); // TMP face colour in a Linear project (see unityUi)
       input.style.textAlign = t.alignH === 'center' ? 'center' : t.alignH === 'right' ? 'right' : 'left';
     }
     const ph = this.placeholderNode?.text;

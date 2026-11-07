@@ -413,7 +413,7 @@ export class NomadHost {
     if (!n?.image) return;
     const id = avatarId(avatar ?? this.ctx.services.account.avatar, playerName);
     if (!id) return;
-    const file = `assets/ui/Test/UI/Common_UI/Pro_Pic/${id}.png`;
+    const file = `assets/ui/Test/UI/Common_UI/Pro_Pic/${id}.webp`;
     if (n.image.sprite?.file === file) return;
     n.image.sprite = { ...(n.image.sprite ?? { ppu: 100, rect: [0, 0, 1, 1], border: [0, 0, 0, 0] }), name: id, file, border: [0, 0, 0, 0] };
     n.image.type = 'Simple';

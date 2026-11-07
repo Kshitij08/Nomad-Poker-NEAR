@@ -275,7 +275,7 @@ export function buildTableScene(): TableScene {
 
   // Felt: Board.png on the world-space Table_Canvas (unlit UI image).
   const img = s.table.tableCanvas.images.find((i) => i.path.endsWith('/Image') && i.activeInHierarchy && i.sprite)!;
-  const feltTex = new TextureLoader().load(`${import.meta.env.BASE_URL}assets/3d/${img.sprite!.texture.split('/').pop()}`);
+  const feltTex = new TextureLoader().load(`${import.meta.env.BASE_URL}assets/3d/${img.sprite!.texture.split('/').pop()!.replace(/\.(png|jpe?g)$/i, '.webp')}`); // WebP: tools/optimize-assets.mjs
   feltTex.colorSpace = SRGBColorSpace;
   const felt = new Mesh(new PlaneGeometry(img.rectSize[0], img.rectSize[1]), new MeshBasicMaterial({ map: feltTex, side: DoubleSide, transparent: true, alphaTest: 0.01 }));
   felt.matrixAutoUpdate = false;

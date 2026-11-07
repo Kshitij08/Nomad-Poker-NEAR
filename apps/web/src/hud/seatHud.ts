@@ -125,7 +125,7 @@ export class SeatHudView implements SeatHud {
     this.nameText.setText(name);
     const id = AvatarCatalog.idOf(AvatarCatalog.resolve(avatar, avatarName));
     if (id && this.avatar.image) {
-      const file = `assets/ui/Test/UI/Common_UI/Pro_Pic/${id}.png`;
+      const file = `assets/ui/Test/UI/Common_UI/Pro_Pic/${id}.webp`;
       if (this.avatar.image.sprite?.file !== file) {
         this.avatar.image.sprite = { ...(this.avatar.image.sprite ?? { ppu: 100, rect: [0, 0, 1, 1], border: [0, 0, 0, 0] }), name: id, file };
         this.avatar.render();

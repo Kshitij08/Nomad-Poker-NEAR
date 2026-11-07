@@ -279,7 +279,7 @@
      768
     ]
    },
-   "file": "assets/3d/BG.png",
+   "file": "assets/3d/BG.webp",
    "exportSize": [
     2880,
     1080
@@ -313,7 +313,7 @@
      122
     ]
    },
-   "file": "assets/ui/Test/UI/SOLANA/xxx_3.png",
+   "file": "assets/ui/Test/UI/SOLANA/xxx_3.webp",
    "exportSize": [
     512,
     243
@@ -353,7 +353,7 @@
      32
     ]
    },
-   "file": "assets/theming/Common_UI/01_1.png",
+   "file": "assets/theming/Common_UI/01_1.webp",
    "exportSize": [
     256,
     64
@@ -392,7 +392,7 @@
      1080
     ]
    },
-   "file": "assets/3d/Board.png",
+   "file": "assets/3d/Board.webp",
    "exportSize": [
     1920,
     1080
@@ -426,10 +426,10 @@
      512
     ]
    },
-   "file": "assets/3d/card_back_side.png",
+   "file": "assets/3d/card_back_side.webp",
    "exportSize": [
-    2927,
-    4096
+    732,
+    1024
    ],
    "reused": "assets/3d"
   },
@@ -460,10 +460,10 @@
      512
     ]
    },
-   "file": "assets/3d/card_back_side_grey.png",
+   "file": "assets/3d/card_back_side_grey.webp",
    "exportSize": [
-    2927,
-    4096
+    732,
+    1024
    ],
    "reused": "assets/3d"
   },
@@ -494,7 +494,7 @@
      59
     ]
    },
-   "file": "assets/ui/Test/UI/SOLANA/pot.png",
+   "file": "assets/ui/Test/UI/SOLANA/pot.webp",
    "exportSize": [
     512,
     118
@@ -534,7 +534,7 @@
      810
     ]
    },
-   "file": "assets/theming/Neon_City/poker_bg_02.png",
+   "file": "assets/theming/Neon_City/poker_bg_02.webp",
    "exportSize": [
     1440,
     810
@@ -567,7 +567,7 @@
      122
     ]
    },
-   "file": "assets/ui/Test/UI/Neon_City/Button.png",
+   "file": "assets/ui/Test/UI/Neon_City/Button.webp",
    "exportSize": [
     512,
     243
@@ -607,7 +607,7 @@
      768
     ]
    },
-   "file": "assets/theming/Neon_City/Neon_City_bg.png",
+   "file": "assets/theming/Neon_City/Neon_City_bg.webp",
    "exportSize": [
     2048,
     768
@@ -646,7 +646,7 @@
      587
     ]
    },
-   "file": "assets/theming/Neon_City/board_01.png",
+   "file": "assets/theming/Neon_City/board_01.webp",
    "exportSize": [
     2048,
     1173
@@ -685,7 +685,7 @@
      512
     ]
    },
-   "file": "assets/theming/Neon_City/Card_Back_07.png",
+   "file": "assets/theming/Neon_City/Card_Back_07.webp",
    "exportSize": [
     357,
     537
@@ -718,7 +718,7 @@
      512
     ]
    },
-   "file": "assets/theming/Neon_City/Card_Back_Grey_07.png",
+   "file": "assets/theming/Neon_City/Card_Back_Grey_07.webp",
    "exportSize": [
     362,
     545
@@ -751,7 +751,7 @@
      59
     ]
    },
-   "file": "assets/ui/Test/UI/Neon_City/pot_04.png",
+   "file": "assets/ui/Test/UI/Neon_City/pot_04.webp",
    "exportSize": [
     512,
     118
@@ -791,7 +791,7 @@
      768
     ]
    },
-   "file": "assets/theming/Forest/poker_bg_04.png",
+   "file": "assets/theming/Forest/poker_bg_04.webp",
    "exportSize": [
     1371,
     768
@@ -824,7 +824,7 @@
      122
     ]
    },
-   "file": "assets/ui/Test/UI/Forest/xxx_3_02.png",
+   "file": "assets/ui/Test/UI/Forest/xxx_3_02.webp",
    "exportSize": [
     512,
     243
@@ -864,7 +864,7 @@
      768
     ]
    },
-   "file": "assets/theming/Forest/Forest_bg.png",
+   "file": "assets/theming/Forest/Forest_bg.webp",
    "exportSize": [
     2048,
     768
@@ -903,7 +903,7 @@
      588
     ]
    },
-   "file": "assets/theming/Forest/board_03.png",
+   "file": "assets/theming/Forest/board_03.webp",
    "exportSize": [
     2048,
     1176
@@ -942,7 +942,7 @@
      512
     ]
    },
-   "file": "assets/theming/Forest/Card_Back_04.png",
+   "file": "assets/theming/Forest/Card_Back_04.webp",
    "exportSize": [
     357,
     537
@@ -975,7 +975,7 @@
      512
     ]
    },
-   "file": "assets/theming/Forest/Card_Back_06_grey2.png",
+   "file": "assets/theming/Forest/Card_Back_06_grey2.webp",
    "exportSize": [
     357,
     537
@@ -1008,7 +1008,7 @@
      59
     ]
    },
-   "file": "assets/ui/Test/UI/Forest/pot_03.png",
+   "file": "assets/ui/Test/UI/Forest/pot_03.webp",
    "exportSize": [
     512,
     118
@@ -1048,7 +1048,7 @@
      768
     ]
    },
-   "file": "assets/theming/Desert/poker_bg_05.png",
+   "file": "assets/theming/Desert/poker_bg_05.webp",
    "exportSize": [
     1371,
     768
@@ -1081,7 +1081,7 @@
      122
     ]
    },
-   "file": "assets/ui/Test/UI/Desert/xxx_3_01.png",
+   "file": "assets/ui/Test/UI/Desert/xxx_3_01.webp",
    "exportSize": [
     512,
     243
@@ -1121,7 +1121,7 @@
      768
     ]
    },
-   "file": "assets/theming/Desert/Desert_bg.png",
+   "file": "assets/theming/Desert/Desert_bg.webp",
    "exportSize": [
     2048,
     768
@@ -1160,7 +1160,7 @@
      588
     ]
    },
-   "file": "assets/theming/Desert/board_02.png",
+   "file": "assets/theming/Desert/board_02.webp",
    "exportSize": [
     2048,
     1176
@@ -1199,7 +1199,7 @@
      512
     ]
    },
-   "file": "assets/theming/Desert/Card_Back_06.png",
+   "file": "assets/theming/Desert/Card_Back_06.webp",
    "exportSize": [
     357,
     537
@@ -1232,7 +1232,7 @@
      512
     ]
    },
-   "file": "assets/theming/Desert/Card_Back_06_grey.png",
+   "file": "assets/theming/Desert/Card_Back_06_grey.webp",
    "exportSize": [
     357,
     537
@@ -1265,7 +1265,7 @@
      59
     ]
    },
-   "file": "assets/ui/Test/UI/Desert/pot_02.png",
+   "file": "assets/ui/Test/UI/Desert/pot_02.webp",
    "exportSize": [
     512,
     118
@@ -1305,7 +1305,7 @@
      768
     ]
    },
-   "file": "assets/theming/Town/poker_bg_03.png",
+   "file": "assets/theming/Town/poker_bg_03.webp",
    "exportSize": [
     1408,
     768
@@ -1338,7 +1338,7 @@
      122
     ]
    },
-   "file": "assets/ui/Test/UI/Town/xxx_3_04.png",
+   "file": "assets/ui/Test/UI/Town/xxx_3_04.webp",
    "exportSize": [
     512,
     243
@@ -1378,7 +1378,7 @@
      768
     ]
    },
-   "file": "assets/theming/Town/Town_bg.png",
+   "file": "assets/theming/Town/Town_bg.webp",
    "exportSize": [
     2048,
     768
@@ -1417,7 +1417,7 @@
      588
     ]
    },
-   "file": "assets/theming/Town/board_04.png",
+   "file": "assets/theming/Town/board_04.webp",
    "exportSize": [
     2048,
     1176
@@ -1456,7 +1456,7 @@
      512
     ]
    },
-   "file": "assets/theming/Town/Card_Back_05.png",
+   "file": "assets/theming/Town/Card_Back_05.webp",
    "exportSize": [
     357,
     537
@@ -1489,7 +1489,7 @@
      512
     ]
    },
-   "file": "assets/theming/Town/Card_Back_06_grey1.png",
+   "file": "assets/theming/Town/Card_Back_06_grey1.webp",
    "exportSize": [
     357,
     537
@@ -1522,7 +1522,7 @@
      59
     ]
    },
-   "file": "assets/ui/Test/UI/Town/pot_01.png",
+   "file": "assets/ui/Test/UI/Town/pot_01.webp",
    "exportSize": [
     512,
     118
@@ -1622,7 +1622,7 @@
      337
     ]
    },
-   "file": "assets/theming/Art/UI/BuyInTables/bg_dark_blue_btn_4.png",
+   "file": "assets/theming/Art/UI/BuyInTables/bg_dark_blue_btn_4.webp",
    "exportSize": [
     1040,
     337
@@ -1655,7 +1655,7 @@
      256
     ]
    },
-   "file": "assets/ui/Test/Sprites/Icons/Circle.png",
+   "file": "assets/ui/Test/Sprites/Icons/Circle.webp",
    "exportSize": [
     512,
     512
@@ -1689,7 +1689,7 @@
      899
     ]
    },
-   "file": "assets/theming/Art/UI/BuyInTables/bg_4.png",
+   "file": "assets/theming/Art/UI/BuyInTables/bg_4.webp",
    "exportSize": [
     2029,
     899
@@ -1722,7 +1722,7 @@
      174
     ]
    },
-   "file": "assets/theming/Art/UI/BuyInTables/scroll_bg_1.png",
+   "file": "assets/theming/Art/UI/BuyInTables/scroll_bg_1.webp",
    "exportSize": [
     970,
     174
@@ -1755,7 +1755,7 @@
      174
     ]
    },
-   "file": "assets/theming/Art/UI/BuyInTables/yellow_scroll_1.png",
+   "file": "assets/theming/Art/UI/BuyInTables/yellow_scroll_1.webp",
    "exportSize": [
     546,
     174
@@ -1788,7 +1788,7 @@
      175
     ]
    },
-   "file": "assets/theming/Art/UI/BuyInTables/num_bg_1.png",
+   "file": "assets/theming/Art/UI/BuyInTables/num_bg_1.webp",
    "exportSize": [
     976,
     175
@@ -1821,7 +1821,7 @@
      291
     ]
    },
-   "file": "assets/theming/Art/UI/BuyInTables/join_green_1.png",
+   "file": "assets/theming/Art/UI/BuyInTables/join_green_1.webp",
    "exportSize": [
     1993,
     291
@@ -1854,7 +1854,7 @@
      89
     ]
    },
-   "file": "assets/theming/Retention/Art/WeeklyRewards/close_btn.png",
+   "file": "assets/theming/Retention/Art/WeeklyRewards/close_btn.webp",
    "exportSize": [
     273,
     89

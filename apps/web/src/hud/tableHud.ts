@@ -31,6 +31,8 @@ export interface DomTableHud extends TableHud {
    * feedback uses 20), frequency in Hz, axis in canvas space ([0,0,1] = spin in the table plane, default).
    */
   shakeSeats(durationSeconds: number, amplitudeDegrees: number, frequency: number, axis?: [number, number, number]): void;
+  /** The screen-space overlay layer (betting / confirm panels); hudDepth.ts inserts its 3D overlay just below it. */
+  readonly screenLayer: HTMLElement;
 }
 
 export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): DomTableHud {
@@ -60,6 +62,7 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
   };
 
   return {
+    screenLayer,
     seats,
     pot,
     betting,

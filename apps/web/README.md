@@ -31,7 +31,23 @@ Nothing calls the live PlayFab title, the deployed (Railway) servers, Photon or 
 `?perbackend=` point web3 at a backend; `?tournaments=live&tournamentBackend=<url>`; `?agentBackend=<url>`. Web3 uses
 devnet and never signs or sends without an explicit user action. Photon Fusion has no browser client, so multiplayer
 runs on `web/server` (the ported engine with PokerServerGame's rules, byte-identical event codec) — local only until
-it is deployed somewhere.
+it is deployed somewhere (`docs/hosting.md`). How to turn each live feature on, and what production needs:
+`docs/live-backends.md` (also covers replacing PlayFab).
+
+Endpoint-override flags (`?netServer=`, `?web3backend=`, `?perbackend=`, `?web3rpc=`, `?tournamentBackend=`,
+`?agentBackend=`) work in dev builds only (`src/app/flags.ts`). Production builds ignore them unless the URL's origin
+is listed in `VITE_ALLOWED_ENDPOINTS` (comma-separated) or the build sets `VITE_ALLOW_ENDPOINT_FLAGS=1` (staging);
+`VITE_NET_SERVER=wss://…` sets the table server a deployed build uses.
+
+### Orientation, assets, parity
+
+- **Portrait:** phones held upright get a portrait layout (tall table with you at the bottom, one-column menus),
+  switching live mid-hand; `?orient=portrait|landscape` forces one. Design notes: `docs/portrait-design.md`.
+- **Assets:** images are WebP, right-sized and visually checked (`tools/optimize-assets.mjs`, run by every extractor);
+  music streams instead of being decoded into memory.
+- **Parity with Unity:** `docs/parity/` compares the same seeded hand rendered by Unity (headless PlayMode capture,
+  `Assets/WebParity/`, kept out of git) and by the web, frame by frame, with pixel diffs.
+- **Particles:** what Unity shows and how to recreate it: `docs/particle-effects.md`.
 
 ## Layout
 
@@ -74,6 +90,10 @@ node web/tools/extract-web3-idl.mjs             # slimmed PER IDL for instructio
 ```
 
 Each module's `MANIFEST.md` under `public/assets/` maps every copied file back to its Unity source.
+Every extractor ends by running `tools/optimize-assets.mjs` on its folder: images ship as WebP (lossy only where it is
+visually identical, else lossless / near-lossless), the 3D card textures at 1024 px and the pot tokens at 256 px, with
+the JSON sprite sizes / 9-slice borders kept in step. `node web/tools/optimize-assets.mjs --check` verifies that every
+referenced asset exists.
 
 ## Scope and known gaps
 
@@ -84,6 +104,10 @@ multiplayer (quick play, parties, chat, reactions, voice over WebRTC, reconnect)
 server-run), Coins Agents with replays, and Solana wallet / escrow / PER private tables.
 
 Known gaps and deliberate differences are listed in each module's report notes and code comments; the main ones:
-the HUD always draws over 3D cards (Unity depth-sorts); particle VFX (turn ring, win burst, smoke) are approximations;
-the offline "Play offline" table is a web addition and does not take the buy-in from the wallet; a copied marketplace
-SOL strategy (`CopiedSol`) is not ported; and the art assets (~84 MB, mostly PNG) are not yet compressed.
+the world-space HUD is depth-sorted against opaque 3D cards and tokens like Unity (`src/three/hudDepth.ts`), but
+not against transparent VFX, and the river slam's lens distortion does not bend the DOM HUD; particle VFX: the turn ring
+is a CSS approximation and the win burst is missing (plan in `docs/particle-effects.md`); remaining Unity differences
+are ranked in `docs/parity/README.md`; some portrait panels are only scaled (`docs/portrait-design.md`);
+the offline "Play offline" table is a web addition and does not take the buy-in from the wallet; and the copied
+marketplace SOL strategy (`CopiedSol`) is ported but only verified offline (its listing, fee terms and payout need a
+live backend).

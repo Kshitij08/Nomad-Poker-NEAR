@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { readFbx, child, childrenNamed, fbxName } from './fbx-binary.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const fbxPath = path.join(here, '../public/assets/3d/Card Deck.FBX');
+const fbxPath = path.join(here, '../../Assets/Test/Model/Card Deck.FBX'); // the Unity source (not shipped in public/)
 const outPath = path.join(here, '../src/data/card-mesh.json');
 const NODE = process.argv[2] ?? 'Ace of Spades'; // a node whose submeshes are back, face, edge like the CardView slots
 const SCALE = 0.0254;

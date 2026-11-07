@@ -20,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UnityProject, buildHierarchy, normId, parseUnityFile, readMeta, imageSize } from './lib/unity-yaml.mjs';
 import { decodePng, resizeRgba, encodePng } from './lib/png.mjs';
+import { optimizeAssets } from './optimize-assets.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.resolve(HERE, '..');
@@ -494,3 +495,6 @@ const notCopied = Object.entries(sprites).filter(([, s]) => !s.file);
 if (notCopied.length) { md += `\n## Not copied\n\n`; for (const [k, s] of notCopied) md += `- \`${k}\` ${s.name || ''}: ${s.builtin ? 'Unity built-in UI sprite (drawn as a rounded rect)' : s.note || (s.missing ? 'GUID not found' : '')}\n`; }
 if (COPY) { fs.mkdirSync(OUT_ASSETS, { recursive: true }); fs.writeFileSync(path.join(OUT_ASSETS, 'MANIFEST.md'), md); }
 console.log(`Assets: ${files} files, ${(bytes / 1024 / 1024).toFixed(2)} MB${COPY ? ' copied' : ' (dry run)'}`);
+
+// WebP + right-size what was just copied (or, without copying, point the JSON at the existing WebP files).
+await optimizeAssets({ dirs: ['menu'], convert: COPY });

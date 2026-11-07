@@ -4,12 +4,14 @@ import { buildTableScene, type TableScene } from '../three/tableScene';
 import { CardModelVisual, preloadCardTextures } from '../three/cardModel';
 import { createRiverSlam, type RiverSlamPlayer } from './riverSlam';
 import { LensDistortionRenderer } from '../three/lensDistortion';
+import { HudDepthCompositor } from '../three/hudDepth';
 import { watchActivationSmoke } from '../three/impactSmoke';
 import { PotTokens } from '../three/potTokens';
 import { SplineCardDealer } from './splineCardDealer';
 import { TableView, type PotHud } from './tableView';
 import { createTableHud, type DomTableHud } from '../hud/tableHud';
 import sceneData from '../data/unity-scene.json';
+import { PortraitTable } from '../layout/portraitTable';
 
 /**
  * The persistent 3D table (Test.unity): renderer, scene, card dealer, pot tokens, river slam and the HUD.
@@ -21,11 +23,15 @@ export class TableStage {
   readonly renderer: WebGLRenderer;
   readonly table: TableScene;
   readonly lens: LensDistortionRenderer;
+  /** Unity-style depth sorting of the world-space HUD against the 3D cards / tokens (three/hudDepth.ts). */
+  readonly hudDepth: HudDepthCompositor;
   readonly hud: DomTableHud;
   readonly slam: RiverSlamPlayer;
   readonly dealer: SplineCardDealer;
   readonly potTokens: PotTokens;
   readonly seatWorld: number[][];
+  /** Portrait layout of the table (src/layout/portraitTable.ts); identity in landscape. */
+  readonly portrait: PortraitTable;
   private paused: boolean;
   private visible = false;
 
@@ -35,13 +41,20 @@ export class TableStage {
     hudRoot: HTMLElement,
     opts: { paused?: boolean; speed?: number } = {},
   ) {
-    this.renderer = new WebGLRenderer({ canvas, antialias: true });
+    // alpha: the HUD depth overlay (hudDepth.ts) is copied out of this context with a transparent clear; the base
+    // pass still clears to the opaque scene background.
+    this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.table = buildTableScene();
     preloadCardTextures();
     this.lens = new LensDistortionRenderer(this.renderer);
     this.hud = createTableHud(hudRoot, this.table.camera);
+    this.hudDepth = new HudDepthCompositor(this.renderer, () => [
+      { canvas: this.hud.pot.canvas, visible: true },
+      ...this.hud.seats.map((s) => ({ canvas: s.canvas, visible: s.visible })),
+    ]);
+    this.hud.screenLayer.before(this.hudDepth.overlay);
 
     let dealtRoot: { children: readonly Object3D[] } | null = null;
     this.slam = createRiverSlam({
@@ -71,6 +84,7 @@ export class TableStage {
 
     this.potTokens = new PotTokens(this.table.world);
     this.seatWorld = sceneData.splines.map((s) => s.seatRootWorldPosition);
+    this.portrait = new PortraitTable(this);
 
     ticker.timeScale = opts.speed ?? 1;
     this.paused = !!opts.paused;
@@ -150,8 +164,9 @@ export class TableStage {
   }
 
   render(): void {
+    this.portrait.frame();
     this.hud.update();
-    this.lens.render(this.table.scene, this.table.camera);
+    this.hudDepth.render(this.table.scene, this.table.camera, this.lens);
   }
 
   resize(): void {
@@ -160,6 +175,7 @@ export class TableStage {
     this.renderer.setSize(w, h, false);
     this.table.camera.aspect = w / h;
     this.table.camera.updateProjectionMatrix();
+    this.portrait?.apply(w, h);
     this.hud.layout();
   }
 }

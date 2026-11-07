@@ -7,6 +7,7 @@
  */
 import { ticker, type Tween, Ease } from '../../anim/tween';
 import { whenFontsReady, type NodeData, type RGBA, type UNode } from '../../hud/unityUi';
+import { portraitMenuLayout } from '../../layout/portraitMenu';
 
 export type Vec2 = [number, number];
 
@@ -60,6 +61,7 @@ export class UCanvas {
     const s = (this.scale = expandScale(w, h));
     this.root.sizeDelta = [w / s, h / s];
     this.root.renderScale = s;
+    portraitMenuLayout(this.root, 'panels'); // portrait: centred panels fill the 1080 column (layout/portraitMenu.ts)
     this.root.layout();
     this.root.el.style.left = '0px';
     this.root.el.style.top = '0px';

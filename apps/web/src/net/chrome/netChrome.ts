@@ -26,6 +26,9 @@ import { TableChat, type PokerChatRow } from '../tableChat';
 import { VoiceLinkState } from '../voice/tableVoice';
 import { applyLayoutGroups, pairNodes } from './uguiLayout';
 import './net.css';
+import { isPortrait } from '../../layout/orientation';
+import { overlayScale } from '../../layout/portraitRects';
+import { portraitNetChromeRects } from '../../layout/portraitHud';
 
 const SCREEN = HUD_DATA.canvases.find((c) => c.role === 'screen-hud')!;
 const child = (name: string): NodeData | undefined => SCREEN.root.children?.find((c) => c.name === name);
@@ -62,6 +65,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
     const chat = new ChatPanelView(root, host.audio);
     const reactions = new ReactionPanelView(root, host.audio);
     const lobby = new LobbyButtonsView(root, host.audio);
+    const portrait = portraitNetChromeRects(root);
     const banner = document.createElement('div');
     banner.className = 'net-banner';
     banner.style.display = 'none';
@@ -70,13 +74,14 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
     const layout = () => {
       const w = holder.clientWidth || window.innerWidth;
       const h = holder.clientHeight || window.innerHeight;
-      const s = Math.pow(2, 0.5 * Math.log2(w / 1920) + 0.5 * Math.log2(h / 1080));
+      const s = overlayScale(w, h); // portrait: everything in the top row (layout/portraitHud.ts)
       root.sizeDelta = [w / s, h / s];
       root.renderScale = s;
       root.el.style.transform = `scale(${s})`;
+      portrait.apply();
       root.layout();
       chat.relayout();
-      reactions.dockTo(chat, s);
+      if (!isPortrait()) reactions.dockTo(chat, s);
     };
 
     let session: NetTableSession | null = null;

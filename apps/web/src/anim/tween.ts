@@ -68,7 +68,9 @@ abstract class BaseTween implements Tween {
       return 0;
     }
     this.elapsed += dt;
-    const finished = this.elapsed >= this.duration;
+    // Tolerance: summed 1/60 s frames land a hair under whole seconds (300 × 1/60 < 5), which made every wait
+    // fire one frame late versus Unity (measured in docs/parity).
+    const finished = this.elapsed >= this.duration - 1e-6;
     this.apply(Math.min(this.elapsed, this.duration));
     if (finished) {
       this.done = true;
