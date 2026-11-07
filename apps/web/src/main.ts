@@ -11,6 +11,9 @@ import type { CardFace } from './table/cardView';
 import { createRiverSlam } from './table/riverSlam';
 import { LensDistortionRenderer } from './three/lensDistortion';
 import { watchActivationSmoke } from './three/impactSmoke';
+import { PotTokens } from './three/potTokens';
+import sceneData from './data/unity-scene.json';
+import type { PotHud } from './table/tableView';
 
 const params = new URLSearchParams(location.search);
 
@@ -57,7 +60,23 @@ const smokeNode = table.slots[3]?.root.getObjectByName('VFX_Impact_Smoke');
 if (smokeNode) watchActivationSmoke(smokeNode);
 
 ticker.timeScale = Number(params.get('speed') ?? 1);
-const view = new TableView(hud, dealer, table.seatSplines);
+// PotView = the pot pill (DOM) + the 3D token piles. Tokens fly to the winning SeatView's transform.
+const potTokens = new PotTokens(table.world);
+const seatWorld = sceneData.splines.map((s) => s.seatRootWorldPosition);
+const pot: PotHud = {
+  setPot(value) {
+    hud.pot.setPot(value);
+    potTokens.setPot(value);
+  },
+  setMessage(message) {
+    hud.pot.setMessage(message);
+  },
+  awardTokensTo(seat) {
+    hud.pot.awardTokensTo(seat);
+    if (seatWorld[seat]) potTokens.awardTokensTo(seatWorld[seat]);
+  },
+};
+const view = new TableView({ seats: hud.seats, betting: hud.betting, pot }, dealer, table.seatSplines);
 
 let controller: PokerGameController | null = null;
 if (params.get('demo') === '1') runDemoHand();
@@ -105,7 +124,7 @@ function step(seconds: number): void {
 }
 let paused = params.get('paused') === '1';
 
-(window as unknown as Record<string, unknown>).__poker = { table, dealer, ticker, view, controller, hud, slam, lens, step, pause: (p: boolean) => (paused = p) };
+(window as unknown as Record<string, unknown>).__poker = { table, dealer, ticker, view, controller, hud, slam, lens, potTokens, step, pause: (p: boolean) => (paused = p) };
 
 function resize(): void {
   const w = window.innerWidth;

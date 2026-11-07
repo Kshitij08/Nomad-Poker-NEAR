@@ -1,0 +1,276 @@
+{
+ "source": "Assets/Test/Test.unity PotView + Assets/Test/Prefabs/Token_*.prefab",
+ "settings": {
+  "maxTokens": 12,
+  "tokenSpacing": 0.09,
+  "tokenJitter": 0.025,
+  "flyDuration": 0.6,
+  "flyStagger": 0.05,
+  "flyEndScale": 0.4
+ },
+ "tokenParents": {
+  "name": "Token Parents ",
+  "worldPosition": [
+   -1.364,
+   0.42,
+   1.66
+  ],
+  "note": "root object: local = world"
+ },
+ "prefab": {
+  "root": {
+   "position": [
+    -0.666,
+    0.53,
+    1.83
+   ],
+   "rotation": [
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  "plane": {
+   "position": [
+    0,
+    0,
+    0
+   ],
+   "rotation": [
+    0,
+    -1,
+    0,
+    0
+   ],
+   "scale": [
+    0.036567,
+    0.036567,
+    0.036567
+   ],
+   "mesh": "builtin Plane: 10×10 in XZ, normal +Y",
+   "material": {
+    "path": "Assets/Test/Token.mat",
+    "cutoff": 0.858,
+    "glossiness": 1,
+    "metallic": 0,
+    "mode": 1,
+    "mainTexture": "Assets/Test/UI/Common_UI/010.png"
+   },
+   "texture": {
+    "file": "010.png",
+    "source": "Assets/Test/UI/Common_UI/010.png",
+    "sourcePixels": [
+     1805,
+     1663
+    ],
+    "exportedPixels": [
+     512,
+     472
+    ]
+   }
+  },
+  "colour": {
+   "position": [
+    0.108,
+    0.4,
+    -0.71
+   ],
+   "rotation": [
+    0.7071068,
+    0,
+    0,
+    0.7071068
+   ],
+   "scale": [
+    0.22061367,
+    0.20968093,
+    0.19044797
+   ],
+   "material": {
+    "path": "Assets/Test/Token_colour.mat",
+    "cutoff": 1,
+    "glossiness": 1,
+    "metallic": 0,
+    "mode": 1,
+    "mainTexture": null
+   },
+   "spriteColor": {
+    "r": "0.58923995",
+    "g": "0.11725702",
+    "b": "0.8018868",
+    "a": "1"
+   },
+   "note": "Standard shader ignores the SpriteRenderer colour (no vertex colour)"
+  }
+ },
+ "denominations": [
+  {
+   "value": 5,
+   "prefab": "Assets/Test/Prefabs/Token_1.prefab",
+   "parent": "Token Parents /GameObject",
+   "parentLocalPosition": [
+    -0.204,
+    0,
+    0
+   ],
+   "coin": {
+    "file": "coin_05.png",
+    "source": "Assets/Test/UI/Common_UI/coin_05.png",
+    "sourcePixels": [
+     3979,
+     4020
+    ],
+    "exportedPixels": [
+     507,
+     512
+    ],
+    "pixelsPerUnit": 100,
+    "worldSize": [
+     39.79,
+     40.2
+    ]
+   }
+  },
+  {
+   "value": 10,
+   "prefab": "Assets/Test/Prefabs/Token_2.prefab",
+   "parent": "Token Parents /GameObject (1)",
+   "parentLocalPosition": [
+    -0.239,
+    0,
+    -0.334
+   ],
+   "coin": {
+    "file": "coin_06.png",
+    "source": "Assets/Test/UI/Common_UI/coin_06.png",
+    "sourcePixels": [
+     3979,
+     4020
+    ],
+    "exportedPixels": [
+     507,
+     512
+    ],
+    "pixelsPerUnit": 100,
+    "worldSize": [
+     39.79,
+     40.2
+    ]
+   }
+  },
+  {
+   "value": 50,
+   "prefab": "Assets/Test/Prefabs/Token_3.prefab",
+   "parent": "Token Parents /GameObject (2)",
+   "parentLocalPosition": [
+    0.079,
+    0,
+    -0.334
+   ],
+   "coin": {
+    "file": "coin_01.png",
+    "source": "Assets/Test/UI/Common_UI/coin_01.png",
+    "sourcePixels": [
+     3979,
+     4020
+    ],
+    "exportedPixels": [
+     507,
+     512
+    ],
+    "pixelsPerUnit": 100,
+    "worldSize": [
+     39.79,
+     40.2
+    ]
+   }
+  },
+  {
+   "value": 100,
+   "prefab": "Assets/Test/Prefabs/Token_4.prefab",
+   "parent": "Token Parents /GameObject (3)",
+   "parentLocalPosition": [
+    0.118,
+    0,
+    -0.044
+   ],
+   "coin": {
+    "file": "coin_03.png",
+    "source": "Assets/Test/UI/Common_UI/coin_03.png",
+    "sourcePixels": [
+     3979,
+     4020
+    ],
+    "exportedPixels": [
+     507,
+     512
+    ],
+    "pixelsPerUnit": 100,
+    "worldSize": [
+     39.79,
+     40.2
+    ]
+   }
+  },
+  {
+   "value": 500,
+   "prefab": "Assets/Test/Prefabs/Token_5.prefab",
+   "parent": "Token Parents /GameObject (4)",
+   "parentLocalPosition": [
+    0.303,
+    0,
+    -0.044
+   ],
+   "coin": {
+    "file": "coin_04.png",
+    "source": "Assets/Test/UI/Common_UI/coin_04.png",
+    "sourcePixels": [
+     3979,
+     4020
+    ],
+    "exportedPixels": [
+     507,
+     512
+    ],
+    "pixelsPerUnit": 100,
+    "worldSize": [
+     39.79,
+     40.2
+    ]
+   }
+  },
+  {
+   "value": 1000,
+   "prefab": "Assets/Test/Prefabs/Token_6.prefab",
+   "parent": "Token Parents /GameObject (5)",
+   "parentLocalPosition": [
+    0.345,
+    0,
+    -0.396
+   ],
+   "coin": {
+    "file": "coin_02.png",
+    "source": "Assets/Test/UI/Common_UI/coin_02.png",
+    "sourcePixels": [
+     3979,
+     4020
+    ],
+    "exportedPixels": [
+     507,
+     512
+    ],
+    "pixelsPerUnit": 100,
+    "worldSize": [
+     39.79,
+     40.2
+    ]
+   }
+  }
+ ]
+}

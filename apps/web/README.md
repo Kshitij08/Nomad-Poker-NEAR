@@ -26,7 +26,7 @@ Debug URL flags:
 | `src/anim/tween.ts` | DOTween stand-in (eases, delayed calls, sequences, `SetLink`). The one clock (`ticker`) everything runs on. |
 | `src/anim/animCurve.ts`, `clipPlayer.ts` | Unity AnimationCurve evaluation, and an Animator-style clip player (Write Defaults). It drives the community slots. |
 | `src/table/cardView.ts`, `splineCardDealer.ts`, `tableView.ts` | Ports of `CardView`, `SplineCardDealer` and `TableView`. |
-| `src/three/` | Scene built from the extracted Unity data: the Z-mirrored Unity-space root, camera, light, felt, the card mesh, and the slots. |
+| `src/three/` | Scene built from the extracted Unity data: the Z-mirrored Unity-space root, camera, light, felt, the card mesh, the slots, and the pot token piles (`potTokens.ts`, the 3D half of `PotView`). |
 | `src/hud/` | HTML/CSS HUD over the canvas: seats, pot, betting panel. |
 | `src/data/*.json` | Data extracted from `Assets/Test/Test.unity` and its prefabs, clips and FBX. Regenerate it with the tools below. |
 | `docs/` | Behaviour and HUD specs read from the Unity code and scene. |
@@ -43,10 +43,11 @@ C#. Only the camera is converted, once (`src/three/unitySpace.ts`).
 node web/tools/extract-unity-scene.mjs --copy   # splines, slots, camera, dealer, card, table → src/data/unity-scene.json, slot-anims.json, public/assets/3d
 node web/tools/export-card-mesh.mjs             # card mesh from Card Deck.FBX → src/data/card-mesh.json
 node web/tools/extract-unity-hud.mjs            # HUD canvases, UI clips, sprites, fonts → src/data/unity-hud.json, ui-anims.json, public/assets/ui
+node web/tools/extract-unity-tokens.mjs         # pot token piles (PotView + Token_N prefabs) → src/data/pot-tokens.json, public/assets/tokens (run after the HUD and scene extractors)
 ```
 
 ## Scope so far
 
 This covers single-player at the table against bots, using the `Test.unity` settings: 7 seats, 25/50 blinds and a
 5,000 stack. Not ported yet: menus, lobby and table select, multiplayer (Photon Fusion), PlayFab, Solana and PER,
-retention screens, tournaments, chat, voice, and audio.
+retention screens, tournaments, chat, and voice.
