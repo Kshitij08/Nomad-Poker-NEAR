@@ -1,94 +1,64 @@
-import { Clock, SRGBColorSpace, WebGLRenderer } from 'three';
-import { ticker } from './anim/tween';
-import { buildTableScene } from './three/tableScene';
-import { CardModelVisual, preloadCardTextures } from './three/cardModel';
-import { SplineCardDealer } from './table/splineCardDealer';
-import { TableView, tickerWait } from './table/tableView';
-import { createTableHud } from './hud/tableHud';
-import { PokerGameController, TEST_SCENE_TABLE_SETTINGS } from './core';
+import { EventBus, Router, type AppContext } from './app/app';
+import { LocalAccount } from './app/services';
 import { WebAudio } from './audio/webAudio';
+import { TableStage } from './table/tableStage';
+import { TableScreen, type TableScreenParams } from './table/tableScreen';
+import { ticker } from './anim/tween';
+import { MODULES } from './modules';
 import type { CardFace } from './table/cardView';
-import { createRiverSlam } from './table/riverSlam';
-import { LensDistortionRenderer } from './three/lensDistortion';
-import { watchActivationSmoke } from './three/impactSmoke';
-import { PotTokens } from './three/potTokens';
-import sceneData from './data/unity-scene.json';
-import type { PotHud } from './table/tableView';
 
+/**
+ * Boot: the persistent table stage, the router, base services, then every module. Starts on the menu
+ * when the menu module registered one, otherwise straight at the offline table (as before).
+ *
+ * Debug flags: ?table=1 (skip the menu), ?demo=1 (animation-only loop), ?speed=N, ?paused=1 (+ __poker.step(s)).
+ */
 const params = new URLSearchParams(location.search);
 
-const canvas = document.getElementById('table3d') as HTMLCanvasElement;
-const renderer = new WebGLRenderer({ canvas, antialias: true });
-renderer.outputColorSpace = SRGBColorSpace;
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const stage = new TableStage(
+  document.getElementById('stage')!,
+  document.getElementById('table3d') as HTMLCanvasElement,
+  document.getElementById('hud')!,
+  { paused: params.get('paused') === '1', speed: Number(params.get('speed') ?? 1) },
+);
 
-const table = buildTableScene();
-preloadCardTextures();
-const lens = new LensDistortionRenderer(renderer);
+const events = new EventBus();
+const router = new Router(document.getElementById('screens')!);
+const audio = new WebAudio();
+void audio.load();
+const ctx: AppContext = { router, services: { account: new LocalAccount(events) }, audio, params, events };
+router.attach(ctx);
+router.register('table', (c) => new TableScreen(c, stage));
 
-const hudRoot = document.getElementById('hud')!;
-const hud = createTableHud(hudRoot, table.camera);
-
-// The river slam (MMF_Player on PokerController/RiverSlamFeedback). Channel 1 shakes the seat name tags.
-let dealtRoot: { children: readonly import('three').Object3D[] } | null = null;
-const slam = createRiverSlam({
-  camera: table.camera,
-  slotRoots: table.slots.map((s) => s.root),
-  getHoleCards: () => dealtRoot?.children ?? [],
-  world: table.world,
-  lens,
-  onNameTagShake: (shake) => {
-    if (shake.kind !== 'rotation') return;
-    hud.seats.forEach((seat, i) => {
-      if (!seat.visible) return;
-      shake.play(`seat${i}`, (off) => {
-        seat.canvas.eulerOffset = off.x || off.y || off.z ? { x: off.x, y: off.y, z: off.z } : null;
-      });
-    });
-  },
-});
-
-const dealer = new SplineCardDealer(table.world, () => new CardModelVisual(), table.slots, slam, {
-  dealSpeed: table.dealer.dealSpeed,
-  holeStagger: table.dealer.holeStagger,
-  cardOptions: table.cardOptions,
-});
-dealtRoot = dealer.dealtRoot;
-
-// Slot_4's reveal clip toggles its impact smoke on; play the burst whenever it activates.
-const smokeNode = table.slots[3]?.root.getObjectByName('VFX_Impact_Smoke');
-if (smokeNode) watchActivationSmoke(smokeNode);
-
-ticker.timeScale = Number(params.get('speed') ?? 1);
-// PotView = the pot pill (DOM) + the 3D token piles. Tokens fly to the winning SeatView's transform.
-const potTokens = new PotTokens(table.world);
-const seatWorld = sceneData.splines.map((s) => s.seatRootWorldPosition);
-const pot: PotHud = {
-  setPot(value) {
-    hud.pot.setPot(value);
-    potTokens.setPot(value);
-  },
-  setMessage(message) {
-    hud.pot.setMessage(message);
-  },
-  awardTokensTo(seat) {
-    hud.pot.awardTokensTo(seat);
-    if (seatWorld[seat]) potTokens.awardTokensTo(seatWorld[seat]);
-  },
+(window as unknown as Record<string, unknown>).__poker = {
+  ctx,
+  stage,
+  ticker,
+  table: stage.table,
+  dealer: stage.dealer,
+  hud: stage.hud,
+  slam: stage.slam,
+  lens: stage.lens,
+  potTokens: stage.potTokens,
+  step: (s: number) => stage.step(s),
+  pause: (p: boolean) => stage.setPaused(p),
 };
-const view = new TableView({ seats: hud.seats, betting: hud.betting, pot }, dealer, table.seatSplines);
 
-let controller: PokerGameController | null = null;
-if (params.get('demo') === '1') runDemoHand();
-else {
-  const audio = new WebAudio();
-  void audio.load();
-  controller = new PokerGameController(TEST_SCENE_TABLE_SETTINGS, view, audio, { wait: tickerWait });
-  void controller.start();
+async function boot(): Promise<void> {
+  for (const install of MODULES) await install(ctx);
+  if (params.get('demo') === '1') {
+    stage.setVisible(true);
+    runDemoHand();
+    return;
+  }
+  if (params.get('table') !== '1' && router.has('menu')) await router.navigate('menu');
+  else await router.navigate('table', {} satisfies TableScreenParams);
 }
+void boot();
 
 /** ?demo=1: scripted hand that exercises every card animation without the engine. */
 function runDemoHand(): void {
+  const { dealer, table } = stage;
   dealer.clear();
   const deck: CardFace[] = [];
   for (let suit = 0; suit < 4; suit++) for (let rank = 2; rank <= 14; rank++) deck.push({ rank, suit });
@@ -111,39 +81,3 @@ function runDemoHand(): void {
   });
   at(16.5, runDemoHand);
 }
-
-/** Advances the whole table by `seconds` in fixed 1/60 s steps (with ?paused=1, for frame inspection). */
-function step(seconds: number): void {
-  const frames = Math.round(seconds * 60);
-  for (let i = 0; i < frames; i++) {
-    ticker.update(1 / 60);
-    table.update((1 / 60) * ticker.timeScale);
-  }
-  hud.update();
-  lens.render(table.scene, table.camera);
-}
-let paused = params.get('paused') === '1';
-
-(window as unknown as Record<string, unknown>).__poker = { table, dealer, ticker, view, controller, hud, slam, lens, potTokens, step, pause: (p: boolean) => (paused = p) };
-
-function resize(): void {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  renderer.setSize(w, h, false);
-  table.camera.aspect = w / h;
-  table.camera.updateProjectionMatrix();
-  hud.layout();
-}
-window.addEventListener('resize', resize);
-resize();
-
-const clock = new Clock();
-renderer.setAnimationLoop(() => {
-  const raw = Math.min(clock.getDelta(), 0.1);
-  if (!paused) {
-    ticker.update(raw);
-    table.update(raw * ticker.timeScale);
-  }
-  hud.update();
-  lens.render(table.scene, table.camera);
-});
