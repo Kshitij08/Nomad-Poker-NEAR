@@ -50,16 +50,20 @@ export class NetConnection {
     this.closedByUs = false;
     return new Promise<void>((resolve, reject) => {
       let ws: WebSocket;
+      // Dev builds name the local server; a deployed build just says multiplayer isn't available (no raw browser
+      // errors such as the HTTPS page → ws:// "insecure WebSocket" refusal).
+      const unavailable = (detail: string) =>
+        new Error(import.meta.env.DEV ? `${detail} Start it with \`npm run server\` in web/.` : 'The multiplayer table server is not available right now.');
       try {
         ws = new WebSocket(this.url);
-      } catch (e) {
-        reject(e);
+      } catch {
+        reject(unavailable(`Could not open a connection to the table server at ${this.url}.`));
         return;
       }
       ws.binaryType = 'arraybuffer';
       this.ws = ws;
       const timer = setTimeout(() => {
-        reject(new Error(`The table server at ${this.url} did not answer. Start it with \`npm run server\` in web/.`));
+        reject(unavailable(`The table server at ${this.url} did not answer.`));
         try {
           ws.close();
         } catch {
@@ -73,7 +77,7 @@ export class NetConnection {
       };
       ws.onerror = () => {
         clearTimeout(timer);
-        reject(new Error(`Could not reach the table server at ${this.url}. Start it with \`npm run server\` in web/.`));
+        reject(unavailable(`Could not reach the table server at ${this.url}.`));
       };
       ws.onclose = () => {
         clearTimeout(timer);
