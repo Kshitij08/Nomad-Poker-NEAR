@@ -23,6 +23,8 @@ export class ScreenCanvas {
   readonly root: UNode;
   scale = 1;
   private readonly onResize = () => this.layout();
+  /** Also follows the host's own size (container changes, orientation, emulated viewports that skip 'resize'). */
+  private readonly observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => this.layout()) : null;
 
   constructor(
     readonly host: HTMLElement,
@@ -36,6 +38,7 @@ export class ScreenCanvas {
     root.anchorMax = [1, 1];
     host.append(root.el);
     window.addEventListener('resize', this.onResize);
+    this.observer?.observe(host);
     this.layout();
     whenFontsReady([root]);
   }
@@ -52,6 +55,7 @@ export class ScreenCanvas {
 
   dispose(): void {
     window.removeEventListener('resize', this.onResize);
+    this.observer?.disconnect();
     this.root.el.remove();
   }
 }

@@ -1,7 +1,7 @@
 /**
  * Drives the usual table screen (TableView + TableEventPresenter + betting panel) from a private table in the TEE
  * rollup, the way the offline controller drives it from the engine. Port of Per/Unity/PerTableController.cs as a
- * TableSessionFactory: `router.navigate('table', perTableParams(...))`.
+ * TableSessionFactory: `router.navigate('table', perTableParams(...))`. Leaving goes through TableSession.requestLeave.
  *
  *  - Loop (every 0.6 s): poll the rollup, re-login when the token expires, keep the table moving (keeper fallback),
  *    sit back in after a missed seed window, Start round (host), the between-hands countdown, prepare the next hand.
@@ -34,6 +34,7 @@ import { PerTableSession } from './tableSession';
 import { decode } from './types';
 import { PerVault } from './vault';
 import { verify, verifyLog } from './verifier';
+import { NomadPerTableHud, type PerHud } from '../nomad/perTableHud';
 
 const POLL_SECONDS = 0.6;
 const PREPARE_EVERY_SECONDS = 3;
@@ -52,26 +53,23 @@ export interface PerTableDeps {
 /** Live controllers by table visit (the menu's leave dialog asks whether it's a tournament table). */
 export const perControllers = new WeakMap<TableSessionHost, PerTableController>();
 
-/** Params for router.navigate('table', …): the PER session plus the cash-out that runs when the player leaves. */
+/** Params for router.navigate('table', …): the PER session (its requestLeave cashes the seat out before the table closes). */
 export function perTableParams(deps: PerTableDeps, seat: PerSeat): TableScreenParams {
-  let controller: PerTableController | null = null;
-  return {
-    session: (host) => (controller = new PerTableController(deps, seat, host)),
-    onLeave: () => controller?.leaveFlow(),
-  };
+  return { session: (host) => new PerTableController(deps, seat, host) };
 }
 
 const realWait = (s: number) => new Promise<void>((r) => setTimeout(r, s * 1000));
 
 /**
- * Shows chain seat `s` in view slot (s − mySeat) mod n, so the player sits in the scene's "you" seat (slot 0, where
- * the offline game seats the human) — PerTableController's SetLocalPerspective. Seats beyond the view are dropped.
+ * TableView.SetLocalPerspective (Game/Views/TableView.cs) over the table screen's view: chain seat `s` is drawn in slot
+ * ((localSlot + s − localSeat) mod n), n = the view's seat count (8 seat HUDs, as Unity's Initialize(8)), so the player
+ * sits in the scene's "you" seat (slot 0: PokerClientGame.localPerspectiveSeat = Name_Canvas_Player). Seats ≥ n have
+ * no view (Unity's _seatToSlot covers 0..n−1 only).
  */
 export class RotatedView implements TableViewPort {
-  /** The local seat (shown in slot 0). */
-  offset = 0;
-  /** The table's seat count (Table.max_seats); chain seats go round this ring. */
-  ring = 9;
+  /** The local seat (−1 = identity, before the session knows it). */
+  offset = -1;
+  readonly localSlot = 0;
   constructor(private readonly inner: TableViewPort) {}
   get seatCount(): number {
     return this.inner.seatCount;
@@ -79,13 +77,13 @@ export class RotatedView implements TableViewPort {
   get betting(): BettingPanelPort | null {
     return this.inner.betting;
   }
-  /** The view slot for chain seat `seat` (−1 when the view has too few slots for it). */
   slot(seat: number): number {
-    const d = (((seat - this.offset) % this.ring) + this.ring) % this.ring;
-    return d < this.inner.seatCount ? d : -1;
+    const n = this.inner.seatCount;
+    if (this.offset < 0) return seat;
+    return (((this.localSlot + (seat - this.offset)) % n) + n) % n;
   }
   private ok(seat: number): boolean {
-    return seat >= 0 && seat < this.ring && this.slot(seat) >= 0;
+    return seat >= 0 && seat < this.inner.seatCount;
   }
   bindSeat(seat: number, name: string, stack: number, isBot: boolean, avatar: number, avatarName: string | null) {
     if (this.ok(seat)) this.inner.bindSeat(this.slot(seat), name, stack, isBot, avatar, avatarName);
@@ -158,7 +156,7 @@ export class PerTableController implements TableSession {
   private countdownShown = -1;
   private shownWait: string | null = null;
   private promptAbort: AbortController | null = null;
-  private hud: PerTableHud | null = null;
+  private hud: PerHud | null = null;
   private wake: (() => void) | null = null;
 
   constructor(
@@ -188,11 +186,15 @@ export class PerTableController implements TableSession {
     // Stacks, bets and the pot are lamports here: the table writes them as dollars.
     TableMoney.custom = (v) => sol(BigInt(Math.max(0, Math.trunc(v))));
     this.view.showMessage(this.isTournament ? 'Tournament · waiting for the round to start…' : 'Private table · waiting for players…');
-    this.hud = new PerTableHud(this.host, {
+    const handlers = {
       onVerify: () => this.verifyText(),
       onStart: () => (this.wantStart = true),
       onBackToLobby: this.isTournament ? () => this.host.leave() : null,
-    });
+    };
+    // The Nomad look when the menu is installed (NomadDialogs pieces, as Unity builds it); else a plain DOM HUD.
+    const nomad = this.host.ctx.services.nomad;
+    const layer = document.querySelector<HTMLElement>('[data-screen="table"]');
+    this.hud = nomad && layer ? new NomadPerTableHud(nomad, layer, handlers) : new PerTableHud(this.host, handlers);
     const c = this.deps.config;
     PerAttestation.run(c.attestScriptUrl, c.teeUrl, c.attestationPins, (r) => this.hud?.setAttestation(r));
     void this.loop();
@@ -203,7 +205,7 @@ export class PerTableController implements TableSession {
     this.stopped = true;
     this.cancelPrompt();
     this.wake?.();
-    if (!this.leaving) this.cleanup();
+    this.cleanup();
   }
 
   private cleanup(): void {
@@ -241,8 +243,13 @@ export class PerTableController implements TableSession {
         this.presenter.localSeat = this.session.mySeat;
         this.view.offset = this.session.mySeat;
       }
-      if (this.session.table) this.view.ring = Math.max(1, Math.min(9, this.session.table.maxSeats));
       const t = this.session.table;
+      if (this.wantLeave && t && t.handState === PerGame.HandIdle) {
+        await this.leave();
+        if (this.leaveDone === null) break; // cashed out: the table screen takes it from here
+        await realWait(POLL_SECONDS);
+        continue;
+      }
       const mine = this.session.mySeat >= 0 && this.session.ledger ? this.session.ledger.seats[this.session.mySeat] : null;
       if (!this.wantLeave && mine?.sittingOut && this.now() - this.sitInAt > 5) {
         this.sitInAt = this.now();
@@ -398,33 +405,42 @@ export class PerTableController implements TableSession {
 
   // ---- leave
 
+  private leaveDone: (() => void) | null = null;
+
   /**
-   * TableScreen calls this (onLeave) after stop(): wait for an idle table, then cash out (RequestLeave + Leave).
-   * A tournament seat isn't cashed out: its chips stay in play.
+   * TableSession.requestLeave (PerTableController.RequestLeave): stop starting hands; the poll loop cashes the seat out
+   * as soon as the table is idle (one loop only, as in the C#) and this resolves once it has. A failed cash-out keeps
+   * the player at the table with the reason in the status line and is tried again on the next idle poll. A tournament
+   * seat isn't cashed out: its chips stay in play (Back to lobby).
    */
-  async leaveFlow(): Promise<void> {
-    if (this.isTournament) return this.cleanup();
-    this.leaving = true;
+  requestLeave(): Promise<void> {
+    if (this.isTournament || this.stopped) return Promise.resolve();
     this.wantLeave = true;
+    const t = this.session.table;
+    this.status(t && this.session.mySeat >= 0 && t.handState !== PerGame.HandIdle && t.dealtMask & (1 << this.session.mySeat)
+      ? 'Cashing out after this hand (fold to leave sooner)…' : 'Cashing out…');
+    return new Promise<void>((resolve) => {
+      const prev = this.leaveDone;
+      this.leaveDone = () => {
+        prev?.();
+        resolve();
+      };
+    });
+  }
+
+  /** PerTableController.Leave, run by the loop when the table is idle. */
+  private async leave(): Promise<void> {
+    if (this.leaving) return;
+    this.leaving = true;
+    this.cancelPrompt();
     try {
-      const t = this.session.table;
-      this.status(t && this.session.mySeat >= 0 && t.handState !== PerGame.HandIdle && t.dealtMask & (1 << this.session.mySeat)
-        ? 'Cashing out after this hand (fold to leave sooner)…' : 'Cashing out…');
-      for (let attempt = 0; attempt < 100; attempt++) {
-        try {
-          await this.session.poll();
-        } catch (e) {
-          if (e instanceof PerUnauthorized) await this.relogin().catch(() => {});
-        }
-        const table = this.session.table;
-        if (!table || table.handState === PerGame.HandIdle) {
-          if (await this.cashOut()) return;
-        }
-        await realWait(2);
+      if (await this.cashOut()) {
+        const done = this.leaveDone;
+        this.leaveDone = null;
+        done?.();
       }
-      this.status('Cash-out did not go through; your chips stay at the table. Rejoin it to try again.');
     } finally {
-      this.cleanup();
+      this.leaving = false;
     }
   }
 
@@ -485,7 +501,7 @@ function rosterText(e: TableRosterEvent): string {
  * Start round pinned to the top-right corner at (−150, −250) / (−150, −345); the Verify panel at anchors
  * 0.55–0.98 × 0.12–0.78 in PerUi.Panel. The second wave reskins the buttons with the menu's NomadDialogs pieces.
  */
-class PerTableHud {
+class PerTableHud implements PerHud {
   private readonly root = document.createElement('div');
   private readonly badge = document.createElement('span');
   private readonly statusEl = document.createElement('span');

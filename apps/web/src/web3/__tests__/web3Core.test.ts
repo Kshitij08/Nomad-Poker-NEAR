@@ -150,16 +150,15 @@ describe('PerGame.legal (engine.rs legal)', () => {
   });
 });
 
-describe('RotatedView (PerTableController.SetLocalPerspective)', () => {
-  it('puts the local seat in slot 0 and drops seats the view has no slot for', () => {
+describe('RotatedView (TableView.SetLocalPerspective)', () => {
+  it('puts the local seat in slot 0, rotating mod the 8 seat views', () => {
     const calls: number[] = [];
-    const inner = { seatCount: 7, betting: null, hideSeat: (s: number) => calls.push(s) } as unknown as TableViewPort;
+    const inner = { seatCount: 8, betting: null, hideSeat: (s: number) => calls.push(s) } as unknown as TableViewPort;
     const v = new RotatedView(inner);
     v.offset = 3;
-    v.ring = 8;
-    for (let s = 0; s < 8; s++) v.hideSeat(s);
-    // seat 3 → 0, 4 → 1, … 0 → 5, 1 → 6, 2 → (7: no slot)
-    expect(calls).toEqual([5, 6, 0, 1, 2, 3, 4]);
+    for (let s = 0; s < 9; s++) v.hideSeat(s);
+    // seat 3 → 0, 4 → 1, … 0 → 5, 1 → 6, 2 → 7; seat 8 has no view
+    expect(calls).toEqual([5, 6, 7, 0, 1, 2, 3, 4]);
   });
 });
 

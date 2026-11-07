@@ -93,7 +93,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       chat.bind(s?.chat ?? null);
       if (s?.game) {
         offGame = s.game.onChange(() => refresh());
-        s.game.privateBuyInPrompt = (g) => openPrivateBuyIn(holder, g, service);
+        s.game.privateBuyInPrompt = (g) => openPrivateBuyIn(holder, g, service, ctx);
         service.privateBuyInPrompt = s.game.privateBuyInPrompt;
         bindSeatMic(s);
       }
@@ -518,8 +518,33 @@ class LobbyButtonsView {
 
 // ---------------------------------------------------------------------------------------------------- private buy-in
 
-/** PrivateBuyInPrompt.Open: 500–1,000 table chips from the Coin balance (blinds 5 / 10). */
-function openPrivateBuyIn(holder: HTMLElement, game: ClientGame, service: NetService): void {
+/**
+ * PrivateBuyInPrompt.Open: 500–1,000 table chips from the Coin balance (blinds 5 / 10). The prompt itself is the web3
+ * module's 'private-buy-in' screen (Net/PrivateBuyInPrompt.cs); this keeps the old DOM prompt only as a fallback for a
+ * build without it. It closes itself once the seat is taken.
+ */
+function openPrivateBuyIn(holder: HTMLElement, game: ClientGame, service: NetService, ctx: AppContext): void {
+  if (ctx.router.has('private-buy-in')) {
+    const off = game.onChange((w) => {
+      if (w === 'seat' && game.localSeat >= 0) {
+        off();
+        if (ctx.router.current === 'private-buy-in') ctx.router.back();
+      }
+    });
+    void ctx.router.push('private-buy-in', {
+      coins: service.wallet.coins,
+      onConfirm: (amount: number) => {
+        off();
+        game.confirmPrivateBuyIn(amount);
+      },
+      onCancel: () => off(),
+    });
+    return;
+  }
+  openDomPrivateBuyIn(holder, game, service);
+}
+
+function openDomPrivateBuyIn(holder: HTMLElement, game: ClientGame, service: NetService): void {
   holder.querySelector('.net-buyin')?.remove();
   const coins = service.wallet.coins;
   const min = ChainTableMode.PrivateMinBuyIn;

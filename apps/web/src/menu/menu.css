@@ -1,6 +1,9 @@
 /* Nomad menu (uGUI → DOM). Canvas roots carry the CanvasScaler transform; nodes are canvas units. */
 .screen-menu { background: #000; overflow: hidden; }
-.nm-screens, .nm-screen { position: absolute; inset: 0; overflow: hidden; }
+/* The wrappers are always laid out (inactive screens hide their canvas instead), so they must not catch input:
+   only nodes Unity would raycast (nm-hit / nm-interactive) do. Otherwise the last screen in the stack swallows
+   every click. */
+.nm-screens, .nm-screen { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .nm-screens { user-select: none; -webkit-user-select: none; }
 .nm-layer { position: fixed; inset: 0; overflow: hidden; pointer-events: none; user-select: none; -webkit-user-select: none; }
 .nm-modal-layer { z-index: 960; pointer-events: auto; }

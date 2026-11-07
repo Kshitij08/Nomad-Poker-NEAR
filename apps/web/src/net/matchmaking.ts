@@ -35,6 +35,12 @@ export interface ConnectOptions {
   coins?: number;
   selectedBuyIn?: number;
   delay?: (ms: number) => Promise<void>;
+  /**
+   * PokerMenuConnection.CheckLobbyMatch: refuses a typed room code from the other economy. Given the room and the
+   * properties the server listed for it, returns the player-facing refusal, or null to go ahead (also when the lookup
+   * is inconclusive). The web3 module supplies it (ChainService.lookUpTableMode).
+   */
+  lobbyCheck?: (session: string, properties: Record<string, string>) => Promise<string | null>;
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -114,5 +120,9 @@ export async function connectTable(route: ConnectRoute, opts: ConnectOptions): P
     r = await conn.join(session);
   }
   if (!r.ok) return fail(r.reason === 'GameNotFound' ? `Room ${session} was not found.` : r.message || `Could not join ${session}.`);
+  if (route.kind === 'join' && opts.lobbyCheck) {
+    const refusal = await opts.lobbyCheck(session, r.properties ?? {});
+    if (refusal) return fail(refusal);
+  }
   return { ok: true, conn, session };
 }

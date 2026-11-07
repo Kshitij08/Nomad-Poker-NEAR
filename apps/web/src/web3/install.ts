@@ -15,6 +15,7 @@ import { SolanaService } from './solana/service';
 import type { LazyService } from './services';
 export { w3, type LazyService, type Web3Services } from './services';
 import { installWeb3Screens } from './ui/screens';
+import { registerOnchainPartial } from './nomad/onchainPartial';
 
 function lazy<T>(load: () => Promise<T>): LazyService<T> {
   let p: Promise<T> | null = null;
@@ -40,4 +41,6 @@ export function install(ctx: AppContext): void {
   ctx.services.chain = lazy(async () => new (await import('./chain/service')).ChainService(config, http, solana));
   ctx.services.per = lazy(async () => new (await import('./per/service')).PerRuntime(config, http, solana));
   installWeb3Screens(ctx);
+  // NomadUiHost.Onchain: the DEMO / ONCHAIN mode and every SOL control of the Nomad menu (runs once the menu has built).
+  registerOnchainPartial();
 }
