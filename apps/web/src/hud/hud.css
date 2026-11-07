@@ -1,0 +1,16 @@
+/* Table HUD (uGUI → DOM). Sizes are canvas units; each canvas root carries the screen transform. */
+.u-hud { overflow: hidden; user-select: none; -webkit-user-select: none; }
+.u-layer { position: absolute; inset: 0; pointer-events: none; }
+#hud .u-node { position: absolute; box-sizing: border-box; pointer-events: none; }
+#hud .u-interactive { pointer-events: auto; cursor: default; touch-action: none; }
+#hud .u-interactive * { pointer-events: none; }
+#hud .u-blocker { pointer-events: auto; }
+.u-world-canvas, .u-screen-canvas { transform-origin: 0 0; }
+.u-gfx { position: absolute; inset: 0; box-sizing: border-box; background-repeat: no-repeat; pointer-events: none;
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
+.u-text { position: absolute; display: flex; flex-direction: column; overflow: visible; pointer-events: none;
+  font-kerning: normal; text-rendering: geometricPrecision; }
+.u-text > span { display: block; }
+.u-turn-ring { position: absolute; inset: 0; border-radius: 50%; border: 16px solid transparent; box-sizing: border-box;
+  opacity: 0; will-change: transform, opacity; }
+.u-slice { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
