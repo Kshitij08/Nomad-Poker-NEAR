@@ -1,0 +1,31 @@
+{
+  "name": "@nomad/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The Nomad Poker API: a Cloudflare Worker (sign-in, sessions, ledger) on D1 and R2.",
+  "scripts": {
+    "dev": "cf-vite dev --mode development",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build:staging": "cf-vite build --mode staging",
+    "build:production": "cf-vite build --mode production",
+    "deploy:staging": "npm run build:staging && cf deploy --prebuilt --mode staging",
+    "deploy:production": "npm run build:production && cf deploy --prebuilt --mode production",
+    "db:migrate:local": "cf d1 migrations apply c9570cef-7f57-4845-b503-03da7893d36d --local --persist-to .cloudflare/state",
+    "db:migrate:staging": "cf d1 migrations apply c9570cef-7f57-4845-b503-03da7893d36d",
+    "db:migrate:production": "cf d1 migrations apply e630e086-697c-47c7-84c3-8ad467005c34"
+  },
+  "dependencies": {
+    "@nomad/contract": "*",
+    "hono": "4.13.14"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.sha-805ec1ff3",
+    "@cloudflare/workers-types": "5.20261024.1",
+    "cf": "0.15.0",
+    "typescript": "5.7.3",
+    "vite": "7.3.7",
+    "vitest": "2.1.8"
+  }
+}

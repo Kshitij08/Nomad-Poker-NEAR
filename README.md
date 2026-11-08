@@ -7,6 +7,8 @@ the folders below kept.
 | Path | What it is |
 |---|---|
 | `packages/engine` | `@nomad/engine`: the poker rules, bit-exact with the Unity C# core (golden tests). No DOM; shared by the web app, the table servers and the API. |
+| `packages/contract` | `@nomad/contract`: the API's routes, request/response types and error codes, shared by the web app and the API. |
+| `apps/api` | The API Worker on Cloudflare (sign-in, sessions, ledger) — `apps/api/README.md`. Staging: https://nomad-poker-api-staging.kshitijiitgn.workers.dev |
 | `apps/web` | The web app: 3D table, Nomad menus, every feature module, and today's local table server (`apps/web/server`). See `apps/web/README.md`. |
 | `onchain/programs`, `onchain/per`, `onchain/idl` | Solana programs (`poker-escrow`, `poker-per`), the PER keeper/payout services and IDLs. Devnet only for now. |
 | `reference/backend` | The old Node backend, kept only as a reference while its routes are ported; removed after Phase 6. |

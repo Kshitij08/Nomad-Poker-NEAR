@@ -12,6 +12,7 @@
     "server": "npm run dev -w nomad-poker-local-server"
   },
   "dependencies": {
+    "@nomad/contract": "*",
     "@nomad/engine": "*",
     "@noble/curves": "1.9.7",
     "@noble/hashes": "1.8.0",

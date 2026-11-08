@@ -1,0 +1,16 @@
+{
+  "name": "@nomad/contract",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The API contract shared by the web app and the API Worker: routes, request and response types, error codes.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3"
+  }
+}
