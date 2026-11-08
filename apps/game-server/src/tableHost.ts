@@ -208,7 +208,7 @@ export class TableHost {
       for (const s of h.stacks) {
         if (s.bot || !s.id.startsWith('p_')) continue;
         this.queue(`progress ${s.id} hand ${h.handNumber}`, async () => {
-          await recordHandProgress(this.opts.db, s.id, { tableId, hand: h.handNumber, won: s.won, showdownCategory: s.showdownCategory });
+          await recordHandProgress(this.opts.db, s.id, { tableId, hand: h.handNumber, won: s.won, showdownCategory: s.showdownCategory, net: s.stack - s.startStack });
         });
       }
     }

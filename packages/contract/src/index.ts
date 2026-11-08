@@ -35,6 +35,10 @@ export interface PlayerProfile {
   kind: PlayerKind;
   /** ISO 8601. */
   createdAt: string;
+  /** Public Friend ID (16 hex characters; show with FriendCode.format). */
+  friendCode: string;
+  /** AvatarCatalog value, 0 = none. */
+  avatar: number;
 }
 
 export interface LinkedIdentity {
@@ -251,4 +255,95 @@ export interface MissionClaimResponse {
   ok: boolean;
   message: string;
   progress: ProgressSnapshot;
+}
+
+// ---- Social, profile and leaderboards (Phase 4: was friends.js CloudScript on PlayFab) -------------
+
+export const SocialRoutes = {
+  /** Friends, waiting invites, and presence. Also counts as "online" for this player. */
+  social: '/v1/social',
+  request: '/v1/friends/request',
+  accept: '/v1/friends/accept',
+  remove: '/v1/friends/remove',
+  invite: '/v1/invites/send',
+  dismiss: '/v1/invites/dismiss',
+  profile: '/v1/me/profile',
+  /** + `/<kind>?page=` (LeaderboardKind number). */
+  leaderboards: '/v1/leaderboards',
+} as const;
+
+export type FriendRelationName = 'friend' | 'pending_out' | 'pending_in';
+
+/** The friends.js error codes, kept so the client's wording carries over. */
+export type SocialErrorCode =
+  | 'invalid_id'
+  | 'self'
+  | 'not_found'
+  | 'not_found_name'
+  | 'ambiguous_name'
+  | 'already_friends'
+  | 'already_requested'
+  | 'no_request'
+  | 'not_friends'
+  | 'invalid_session';
+
+export interface FriendInfo {
+  /** Their Friend ID (16 hex characters). */
+  id: string;
+  name: string;
+  relation: FriendRelationName;
+  /** Last activity, epoch ms. */
+  lastSeen: number;
+  avatar: number;
+  /** Active in the last two minutes. */
+  online: boolean;
+  /** The table (session) they are seated at; friends only. */
+  table: string | null;
+}
+
+export interface TableInviteInfo {
+  fromId: string;
+  fromName: string;
+  session: string;
+  money: boolean;
+  /** Server time, unix seconds. */
+  sentAtUnix: number;
+}
+
+export interface SocialResponse {
+  friendCode: string;
+  friends: FriendInfo[];
+  invites: TableInviteInfo[];
+  /** Server time, unix seconds (invites are aged on this clock). */
+  serverTime: number;
+}
+
+export interface SocialActionResult {
+  ok: boolean;
+  relation?: FriendRelationName;
+  error?: SocialErrorCode;
+}
+
+export interface ProfileUpdateRequest {
+  displayName?: string;
+  avatar?: number;
+}
+
+export interface LeaderboardRowInfo {
+  rank: number;
+  displayName: string;
+  score: number;
+  isLocal: boolean;
+}
+
+export interface LeaderboardPage {
+  kind: number;
+  /** Period the board covers: YYYYWW for weekly boards, YYYYMM for the season, 0 for all time. */
+  period: number;
+  localRank: number;
+  localScore: number;
+  pageIndex: number;
+  pageSize: number;
+  hasMore: boolean;
+  rows: LeaderboardRowInfo[];
 }

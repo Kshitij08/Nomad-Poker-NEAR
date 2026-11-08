@@ -15,6 +15,7 @@ import {
 } from '@nomad/engine/retention';
 import type { Currency, LoginClaimResponse, MissionClaimResponse, ProgressSnapshot, SpinResponse } from '@nomad/contract';
 import { balances, postingStatement } from './ledger';
+import { handResultStatement } from './leaderboards';
 import { utf8 } from './util';
 
 /**
@@ -188,6 +189,8 @@ export interface HandFacts {
   won: boolean;
   /** The player's showdown hand category (HandCategory), or null without a showdown. */
   showdownCategory: number | null;
+  /** Chips won (+) or lost (−) in the hand, for the leaderboards. */
+  net: number;
 }
 
 /** One hand a human was dealt into: XP and mission progress. Idempotent per (table, hand). Returns levels paid. */
@@ -211,6 +214,7 @@ export async function recordHand(db: D1Database, playerId: string, f: HandFacts,
     const results = await db.batch([
       saveBoard(db, r, board, now),
       postingStatement(db, { playerId, currency: 'xp', delta: xp, reason: f.won ? 'hand_won' : 'hand_played', ref: f.tableId, idempotencyKey: key }, now),
+      handResultStatement(db, playerId, { tableId: f.tableId, hand: f.hand, net: f.net, won: f.won }, now),
     ]);
     if ((results[0]!.meta.changes ?? 0) === 0) continue;
     return settleLevels(db, playerId, now);

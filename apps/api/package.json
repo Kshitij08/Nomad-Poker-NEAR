@@ -19,7 +19,8 @@
   "dependencies": {
     "@nomad/db": "*",
     "@nomad/contract": "*",
-    "hono": "4.13.14"
+    "hono": "4.13.14",
+    "@nomad/engine": "*"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "2.0.0-beta.sha-805ec1ff3",

@@ -17,7 +17,12 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_TOUCH_MS = 60 * 60 * 1000;
 
 export function profile(p: PlayerRow): PlayerProfile {
-  return { id: p.id, displayName: p.display_name, kind: p.kind, createdAt: iso(p.created_at) };
+  return { id: p.id, displayName: p.display_name, kind: p.kind, createdAt: iso(p.created_at), friendCode: p.friend_code ?? '', avatar: p.avatar ?? 0 };
+}
+
+/** A Friend ID: 8 random bytes as 16 upper-case hex characters. */
+export function newFriendCode(): string {
+  return Array.from(randomBytes(8), (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
 export function guestName(): string {
@@ -49,11 +54,13 @@ export async function createPlayer(
     kind: opts.identity ? 'registered' : 'guest',
     created_at: now,
     last_seen_at: now,
+    friend_code: newFriendCode(),
+    avatar: 0,
   };
   const stmts: D1PreparedStatement[] = [
     db
-      .prepare('INSERT INTO players (id, display_name, kind, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?5)')
-      .bind(player.id, player.display_name, player.kind, now, now),
+      .prepare('INSERT INTO players (id, display_name, kind, created_at, last_seen_at, friend_code) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
+      .bind(player.id, player.display_name, player.kind, now, now, player.friend_code),
   ];
   if (opts.identity) stmts.push(identityStatement(db, player.id, opts.identity, now));
   for (const [currency, amount] of Object.entries(STARTER_GRANT)) {

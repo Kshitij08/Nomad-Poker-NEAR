@@ -3,6 +3,8 @@ import { cors } from 'hono/cors';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import {
   ProgressRoutes,
+  SocialRoutes,
+  type ProfileUpdateRequest,
   Routes,
   walletSignInMessage,
   type ApiErrorBody,
@@ -20,6 +22,7 @@ import {
   type WalletVerifyRequest,
 } from '@nomad/contract';
 import {
+  findPlayer,
   cleanDisplayName,
   completeSignIn,
   createPlayer,
@@ -34,6 +37,9 @@ import type { AppEnv, Env, PlayerRow } from './env';
 import { verifyGoogleIdToken } from './google';
 import * as ledger from '@nomad/db/ledger';
 import * as progress from '@nomad/db/progress';
+import * as socialDb from '@nomad/db/social';
+import { isLeaderboardKind, leaderboard } from '@nomad/db/leaderboards';
+import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import { ApiError, base58Decode, fail, iso, randomId, readJson, requireString, sha256Hex, utf8 } from '@nomad/db/util';
 
 export const VERSION = '0.1.0';
@@ -252,6 +258,35 @@ export function createApp(): Hono<AppEnv> {
   app.post(ProgressRoutes.missionClaim, requirePlayer, async (c) => {
     const { id } = await readJson<MissionClaimRequest>(c.req.raw);
     return c.json(await progress.claimMission(c.env.DB, c.get('player').id, requireString(id, 'id', 64)));
+  });
+
+  // ---- Social, profile, leaderboards (Phase 4) ---------------------------------------------------
+
+  type Body = { idOrName?: string; friendId?: string; fromId?: string; session?: string; money?: boolean };
+  const body = (c: Context<AppEnv>) => readJson<Body>(c.req.raw);
+
+  app.get(SocialRoutes.social, requirePlayer, async (c) => c.json(await socialDb.social(c.env.DB, c.get('player'))));
+  app.post(SocialRoutes.request, requirePlayer, async (c) => c.json(await socialDb.sendRequest(c.env.DB, c.get('player'), String((await body(c)).idOrName ?? ''))));
+  app.post(SocialRoutes.accept, requirePlayer, async (c) => c.json(await socialDb.acceptRequest(c.env.DB, c.get('player'), String((await body(c)).friendId ?? ''))));
+  app.post(SocialRoutes.remove, requirePlayer, async (c) => c.json(await socialDb.removeFriend(c.env.DB, c.get('player'), String((await body(c)).friendId ?? ''))));
+  app.post(SocialRoutes.invite, requirePlayer, async (c) => {
+    const b = await body(c);
+    return c.json(await socialDb.sendInvite(c.env.DB, c.get('player'), String(b.friendId ?? ''), String(b.session ?? ''), b.money === true));
+  });
+  app.post(SocialRoutes.dismiss, requirePlayer, async (c) => c.json(await socialDb.dismissInvite(c.env.DB, c.get('player'), String((await body(c)).fromId ?? ''))));
+
+  app.post(SocialRoutes.profile, requirePlayer, async (c) => {
+    const req = await readJson<ProfileUpdateRequest>(c.req.raw);
+    const r = await socialDb.updateProfile(c.env.DB, c.get('player'), req, AvatarCatalog.count);
+    if (!r.ok) fail(400, 'bad_request', r.error);
+    const p = await findPlayer(c.env.DB, c.get('player').id);
+    return c.json(profile(p!));
+  });
+
+  app.get(`${SocialRoutes.leaderboards}/:kind`, requirePlayer, async (c) => {
+    const kind = Number(c.req.param('kind'));
+    if (!isLeaderboardKind(kind)) fail(404, 'not_found', 'No such leaderboard.');
+    return c.json(await leaderboard(c.env.DB, c.get('player').id, kind, Number(c.req.query('page')) || 0));
   });
 
   return app;

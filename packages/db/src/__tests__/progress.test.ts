@@ -86,7 +86,7 @@ describe('login track', () => {
 });
 
 describe('missions', () => {
-  const hand = (n: number, won = false, cat: number | null = null) => recordHand(db, p, { tableId: 't1', hand: n, won, showdownCategory: cat }, T0);
+  const hand = (n: number, won = false, cat: number | null = null) => recordHand(db, p, { tableId: 't1', hand: n, won, showdownCategory: cat, net: won ? 100 : -10 }, T0);
 
   it('counts hands on the server and pays a finished mission once', async () => {
     expect((await claimMission(db, p, 'daily_warmup_10', T0)).ok).toBe(false);

@@ -339,3 +339,30 @@ describe('rewards (the server decides)', () => {
     expect(p.body.items).toEqual([]);
   });
 });
+
+describe('social over HTTP (two accounts)', () => {
+  it('friends, invites, profile and a leaderboard page', async () => {
+    const a = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Ann' });
+    const b = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Bob' });
+    const bobCode = b.body.player.friendCode;
+    expect(bobCode).toMatch(/^[0-9A-F]{16}$/);
+
+    expect((await call('POST', '/v1/friends/request', { idOrName: bobCode }, a.body.token)).body).toEqual({ ok: true, relation: 'pending_out' });
+    const bobView = await call<{ friends: { id: string; relation: string }[] }>('GET', '/v1/social', undefined, b.body.token);
+    expect(bobView.body.friends).toMatchObject([{ id: a.body.player.friendCode, relation: 'pending_in' }]);
+    expect((await call('POST', '/v1/friends/accept', { friendId: a.body.player.friendCode }, b.body.token)).body).toEqual({ ok: true, relation: 'friend' });
+
+    expect((await call('POST', '/v1/invites/send', { friendId: bobCode, session: 'poker-free' }, a.body.token)).body).toEqual({ ok: true });
+    const inbox = await call<{ invites: { fromName: string; session: string }[] }>('GET', '/v1/social', undefined, b.body.token);
+    expect(inbox.body.invites).toMatchObject([{ fromName: 'Ann', session: 'poker-free' }]);
+
+    const renamed = await call<{ displayName: string; avatar: number }>('POST', '/v1/me/profile', { displayName: 'Ann the Bold', avatar: 2 }, a.body.token);
+    expect(renamed.body).toMatchObject({ displayName: 'Ann the Bold', avatar: 2 });
+    expect((await call<ApiErrorBody>('POST', '/v1/me/profile', { avatar: 9999 }, a.body.token)).status).toBe(400);
+
+    const board = await call<{ localRank: number; rows: unknown[] }>('GET', '/v1/leaderboards/0', undefined, a.body.token);
+    expect(board.body).toMatchObject({ localRank: 1, rows: [] });
+    expect((await call('GET', '/v1/leaderboards/9', undefined, a.body.token)).status).toBe(404);
+    expect((await call('GET', '/v1/social')).status).toBe(401);
+  });
+});

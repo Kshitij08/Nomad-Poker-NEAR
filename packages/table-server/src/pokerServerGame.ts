@@ -87,7 +87,7 @@ export interface SettledHand {
   botDelta: number;
   humanDelta: number;
   /** Everyone dealt into the hand: final stack, whether they won a pot, and their showdown hand (HandCategory). */
-  stacks: { id: string; seat: number; stack: number; bot: boolean; won: boolean; showdownCategory: number | null }[];
+  stacks: { id: string; seat: number; startStack: number; stack: number; bot: boolean; won: boolean; showdownCategory: number | null }[];
 }
 
 class SeatOccupant {
@@ -1487,7 +1487,7 @@ export class PokerServerGame implements IPokerTableServer {
         humanDelta,
         stacks: [...this.stacksAtHandStart.keys()].map((id) => {
           const seat = this.seatOfPlayer(id);
-          return { id, seat, stack: this.stackOfPlayer(id), bot: isBotId(id), won: this.handWinners.has(seat), showdownCategory: this.handShowdown.get(seat) ?? null };
+          return { id, seat, startStack: this.stacksAtHandStart.get(id) ?? 0, stack: this.stackOfPlayer(id), bot: isBotId(id), won: this.handWinners.has(seat), showdownCategory: this.handShowdown.get(seat) ?? null };
         }),
       });
     } catch (e) {

@@ -11,7 +11,7 @@ function memoryStore(initial: string | null = null): TokenStore & { value: strin
 }
 
 const me = (id: string, coins = 10_000): MeResponse => ({
-  player: { id, displayName: 'Guest 0001', kind: 'guest', createdAt: '2026-11-08T00:00:00.000Z' },
+  player: { id, displayName: 'Guest 0001', kind: 'guest', createdAt: '2026-11-08T00:00:00.000Z', friendCode: '0123456789ABCDEF', avatar: 0 },
   identities: [],
   balances: { coins, gems: 0, xp: 0, streak_tokens: 0 },
 });
