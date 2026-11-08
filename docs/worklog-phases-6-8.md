@@ -79,6 +79,12 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     audience they don't have: on staging 8 hands took 6½ minutes before and 53 seconds after (the Agent check still
     passes, paid back exactly). The first connection restores the normal pace from the next
     turn. Tables with people at them are unchanged.
+14. **Switch-over rehearsed on staging; runbook drafted** (`docs/launch-runbook.md`). Rolled the staging API back one
+    version and forward again (`infra/rollback.mjs`: 8 s and 5 s), and restored the staging database to a point in time
+    (2 s; a marker row written after the bookmark was gone and the books reconciled clean). The runbook lists the
+    production steps, the beta gate and how to back out of each kind of problem.
+15. **iOS shell generated** (Swift Package Manager, `nomadpoker://` scheme). It needs a Mac to build; no microphone
+    permission is declared, since table voice is off in the apps.
 
 ## Questions for you
 
