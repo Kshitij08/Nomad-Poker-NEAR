@@ -98,6 +98,13 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     Bans now also stop the player's Agent at the next minute sweep (checked on staging: stopped 40 s after the ban,
     its stack paid back). Not done: a banned player's already-open table socket stays until they leave (the next sit
     or sign-in is refused).
+17. **Phase 6 signing groundwork built and verified offline.** `packages/chain`: the escrow's settlement-authority
+    instructions from the IDL, PDAs, transactions compiled like web3.js and signed through WebCrypto Ed25519 (the key
+    stays non-extractable; Workers support it), and a devnet-only JSON-RPC client. Tests compare PDAs, message bytes
+    and signed wire bytes with `@solana/web3.js` (identical) and discriminators with the IDL. No transaction sent, no
+    real key used. Wiring it into the tables is listed in `docs/phase-6-design.md`.
+18. **Store rules check.** The client has no real-money purchase or external payment flow, so store builds only drop
+    the SOL features.
 
 ## Questions for you
 
@@ -136,3 +143,5 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
 9. **Native Google sign-in** needs OAuth client ids (Android SHA-1 + iOS) from your Google Cloud project.
 10. **The production domain.** What domain will the web app and the APIs live on (e.g. `play.<domain>`)? It sets
     the production allowed origins, the CSP, the deep-link app verification files and the launch step.
+11. **The coach's written note.** It uses Claude (default model `claude-haiku-5-5`) when the API has an
+    `ANTHROPIC_API_KEY` secret; without it players get the computed report only. Do you want the note, and whose key?

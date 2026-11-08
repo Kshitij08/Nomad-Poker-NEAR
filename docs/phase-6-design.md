@@ -1,6 +1,12 @@
 # Phase 6 design: on-chain tables on the new stack (devnet)
 
-Status: design, 9 Nov 2026. Nothing here sends a transaction yet; building it needs the decisions at the end.
+Status, 10 Nov 2026: design, plus the signing groundwork. `packages/chain` builds the escrow's authority instructions,
+compiles and signs transactions with WebCrypto Ed25519 and talks JSON-RPC; its tests match `@solana/web3.js` byte for
+byte, offline. Nothing sends a transaction yet; the rest needs the decisions at the end.
+
+Next to build once keys are OK'd: a hand-start hook in `PokerServerGame` (await `begin_round` before the deal), a
+table-level settle step from `onHandSettled` (`settle_round` with every seat's delta), buy-in by reading the seat PDA
+the player's wallet funded, and cash-out / close through the same signer, then the two-wallet devnet harness.
 Programs stay as they are (`poker-escrow` `GdduGz…ozo`, `poker-per` test `4A3DZW…MZ` / live `7q2vxh…pv`).
 
 ## What exists
