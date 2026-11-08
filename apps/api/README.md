@@ -15,6 +15,11 @@ ledger; the contract (routes, types, error codes) is `packages/contract` (`@noma
 | `GET /v1/progress` | Everything the retention screens paint: balances, items, level, spin, login track, missions. |
 | `POST /v1/rewards/spin` | The daily spin: the server rolls (HMAC of a secret, the player and the UTC day, so a retry gets the same prize) and pays a catalogue prize once a day. |
 | `POST /v1/rewards/login` | The 7-day login track: the server reads the streak, spends a shield on a one-day gap, pays the catalogue day. |
+| `GET /v1/social` | Friends (relation, presence: online in the last two minutes, the table a friend sits at), the live table invites, server time. Counts as activity. |
+| `POST /v1/friends/request` `{ idOrName }`, `/accept` `{ friendId }`, `/remove` `{ friendId }` | friends.js's rules on D1: Friend IDs (16 hex) or a unique name; asking back accepts; removing clears both sides. |
+| `POST /v1/invites/send` `{ friendId, session }`, `/v1/invites/dismiss` `{ fromId }` | Friends-only table invites, 10 minutes, newest 10 kept. |
+| `POST /v1/me/profile` `{ displayName?, avatar? }` | Rename (2–24 characters) and avatar. |
+| `GET /v1/leaderboards/:kind?page=` | Weekly / season earnings, weekly / all-time hands won, friends weekly — from the hands the game server recorded. |
 | `POST /v1/missions/claim` `{ id }` | Pays a mission only when the progress the game server counted reaches its target, once per day / week. |
 
 Sessions are opaque bearer tokens (`np_…`, 30 days, sliding); only their SHA-256 is stored. Sending a guest's token

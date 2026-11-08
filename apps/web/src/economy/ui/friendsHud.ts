@@ -9,7 +9,7 @@
  * the router overlay 'friends'; the toast lives on a persistent layer above every screen (FriendsCanvas order 510).
  *
  * Faithful quirks kept: the designer sheet has no "Status" label, so status lines are not shown there; its
- * PlayerName / FriendsCount texts are not bound by FriendsHud (they keep the designer text).
+ * The FriendsCount text is not bound by FriendsHud (it keeps the designer text); PlayerName shows the player's name.
  */
 import type { AppContext, Screen } from '../../app/app';
 import type { UNode } from '../../hud/unityUi';
@@ -279,6 +279,7 @@ class FriendsSheet {
   private readonly root: UNode;
   private readonly list: UNode;
   private readonly idLabel: UNode | null;
+  private readonly nameLabel: UNode | null;
   private readonly profileAvatar: UNode | null;
   private readonly addInput: HTMLInputElement | null;
   private readonly addButton: ReturnType<typeof wireButton>;
@@ -307,6 +308,8 @@ class FriendsSheet {
     this.addInput = search ? attachInput(search, { onSubmit: () => this.onAdd() }) : null;
     this.idLabel = this.root.find('Sheet/FriendId');
     if (this.idLabel?.text) this.idLabel.text.rich = true;
+    // Unity left the sheet's PlayerName at the designer's "Player 1234"; show the real name.
+    this.nameLabel = this.root.find('Sheet/PlayerName');
     this.profileAvatar = this.root.find('Sheet/Avatar');
     if (this.profileAvatar) wireButton(ctx, this.profileAvatar, () => this.openPicker(), undefined, null);
 
@@ -347,6 +350,7 @@ class FriendsSheet {
         this.profileAvatar.render();
       }
     }
+    this.nameLabel?.setText(PokerClientIdentity.playerName);
     if (!this.idLabel) return;
     const id = PokerClientIdentity.playFabId;
     const friendId = signedIn() && id ? FriendCode.format(id) : '<color=#FFFFFF80>signing in…</color>';

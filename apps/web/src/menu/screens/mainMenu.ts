@@ -47,16 +47,16 @@ function bindLogin(host: NomadHost): void {
     if (a.signInWithGoogle) void a.signInWithGoogle();
     else host.message('Google sign-in', 'Google sign-in needs the online account service, which is off in this build. Play as Guest instead.');
   });
-  // Email: a form in the Nomad look, signing in the same way.
+  // Email: a one-time sign-in link (the Nomad account has no passwords), in the Nomad look.
   host.bind(root, 'Panel/Btn_Email', () =>
-    host.dialogs.form('Sign in with email', ['Email', 'Password'], [false, true], 'Sign in', (v) => {
+    host.dialogs.form('Sign in with email', ['Email'], [false], 'Send link', (v) => {
       const a = acc();
       if (!a.signInWithEmail) {
         host.message('Sign in with email', 'Email sign-in needs the online account service, which is off in this build. Play as Guest instead.');
         return;
       }
-      host.busy('Signing in', 'Signing in with your email…');
-      void host.run(() => a.signInWithEmail!(v[0] ?? '', v[1] ?? ''), () => host.closeMessage());
+      host.busy('Signing in', 'Sending your sign-in link…');
+      void host.run(() => a.signInWithEmail!(v[0] ?? '', ''), () => host.closeMessage());
     }),
   );
   const keep = host.find(root, 'Panel/KeepSignedIn');
@@ -165,9 +165,9 @@ export function openSettings(host: NomadHost): void {
 export const settingsAccountExtras: ((host: NomadHost, rows: [string, () => void][]) => void)[] = [];
 
 function saveWithEmail(host: NomadHost): void {
-  host.dialogs.form('Save your account', ['Email', 'Password (6+ characters)'], [false, true], 'Save', (v) =>
-    void host.run(() => accountExtras(host.ctx).addRecoveryLogin!((v[0] ?? '').trim(), v[1] ?? ''), () =>
-      host.message('Account saved', 'Sign in with this email on any device: your Coins and progress come with you.')),
+  host.dialogs.form('Save your account', ['Email'], [false], 'Save', (v) =>
+    void host.run(() => accountExtras(host.ctx).addRecoveryLogin!((v[0] ?? '').trim(), ''), () =>
+      host.message('Account saved', 'Sign in with this email on any device (we send a one-time link): your Coins and progress come with you.')),
   );
 }
 
