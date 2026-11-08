@@ -1,4 +1,4 @@
-import { StakeCatalog, type StakeTier } from '../../core/stakes/stakes';
+import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
 
 /**
  * Session naming and table-mode constants: ports of Core/Stakes/StakeSessionNames.cs, the parts of

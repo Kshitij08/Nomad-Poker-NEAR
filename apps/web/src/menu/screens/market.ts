@@ -15,7 +15,7 @@
  */
 import type { UNode } from '../../hud/unityUi';
 import type { AppContext } from '../../app/app';
-import { formatN0 } from '../../core';
+import { formatN0 } from '@nomad/engine';
 import type { NomadHost } from '../host';
 import type { BackendApiLike } from '../deps';
 

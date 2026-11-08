@@ -11,7 +11,7 @@
  *   and the tab's own Image sprite, neither of which exists any more).
  */
 import type { AppContext } from '../../app/app';
-import { LeaderboardKind } from '../../core/leaderboards/freePlayLeaderboardMath';
+import { LeaderboardKind } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
 import type { UNode } from '../../hud/unityUi';
 import type { NomadHost } from '../../menu/host';
 import { NomadHost as Host } from '../../menu/host';

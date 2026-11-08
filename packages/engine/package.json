@@ -1,0 +1,22 @@
+{
+  "name": "@nomad/engine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The poker rules, bit-exact with the Unity C# core: cards, evaluator, engine, bots, events and codec, stakes, retention, tournaments, agents. No DOM, no three.js; runs in the browser, Node and Workers.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./agents": "./src/agents/index.ts",
+    "./retention": "./src/retention/index.ts",
+    "./tournament": "./src/tournament/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "vitest": "2.1.8"
+  }
+}

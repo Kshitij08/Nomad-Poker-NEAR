@@ -1,0 +1,20 @@
+{
+  "name": "nomad-poker",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/web",
+    "apps/web/server"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w nomad-poker-web",
+    "server": "npm run dev -w nomad-poker-local-server",
+    "build": "npm run build -w nomad-poker-web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

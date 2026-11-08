@@ -5,8 +5,8 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RewardGrant } from '../../app/services';
-import { LeaderboardKind } from '../../core/leaderboards/freePlayLeaderboardMath';
-import { FriendRelation } from '../../core/social/friendRules';
+import { LeaderboardKind } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
+import { FriendRelation } from '@nomad/engine/social/friendRules';
 import { PlayFabConfig } from '../config';
 import { PokerClientIdentity } from '../identity';
 import { FreePlayLeaderboard } from '../leaderboards/freePlayLeaderboard';

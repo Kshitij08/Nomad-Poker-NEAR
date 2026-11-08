@@ -6,8 +6,8 @@
  * Router ids 'weekly-reward' and 'login-rewards' (overlay).
  */
 import { RewardKind, type RewardGrant } from '../../app/services';
-import { LoginRewardCatalog, loginRewardSummary } from '../../core/retention';
-import { PokerSound } from '../../core/orchestration/pokerSound';
+import { LoginRewardCatalog, loginRewardSummary } from '@nomad/engine/retention';
+import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
 import type { SpriteData, UNode } from '../../hud/unityUi';
 import {
   setImageEnabled, setImageSprite, setTextEnabled, spriteByKey, wireButton,

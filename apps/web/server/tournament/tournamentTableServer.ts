@@ -5,10 +5,10 @@
  * only a change in which table's events a connection receives (PokerEventCodec payloads, OutOfBandSequence for the
  * tournament events and catch-ups).
  */
-import { CryptoRandom } from '../../src/core/cards/random';
-import { PokerEventCodec } from '../../src/core/events/pokerEventCodec';
-import type { PlayerAction } from '../../src/core/actions/actions';
-import { TEST_SCENE_TABLE_SETTINGS } from '../../src/core/orchestration/tableSettings';
+import { CryptoRandom } from '@nomad/engine/cards/random';
+import { PokerEventCodec } from '@nomad/engine/events/pokerEventCodec';
+import type { PlayerAction } from '@nomad/engine/actions/actions';
+import { TEST_SCENE_TABLE_SETTINGS } from '@nomad/engine/orchestration/tableSettings';
 import { TournamentServerGame } from '../../src/tournaments/runtime/tournamentServerGame';
 import type { TournamentBackend, TournamentPacing } from '../../src/tournaments/runtime/wire';
 import type { ServerClock } from '../src/clock';

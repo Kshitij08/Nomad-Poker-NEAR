@@ -2,8 +2,8 @@
  * Pure ports of the decision logic in Game/Theming (ThemeManager, ThemeBackgroundFitter) and
  * Game/Stakes/StakeTableSkin.cs. No DOM, no three.js — unit tested in __tests__/themeLogic.test.ts.
  */
-import { StakeCatalog, type StakeTier } from '../core/stakes/stakes';
-import { formatN0 } from '../core/util/dotnetMath';
+import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import type { RGBA } from '../hud/unityUi';
 
 export type ThemeName = 'Default' | 'Neon_City' | 'Forest' | 'Desert' | 'Town';

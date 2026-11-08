@@ -14,8 +14,8 @@
  * TableDisconnectButton's sequence (leave RPC, 0.75 s, shut the runner down).
  */
 import type { AppContext } from '../../app/app';
-import { PokerSound } from '../../core/orchestration/pokerSound';
-import { TablePhase } from '../../core/events/pokerEvent';
+import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
+import { TablePhase } from '@nomad/engine/events/pokerEvent';
 import { buildNode, HUD_DATA, UNode, whenFontsReady, type NodeData, type RGBA } from '../../hud/unityUi';
 import type { TableChrome } from '../../table/tableScreen';
 import type { ClientGame } from '../clientGame';

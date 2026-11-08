@@ -6,7 +6,7 @@
  */
 import type { AppContext } from '../app/app';
 import type { UNode } from '../hud/unityUi';
-import { AvatarCatalog, formatN0 } from '../core';
+import { AvatarCatalog, formatN0 } from '@nomad/engine';
 import { MENU_DATA, nodeDataAt, type MenuCanvasData } from './data';
 import { NomadDialogs, fitText } from './dialogs';
 import { StakeSelection } from './stakes';

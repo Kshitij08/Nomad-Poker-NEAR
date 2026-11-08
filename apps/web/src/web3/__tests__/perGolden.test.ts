@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { Keypair, PublicKey } from '@solana/web3.js';
 import { sha256 } from '@noble/hashes/sha256';
-import { ActionType, BettingRound, Card, type PokerEvent } from '../../core';
+import { ActionType, BettingRound, Card, type PokerEvent } from '@nomad/engine';
 import { concat, hex, utf8 } from '../lib/bytes';
 import { PerTableAddresses } from '../per/addresses';
 import { PerGame } from '../per/legal';

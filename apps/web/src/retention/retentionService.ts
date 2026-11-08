@@ -18,8 +18,8 @@ import { PlayerPrefs, RewardKind, type RewardGrant, type VirtualWallet } from '.
 import {
   DailySpinCatalog, LevelRewardCatalog, MissionCatalog, MissionProgressMath, rewardPreview, systemClock, type Clock,
   type MissionDef,
-} from '../core/retention';
-import { formatN0 } from '../core/util/dotnetMath';
+} from '@nomad/engine/retention';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import { DailyEngagement, defaultRoll, type PrefsLike, type RetentionEnv } from './dailyEngagement';
 import { LevelUpQueue, PlayerProgression } from './playerProgression';
 import { StakeSelection } from './stakeSelection';

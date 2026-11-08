@@ -10,7 +10,7 @@ import {
   buildSessionCode, clampAgentConfig,
   type AgentDeploymentConfig, type AgentDeploymentProgress, type AgentDeploymentSummary, type AgentHandHistory,
   type AgentSessionHistory, newAgentProgress,
-} from '../core/agents';
+} from '@nomad/engine/agents';
 import type { AgentBackend } from './agentBackend';
 import { startRequestOf } from './server/agentFarm';
 

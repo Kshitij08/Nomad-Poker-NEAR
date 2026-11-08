@@ -3,8 +3,8 @@
  * ScrollList) in 1920x1080 reference pixels with centre-origin anchored positions; `refPanel` + `place` reproduce that
  * coordinate system (x right, y up, from the panel centre) and scale the panel to fit the window.
  */
-import { formatN0 } from '../../core/util/dotnetMath';
-import { roundHalfEven } from '../../core/util/dotnetMath';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
+import { roundHalfEven } from '@nomad/engine/util/dotnetMath';
 import './agents.css';
 
 export const COLORS = {

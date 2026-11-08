@@ -9,7 +9,7 @@
  * `tableSelectOnchain`.
  */
 import type { UNode } from '../../hud/unityUi';
-import { StakeCatalog, formatN0, type StakeTier } from '../../core';
+import { StakeCatalog, formatN0, type StakeTier } from '@nomad/engine';
 import { MENU_DATA, scriptOf, type RefData } from '../data';
 import { NomadHost } from '../host';
 import { StakeTableSkin, type Theme } from '../stakes';

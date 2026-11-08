@@ -8,7 +8,7 @@
  * host.actions.openDailySpin / openWeeklyRewards so they run the real retention flows.
  */
 import type { AppContext } from '../app/app';
-import { MissionCatalog, type MissionDef } from '../core/retention';
+import { MissionCatalog, type MissionDef } from '@nomad/engine/retention';
 import type { SpriteData, UNode } from '../hud/unityUi';
 import type { NomadHost } from '../menu/host';
 import { newText } from '../menu/ui/canvas';

@@ -13,7 +13,7 @@ import {
   seatRoleLabel,
   TableMoney,
   type Card,
-} from '../core';
+} from '@nomad/engine';
 import { Ease, ticker, type Tween } from '../anim/tween';
 import type { SeatHud } from '../table/tableView';
 import { animatorOnEnable, uiClip } from './uiClips';

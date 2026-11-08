@@ -1,6 +1,6 @@
-import type { BotProfile } from '../../src/core/bots/botProfile';
-import type { WireEvent } from '../../src/core/events/pokerEventCodec';
-import type { EngineEvent } from '../../src/core/events/pokerEvent';
+import type { BotProfile } from '@nomad/engine/bots/botProfile';
+import type { WireEvent } from '@nomad/engine/events/pokerEventCodec';
+import type { EngineEvent } from '@nomad/engine/events/pokerEvent';
 
 /**
  * The seam for owned AFK agents (Net/Agents in Unity, `web/src/agents/server/` here — the agents porter's). Unity keeps

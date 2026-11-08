@@ -2,8 +2,8 @@
 
 How the offline single-player table behaves at runtime in the Unity build (branch `web/unity-port`), written so the
 web view layer can reproduce it. Everything here was read from the C# sources and the serialized scene/prefab values
-listed. The game logic is already ported to `web/src/core/` (see "Using the port" at the end). The port is checked
-bit-exact against the real C# code by `web/src/core/__tests__/parity.test.ts`.
+listed. The game logic is already ported to `packages/engine/src/` (see "Using the port" at the end). The port is checked
+bit-exact against the real C# code by `packages/engine/src/__tests__/parity.test.ts`.
 
 **Which scene counts.** The table scene in the build is `Assets/Test/Test.unity`. Its `PokerGameController` runs the
 single-player game whenever no Fusion `NetworkRunner` exists (`Net/PokerNetworkLauncher.cs`). In the shipped WebGL
@@ -326,7 +326,7 @@ perspective rotation (`SetLocalPerspective`), reactions and voice indicators, ch
 
 ---
 
-## Using the port (`web/src/core`)
+## Using the port (`packages/engine/src`)
 
 ```ts
 import { PokerGameController, TEST_SCENE_TABLE_SETTINGS, type TableViewPort, type AudioPort } from './core';

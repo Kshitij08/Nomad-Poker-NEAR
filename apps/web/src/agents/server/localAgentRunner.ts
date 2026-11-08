@@ -7,13 +7,13 @@
  * No browser APIs: the browser's local backend ticks it once a second; a Node table server can run it as is for
  * Agent-only tables, or embed AgentTableHost in its own tables (see README.md).
  */
-import { StakeCatalog, type StakeTier } from '../../core/stakes/stakes';
-import { PokerEngine } from '../../core/engine/pokerEngine';
-import { SeededRandom, DotNetRandom } from '../../core/cards/random';
-import { HeuristicBot } from '../../core/bots/heuristicBot';
-import { positionOf, type BotContext, type IPokerBot } from '../../core/bots/botContext';
-import { QuickPlayFreeBots } from '../../core/bots/quickPlayFreeBots';
-import { AgentSessionHost, newAgentSummary, AgentStopReasons, type AgentSession } from '../../core/agents';
+import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
+import { PokerEngine } from '@nomad/engine/engine/pokerEngine';
+import { SeededRandom, DotNetRandom } from '@nomad/engine/cards/random';
+import { HeuristicBot } from '@nomad/engine/bots/heuristicBot';
+import { positionOf, type BotContext, type IPokerBot } from '@nomad/engine/bots/botContext';
+import { QuickPlayFreeBots } from '@nomad/engine/bots/quickPlayFreeBots';
+import { AgentSessionHost, newAgentSummary, AgentStopReasons, type AgentSession } from '@nomad/engine/agents';
 import { AgentTableHost, agentPlayerId, type AgentReporter } from './agentTableHost';
 import type { AgentFarm, DeploymentRow } from './agentFarm';
 import { configOfRow } from './agentFarm';

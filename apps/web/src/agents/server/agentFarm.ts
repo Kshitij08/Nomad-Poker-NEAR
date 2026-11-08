@@ -12,7 +12,7 @@ import {
   newAgentDeploymentConfig, newAgentHandRecord, newAgentProgress, newAgentSummary,
   type AgentDeploymentConfig, type AgentDeploymentProgress, type AgentDeploymentSummary, type AgentHandHistory,
   type AgentHandRecord, type AgentSessionHistory, type StreetProfileSnapshot,
-} from '../../core/agents';
+} from '@nomad/engine/agents';
 import type { AgentProgressBody } from './agentTableHost';
 
 export type AgentPhase = 'queued' | 'seated' | 'playing' | 'stop_requested' | 'settling' | 'completed' | 'failed';

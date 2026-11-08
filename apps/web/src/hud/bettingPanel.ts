@@ -17,7 +17,7 @@ import {
   type BettingPanelPort,
   type BettingPanelState,
   type LegalActions,
-} from '../core';
+} from '@nomad/engine';
 import { evaluateCurve, type Keyframe } from '../anim/animCurve';
 import { Ease, ticker, type Tween } from '../anim/tween';
 import { animatorOnEnable, uiClip } from './uiClips';

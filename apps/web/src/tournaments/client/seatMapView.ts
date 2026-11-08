@@ -1,6 +1,6 @@
-import type { Card } from '../../core/cards/card';
-import { RoundPlanner } from '../../core/tournament';
-import type { BettingPanelPort, SeatRole, TableViewPort } from '../../core/orchestration/tableView';
+import type { Card } from '@nomad/engine/cards/card';
+import { RoundPlanner } from '@nomad/engine/tournament';
+import type { BettingPanelPort, SeatRole, TableViewPort } from '@nomad/engine/orchestration/tableView';
 
 /**
  * Tournament tables have 8 chairs (TournamentRules.SeatsPerTable) and the local player must sit at the near seat

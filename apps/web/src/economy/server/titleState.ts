@@ -4,7 +4,7 @@
  * title (economy/playfab/localTitle.ts), the offline chip ledger (chipLedger.ts) and the CloudScript ports
  * (cloudScript.ts) can all share it — the same way the real ledger and CloudScript share one title.
  */
-import { FreePlayLeaderboardMath } from '../../core/leaderboards/freePlayLeaderboardMath';
+import { FreePlayLeaderboardMath } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
 
 export interface DataRecord {
   Value: string;

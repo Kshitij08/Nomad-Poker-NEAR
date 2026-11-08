@@ -9,8 +9,8 @@
  */
 import type { AppContext, Screen } from '../../app/app';
 import { RewardKind, type RewardGrant } from '../../app/services';
-import { LevelRewardCatalog } from '../../core/retention';
-import { roundHalfEven, formatN0 } from '../../core/util/dotnetMath';
+import { LevelRewardCatalog } from '@nomad/engine/retention';
+import { roundHalfEven, formatN0 } from '@nomad/engine/util/dotnetMath';
 import { whenFontsReady, type UNode } from '../../hud/unityUi';
 import {
   CoroutineHost, clamp01, easeOutBack, easeOutCubic, easeOutElastic, lerp, lerpUnclamped, tweenRoutine, waitRoutine,

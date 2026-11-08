@@ -10,7 +10,7 @@
  */
 import {
   AgentHandReplay, AgentHandReplayText, ReplaySeatFrame, ReplayStep, type AgentDeploymentSummary, type AgentHandRecord, type ReplaySeat,
-} from '../../core/agents';
+} from '@nomad/engine/agents';
 import {
   COLORS, button, cardMark, cardsRich, richCards, duration, el, escapeHtml, line, place, refPanel, setChip, shortText, type RefPanel,
 } from './dom';

@@ -1,6 +1,6 @@
 import type { AppContext } from '../app/app';
 import { RewardGrant, type VirtualWallet } from '../app/services';
-import { AgentStrategyState } from '../core/agents';
+import { AgentStrategyState } from '@nomad/engine/agents';
 import { HttpAgentBackend, LocalAgentBackend, LOCAL_FARM_KEY, type AgentBackend } from './agentBackend';
 import { AgentDeployService, type AgentSummaryCloud } from './agentDeployService';
 import { AgentsService, prefsStore } from './agentsService';

@@ -4,8 +4,8 @@
  * SPEED× faster on both sides.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PlayerAction } from '../../src/core/actions/actions';
-import { TablePhase } from '../../src/core/events/pokerEvent';
+import { PlayerAction } from '@nomad/engine/actions/actions';
+import { TablePhase } from '@nomad/engine/events/pokerEvent';
 import { connectTable } from '../../src/net/matchmaking';
 import { NetConnection } from '../../src/net/netConnection';
 import { TableChat } from '../../src/net/tableChat';

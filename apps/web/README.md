@@ -53,7 +53,7 @@ is listed in `VITE_ALLOWED_ENDPOINTS` (comma-separated) or the build sets `VITE_
 
 | Path | What it is |
 |---|---|
-| `src/core/` | Port of the C# core: cards, evaluator, `PokerEngine`, bots, `PokerGameController`. It has no DOM and no three.js. `__tests__/parity.test.ts` checks it bit-exact against the real C#, compiled with .NET (`__tests__/golden/gen`). |
+| `../../packages/engine` (`@nomad/engine`) | Port of the C# core: cards, evaluator, `PokerEngine`, bots, `PokerGameController`. It has no DOM and no three.js, so the API Worker and table servers share it. `src/__tests__/parity.test.ts` checks it bit-exact against the real C#, compiled with .NET (`src/__tests__/golden/gen`). |
 | `src/anim/unitySpline.ts` | Port of `com.unity.splines` 2.8.4: Bezier knots, arc-length t, rotation-minimising up vectors, `SplineAnimate` timing and easing. |
 | `src/anim/tween.ts` | DOTween stand-in (eases, delayed calls, sequences, `SetLink`). The one clock (`ticker`) everything runs on. |
 | `src/anim/animCurve.ts`, `clipPlayer.ts` | Unity AnimationCurve evaluation, and an Animator-style clip player (Write Defaults). It drives the community slots. |

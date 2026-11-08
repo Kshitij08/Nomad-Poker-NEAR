@@ -4,11 +4,11 @@
  * wallet. Also holds the LevelUpPanel's static level-up listener (Pending queue, hydration), see `LevelUpQueue`.
  */
 import { RewardGrant, RewardKind } from '../app/services';
-import { HandCategory } from '../core/evaluation/handCategory';
+import { HandCategory } from '@nomad/engine/evaluation/handCategory';
 import {
   LevelRewardCatalog, MissionCatalog, MissionKind, MissionProgressMath, PlayerLevelMath, UtcDay, deserializeBoard,
   rewardPreview, serializeBoard, type MissionBoardState,
-} from '../core/retention';
+} from '@nomad/engine/retention';
 import type { RetentionEnv } from './dailyEngagement';
 
 /** ProgressionCloud: LoadMissionsOverride / SaveMissionsOverride. */

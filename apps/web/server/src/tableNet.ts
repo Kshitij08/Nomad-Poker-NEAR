@@ -1,4 +1,4 @@
-import type { PlayerAction } from '../../src/core/actions/actions';
+import type { PlayerAction } from '@nomad/engine/actions/actions';
 
 /** Fusion PlayerRef: one connection's id inside a session (1, 2, 3…). 0 = PlayerRef.None. */
 export type PlayerRef = number;

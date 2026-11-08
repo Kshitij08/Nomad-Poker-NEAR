@@ -9,7 +9,7 @@
  * everything else lets clicks through (the art's generator turns raycasts off on decorative images and labels).
  */
 import { buildNode, assetUrl, cssColor, rgba, tmpFaceColor, type UNode, type NodeData, type SpriteData } from '../../hud/unityUi';
-import { PokerSound } from '../../core';
+import { PokerSound } from '@nomad/engine';
 import { MENU_DATA, scriptOf, type MenuNodeData, type PersistentCall, type RefData, type SelectableData } from '../data';
 
 export type Listener<T = void> = (v: T) => void;

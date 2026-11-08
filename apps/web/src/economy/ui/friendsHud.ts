@@ -13,10 +13,10 @@
  */
 import type { AppContext, Screen } from '../../app/app';
 import type { UNode } from '../../hud/unityUi';
-import { PokerSound } from '../../core/orchestration/pokerSound';
-import { AvatarCatalog } from '../../core/social/avatarCatalog';
-import { FriendCode } from '../../core/social/friendCode';
-import { FriendLastSeen, FriendRelation, FriendTags } from '../../core/social/friendRules';
+import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
+import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
+import { FriendCode } from '@nomad/engine/social/friendCode';
+import { FriendLastSeen, FriendRelation, FriendTags } from '@nomad/engine/social/friendRules';
 import { PokerClientIdentity } from '../identity';
 import { PlayFabAuth } from '../playfab/auth';
 import { FriendInvites, inviteLabel, type FriendInvite } from '../social/friendInvites';

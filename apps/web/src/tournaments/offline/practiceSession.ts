@@ -1,5 +1,5 @@
-import { CryptoRandom } from '../../core/cards/random';
-import { TEST_SCENE_TABLE_SETTINGS } from '../../core/orchestration/tableSettings';
+import { CryptoRandom } from '@nomad/engine/cards/random';
+import { TEST_SCENE_TABLE_SETTINGS } from '@nomad/engine/orchestration/tableSettings';
 import { ticker, type Linkable, type Tween } from '../../anim/tween';
 import { tickerWait } from '../../table/tableView';
 import type { TableSessionFactory } from '../../table/tableScreen';

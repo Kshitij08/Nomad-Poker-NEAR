@@ -7,7 +7,7 @@ script in `web/tools/` instead of hand-copying numbers.
 ## Ownership and concurrency
 - Several people/agents work in this checkout at the same time. You own only the folders your brief names.
 - Never edit: `src/app/*`, `src/main.ts`, `src/modules.ts`, `src/table/*`, `src/three/*` (unless your brief allows
-  it), `src/core/*` outside a subfolder your brief gives you, or another module's folder. If you need a change
+  it), `packages/engine/src/*` (`@nomad/engine`) outside a subfolder your brief gives you, or another module's folder. If you need a change
   there, put the exact diff in your report.
 - Never run git commands that change the index or the working tree (no add/commit/stash/checkout/reset/clean).
 - Use only the built-in browser tools (`mcp__Claude_Browser__*`), never Claude in Chrome (the user's own browser).
@@ -30,7 +30,7 @@ script in `web/tools/` instead of hand-copying numbers.
 - `src/hud/unityUi.ts` + `uiClips.ts`: render Unity uGUI canvases extracted to JSON as DOM (`buildNode`, `UNode`)
   and play UI clips. `tools/extract-unity-hud.mjs` (with `tools/lib/unity-yaml.mjs` `UnityProject`, which resolves
   prefabs/variants/overrides) is the reference extractor. Reuse them; don't hand-build UI the extractor can supply.
-- `src/core/`: the ported C# core (engine, bots, events, controller). `src/anim/tween.ts` `ticker` is the one clock.
+- `packages/engine/src/` (`@nomad/engine`): the ported C# core (engine, bots, events, controller). `src/anim/tween.ts` `ticker` is the one clock.
 
 ## Data and assets
 - Extracted data: `src/data/<module>-*.json`. Assets: `public/assets/<module>/`. Keep them lean: resize oversized

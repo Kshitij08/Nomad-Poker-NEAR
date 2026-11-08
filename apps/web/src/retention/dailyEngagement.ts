@@ -8,7 +8,7 @@ import { RewardGrant, type VirtualWallet } from '../app/services';
 import {
   DailySpinCatalog, DailySpinMath, DailySpinResult, LoginClaimPreview, LoginStreakMath, UtcDay, type Clock,
   type DailyEngagementState,
-} from '../core/retention';
+} from '@nomad/engine/retention';
 
 /** The PlayerPrefs surface retention needs (app/services PlayerPrefs, or an in-memory map in tests). */
 export interface PrefsLike {

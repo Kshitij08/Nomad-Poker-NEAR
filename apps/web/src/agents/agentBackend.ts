@@ -7,7 +7,7 @@
  */
 import type {
   AgentDeploymentProgress, AgentDeploymentSummary, AgentHandHistory, AgentSessionHistory,
-} from '../core/agents';
+} from '@nomad/engine/agents';
 import { AgentFarm, AgentFarmError, type AgentMoney, type AgentStartRequest } from './server/agentFarm';
 import { LocalAgentRunner } from './server/localAgentRunner';
 

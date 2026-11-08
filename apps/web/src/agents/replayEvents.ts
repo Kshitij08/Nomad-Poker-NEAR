@@ -6,12 +6,12 @@
  * clockwise in their table order, spread over the view's seats. Hidden hole cards (everyone but the Agent, until shown at
  * showdown) are dealt face down as placeholders: the replay never had them (privacy), so the view can't leak them.
  */
-import { ActionType } from '../core/actions/actions';
-import { Card } from '../core/cards/card';
-import type { EngineEvent, SeatSnapshot, ShowdownEntry } from '../core/events/pokerEvent';
-import type { HandValue } from '../core/evaluation/handValue';
-import { BettingRound } from '../core/state/state';
-import { ReplayStep, type AgentHandReplay } from '../core/agents';
+import { ActionType } from '@nomad/engine/actions/actions';
+import { Card } from '@nomad/engine/cards/card';
+import type { EngineEvent, SeatSnapshot, ShowdownEntry } from '@nomad/engine/events/pokerEvent';
+import type { HandValue } from '@nomad/engine/evaluation/handValue';
+import { BettingRound } from '@nomad/engine/state/state';
+import { ReplayStep, type AgentHandReplay } from '@nomad/engine/agents';
 
 /** Which pause follows an event (the controller's TableSettings delays). */
 export type ReplayPause = 'none' | 'deal' | 'settle' | 'turn' | 'action' | 'showdown';

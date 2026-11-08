@@ -1,5 +1,5 @@
 import type { AppContext, Screen } from '../app/app';
-import { PokerGameController, TEST_SCENE_TABLE_SETTINGS, type AudioPort, type TableSettings } from '../core';
+import { PokerGameController, TEST_SCENE_TABLE_SETTINGS, type AudioPort, type TableSettings } from '@nomad/engine';
 import type { TableStage } from './tableStage';
 import { tickerWait, type TableView } from './tableView';
 

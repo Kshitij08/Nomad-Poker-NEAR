@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Golden payloads from the real Unity PokerEventCodec.cs, for packages/engine/src/events/__tests__/codec.test.ts.
+       Run: dotnet run -p:UNITY_REPO=<Unity Poker checkout> (from this folder) → writes codec-golden.json next to it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>CS1574;CS1584;CS1581;CS1580;CS0618</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="$(UNITY_REPO)/Assets/Scripts/Core/Cards/*.cs" />
+    <Compile Include="$(UNITY_REPO)/Assets/Scripts/Core/Evaluation/*.cs" />
+    <Compile Include="$(UNITY_REPO)/Assets/Scripts/Core/Actions/*.cs" />
+    <Compile Include="$(UNITY_REPO)/Assets/Scripts/Core/State/*.cs" />
+    <Compile Include="$(UNITY_REPO)/Assets/Scripts/Core/Events/*.cs" />
+  </ItemGroup>
+</Project>

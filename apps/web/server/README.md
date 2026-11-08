@@ -1,6 +1,6 @@
 # Local table server (web port of the Fusion dedicated server)
 
-`npm run server` in `web/` (installs this folder's deps, then `tsx watch src/main.ts`) starts the authoritative table
+`npm run server` at the repo root (`tsx watch src/main.ts` in this workspace) starts the authoritative table
 server on **ws://127.0.0.1:5181** (`POKER_SERVER_PORT`, `POKER_SERVER_SPEED` = time scale, `POKER_SERVER_HOST`).
 Local only: it trusts the browser's local chip tickets. Nothing here talks to Photon, PlayFab or any deployed server.
 
@@ -10,7 +10,7 @@ Local only: it trusts the browser's local chip tickets. Nothing here talks to Ph
 | `src/rooms.ts` | the Fusion session layer + VPS spawner: rooms (8 connections), PlayerRefs, Quick Play pools + overflow, party rooms (`PokerDedicatedPartySpawner`), idle quit, chat relay (Photon Chat), WebRTC signalling (Vivox) |
 | `src/economy.ts` | `Net/Economy/ChipTableSession.cs` over the economy module's `TitleChipLedger` (src/economy/server) |
 | `src/tableNet.ts` | `PokerTableNet` (server half) and `IPokerTableServer` |
-| `../src/core/events/pokerEventCodec.ts` | `PokerEventCodec.cs`, byte-identical (golden test against the real C#) |
+| `packages/engine/src/events/pokerEventCodec.ts` (`@nomad/engine`) | `PokerEventCodec.cs`, byte-identical (golden test against the real C#) |
 | `../src/net/shared/*` | protocol, `PokerChatText` / rate limiter, `StakeSessionNames`, `ChainTableMode`, party codes |
 
 Wire: binary frames are C# codec payloads; text frames are JSON (`src/net/shared/protocol.ts`).

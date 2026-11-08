@@ -7,21 +7,21 @@
  *
  * DOM-free: the browser gives it the 3D table view; the headless test clients give it a recording view.
  */
-import { PlayerAction, type ActionType, type LegalActions } from '../core/actions/actions';
+import { PlayerAction, type ActionType, type LegalActions } from '@nomad/engine/actions/actions';
 import type {
   BettingRoundChangedEvent, BlindPostedEvent, HandEndedEvent, HandStartedEvent, LobbyStateEvent, PlayerActedEvent,
   PotAwardedEvent, SeatSnapshot, ShowdownEvent, TableEconomyEvent, TableRosterEvent, TurnStartedEvent,
-} from '../core/events/pokerEvent';
-import { TablePhase } from '../core/events/pokerEvent';
-import { PokerEventCodec, type WireEvent } from '../core/events/pokerEventCodec';
-import type { TournamentViewEvent } from '../core/events/tournamentEvents';
-import { TournamentViewReason } from '../core/events/tournamentEvents';
-import { HumanActionProvider, type WaitFn } from '../core/orchestration/actionProviders';
-import { PokerSound, type AudioPort } from '../core/orchestration/pokerSound';
-import { TableEventPresenter } from '../core/orchestration/tableEventPresenter';
-import type { TableViewPort } from '../core/orchestration/tableView';
-import { AvatarCatalog } from '../core/social/avatarCatalog';
-import { BettingRound } from '../core/state/state';
+} from '@nomad/engine/events/pokerEvent';
+import { TablePhase } from '@nomad/engine/events/pokerEvent';
+import { PokerEventCodec, type WireEvent } from '@nomad/engine/events/pokerEventCodec';
+import type { TournamentViewEvent } from '@nomad/engine/events/tournamentEvents';
+import { TournamentViewReason } from '@nomad/engine/events/tournamentEvents';
+import { HumanActionProvider, type WaitFn } from '@nomad/engine/orchestration/actionProviders';
+import { PokerSound, type AudioPort } from '@nomad/engine/orchestration/pokerSound';
+import { TableEventPresenter } from '@nomad/engine/orchestration/tableEventPresenter';
+import type { TableViewPort } from '@nomad/engine/orchestration/tableView';
+import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
+import { BettingRound } from '@nomad/engine/state/state';
 import type { NetConnection } from './netConnection';
 import { PokerChatRateLimiter } from './shared/chat';
 import type { ServerMessage } from './shared/protocol';

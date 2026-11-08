@@ -6,7 +6,7 @@
 import { UNode, whenFontsReady, type RGBA } from '../../hud/unityUi';
 import { MENU_DATA, nodeDataAt, type MenuComponents, type MenuNodeData } from '../data';
 import { buildTree, runLayout, type TreeEnv } from './tree';
-import { PokerSound } from '../../core';
+import { PokerSound } from '@nomad/engine';
 import { menuReference, portraitMenuLayout } from '../../layout/portraitMenu';
 
 export type Vec2 = [number, number];

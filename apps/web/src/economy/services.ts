@@ -11,11 +11,11 @@
  *   ctx.services.economy       EconomyService — backend mode, grant queue, chip-ledger factory for the net server
  */
 import { PlayerPrefs, type RewardGrant, type VirtualWallet } from '../app/services';
-import { AvatarCatalog } from '../core/social/avatarCatalog';
-import { AvatarUrl } from '../core/social/avatarUrl';
-import { FriendCode } from '../core/social/friendCode';
-import { FriendLastSeen } from '../core/social/friendRules';
-import type { LeaderboardKind } from '../core/leaderboards/freePlayLeaderboardMath';
+import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
+import { AvatarUrl } from '@nomad/engine/social/avatarUrl';
+import { FriendCode } from '@nomad/engine/social/friendCode';
+import { FriendLastSeen } from '@nomad/engine/social/friendRules';
+import type { LeaderboardKind } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
 import type { EconomyAccount } from './account';
 import { PokerFunnel } from './analytics/pokerFunnel';
 import { PokerTelemetry, type LocalTelemetrySink } from './analytics/pokerTelemetry';

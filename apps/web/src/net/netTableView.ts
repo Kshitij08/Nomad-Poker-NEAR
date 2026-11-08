@@ -11,14 +11,14 @@
  * reaction bubble (SeatView.ShowReaction) and the voice indicators on the seat's Mic node (SeatView.SetVoiceState).
  */
 import { Ease, ticker, type Tween } from '../anim/tween';
-import type { Card } from '../core/cards/card';
-import type { BettingPanelPort, SeatRole } from '../core/orchestration/tableView';
+import type { Card } from '@nomad/engine/cards/card';
+import type { BettingPanelPort, SeatRole } from '@nomad/engine/orchestration/tableView';
 import type { SeatHudView } from '../hud/seatHud';
 import { buildNode, HUD_DATA, UNode, type NodeData } from '../hud/unityUi';
 import type { TableStage } from '../table/tableStage';
 import { TableView, type PotHud, type SeatHud } from '../table/tableView';
 import type { NetTableViewPort } from './clientGame';
-import { isHiddenCard } from '../core/events/pokerEventCodec';
+import { isHiddenCard } from '@nomad/engine/events/pokerEventCodec';
 
 /** Test.unity: PokerClientGame.localPerspectiveSeat = seatViews[0] (Name_Canvas_Player). */
 export const LOCAL_PERSPECTIVE_SLOT = 0;

@@ -11,8 +11,8 @@ import type { UNode } from '../../hud/unityUi';
 import type { NomadHost } from '../../menu/host';
 import { widgetsOf } from '../../menu/ui/tree';
 import { marketState } from '../../menu/screens/market';
-import { AgentStopReasons, readNumberField, type AgentDeploymentSummary } from '../../core/agents';
-import { formatN0 } from '../../core/util/dotnetMath';
+import { AgentStopReasons, readNumberField, type AgentDeploymentSummary } from '@nomad/engine/agents';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import type { AgentsService } from '../agentsService';
 import { bindStrategyEditor } from './strategyEditor';
 

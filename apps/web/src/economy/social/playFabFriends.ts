@@ -3,9 +3,9 @@
  * through the friends.js CloudScript handlers (the list is one-way, so both sides are written by the server).
  * Never throws; every failure is a sentence fit to show the player.
  */
-import { AvatarUrl } from '../../core/social/avatarUrl';
-import { FriendCode } from '../../core/social/friendCode';
-import { FriendRelation, FriendTags } from '../../core/social/friendRules';
+import { AvatarUrl } from '@nomad/engine/social/avatarUrl';
+import { FriendCode } from '@nomad/engine/social/friendCode';
+import { FriendRelation, FriendTags } from '@nomad/engine/social/friendRules';
 import { PokerClientIdentity } from '../identity';
 import { errorReport, type PlayFabError } from '../playfab/client';
 import { isClientLoggedIn, playFab } from '../playfab/runtime';

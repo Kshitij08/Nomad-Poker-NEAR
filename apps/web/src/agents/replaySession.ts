@@ -6,9 +6,9 @@
  */
 import { addTableChrome, type TableSessionFactory, type TableSessionHost } from '../table/tableScreen';
 import { tickerWait } from '../table/tableView';
-import { TableEventPresenter } from '../core/orchestration/tableEventPresenter';
-import { DEFAULT_TABLE_SETTINGS } from '../core/orchestration/tableSettings';
-import { AgentHandReplayText, type AgentHandReplay } from '../core/agents';
+import { TableEventPresenter } from '@nomad/engine/orchestration/tableEventPresenter';
+import { DEFAULT_TABLE_SETTINGS } from '@nomad/engine/orchestration/tableSettings';
+import { AgentHandReplayText, type AgentHandReplay } from '@nomad/engine/agents';
 import { replayToEvents, type ReplayPause } from './replayEvents';
 
 /** The DOM layer table chrome gets, per table visit (the replay session mounts its controls there). */

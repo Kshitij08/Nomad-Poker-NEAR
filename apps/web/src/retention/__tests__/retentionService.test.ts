@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { EventBus } from '../../app/app';
 import { RewardKind, type RewardGrant, type VirtualWallet } from '../../app/services';
-import { HandCategory } from '../../core/evaluation/handCategory';
-import { HandValue } from '../../core/evaluation/handValue';
-import type { PokerEvent, SeatSnapshot } from '../../core/events/pokerEvent';
+import { HandCategory } from '@nomad/engine/evaluation/handCategory';
+import { HandValue } from '@nomad/engine/evaluation/handValue';
+import type { PokerEvent, SeatSnapshot } from '@nomad/engine/events/pokerEvent';
 import { RetentionService } from '../retentionService';
 import type { PrefsLike } from '../dailyEngagement';
 

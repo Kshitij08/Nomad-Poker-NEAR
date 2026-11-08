@@ -8,7 +8,7 @@
  */
 import type { AppContext } from '../app/app';
 import { PlayerPrefs, type VirtualWallet } from '../app/services';
-import { clampBuyIn, StakeCatalog, type StakeTier } from '../core/stakes/stakes';
+import { clampBuyIn, StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
 import { PokerClientIdentity } from '../economy/identity';
 import { VirtualEconomy } from '../economy/virtualEconomy';
 import type { ClientIdentity, WalletPort } from './clientGame';

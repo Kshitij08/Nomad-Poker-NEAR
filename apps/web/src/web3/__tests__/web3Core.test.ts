@@ -13,7 +13,7 @@ import { PerGame } from '../per/legal';
 import { perIdl } from '../per/types';
 import { RotatedView } from '../per/perTableController';
 import { ChainTableSession } from '../chain/chainTableSession';
-import type { TableViewPort } from '../../core';
+import type { TableViewPort } from '@nomad/engine';
 
 describe('network policy (config.ts)', () => {
   it('defaults to devnet with no backends, refuses mainnet and deployed servers', () => {

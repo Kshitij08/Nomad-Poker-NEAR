@@ -1,4 +1,4 @@
-import type { TournamentResultEvent, TournamentStatusEvent, TournamentViewEvent } from '../core/tournament';
+import type { TournamentResultEvent, TournamentStatusEvent, TournamentViewEvent } from '@nomad/engine/tournament';
 
 /**
  * The client's picture of the tournament it is playing: the latest status, what it is looking at, and its result.

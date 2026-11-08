@@ -13,7 +13,7 @@
  */
 import type { TableChrome, TableSessionHost } from '../../table/tableScreen';
 import { buildNode, HUD_DATA, UNode, whenFontsReady, type NodeData } from '../../hud/unityUi';
-import { PokerSound } from '../../core';
+import { PokerSound } from '@nomad/engine';
 import type { NomadHost } from '../host';
 import { overlayScale } from '../../layout/portraitRects';
 import { portraitNomadTableRects } from '../../layout/portraitHud';

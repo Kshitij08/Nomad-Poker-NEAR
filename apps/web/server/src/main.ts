@@ -1,5 +1,5 @@
 /**
- * `npm run server` (in web/server, or `npm run server` in web/): the local dedicated table server + matchmaking.
+ * `npm run server` (at the repo root, or `npm run dev` in apps/web/server): the local dedicated table server + matchmaking.
  *
  *   POKER_SERVER_PORT  (default 5181)   POKER_SERVER_SPEED (default 1)   POKER_SERVER_HOST (default 127.0.0.1)
  *

@@ -1,5 +1,5 @@
 /** Text helpers shared by the tournament UI: TournamentsHud's static formatters and NomadUiHost.Tournaments'. */
-import { formatN0 } from '../core/util/dotnetMath';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import { isLive, isOpen, isRegistered, type TournamentInfo } from './api/tournamentInfo';
 
 export const N0 = formatN0;

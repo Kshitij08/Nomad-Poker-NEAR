@@ -12,7 +12,7 @@
  * Side channels Unity ran elsewhere ride the same socket: table chat (Photon Chat, channel = session) and WebRTC
  * signalling for voice (Vivox).
  */
-import { PlayerAction } from '../../src/core/actions/actions';
+import { PlayerAction } from '@nomad/engine/actions/actions';
 import { PokerChatRateLimiter, PokerChatText } from '../../src/net/shared/chat';
 import { encodeMessage, type ClientMessage, type JoinFailReason, type ServerMessage } from '../../src/net/shared/protocol';
 import { ChainTableMode, MAX_PLAYERS_PER_SESSION, PartyCodes, StakeSessionNames } from '../../src/net/shared/sessions';

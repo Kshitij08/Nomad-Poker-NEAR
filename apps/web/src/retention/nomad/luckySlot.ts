@@ -11,7 +11,7 @@
  * reels land on it, then the "You Won!" banner shows the Coins.
  */
 import type { AppContext } from '../../app/app';
-import { formatN0 } from '../../core/util/dotnetMath';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import { UNode, type RGBA, type SpriteData } from '../../hud/unityUi';
 import type { CoroutineHost } from '../ui/coroutines';
 import { RETENTION_DATA, instantiate, refNode, spriteByKey, type RetNodeData } from '../ui/retentionUi';

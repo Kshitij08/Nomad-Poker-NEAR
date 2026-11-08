@@ -7,10 +7,10 @@
  */
 import type { AppContext } from '../../app/app';
 import type { SpriteData, UNode } from '../../hud/unityUi';
-import { formatN0 } from '../../core/util/dotnetMath';
-import { LeaderboardKind } from '../../core/leaderboards/freePlayLeaderboardMath';
-import { FriendCode } from '../../core/social/friendCode';
-import { FriendRelation } from '../../core/social/friendRules';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
+import { LeaderboardKind } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
+import { FriendCode } from '@nomad/engine/social/friendCode';
+import { FriendRelation } from '@nomad/engine/social/friendRules';
 import { NomadHost, registerNomadPartial } from '../../menu/host';
 import { widgetsOf } from '../../menu/ui/tree';
 import { PokerClientIdentity } from '../identity';

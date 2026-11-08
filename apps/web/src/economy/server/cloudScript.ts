@@ -4,7 +4,7 @@
  * same rules (friend tags on both lists, the invite mailbox in read-only data, the ChipGrants protocol shared
  * with the chip ledger). The live title keeps running the real .js; this is what `?online=local` and the tests run.
  */
-import { FriendInviteRules } from '../../core/social/friendRules';
+import { FriendInviteRules } from '@nomad/engine/social/friendRules';
 import { PlayFabConfig } from '../config';
 import { readGrantLog } from './chipLedger';
 import { grantIdempotencyId, welcomeIdempotencyId } from './ids';

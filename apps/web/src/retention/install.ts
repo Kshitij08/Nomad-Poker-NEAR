@@ -11,7 +11,7 @@
  * loadMissions/saveMissions, they are wired as EngagementCloud / ProgressionCloud; else PlayerPrefs (C# keys).
  */
 import type { AppContext } from '../app/app';
-import type { DailyEngagementState } from '../core/retention';
+import type { DailyEngagementState } from '@nomad/engine/retention';
 import { RetentionService } from './retentionService';
 import { LevelUpScreen } from './screens/levelUpScreen';
 import { WeeklyRewardsScreen } from './screens/weeklyRewardsScreen';
@@ -20,7 +20,7 @@ import { MissionsScreen } from './screens/missionsScreen';
 import { StakeSelectScreen } from './screens/stakeSelectScreen';
 import { LuckySlotScreen } from './screens/luckySlotScreen';
 import type { TableProgressTracker } from './tableProgress';
-import type { PokerEvent } from '../core/events/pokerEvent';
+import type { PokerEvent } from '@nomad/engine/events/pokerEvent';
 import { registerNomadPartial } from '../menu/host';
 import { bindNomadRetention } from './nomadPartial';
 

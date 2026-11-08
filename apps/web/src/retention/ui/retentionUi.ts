@@ -6,7 +6,7 @@
  */
 import retentionData from '../../data/retention-ui.json';
 import { HUD_DATA, assetUrl, buildNode, rgba, type NodeData, type RGBA, type SpriteData, type UNode } from '../../hud/unityUi';
-import { PokerSound } from '../../core/orchestration/pokerSound';
+import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
 import type { AppContext } from '../../app/app';
 import './retention.css';
 import { portraitMenuLayout, portraitScaleFor } from '../../layout/portraitMenu';

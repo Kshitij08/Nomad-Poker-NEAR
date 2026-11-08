@@ -21,7 +21,7 @@ import { quickPlayOverrides, settingsAccountExtras, solTablesHandlers } from '..
 import { tableSelectOnchain } from '../../menu/screens/tableSelect';
 import { widgetsOf } from '../../menu/ui/tree';
 import { setOffsets } from '../../menu/ui/canvas';
-import { StakeCatalog } from '../../core';
+import { StakeCatalog } from '@nomad/engine';
 import { formatN0 } from '../per/format';
 import { LAMPORTS_PER_DOLLAR, PerBuyIn, sol, solExact, STAKES, stakeMaxBuyIn, stakeMinBuyIn } from '../per/money';
 import type { PerRuntime } from '../per/service';

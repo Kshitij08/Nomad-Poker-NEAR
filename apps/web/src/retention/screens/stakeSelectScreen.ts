@@ -5,9 +5,9 @@
  *
  * Router id 'stake-select' (overlay). Selection lives in ctx.services.retention.stakes (StakeSelection port).
  */
-import { PokerSound } from '../../core/orchestration/pokerSound';
-import { StakeCatalog, type StakeTier } from '../../core/stakes/stakes';
-import { formatN0 } from '../../core/util/dotnetMath';
+import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
+import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import type { RGBA, UNode } from '../../hud/unityUi';
 import { RetentionColors, applySprite, setImageColor, wireButton, type ButtonHandle } from '../ui/retentionUi';
 import { PanelScreen } from './panelScreen';

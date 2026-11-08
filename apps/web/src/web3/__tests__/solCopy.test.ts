@@ -5,7 +5,7 @@
  */
 import { Keypair, PublicKey } from '@solana/web3.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AgentStrategyState, type KeyValueStore } from '../../core/agents';
+import { AgentStrategyState, type KeyValueStore } from '@nomad/engine/agents';
 import type { NomadHost } from '../../menu/host';
 import {
   applyProfileTo, feePercent, format0Hash, marketOnchain, marketState, onStrategyEdited, openMarket, openMyStrategies, solCopyIsOwn,

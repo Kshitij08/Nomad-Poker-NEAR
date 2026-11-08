@@ -7,7 +7,7 @@
  */
 import { PlayerPrefs } from '../app/services';
 import type { AppContext } from '../app/app';
-import { StakeCatalog, maxBuyInChips, type StakeTier } from '../core';
+import { StakeCatalog, maxBuyInChips, type StakeTier } from '@nomad/engine';
 
 const PREF_KEY = 'Poker.SelectedStake';
 const BUY_IN_PREF_KEY = 'Poker.SelectedBuyIn';

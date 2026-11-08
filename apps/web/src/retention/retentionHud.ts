@@ -11,7 +11,7 @@
  * 'friends:open' on ctx.events (the social module owns that panel).
  */
 import type { AppContext } from './../app/app';
-import { formatN0 } from '../core/util/dotnetMath';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import { whenFontsReady, UNode } from '../hud/unityUi';
 import { OverlayCanvas, RETENTION_DATA, chipData, instantiate, wireButton } from './ui/retentionUi';
 

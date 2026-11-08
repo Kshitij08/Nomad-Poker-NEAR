@@ -4,8 +4,8 @@
  * champion and the final result for both connections.
  */
 import { describe, expect, it } from 'vitest';
-import { PlayerAction } from '../../../src/core/actions/actions';
-import { PokerEventCodec, isHiddenCard, type WireEvent } from '../../../src/core/events/pokerEventCodec';
+import { PlayerAction } from '@nomad/engine/actions/actions';
+import { PokerEventCodec, isHiddenCard, type WireEvent } from '@nomad/engine/events/pokerEventCodec';
 import type { ServerClock } from '../../src/clock';
 import type { PlayerRef, TableNet } from '../../src/tableNet';
 import { TournamentTableServer } from '../tournamentTableServer';

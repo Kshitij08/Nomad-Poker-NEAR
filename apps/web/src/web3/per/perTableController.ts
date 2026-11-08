@@ -17,7 +17,7 @@
 import {
   ActionType, BettingRound, Card, PokerSound, TableEventPresenter, TableMoney, type BettingPanelPort, type PokerEvent,
   type SeatRole, type TableRosterEvent, type TableViewPort, type TurnStartedEvent,
-} from '../../core';
+} from '@nomad/engine';
 import type { TableScreenParams, TableSession, TableSessionHost } from '../../table/tableScreen';
 import { tickerWait } from '../../table/tableView';
 import type { Web3Config } from '../config';

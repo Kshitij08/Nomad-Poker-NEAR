@@ -4,7 +4,7 @@
  * every second by NomadTableHud, so it is not built. The 3D token piles and their win fly belong to the 3D scene:
  * `awardTokensTo` forwards to `onAwardTokens` for whoever owns them.
  */
-import { TableMoney } from '../core';
+import { TableMoney } from '@nomad/engine';
 import type { PotHud } from '../table/tableView';
 import { buildNode, type CanvasData, type UNode } from './unityUi';
 import { WorldCanvas } from './worldCanvas';

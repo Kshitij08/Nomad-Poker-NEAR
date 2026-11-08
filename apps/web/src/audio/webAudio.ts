@@ -1,4 +1,4 @@
-import { DEFAULT_VOLUMES, PokerSound, SFX_LIBRARY, type AudioPort } from '../core';
+import { DEFAULT_VOLUMES, PokerSound, SFX_LIBRARY, type AudioPort } from '@nomad/engine';
 
 /**
  * Port of PokerAudio / PokerAudioRuntime on the Web Audio API. One-shots play at

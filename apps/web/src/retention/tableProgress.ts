@@ -5,7 +5,7 @@
  * hand), TryRecordFriendMission. Money (SOL) tables never count. Unity's offline PokerGameController (Test.unity)
  * has no progression hooks at all; whether the web's offline table counts is the table session's call.
  */
-import type { PokerEvent, SeatSnapshot } from '../core/events/pokerEvent';
+import type { PokerEvent, SeatSnapshot } from '@nomad/engine/events/pokerEvent';
 import type { PlayerProgression } from './playerProgression';
 
 export interface TableProgressOptions {

@@ -3,11 +3,11 @@
  * the offline practice wiring without the DOM. The human answers the betting panel with check/fold.
  */
 import { describe, expect, it } from 'vitest';
-import { SeededRandom } from '../../core/cards/random';
-import { PlayerAction } from '../../core/actions/actions';
-import type { BettingPanelPort, TableViewPort } from '../../core/orchestration/tableView';
-import type { AudioPort } from '../../core/orchestration/pokerSound';
-import { TournamentPhase } from '../../core/tournament';
+import { SeededRandom } from '@nomad/engine/cards/random';
+import { PlayerAction } from '@nomad/engine/actions/actions';
+import type { BettingPanelPort, TableViewPort } from '@nomad/engine/orchestration/tableView';
+import type { AudioPort } from '@nomad/engine/orchestration/pokerSound';
+import { TournamentPhase } from '@nomad/engine/tournament';
 import { TournamentServerGame } from '../runtime/tournamentServerGame';
 import type { RuntimeTiming } from '../runtime/wire';
 import { TournamentClientState } from '../clientState';

@@ -1,13 +1,13 @@
-import type { PlayerAction } from '../../core/actions/actions';
-import { HeuristicBot } from '../../core/bots/heuristicBot';
-import type { IPokerBot } from '../../core/bots/botContext';
-import { AvatarCatalog } from '../../core/social/avatarCatalog';
+import type { PlayerAction } from '@nomad/engine/actions/actions';
+import { HeuristicBot } from '@nomad/engine/bots/heuristicBot';
+import type { IPokerBot } from '@nomad/engine/bots/botContext';
+import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import {
   MAX_TOURNAMENT_TABLES, TournamentDirector, TournamentPhase, TournamentPlayerState, TournamentRewards, TournamentSpeed,
   TournamentViewReason, blindLevelToString, speedFromString, tournamentResult, tournamentView,
   type PlayersEliminatedCommand, type TableClosedCommand, type TableOpenedCommand, type TournamentCommand,
   type TournamentFinishedCommand, type TournamentStatusEvent, type TournamentTableLine, type TournamentViewEvent,
-} from '../../core/tournament';
+} from '@nomad/engine/tournament';
 import { TournamentTableRunner, type TableRunnerHost } from './tournamentTableRunner';
 import {
   OUT_OF_BAND, type PlayerRef, type RuntimeTiming, type TournamentBackend, type TournamentPacing, type TournamentRoster,

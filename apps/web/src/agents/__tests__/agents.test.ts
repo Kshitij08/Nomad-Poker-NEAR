@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   AgentHandReplay, AgentStopReasons, AgentStrategyState, buildAgentConfig, newAgentDeploymentConfig, type KeyValueStore,
-} from '../../core/agents';
+} from '@nomad/engine/agents';
 import { LocalAgentBackend } from '../agentBackend';
 import { AgentDeployService, type Prefs } from '../agentDeployService';
 import { AgentFarm, startRequestOf, type AgentMoney } from '../server/agentFarm';
 import { HeadlessAgentTable } from '../server/localAgentRunner';
 import { replayToEvents, mapReplaySeats } from '../replayEvents';
-import { StakeCatalog } from '../../core/stakes/stakes';
+import { StakeCatalog } from '@nomad/engine/stakes/stakes';
 
 class MemPrefs implements Prefs, KeyValueStore {
   readonly map = new Map<string, string>();

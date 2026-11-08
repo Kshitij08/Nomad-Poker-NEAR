@@ -3,7 +3,7 @@
  * panel (and the Nomad menu's STAKES capsule). 0 = auto-match: Quick Play picks the highest tier the Coins can enter.
  * PlayerPrefs keys are the C# ones.
  */
-import { StakeCatalog, maxBuyInChips, type StakeTier } from '../core/stakes/stakes';
+import { StakeCatalog, maxBuyInChips, type StakeTier } from '@nomad/engine/stakes/stakes';
 import type { RetentionEnv } from './dailyEngagement';
 
 const PrefKey = 'Poker.SelectedStake';

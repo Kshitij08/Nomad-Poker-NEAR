@@ -9,7 +9,7 @@
  * because this client is fetch-based already.
  */
 import { PlayerPrefs } from '../../app/services';
-import { parsePlayFabWebResponse } from '../../core/economy/playFabWebResponse';
+import { parsePlayFabWebResponse } from '@nomad/engine/economy/playFabWebResponse';
 import { PokerFunnel } from '../analytics/pokerFunnel';
 import { PlayFabConfig } from '../config';
 import { MenuUsernamePref, PokerClientIdentity } from '../identity';

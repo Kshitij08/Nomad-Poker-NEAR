@@ -3,8 +3,8 @@
  * carries its events: the in-browser practice loop (offline) or the local WebSocket table server (web/server).
  * No DOM, no Node APIs — both sides import this.
  */
-import type { IRandom } from '../../core/cards/random';
-import type { WireEvent } from '../../core/events/pokerEventCodec';
+import type { IRandom } from '@nomad/engine/cards/random';
+import type { WireEvent } from '@nomad/engine/events/pokerEventCodec';
 
 /** Everything a tournament player can receive (encoded by PokerEventCodec on the WebSocket server). */
 export type { WireEvent };

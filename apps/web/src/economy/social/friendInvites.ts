@@ -6,8 +6,8 @@
  * performs the join (joinHandler). Accepting with no handler says "Go back to the main menu to join." like the C#
  * does without a menu controller.
  */
-import { FriendCode } from '../../core/social/friendCode';
-import { FriendInviteRules, FriendRelation } from '../../core/social/friendRules';
+import { FriendCode } from '@nomad/engine/social/friendCode';
+import { FriendInviteRules, FriendRelation } from '@nomad/engine/social/friendRules';
 import { PokerClientIdentity } from '../identity';
 import { errorReport } from '../playfab/client';
 import { isClientLoggedIn, playFab } from '../playfab/runtime';

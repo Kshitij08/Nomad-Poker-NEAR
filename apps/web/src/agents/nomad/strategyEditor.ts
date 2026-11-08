@@ -18,8 +18,8 @@ import { destroy, imageComp, make, setOffsets, synth, textComp } from '../../men
 import { runLayout, widgetsOf, type MSlider } from '../../menu/ui/tree';
 import {
   AgentStrategyWords as W, BRAIN_SMART, STRATEGY_BLURBS, STRATEGY_NAMES, STRATEGY_PRESETS,
-} from '../../core/agents';
-import { roundHalfEven } from '../../core/util/dotnetMath';
+} from '@nomad/engine/agents';
+import { roundHalfEven } from '@nomad/engine/util/dotnetMath';
 import type { AgentsService } from '../agentsService';
 
 /** The art's four cards, left to right, show the four presets (Custom is the pill, not a card). */

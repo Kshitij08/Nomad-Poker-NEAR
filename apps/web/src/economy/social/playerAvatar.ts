@@ -3,8 +3,8 @@
  * (keeps it in step with the PlayFab account's AvatarUrl: the account wins on sign-in unless it has none).
  */
 import { PlayerPrefs } from '../../app/services';
-import { AvatarCatalog } from '../../core/social/avatarCatalog';
-import { AvatarUrl } from '../../core/social/avatarUrl';
+import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
+import { AvatarUrl } from '@nomad/engine/social/avatarUrl';
 import { errorReport } from '../playfab/client';
 import { isClientLoggedIn, playFab } from '../playfab/runtime';
 import { Signal } from '../signal';

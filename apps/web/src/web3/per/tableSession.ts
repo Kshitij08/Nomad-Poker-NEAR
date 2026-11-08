@@ -13,7 +13,7 @@
 import { PublicKey } from '@solana/web3.js';
 import {
   ActionType, Card, HandEvaluator, NO_LEGAL_ACTIONS, type PokerEvent, type SeatSnapshot, type ShowdownEntry,
-} from '../../core';
+} from '@nomad/engine';
 import { bytesEq, randomBytes, shortKey } from '../lib/bytes';
 import { PerTableAddresses } from './addresses';
 import { PerIx } from './ix';

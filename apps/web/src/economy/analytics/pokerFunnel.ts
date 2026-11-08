@@ -4,7 +4,7 @@
  * menu calls stakeSelected when StakeSelection changes; `ctx.services.telemetry.funnel` exposes this.
  */
 import { PlayerPrefs } from '../../app/services';
-import { FreePlayLeaderboardMath } from '../../core/leaderboards/freePlayLeaderboardMath';
+import { FreePlayLeaderboardMath } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
 import { PokerTelemetry } from './pokerTelemetry';
 
 const FirstTableKey = 'Poker.Funnel.FirstTable';

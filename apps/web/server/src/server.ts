@@ -6,7 +6,7 @@ import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
 import { encodeMessage, type ClientMessage, type ServerMessage } from '../../src/net/shared/protocol';
 import { LOCAL_APP_VERSION } from '../../src/net/shared/sessions';
-import type { TableSettings } from '../../src/core/orchestration/tableSettings';
+import type { TableSettings } from '@nomad/engine/orchestration/tableSettings';
 import type { AgentHooks } from './agents';
 import { realClock, type ServerClock } from './clock';
 import { LocalEconomy, type LogFn } from './economy';

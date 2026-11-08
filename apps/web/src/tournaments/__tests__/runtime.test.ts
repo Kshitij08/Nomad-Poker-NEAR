@@ -4,14 +4,14 @@
  * state and the TournamentTableClient's seat mapping.
  */
 import { describe, expect, it } from 'vitest';
-import { SeededRandom } from '../../core/cards/random';
-import { PlayerAction } from '../../core/actions/actions';
-import { TournamentPhase, TournamentPlayerState, TournamentViewReason, type TournamentResultEvent, type TournamentStatusEvent, type TournamentViewEvent } from '../../core/tournament';
+import { SeededRandom } from '@nomad/engine/cards/random';
+import { PlayerAction } from '@nomad/engine/actions/actions';
+import { TournamentPhase, TournamentPlayerState, TournamentViewReason, type TournamentResultEvent, type TournamentStatusEvent, type TournamentViewEvent } from '@nomad/engine/tournament';
 import { TournamentServerGame, cleanName } from '../runtime/tournamentServerGame';
 import { OUT_OF_BAND, type RuntimeTiming, type WireEvent } from '../runtime/wire';
 import { TournamentClientState } from '../clientState';
 import { SeatMapView } from '../client/seatMapView';
-import type { TableViewPort } from '../../core/orchestration/tableView';
+import type { TableViewPort } from '@nomad/engine/orchestration/tableView';
 import { TournamentDemoData } from '../api/demoData';
 import { TournamentApiClient } from '../api/apiClient';
 import { clock, ordinal } from '../format';

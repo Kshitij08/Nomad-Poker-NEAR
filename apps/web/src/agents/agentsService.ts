@@ -10,7 +10,7 @@ import {
   AgentStrategyState, buildAgentConfig, cleanAgentName,
   type AgentBudgetFields, type AgentDeploymentConfig, type AgentDeploymentProgress, type AgentHandRecord,
   type AgentHandReplay, type AgentSessionHistory,
-} from '../core/agents';
+} from '@nomad/engine/agents';
 import type { AgentBackend } from './agentBackend';
 import { AgentDeployService } from './agentDeployService';
 import { replaySession } from './replaySession';

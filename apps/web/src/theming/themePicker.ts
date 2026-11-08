@@ -11,8 +11,8 @@
  */
 import type { AppContext, Screen } from '../app/app';
 import { PlayerPrefs } from '../app/services';
-import { PokerSound } from '../core/orchestration/pokerSound';
-import type { StakeTier } from '../core/stakes/stakes';
+import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
+import type { StakeTier } from '@nomad/engine/stakes/stakes';
 import { buildNode, registerTmpFont, UNode, type NodeData, type TextState } from '../hud/unityUi';
 import { THEME_DATA, PACKS, spriteFor, type ThemeId, type ThemePack } from './themeData';
 import { canAffordTheme, fitCover, pickStakeForTheme, resolvePackIndex, selectedTableTheme, sortThemesByStake, stakeCaption } from './themeLogic';

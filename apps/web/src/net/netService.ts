@@ -12,7 +12,7 @@
  * Every join ends at `router.navigate('table', { session })` with a TableSession that drives the 3D table.
  */
 import type { AppContext } from '../app/app';
-import type { StakeTier } from '../core/stakes/stakes';
+import type { StakeTier } from '@nomad/engine/stakes/stakes';
 import { tickerWait } from '../table/tableView';
 import type { TableSession, TableSessionFactory, TableSessionHost } from '../table/tableScreen';
 import { browserIdentity, browserWallet, selectedStake, type BrowserIdentity } from './browserIdentity';
@@ -24,8 +24,8 @@ import { DEFAULT_SERVER_PORT } from './shared/protocol';
 import { ChainTableMode } from './shared/sessions';
 import { TableChat } from './tableChat';
 import { TableVoice } from './voice/tableVoice';
-import { PokerEventCodec, type WireEvent } from '../core/events/pokerEventCodec';
-import { FreePlayLeaderboardMath } from '../core/leaderboards/freePlayLeaderboardMath';
+import { PokerEventCodec, type WireEvent } from '@nomad/engine/events/pokerEventCodec';
+import { FreePlayLeaderboardMath } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
 import { RewardGrant } from '../app/services';
 import { VirtualEconomy } from '../economy/virtualEconomy';
 import type { TournamentClientState } from '../tournaments/clientState';

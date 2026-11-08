@@ -4,7 +4,7 @@
  * calls render() with the replicated lobby state and roster. Widgets are handed in as small handles so any panel (the
  * table HUD's Join_Table / Start Game / AddBotButton / InviteButton nodes, or a net module's own) can use it.
  */
-import { formatN0 } from '../../core';
+import { formatN0 } from '@nomad/engine';
 
 export interface LobbyWidget {
   setActive(on: boolean): void;

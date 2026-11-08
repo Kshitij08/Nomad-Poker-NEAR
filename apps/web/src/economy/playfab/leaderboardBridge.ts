@@ -3,7 +3,7 @@
  * Progression entity stats) and reads global / friend boards in pages of FreePlayLeaderboardMath.PageSize, falling
  * back from the legacy board to the entity leaderboard when the legacy one is empty.
  */
-import { FreePlayLeaderboardMath, LeaderboardKind } from '../../core/leaderboards/freePlayLeaderboardMath';
+import { FreePlayLeaderboardMath, LeaderboardKind } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
 import { PokerClientIdentity } from '../identity';
 import { FreePlayLeaderboard, type LeaderboardEntry, type LeaderboardSnapshot } from '../leaderboards/freePlayLeaderboard';
 import { errorReport } from './client';

@@ -1,6 +1,6 @@
 /**
  * The authoritative half of a cash table — port of Assets/Scripts/Net/PokerServerGame.cs (the dedicated Fusion
- * server's table) on the shared rules engine in src/core. It owns the one PokerEngine, seats players and bots, and
+ * server's table) on the shared rules engine in @nomad/engine (packages/engine). It owns the one PokerEngine, seats players and bots, and
  * pumps the engine's event stream out over the TableNet. Hole cards are filtered per recipient here, before anything
  * touches the wire.
  *
@@ -12,21 +12,21 @@
  * Coroutines → async functions on a ServerClock (scaled in tests). Unity-only pieces not ported: StyleRecorder
  * ("My Twin" telemetry) and AgentReplay JSON (left to AgentHooks).
  */
-import { ActionType, PlayerAction, type LegalActions } from '../../src/core/actions/actions';
-import { HeuristicBot } from '../../src/core/bots/heuristicBot';
-import { positionOf, type BotContext } from '../../src/core/bots/botContext';
-import { QuickPlayFreeBots } from '../../src/core/bots/quickPlayFreeBots';
-import { CryptoRandom, SeededRandom, type IRandom } from '../../src/core/cards/random';
-import { PokerEngine } from '../../src/core/engine/pokerEngine';
+import { ActionType, PlayerAction, type LegalActions } from '@nomad/engine/actions/actions';
+import { HeuristicBot } from '@nomad/engine/bots/heuristicBot';
+import { positionOf, type BotContext } from '@nomad/engine/bots/botContext';
+import { QuickPlayFreeBots } from '@nomad/engine/bots/quickPlayFreeBots';
+import { CryptoRandom, SeededRandom, type IRandom } from '@nomad/engine/cards/random';
+import { PokerEngine } from '@nomad/engine/engine/pokerEngine';
 import {
   TablePhase, type ActionRequestedEvent, type EngineEvent, type HandStartedEvent, type HoleCardsDealtEvent, type PokerEvent, type SeatSnapshot,
-} from '../../src/core/events/pokerEvent';
-import { HIDDEN_CARD, PokerEventCodec, pokerTokenHash, type WireEvent } from '../../src/core/events/pokerEventCodec';
-import { ActionRouter, BotActionProvider, type ActionRequest, type IActionProvider } from '../../src/core/orchestration/actionProviders';
-import type { TableSettings } from '../../src/core/orchestration/tableSettings';
-import { AvatarCatalog } from '../../src/core/social/avatarCatalog';
-import { StakeCatalog, type StakeTier } from '../../src/core/stakes/stakes';
-import { BettingRound, PlayerStatus } from '../../src/core/state/state';
+} from '@nomad/engine/events/pokerEvent';
+import { HIDDEN_CARD, PokerEventCodec, pokerTokenHash, type WireEvent } from '@nomad/engine/events/pokerEventCodec';
+import { ActionRouter, BotActionProvider, type ActionRequest, type IActionProvider } from '@nomad/engine/orchestration/actionProviders';
+import type { TableSettings } from '@nomad/engine/orchestration/tableSettings';
+import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
+import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
+import { BettingRound, PlayerStatus } from '@nomad/engine/state/state';
 import { PokerChatRateLimiter } from '../../src/net/shared/chat';
 import { ChainTableMode } from '../../src/net/shared/sessions';
 import {

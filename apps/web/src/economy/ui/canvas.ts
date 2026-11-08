@@ -7,9 +7,9 @@
 import economyData from '../../data/economy-ui.json';
 import { HUD_DATA, buildNode, type NodeData, type RGBA, type SpriteData, type UNode as UNodeT } from '../../hud/unityUi';
 import { UNode } from '../../hud/unityUi';
-import { AvatarCatalog } from '../../core/social/avatarCatalog';
+import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import type { AppContext } from '../../app/app';
-import { PokerSound } from '../../core/orchestration/pokerSound';
+import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
 import { portraitMenuLayout, portraitScaleFor } from '../../layout/portraitMenu';
 
 interface ScalerData {

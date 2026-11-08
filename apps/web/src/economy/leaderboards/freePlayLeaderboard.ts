@@ -4,7 +4,7 @@
  * submitOverride / fetchOverride, which the PlayFab leaderboard bridge installs after sign-in.
  */
 import { PlayerPrefs } from '../../app/services';
-import { FreePlayLeaderboardMath, LeaderboardKind } from '../../core/leaderboards/freePlayLeaderboardMath';
+import { FreePlayLeaderboardMath, LeaderboardKind } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
 import { Signal } from '../signal';
 
 const WeekKey = 'Poker.LB.WeekId';

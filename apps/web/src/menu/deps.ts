@@ -5,7 +5,7 @@
  * back to the offline behaviour noted next to it (see README.md "Services the menu calls").
  */
 import type { AppContext } from '../app/app';
-import type { StakeTier } from '../core';
+import type { StakeTier } from '@nomad/engine';
 
 /** Extra AccountService members the economy module's account may carry (PlayFabLoginUI / PlayFabAuth / PokerClientIdentity). */
 export interface AccountExtras {

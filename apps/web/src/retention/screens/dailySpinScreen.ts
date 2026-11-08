@@ -6,9 +6,9 @@
  * Router id 'daily-spin' (overlay). In the shipped Nomad flow the menu shows the Lucky Slot ('lucky-slot') instead;
  * this panel is what the table's Coins chip opens when the Nomad menu is not running.
  */
-import { DailySpinCatalog } from '../../core/retention';
-import { PokerSound } from '../../core/orchestration/pokerSound';
-import { formatN0 } from '../../core/util/dotnetMath';
+import { DailySpinCatalog } from '@nomad/engine/retention';
+import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import type { UNode } from '../../hud/unityUi';
 import type { Routine } from '../ui/coroutines';
 import {

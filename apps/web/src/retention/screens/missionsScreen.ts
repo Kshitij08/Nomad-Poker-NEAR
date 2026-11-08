@@ -7,9 +7,9 @@
  * Router id 'missions' (overlay). In the shipped Nomad flow the menu's LevelRewards screen shows missions instead
  * (it binds ctx.services.retention.missionRows()); this panel is what the table's Level / Missions chips open.
  */
-import { MissionCatalog, PlayerLevelMath, rewardPreview, type MissionBoardState, type MissionDef } from '../../core/retention';
-import { PokerSound } from '../../core/orchestration/pokerSound';
-import { formatN0 } from '../../core/util/dotnetMath';
+import { MissionCatalog, PlayerLevelMath, rewardPreview, type MissionBoardState, type MissionDef } from '@nomad/engine/retention';
+import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
+import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import { UNode, type RGBA } from '../../hud/unityUi';
 import {
   RetentionColors, applySprite, dataOf, instantiate, setImageColor, setRichText, setXpBarProgress, wireButton,

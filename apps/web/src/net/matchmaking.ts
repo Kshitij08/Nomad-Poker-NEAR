@@ -3,7 +3,7 @@
  * overflow, Party Create (spawn a dedicated room under a generated code, then join it) and Join by code — against the
  * local table server instead of Photon. DOM-free.
  */
-import { StakeCatalog, type StakeTier } from '../core/stakes/stakes';
+import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
 import { NetConnection, type JoinResult } from './netConnection';
 import { ChainTableMode, PartyCodes, StakeSessionNames } from './shared/sessions';
 

@@ -15,12 +15,12 @@
 import {
   AgentSessionHost, AgentStopReasons, defaultClock, defaultUnixClock, newAgentHandRecord,
   type AgentDeploymentConfig, type AgentDeploymentSummary, type AgentHandRecord, type AgentSession, type Clock, type UnixClock,
-} from '../../core/agents';
-import { HeuristicBot } from '../../core/bots/heuristicBot';
-import type { IPokerBot } from '../../core/bots/botContext';
-import type { PokerEngine } from '../../core/engine/pokerEngine';
-import { ActionType } from '../../core/actions/actions';
-import type { PokerEvent } from '../../core/events/pokerEvent';
+} from '@nomad/engine/agents';
+import { HeuristicBot } from '@nomad/engine/bots/heuristicBot';
+import type { IPokerBot } from '@nomad/engine/bots/botContext';
+import type { PokerEngine } from '@nomad/engine/engine/pokerEngine';
+import { ActionType } from '@nomad/engine/actions/actions';
+import type { PokerEvent } from '@nomad/engine/events/pokerEvent';
 
 /** Where finished hands and deployments go (AgentCompleteReporter: the backend's /internal/agent/hand and /complete). */
 export interface AgentReporter {

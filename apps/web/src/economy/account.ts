@@ -9,7 +9,7 @@
  */
 import type { EventBus } from '../app/app';
 import { PlayerPrefs, type AccountService } from '../app/services';
-import { FriendCode } from '../core/social/friendCode';
+import { FriendCode } from '@nomad/engine/social/friendCode';
 import type { BackendMode } from './config';
 import { MenuUsernamePref, PokerClientIdentity } from './identity';
 import { PlayFabAuth } from './playfab/auth';

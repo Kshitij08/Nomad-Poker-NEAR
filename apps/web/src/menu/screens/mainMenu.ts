@@ -4,7 +4,7 @@
  * are the web3 partial's (NomadUiHost.Onchain.cs): it sets host.onchain / host.solShort and rebinds those buttons.
  */
 import type { UNode } from '../../hud/unityUi';
-import { formatN0, TEST_SCENE_TABLE_SETTINGS, type StakeTier } from '../../core';
+import { formatN0, TEST_SCENE_TABLE_SETTINGS, type StakeTier } from '@nomad/engine';
 import type { TableScreenParams } from '../../table/tableScreen';
 import { NomadHost, fittedSize } from '../host';
 import { accountExtras, canClaimLogin, canSpin, progressionOf, svc } from '../deps';

@@ -3,12 +3,12 @@
  * NetConnection (Node 22's global WebSocket), with a recording view instead of the 3D table and a betting panel that
  * answers instantly with a scripted policy.
  */
-import { PlayerAction, type LegalActions } from '../../src/core/actions/actions';
-import type { Card } from '../../src/core/cards/card';
-import { isHiddenCard } from '../../src/core/events/pokerEventCodec';
-import { realWait, type WaitFn } from '../../src/core/orchestration/actionProviders';
-import type { AudioPort } from '../../src/core/orchestration/pokerSound';
-import type { BettingPanelPort, SeatRole } from '../../src/core/orchestration/tableView';
+import { PlayerAction, type LegalActions } from '@nomad/engine/actions/actions';
+import type { Card } from '@nomad/engine/cards/card';
+import { isHiddenCard } from '@nomad/engine/events/pokerEventCodec';
+import { realWait, type WaitFn } from '@nomad/engine/orchestration/actionProviders';
+import type { AudioPort } from '@nomad/engine/orchestration/pokerSound';
+import type { BettingPanelPort, SeatRole } from '@nomad/engine/orchestration/tableView';
 import { ClientGame, type NetTableViewPort } from '../../src/net/clientGame';
 import type { NetConnection } from '../../src/net/netConnection';
 

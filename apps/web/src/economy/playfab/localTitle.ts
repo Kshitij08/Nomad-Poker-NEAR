@@ -7,8 +7,8 @@
  * ('web.economy.localTitle'), shared with the offline chip ledger and the CloudScript ports (economy/server).
  * Google sign-in is not emulated (it needs Google's servers): it fails like a title without the Google add-on.
  */
-import { AvatarUrl } from '../../core/social/avatarUrl';
-import { FreePlayLeaderboardMath } from '../../core/leaderboards/freePlayLeaderboardMath';
+import { AvatarUrl } from '@nomad/engine/social/avatarUrl';
+import { FreePlayLeaderboardMath } from '@nomad/engine/leaderboards/freePlayLeaderboardMath';
 import { runCloudScript } from '../server/cloudScript';
 import {
   createPlayer, emptyTitleState, playerByEntity, randomHex, rankedBoard, setStat, statOf,

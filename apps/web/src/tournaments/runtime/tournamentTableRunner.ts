@@ -1,10 +1,10 @@
-import { ActionType, NO_LEGAL_ACTIONS, PlayerAction, type LegalActions } from '../../core/actions/actions';
-import { positionOf, type BotContext, type IPokerBot } from '../../core/bots/botContext';
-import { PokerEngine } from '../../core/engine/pokerEngine';
-import { HIDDEN_CARD } from '../../core/events/pokerEventCodec';
-import type { ActionRequestedEvent, EngineEvent, HoleCardsDealtEvent, SeatSnapshot } from '../../core/events/pokerEvent';
-import { BettingRound, PlayerStatus } from '../../core/state/state';
-import { TournamentRules, seatResult, type BlindLevel, type SeatResult, type TableOpenedCommand } from '../../core/tournament';
+import { ActionType, NO_LEGAL_ACTIONS, PlayerAction, type LegalActions } from '@nomad/engine/actions/actions';
+import { positionOf, type BotContext, type IPokerBot } from '@nomad/engine/bots/botContext';
+import { PokerEngine } from '@nomad/engine/engine/pokerEngine';
+import { HIDDEN_CARD } from '@nomad/engine/events/pokerEventCodec';
+import type { ActionRequestedEvent, EngineEvent, HoleCardsDealtEvent, SeatSnapshot } from '@nomad/engine/events/pokerEvent';
+import { BettingRound, PlayerStatus } from '@nomad/engine/state/state';
+import { TournamentRules, seatResult, type BlindLevel, type SeatResult, type TableOpenedCommand } from '@nomad/engine/tournament';
 import { OUT_OF_BAND, type PlayerRef, type TournamentPacing, type RuntimeTiming, type WireEvent } from './wire';
 
 /** What a table runner asks of the tournament that owns it (TournamentServerGame's internal members). */

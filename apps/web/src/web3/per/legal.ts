@@ -3,7 +3,7 @@
  * itself a port of PokerEngine.ComputeLegalActions). Port of Per/Core/PerLegal.cs (PerGame). The program re-checks
  * every action, so this only drives the betting panel. Stacks are lamports (bigint) on chain; the panel takes numbers.
  */
-import { BettingRound, Card, legalActions, NO_LEGAL_ACTIONS, type LegalActions } from '../../core';
+import { BettingRound, Card, legalActions, NO_LEGAL_ACTIONS, type LegalActions } from '@nomad/engine';
 import type { Game, GameSeat } from './types';
 
 export const PerGame = {

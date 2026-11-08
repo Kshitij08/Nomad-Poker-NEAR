@@ -1,4 +1,4 @@
-import { TournamentPhase, TournamentPlayerState, TournamentViewReason, type TournamentResultEvent, type TournamentStatusEvent, type TournamentTableLine, type TournamentViewEvent } from '../../core/tournament';
+import { TournamentPhase, TournamentPlayerState, TournamentViewReason, type TournamentResultEvent, type TournamentStatusEvent, type TournamentTableLine, type TournamentViewEvent } from '@nomad/engine/tournament';
 import type { TableChrome } from '../../table/tableScreen';
 import type { TournamentClientState } from '../clientState';
 import { N0, clock, ordinal } from '../format';

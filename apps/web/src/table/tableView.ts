@@ -1,4 +1,4 @@
-import type { BettingPanelPort, Card, SeatRole, TableViewPort, WaitFn } from '../core';
+import type { BettingPanelPort, Card, SeatRole, TableViewPort, WaitFn } from '@nomad/engine';
 import { ticker } from '../anim/tween';
 import type { UnitySpline } from '../anim/unitySpline';
 import type { SplineCardDealer } from './splineCardDealer';
