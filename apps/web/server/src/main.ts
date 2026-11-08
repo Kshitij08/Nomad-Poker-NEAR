@@ -5,7 +5,7 @@
  *
  * Local only: it trusts the browser's local chip tickets. Never bind it to a public interface.
  */
-import { DEFAULT_SERVER_PORT } from '../../src/net/shared/protocol';
+import { DEFAULT_SERVER_PORT } from '@nomad/table-server/protocol';
 import { registerTournaments } from '../tournament';
 import { startPokerServer } from './server';
 

@@ -11,8 +11,8 @@ import type { PlayerAction } from '@nomad/engine/actions/actions';
 import { TEST_SCENE_TABLE_SETTINGS } from '@nomad/engine/orchestration/tableSettings';
 import { TournamentServerGame } from '../../src/tournaments/runtime/tournamentServerGame';
 import type { TournamentBackend, TournamentPacing } from '../../src/tournaments/runtime/wire';
-import type { ServerClock } from '../src/clock';
-import type { IPokerTableServer, PlayerRef, TableNet } from '../src/tableNet';
+import type { ServerClock } from '@nomad/table-server/clock';
+import type { IPokerTableServer, PlayerRef, TableNet } from '@nomad/table-server/tableNet';
 
 export interface TournamentTableServerOptions {
   clock: ServerClock;

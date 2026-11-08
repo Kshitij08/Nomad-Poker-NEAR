@@ -1,0 +1,20 @@
+{
+  "name": "@nomad/table-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The authoritative table: rooms, PokerServerGame (port of Net/PokerServerGame.cs), the chip-ledger contract and the wire protocol. No Node or browser APIs: hosted by the local Node server and by the game-server Durable Objects.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nomad/engine": "*"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3"
+  }
+}

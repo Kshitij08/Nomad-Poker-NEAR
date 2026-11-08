@@ -4,15 +4,15 @@
  */
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
-import { encodeMessage, type ClientMessage, type ServerMessage } from '../../src/net/shared/protocol';
-import { LOCAL_APP_VERSION } from '../../src/net/shared/sessions';
+import { encodeMessage, type ClientMessage, type ServerMessage } from '@nomad/table-server/protocol';
+import { LOCAL_APP_VERSION } from '@nomad/table-server/sessions';
 import type { TableSettings } from '@nomad/engine/orchestration/tableSettings';
-import type { AgentHooks } from './agents';
-import { realClock, type ServerClock } from './clock';
+import type { AgentHooks } from '@nomad/table-server/agents';
+import { realClock, type ServerClock } from '@nomad/table-server/clock';
 import { LocalEconomy, type LogFn } from './economy';
-import { PokerServerGame } from './pokerServerGame';
-import { routeMessage, RoomRegistry, type Peer, type Room, type RoomSpec, type TableServerFactory } from './rooms';
-import { PLAYER_NONE } from './tableNet';
+import { PokerServerGame } from '@nomad/table-server/pokerServerGame';
+import { routeMessage, RoomRegistry, type Peer, type Room, type RoomSpec, type TableServerFactory } from '@nomad/table-server/rooms';
+import { PLAYER_NONE } from '@nomad/table-server/tableNet';
 
 export interface PokerServerOptions {
   /** 0 = any free port (tests). */

@@ -23,9 +23,9 @@ import type { TableViewPort } from '@nomad/engine/orchestration/tableView';
 import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import { BettingRound } from '@nomad/engine/state/state';
 import type { NetConnection } from './netConnection';
-import { PokerChatRateLimiter } from './shared/chat';
-import type { ServerMessage } from './shared/protocol';
-import { ChainTableMode } from './shared/sessions';
+import { PokerChatRateLimiter } from '@nomad/table-server/chat';
+import type { ServerMessage } from '@nomad/table-server/protocol';
+import { ChainTableMode } from '@nomad/table-server/sessions';
 
 /** What PokerClientGame needs from TableView beyond the single-player port. */
 export interface NetTableViewPort extends TableViewPort {

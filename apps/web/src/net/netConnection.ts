@@ -3,8 +3,8 @@
  * WebSocket and Node 22's global WebSocket (the headless test clients). Binary frames are table events (C# codec
  * bytes); text frames are JSON control messages (see shared/protocol.ts).
  */
-import { encodeMessage, type ClientMessage, type JoinFailReason, type ServerMessage } from './shared/protocol';
-import { LOCAL_APP_VERSION } from './shared/sessions';
+import { encodeMessage, type ClientMessage, type JoinFailReason, type ServerMessage } from '@nomad/table-server/protocol';
+import { LOCAL_APP_VERSION } from '@nomad/table-server/sessions';
 
 export interface JoinResult {
   ok: boolean;

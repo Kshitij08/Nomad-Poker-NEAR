@@ -13,11 +13,11 @@
  * signalling for voice (Vivox).
  */
 import { PlayerAction } from '@nomad/engine/actions/actions';
-import { PokerChatRateLimiter, PokerChatText } from '../../src/net/shared/chat';
-import { encodeMessage, type ClientMessage, type JoinFailReason, type ServerMessage } from '../../src/net/shared/protocol';
-import { ChainTableMode, MAX_PLAYERS_PER_SESSION, PartyCodes, StakeSessionNames } from '../../src/net/shared/sessions';
+import { PokerChatRateLimiter, PokerChatText } from './chat';
+import { encodeMessage, type ClientMessage, type JoinFailReason, type ServerMessage } from './protocol';
+import { ChainTableMode, MAX_PLAYERS_PER_SESSION, PartyCodes, StakeSessionNames } from './sessions';
 import type { ServerClock } from './clock';
-import type { LogFn } from './economy';
+import type { LogFn } from './chipTableSession';
 import { PLAYER_NONE, type IPokerTableServer, type PlayerRef, type TableNet } from './tableNet';
 
 /** One client connection (a NetworkRunner in Client mode). */

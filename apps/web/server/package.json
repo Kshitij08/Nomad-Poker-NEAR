@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@nomad/table-server": "*",
     "ws": "8.22.1",
     "@nomad/engine": "*"
   },

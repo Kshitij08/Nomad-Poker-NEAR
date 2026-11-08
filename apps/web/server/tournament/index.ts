@@ -10,8 +10,8 @@
  * - any other `TRN…` session: a hosted tournament, only when POKER_TOURNAMENT_BACKEND_URL is configured and
  *   `tournamentIdFor(session)` resolves it (the backend's claim-spawn hands a spawner the id). Off by default.
  */
-import type { ServerClock } from '../src/clock';
-import type { IPokerTableServer } from '../src/tableNet';
+import type { ServerClock } from '@nomad/table-server/clock';
+import type { IPokerTableServer } from '@nomad/table-server/tableNet';
 import { TournamentBackendClient } from './tournamentBackendClient';
 import { TournamentTableServer } from './tournamentTableServer';
 

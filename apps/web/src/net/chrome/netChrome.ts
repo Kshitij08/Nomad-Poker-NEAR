@@ -20,8 +20,8 @@ import { buildNode, HUD_DATA, UNode, whenFontsReady, type NodeData, type RGBA } 
 import type { TableChrome } from '../../table/tableScreen';
 import type { ClientGame } from '../clientGame';
 import type { NetService, NetTableSession } from '../netService';
-import { PokerChatText } from '../shared/chat';
-import { ChainTableMode, StakeSessionNames } from '../shared/sessions';
+import { PokerChatText } from '@nomad/table-server/chat';
+import { ChainTableMode, StakeSessionNames } from '@nomad/table-server/sessions';
 import { TableChat, type PokerChatRow } from '../tableChat';
 import { VoiceLinkState } from '../voice/tableVoice';
 import { applyLayoutGroups, pairNodes } from './uguiLayout';

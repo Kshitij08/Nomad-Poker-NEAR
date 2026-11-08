@@ -27,13 +27,13 @@ import type { TableSettings } from '@nomad/engine/orchestration/tableSettings';
 import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
 import { BettingRound, PlayerStatus } from '@nomad/engine/state/state';
-import { PokerChatRateLimiter } from '../../src/net/shared/chat';
-import { ChainTableMode } from '../../src/net/shared/sessions';
+import { PokerChatRateLimiter } from './chat';
+import { ChainTableMode } from './sessions';
 import {
   AgentStopReasons, maxAgentsPerTable, newAgentSession, type AgentDeploymentConfig, type AgentHooks, type AgentSession,
 } from './agents';
 import type { ServerClock } from './clock';
-import { ChipTableSession, type LocalEconomy, type LogFn } from './economy';
+import { ChipTableSession, type LogFn, type TableEconomy } from './chipTableSession';
 import { PLAYER_NONE, type IPokerTableServer, type PlayerRef, type TableNet } from './tableNet';
 
 /** PokerServerGame's serialized TableSettings in Test.unity (seat count 8, 5 bots, 4 s settle, 3 s between hands, 20 s turns). */
@@ -67,7 +67,7 @@ export interface PokerServerGameOptions {
   /** GameMode.Server (every table is dedicated-hosted): caps the drop grace at 5 s. Default true. */
   dedicated?: boolean;
   /** The chip ledger. Null → this process is not the economy authority: everyone spectates (as the Editor without a key). */
-  economy: LocalEconomy | null;
+  economy: TableEconomy | null;
   /** UnityEngine.Random (bot names, filler counts, buy-ins). Default Math.random. */
   random?: () => number;
   /** Deck RNG override (tests). Default CryptoRandom, or SeededRandom(seed) with useFixedSeed. */
@@ -238,7 +238,7 @@ export class PokerServerGame implements IPokerTableServer {
       // Local ticket sync: a player who left on purpose already shows the stack back in their wallet, so the
       // browser now holds the post-cash-out balance even if it never hears the push (the socket closes 0.75 s later).
       this.economy.onPaid = (id, balance) => {
-        if (this.leftOnPurpose.delete(id)) this.opts.economy?.noteSynced(id, balance);
+        if (this.leftOnPurpose.delete(id)) this.opts.economy?.noteSynced?.(id, balance);
       };
       this.settings.smallBlind = this.economy.stakes.smallBlind;
       this.settings.bigBlind = this.economy.stakes.bigBlind;
@@ -1490,7 +1490,7 @@ export class PokerServerGame implements IPokerTableServer {
   /** SendWalletBalance, remembering what this player's browser now believes (local ticket sync). */
   private pushBalance(player: PlayerRef, playFabId: string, balance: number): void {
     this.net.sendWalletBalance(player, balance);
-    this.opts.economy?.noteSynced(playFabId, balance);
+    this.opts.economy?.noteSynced?.(playFabId, balance);
   }
 
   private onEconomyHalted(): void {

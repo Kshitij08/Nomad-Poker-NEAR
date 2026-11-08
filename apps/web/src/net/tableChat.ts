@@ -5,8 +5,8 @@
  * colour index, "Photon does not echo" (the local row is added on send), and the state machine the panel reads.
  */
 import type { NetConnection } from './netConnection';
-import { PokerChatRateLimiter, PokerChatSettings, PokerChatText } from './shared/chat';
-import { LOCAL_APP_VERSION } from './shared/sessions';
+import { PokerChatRateLimiter, PokerChatSettings, PokerChatText } from '@nomad/table-server/chat';
+import { LOCAL_APP_VERSION } from '@nomad/table-server/sessions';
 
 export interface PokerChatRow {
   userId: string;

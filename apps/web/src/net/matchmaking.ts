@@ -5,7 +5,7 @@
  */
 import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
 import { NetConnection, type JoinResult } from './netConnection';
-import { ChainTableMode, PartyCodes, StakeSessionNames } from './shared/sessions';
+import { ChainTableMode, PartyCodes, StakeSessionNames } from '@nomad/table-server/sessions';
 
 export interface ConnectResult {
   ok: boolean;
