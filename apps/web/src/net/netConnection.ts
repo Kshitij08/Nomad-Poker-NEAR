@@ -71,7 +71,7 @@ export class NetConnection {
     } catch {
       /* fall through */
     }
-    throw new Error(import.meta.env.DEV ? `The game server at ${this.cloudBase} did not answer.` : 'The multiplayer table server is not available right now.');
+    throw new Error(import.meta.env?.DEV ? `The game server at ${this.cloudBase} did not answer.` : 'The multiplayer table server is not available right now.');
   }
 
   private openSocket(url: string, timeoutMs = 5000): Promise<void> {
@@ -82,7 +82,7 @@ export class NetConnection {
       // Dev builds name the local server; a deployed build just says multiplayer isn't available (no raw browser
       // errors such as the HTTPS page → ws:// "insecure WebSocket" refusal).
       const unavailable = (detail: string) =>
-        new Error(import.meta.env.DEV ? `${detail} Start it with \`npm run server\` in web/.` : 'The multiplayer table server is not available right now.');
+        new Error(import.meta.env?.DEV ? `${detail} Start it with \`npm run server\` in the repo root.` : 'The multiplayer table server is not available right now.');
       try {
         ws = new WebSocket(url);
       } catch {

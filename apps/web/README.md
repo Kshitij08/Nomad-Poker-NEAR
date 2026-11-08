@@ -23,6 +23,7 @@ Debug URL flags:
 - `?online=local&seed=1`: run the PlayFab code against an emulated title in localStorage, with demo friends and rivals.
 - `?practice=8`: jump into an offline practice tournament. `?agents=1`: open the Agents screens.
 - `?api=staging&account=1`: open the Nomad account panel against the staging API (guest, wallet, email-link sign-in; ledger balance). `?api=local` uses `npm run dev` in `apps/api`.
+- `?netServer=staging`: multiplayer on the staging game server (Cloudflare) with chips on the Nomad ledger; signs in to the staging API as a guest if needed.
 - `?net=create&netPlayer=Alice` / `?net=<CODE>&netPlayer=Bob`: two-tab multiplayer against the local server.
 
 ### Live backends are OFF by default

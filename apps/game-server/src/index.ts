@@ -1,5 +1,6 @@
 import { StakeSessionNames, PartyCodes } from '@nomad/table-server/sessions';
 import type { Env } from './env';
+import { auditTable } from '@nomad/db/seatLocks';
 import { canonicalSession } from './roomSpec';
 
 export { TableRoom } from './tableRoom';
@@ -13,6 +14,7 @@ export { TableRoom } from './tableRoom';
  *   POST /v1/tables/spawn     { code, money }               → { code } | { error }
  *   POST /v1/tables/overflow  { money, failed, minBuyIn }   → { session } | { error }
  *   POST /v1/admin/drain      (Bearer DRAIN_TOKEN)          finish hands, pay out, close every open table
+ *   GET  /v1/admin/audit?room= (Bearer DRAIN_TOKEN)         where every chip of that room's tables went (drift)
  */
 
 const VERSION = '0.1.0';
@@ -80,6 +82,15 @@ export default {
       const rooms = open.results.map((r) => r.room);
       await Promise.all(rooms.map((room) => table(env, room).fetch(`https://table/drain?session=${encodeURIComponent(room)}`, { method: 'POST' })));
       return json({ drained: rooms }, 200);
+    }
+
+    if (url.pathname === '/v1/admin/audit' && request.method === 'GET') {
+      if (!env.DRAIN_TOKEN || request.headers.get('authorization') !== `Bearer ${env.DRAIN_TOKEN}`) return json({ error: 'unauthorized' }, 401);
+      const room = canonicalSession(url.searchParams.get('room'));
+      if (!room) return json({ error: 'room?' }, 400);
+      const tables = await env.DB.prepare('SELECT id FROM table_sessions WHERE room = ?1 ORDER BY opened_at').bind(room).all<{ id: string }>();
+      const audits = await Promise.all(tables.results.map((t) => auditTable(env.DB, t.id)));
+      return json({ room, tables: audits }, 200);
     }
 
     return json({ error: 'not found' }, 404, h);
