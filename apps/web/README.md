@@ -45,6 +45,12 @@ Endpoint-override flags (`?netServer=`, `?web3backend=`, `?perbackend=`, `?web3r
 is listed in `VITE_ALLOWED_ENDPOINTS` (comma-separated) or the build sets `VITE_ALLOW_ENDPOINT_FLAGS=1` (staging);
 `VITE_NET_SERVER=wss://…` sets the table server a deployed build uses.
 
+### Deploying
+
+`node scripts/deploy-vercel.mjs staging` builds the app wired to the staging API and game server (`VITE_API_URL`,
+`VITE_NET_SERVER`) and deploys it to the Vercel project `nomad-poker-web` (https://nomad-poker-web.vercel.app) as a
+prebuilt output; `--preview` gives a preview URL instead. Needs `apps/web/.vercel/project.json` (`npx vercel@latest link`).
+
 ### Orientation, assets, parity
 
 - **Portrait:** phones held upright get a portrait layout (tall table with you at the bottom, one-column menus),

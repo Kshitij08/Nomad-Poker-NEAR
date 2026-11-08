@@ -411,7 +411,10 @@ export class NetService {
         if (!api.signedIn) await api.restore();
         if (!api.signedIn) await api.guest(this.identity.playerName);
         if (!api.signedIn || !api.me) throw new NetConnectError(api.error ?? 'Could not sign in to play online.', false);
-        coins = api.me.balances.coins;
+        // The balance as of now (rewards and tables move it after sign-in), not the one cached at sign-in.
+        const progress = this.ctx.services.nomadProgress;
+        await progress?.refresh();
+        coins = progress?.snapshot?.balances.coins ?? api.me.balances.coins;
       }
       const r = await connectTable(route, {
         url: this.serverUrl,

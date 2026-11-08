@@ -14,7 +14,8 @@ Worker is described by `apps/api/cloudflare.config.ts` (no Wrangler config). Pri
 `cf dev` (mode `development`, namespace `7101`) uses local D1/R2 simulations, not the resources above.
 
 Not created yet: production deploys of either Worker. The web app stays on Vercel
-(`nomad-poker-web`) until a Cloudflare Pages move is decided.
+(`nomad-poker-web`, https://nomad-poker-web.vercel.app, built from this repo since 9 Nov and wired to the staging
+Workers) until a Cloudflare Pages move is decided.
 
 Secrets: the game server's `DRAIN_TOKEN` (admin drain/audit), uploaded from `apps/game-server/.secrets.<stage>.json` (git-ignored). Google sign-in will need `GOOGLE_CLIENT_IDS` (a public value, set in the config), and email links
 a mail provider; neither is configured, so those routes answer `not_configured` (staging echoes email links instead).
