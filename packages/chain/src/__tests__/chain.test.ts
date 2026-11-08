@@ -1,0 +1,129 @@
+/**
+ * @nomad/chain checked against @solana/web3.js and the program's IDL, entirely offline: no transaction is sent and no
+ * real key is used (keypairs are generated in memory for the test).
+ */
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { sha256 } from '@noble/hashes/sha256';
+import { Keypair, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
+import { EscrowAuthority, ESCROW_PROGRAM_ID, escrowDiscriminators, tableIdBytes } from '../escrow';
+import { address, toBase58 } from '../pubkey';
+import { SolanaRpc } from '../rpc';
+import { compileMessage, signTransaction, signerFromSecret, type Instruction } from '../transaction';
+import * as b58 from '../base58';
+
+const idl = JSON.parse(readFileSync(new URL('../../../../onchain/idl/poker_escrow.json', import.meta.url), 'utf8')) as {
+  instructions: { name: string; discriminator: number[]; accounts: { name: string; signer?: boolean; writable?: boolean }[] }[];
+};
+const BLOCKHASH = 'EkSnNWid2cvwEVnVx9aBqawnmiCNiDgp3gUdkDPTKN1N';
+const toWeb3 = (ix: Instruction) =>
+  new TransactionInstruction({ programId: new PublicKey(ix.programId), keys: ix.keys.map((k) => ({ ...k, pubkey: new PublicKey(k.pubkey) })), data: Buffer.from(ix.data) });
+
+describe('@nomad/chain', () => {
+  it('base58 round-trips, including leading zeros', () => {
+    for (const s of ['11111111111111111111111111111111', ESCROW_PROGRAM_ID, BLOCKHASH]) expect(b58.encode(b58.decode(s))).toBe(s);
+    expect(b58.encode(Uint8Array.of(0, 0, 1))).toBe('112');
+  });
+
+  it('derives the same PDAs as web3.js', () => {
+    const player = Keypair.generate().publicKey;
+    const esc = new EscrowAuthority(ESCROW_PROGRAM_ID, address(Keypair.generate().publicKey.toBase58()));
+    const program = new PublicKey(ESCROW_PROGRAM_ID);
+    const id = 'poker-money-st1000000-t-abc';
+    const web3 = (seeds: Buffer[]) => PublicKey.findProgramAddressSync(seeds, program)[0].toBase58();
+    expect(toBase58(esc.config())).toBe(web3([Buffer.from('config')]));
+    expect(toBase58(esc.table(id))).toBe(web3([Buffer.from('table'), Buffer.from(tableIdBytes(id))]));
+    expect(toBase58(esc.vault(id))).toBe(web3([Buffer.from('vault'), Buffer.from(tableIdBytes(id))]));
+    expect(toBase58(esc.seat(id, address(player.toBase58())))).toBe(web3([Buffer.from('seat'), Buffer.from(tableIdBytes(id)), player.toBuffer()]));
+  });
+
+  it('matches the IDL: discriminators (sha256 of global:<name>) and account order and flags', () => {
+    const authority = address(Keypair.generate().publicKey.toBase58());
+    const esc = new EscrowAuthority(ESCROW_PROGRAM_ID, authority);
+    const p = address(Keypair.generate().publicKey.toBase58());
+    const built: Record<string, Instruction> = {
+      create_table: esc.createTable('t1', p, 1_000_000_000n, 5n, 10n, 7),
+      begin_round: esc.beginRound('t1'),
+      settle_round: esc.settleRound('t1', 3n, [{ player: p, chipDelta: 0n }]),
+      cash_out: esc.cashOut('t1', p),
+      close_table: esc.closeTable('t1'),
+    };
+    for (const [name, ix] of Object.entries(built)) {
+      const spec = idl.instructions.find((i) => i.name === name)!;
+      expect(escrowDiscriminators[name as keyof typeof escrowDiscriminators]).toEqual(spec.discriminator);
+      expect([...sha256(new TextEncoder().encode(`global:${name}`)).slice(0, 8)]).toEqual(spec.discriminator);
+      expect([...ix.data.slice(0, 8)]).toEqual(spec.discriminator);
+      // The IDL's accounts, in order, with the same signer / writable flags (settle_round adds seat PDAs after them).
+      const fixed = ix.keys.slice(0, spec.accounts.length);
+      expect(fixed.map((k) => [k.isSigner, k.isWritable])).toEqual(spec.accounts.map((a) => [!!a.signer, !!a.writable]));
+    }
+  });
+
+  it('encodes settle_round deltas as Borsh (u64 nonce, u32 length, pubkey + i64 each)', () => {
+    const a = address(Keypair.generate().publicKey.toBase58());
+    const b = address(Keypair.generate().publicKey.toBase58());
+    const esc = new EscrowAuthority(ESCROW_PROGRAM_ID, a);
+    const ix = esc.settleRound('t1', 258n, [{ player: a, chipDelta: -50n }, { player: b, chipDelta: 50n }]);
+    const d = ix.data;
+    expect(d.length).toBe(8 + 32 + 8 + 4 + 2 * 40);
+    expect([...d.slice(40, 48)]).toEqual([2, 1, 0, 0, 0, 0, 0, 0]); // 258
+    expect([...d.slice(48, 52)]).toEqual([2, 0, 0, 0]);
+    expect(Buffer.from(d.slice(84, 92)).readBigInt64LE()).toBe(-50n);
+    expect(Buffer.from(d.slice(124, 132)).readBigInt64LE()).toBe(50n);
+    expect(ix.keys.slice(3).map((k) => toBase58(k.pubkey))).toEqual([toBase58(esc.seat('t1', a)), toBase58(esc.seat('t1', b))]);
+    expect(() => esc.settleRound('t1', 1n, [{ player: a, chipDelta: 1n }])).toThrow(/zero/);
+  });
+
+  it('compiles the same message bytes as web3.js, and its WebCrypto signature verifies there', async () => {
+    const kp = Keypair.generate();
+    const signer = await signerFromSecret(kp.secretKey);
+    expect(toBase58(signer.publicKey)).toBe(kp.publicKey.toBase58());
+    const esc = new EscrowAuthority(ESCROW_PROGRAM_ID, signer.publicKey);
+    const players = [Keypair.generate(), Keypair.generate(), Keypair.generate()].map((k) => address(k.publicKey.toBase58()));
+    const ixs = [esc.beginRound('t9'), esc.settleRound('t9', 7n, [{ player: players[0]!, chipDelta: 120n }, { player: players[1]!, chipDelta: -100n }, { player: players[2]!, chipDelta: -20n }]), esc.cashOut('t9', players[1]!)];
+
+    const ours = compileMessage(signer.publicKey, BLOCKHASH, ixs);
+    const theirs = new Transaction({ feePayer: kp.publicKey, recentBlockhash: BLOCKHASH }).add(...ixs.map(toWeb3));
+    expect(Buffer.from(ours.message).equals(theirs.serializeMessage())).toBe(true);
+
+    const wire = await signTransaction(ours, [signer]);
+    const decoded = Transaction.from(Buffer.from(wire));
+    expect(decoded.verifySignatures()).toBe(true);
+    expect(decoded.signatures[0]!.publicKey.toBase58()).toBe(kp.publicKey.toBase58());
+    theirs.sign(kp);
+    expect(Buffer.from(wire).equals(theirs.serialize())).toBe(true); // Ed25519 is deterministic: identical bytes
+  });
+
+  it('refuses a mismatched secret, a missing signer, and mainnet', async () => {
+    const kp = Keypair.generate();
+    const bad = Uint8Array.from(kp.secretKey);
+    bad.set(Keypair.generate().publicKey.toBytes(), 32);
+    await expect(signerFromSecret(bad)).rejects.toThrow(/do not match/);
+    const signer = await signerFromSecret(b58.encode(kp.secretKey));
+    const other = address(Keypair.generate().publicKey.toBase58());
+    const esc = new EscrowAuthority(ESCROW_PROGRAM_ID, other);
+    await expect(signTransaction(compileMessage(signer.publicKey, BLOCKHASH, [esc.beginRound('t1')]), [signer])).rejects.toThrow(/missing signer/);
+    expect(() => new SolanaRpc('https://api.mainnet-beta.solana.com')).toThrow(/mainnet/);
+  });
+
+  it('talks JSON-RPC: blockhash, send, confirm (against a stand-in RPC)', async () => {
+    const calls: string[] = [];
+    let statusCalls = 0;
+    const fake = (async (_url: string, init: RequestInit) => {
+      const { method, params } = JSON.parse(String(init.body));
+      calls.push(method);
+      const result =
+        method === 'getLatestBlockhash' ? { value: { blockhash: BLOCKHASH, lastValidBlockHeight: 100 } }
+        : method === 'sendTransaction' ? (expect(params[1].encoding).toBe('base64'), 'sig123')
+        : method === 'getSignatureStatuses' ? { value: [++statusCalls < 2 ? null : { err: null, confirmationStatus: 'confirmed' }] }
+        : method === 'getBlockHeight' ? 90
+        : null;
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result }));
+    }) as typeof fetch;
+    const rpc = new SolanaRpc('https://api.devnet.solana.com', fake);
+    const bh = await rpc.latestBlockhash();
+    expect(await rpc.sendTransaction(Uint8Array.of(1, 2))).toBe('sig123');
+    await rpc.confirm('sig123', bh.lastValidBlockHeight, async () => undefined);
+    expect(calls).toEqual(['getLatestBlockhash', 'sendTransaction', 'getSignatureStatuses', 'getBlockHeight', 'getSignatureStatuses']);
+  });
+});

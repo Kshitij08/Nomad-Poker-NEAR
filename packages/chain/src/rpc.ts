@@ -1,0 +1,55 @@
+import { base64 } from './transaction';
+
+/**
+ * A minimal Solana JSON-RPC client over fetch (Workers and Node). Devnet only: a mainnet URL is refused, as the old
+ * backend's settlement key loader did.
+ */
+export class SolanaRpc {
+  private id = 0;
+
+  constructor(readonly url: string, private readonly fetchImpl: typeof fetch = (...a) => fetch(...a)) {
+    if (/mainnet/i.test(url)) throw new Error('refused: mainnet RPC (the new stack is devnet-only)');
+  }
+
+  async call<T>(method: string, params: unknown[] = []): Promise<T> {
+    const res = await this.fetchImpl(this.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: ++this.id, method, params }),
+    });
+    if (!res.ok) throw new Error(`${method}: HTTP ${res.status}`);
+    const body = (await res.json()) as { result?: T; error?: { code: number; message: string } };
+    if (body.error) throw new Error(`${method}: ${body.error.message} (${body.error.code})`);
+    return body.result as T;
+  }
+
+  async latestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }> {
+    return (await this.call<{ value: { blockhash: string; lastValidBlockHeight: number } }>('getLatestBlockhash', [{ commitment: 'confirmed' }])).value;
+  }
+
+  /** Sends signed wire bytes; returns the signature. */
+  sendTransaction(wire: Uint8Array): Promise<string> {
+    return this.call<string>('sendTransaction', [base64(wire), { encoding: 'base64', preflightCommitment: 'confirmed' }]);
+  }
+
+  /** Polls until confirmed (or failed, or the blockhash expired). */
+  async confirm(signature: string, lastValidBlockHeight: number, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<void> {
+    for (;;) {
+      const st = await this.call<{ value: ({ err: unknown; confirmationStatus?: string } | null)[] }>('getSignatureStatuses', [[signature]]);
+      const s = st.value[0];
+      if (s?.err) throw new Error(`transaction failed: ${JSON.stringify(s.err)}`);
+      if (s && (s.confirmationStatus === 'confirmed' || s.confirmationStatus === 'finalized')) return;
+      const height = await this.call<number>('getBlockHeight', [{ commitment: 'confirmed' }]);
+      if (height > lastValidBlockHeight) throw new Error('blockhash expired before confirmation');
+      await sleep(800);
+    }
+  }
+
+  /** An account's data, or null when it doesn't exist. */
+  async accountData(addressBase58: string): Promise<Uint8Array | null> {
+    const r = await this.call<{ value: { data: [string, string] } | null }>('getAccountInfo', [addressBase58, { encoding: 'base64', commitment: 'confirmed' }]);
+    if (!r.value) return null;
+    const bin = atob(r.value.data[0]);
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  }
+}
