@@ -125,3 +125,19 @@ are ranked in `docs/parity/README.md`; some portrait panels are only scaled (`do
 the offline "Play offline" table is a web addition and does not take the buy-in from the wallet; and the copied
 marketplace SOL strategy (`CopiedSol`) is ported but only verified offline (its listing, fee terms and payout need a
 live backend).
+
+## Store apps (Capacitor, Phase 8)
+
+`android/` and `ios/` are the native shells around this app (`capacitor.config.ts`; app id provisional). A store build
+turns SOL features off and points at a stage's servers:
+
+```bash
+VITE_STORE_BUILD=1 VITE_API_URL=https://nomad-poker-api-staging.kshitijiitgn.workers.dev VITE_NET_SERVER=https://nomad-poker-game-staging.kshitijiitgn.workers.dev npm run build
+npx cap sync            # copies dist/ into both shells
+npx cap open android    # Android Studio (JDK 21); CI builds a debug APK: .github/workflows/android.yml
+npx cap open ios        # Xcode on a Mac (Swift Package Manager, no CocoaPods)
+```
+
+`src/native/` runs only inside the apps: splash and status bar, Android back button, deep links
+(`nomadpoker://join/<CODE>`, `nomadpoker://t/<CODE>`, and `https://…/?net=<CODE>` once app links are verified for the
+final domain), and a refresh when the app returns to the foreground.
