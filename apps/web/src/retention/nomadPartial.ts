@@ -56,9 +56,10 @@ export function bindNomadRetention(host: NomadHost, ctx: AppContext): void {
       const id = m.def.id;
       if (m.done && !m.claimed)
         b.addListener(() => {
-          const res = svc.progression.tryClaimMission(id);
-          host.message(res.ok ? 'Mission complete' : 'Missions', res.message || (res.ok ? 'Reward added.' : 'Not yet.'));
-          paintLevelRewards();
+          void svc.progression.claimMission(id).then((res) => {
+            host.message(res.ok ? 'Mission complete' : 'Missions', res.message || (res.ok ? 'Reward added.' : 'Not yet.'));
+            paintLevelRewards();
+          });
         });
     }
     if (content.activeInHierarchy) {

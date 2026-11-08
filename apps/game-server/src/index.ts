@@ -80,7 +80,14 @@ export default {
       if (!env.DRAIN_TOKEN || request.headers.get('authorization') !== `Bearer ${env.DRAIN_TOKEN}`) return json({ error: 'unauthorized' }, 401);
       const open = await env.DB.prepare('SELECT DISTINCT room FROM table_sessions WHERE closed_at IS NULL').all<{ room: string }>();
       const rooms = open.results.map((r) => r.room);
+      const startedAt = Date.now();
       await Promise.all(rooms.map((room) => table(env, room).fetch(`https://table/drain?session=${encodeURIComponent(room)}`, { method: 'POST' })));
+      // A drained room has no live table. Rows still open for it belong to tables that died without closing (an
+      // eviction or a deploy before drains existed): mark them closed so they stop being listed. Their seat locks are
+      // untouched and pay back at the players' next sit-down.
+      if (rooms.length) {
+        await env.DB.batch(rooms.map((room) => env.DB.prepare('UPDATE table_sessions SET closed_at = ?2 WHERE room = ?1 AND closed_at IS NULL').bind(room, startedAt)));
+      }
       return json({ drained: rooms }, 200);
     }
 

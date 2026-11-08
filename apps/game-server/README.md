@@ -30,6 +30,12 @@ on-chain phase. Every room closes after idling empty and reopens on the next joi
 
 **Drift** for a table = cash-outs + stacks still seated − buy-ins + bot_net. It must be zero.
 
+## Progress
+
+After each hand the table records, for every Nomad player dealt in, 10 XP (+25 for winning a pot) and mission
+progress (hands played, hands won, wins with a pair / two pair or better), keyed per hand so a retry counts once; a
+buy-in counts the table toward Table Hopper. Level-ups are paid by the server as the XP lands.
+
 ## Hand records
 
 Each settled hand (every event the table sent, to everyone and to each player, plus stacks and the house result) is

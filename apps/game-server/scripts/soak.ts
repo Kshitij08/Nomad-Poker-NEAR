@@ -9,7 +9,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { PlayerAction, type LegalActions } from '@nomad/engine/actions/actions';
-import type { LedgerResponse, SessionResponse } from '@nomad/contract';
+import type { LedgerResponse, ProgressSnapshot, SessionResponse } from '@nomad/contract';
 import { connectTable } from '../../web/src/net/matchmaking';
 import { headlessClient, until, type Headless } from '../../web/server/__tests__/headlessClient';
 
@@ -112,18 +112,38 @@ async function main(): Promise<void> {
 
   const players = [];
   for (const s of seats) {
-    const l = await api<LedgerResponse>('GET', '/v1/ledger?limit=100', s.token);
-    const sum = l.entries.reduce((acc, e) => acc + (e.currency === 'coins' ? e.delta : 0), 0);
-    const table = l.entries.filter((e) => e.reason.startsWith('table:')).reduce((acc, e) => acc + e.delta, 0);
-    players.push({ name: s.name, playerId: s.playerId, hands: s.hands, rejoins: s.rejoins, balance: l.balances.coins, ledgerSum: sum, tableNet: table, entries: l.entries.length, balanceMatchesEntries: sum === l.balances.coins });
+    // Every ledger entry (XP adds one a hand, so page through them all).
+    const all: LedgerResponse['entries'] = [];
+    let before: number | undefined;
+    let bal: LedgerResponse['balances'] | null = null;
+    do {
+      const l = await api<LedgerResponse>('GET', `/v1/ledger?limit=100${before ? `&before=${before}` : ''}`, s.token);
+      bal ??= l.balances;
+      all.push(...l.entries);
+      before = l.nextBefore;
+    } while (before);
+    const sumOf = (currency: string) => all.filter((e) => e.currency === currency).reduce((acc, e) => acc + e.delta, 0);
+    const table = all.filter((e) => e.reason.startsWith('table:')).reduce((acc, e) => acc + e.delta, 0);
+    // Phase 3: the server counted these hands into XP and missions, and paid the levels.
+    const prog = await api<ProgressSnapshot>('GET', '/v1/progress', s.token).catch(() => null);
+    const xpHands = all.filter((e) => e.currency === 'xp' && (e.reason === 'hand_played' || e.reason === 'hand_won')).length;
+    players.push({
+      name: s.name, playerId: s.playerId, hands: s.hands, rejoins: s.rejoins, balance: bal!.coins, ledgerSum: sumOf('coins'), tableNet: table,
+      entries: all.length, balanceMatchesEntries: sumOf('coins') === bal!.coins && sumOf('xp') === bal!.xp,
+      xp: bal!.xp, xpHands, level: prog?.level ?? null, rewardedLevel: prog?.rewardedLevel ?? null,
+      warmup: prog?.missions.slots.find((m) => m.id === 'daily_warmup_10')?.progress ?? null,
+      levelsPaid: prog ? prog.rewardedLevel === prog.level : false,
+    });
   }
   const totals = audit.tables.reduce(
     (acc, t) => ({ hands: acc.hands + t.hands, buyIns: acc.buyIns + t.buyIns, cashOuts: acc.cashOuts + t.cashOuts, botNet: acc.botNet + t.botNet, drift: acc.drift + t.drift, seated: acc.seated + t.seatedPlayers }),
     { hands: 0, buyIns: 0, cashOuts: 0, botNet: 0, drift: 0, seated: 0 },
   );
   const humansNet = players.reduce((a, p) => a + p.tableNet, 0);
-  const pass = totals.drift === 0 && totals.seated === 0 && humansNet + totals.botNet === 0 && players.every((p) => p.balanceMatchesEntries && p.hands >= HANDS);
-  const report = { room, stage, target: HANDS, minutes: +((Date.now() - t0) / 60000).toFixed(1), pass, totals, humansNet, players, tables: audit.tables };
+  // XP: one server-counted entry per hand a player was dealt into (rebuys skip a hand or two while they sit down).
+  const progressOk = players.every((p) => p.levelsPaid && p.xpHands >= p.hands - 3 * (p.rejoins + 1) && p.xpHands <= p.hands && (p.warmup ?? 0) === Math.min(10, p.xpHands));
+  const pass = totals.drift === 0 && totals.seated === 0 && humansNet + totals.botNet === 0 && progressOk && players.every((p) => p.balanceMatchesEntries && p.hands >= HANDS);
+  const report = { room, stage, target: HANDS, minutes: +((Date.now() - t0) / 60000).toFixed(1), pass, progressOk, totals, humansNet, players, tables: audit.tables };
   mkdirSync(new URL('../results/', import.meta.url), { recursive: true });
   writeFileSync(new URL(`../results/soak-${room}.json`, import.meta.url), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

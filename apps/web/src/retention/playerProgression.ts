@@ -10,6 +10,7 @@ import {
   rewardPreview, serializeBoard, type MissionBoardState,
 } from '@nomad/engine/retention';
 import type { RetentionEnv } from './dailyEngagement';
+import type { RetentionBackend } from './backend';
 
 /** ProgressionCloud: LoadMissionsOverride / SaveMissionsOverride. */
 export interface ProgressionCloud {
@@ -33,6 +34,11 @@ export class PlayerProgression {
   private toast = '';
   /** LevelUpPanel's listener, run synchronously on every change before the bus event (C# static subscriber). */
   levelUps: LevelUpQueue | null = null;
+  /**
+   * Set when a Nomad server owns retention: the board and XP are its numbers (the game server counts hands), level-up
+   * rewards are its payouts, and the record* hooks below do nothing.
+   */
+  backend: RetentionBackend | null = null;
 
   constructor(private readonly env: RetentionEnv) {}
 
@@ -57,6 +63,13 @@ export class PlayerProgression {
     return this.toast;
   }
   get missionBoard(): MissionBoardState {
+    if (this.backend) {
+      const m = this.backend.snapshot?.missions;
+      return MissionProgressMath.ensureFresh(
+        m ? { dayNumber: m.dayNumber, weekNumber: m.weekNumber, slots: m.slots.map((s) => ({ ...s })), tablesToday: [] } : null,
+        this.backend.snapshot?.today ?? this.today(),
+      );
+    }
     this.ensureLoaded();
     this.refreshDay();
     return this.board!;
@@ -68,7 +81,7 @@ export class PlayerProgression {
   }
 
   addXp(amount: number, source: string | null): void {
-    if (amount <= 0) return;
+    if (amount <= 0 || this.backend) return;
     this.ensureLoaded();
     const wallet = this.env.wallet();
     if (!wallet) return;
@@ -79,6 +92,7 @@ export class PlayerProgression {
   }
 
   recordHandPlayed(): void {
+    if (this.backend) return;
     this.ensureLoaded();
     this.refreshDay();
     MissionProgressMath.advance(this.board, MissionKind.PlayHands, 1, this.today());
@@ -88,6 +102,7 @@ export class PlayerProgression {
   }
 
   recordHandWon(): void {
+    if (this.backend) return;
     this.ensureLoaded();
     this.refreshDay();
     MissionProgressMath.advance(this.board, MissionKind.WinHands, 1, this.today());
@@ -96,7 +111,7 @@ export class PlayerProgression {
   }
 
   recordTableJoined(sessionName: string): void {
-    if (!sessionName) return;
+    if (!sessionName || this.backend) return;
     this.ensureLoaded();
     this.refreshDay();
     if (!MissionProgressMath.tryCountTable(this.board, sessionName, this.today())) return;
@@ -105,7 +120,7 @@ export class PlayerProgression {
 
   /** Local seat's showdown hand (C# RecordShowdown(HandValue): only the category matters). */
   recordShowdown(category: HandCategory): void {
-    if (category < HandCategory.Pair) return;
+    if (category < HandCategory.Pair || this.backend) return;
     this.ensureLoaded();
     this.refreshDay();
     let changed = MissionProgressMath.advance(this.board, MissionKind.WinPairOrBetter, 1, this.today());
@@ -115,10 +130,19 @@ export class PlayerProgression {
   }
 
   recordPlayedWithFriend(): void {
+    if (this.backend) return;
     this.ensureLoaded();
     this.refreshDay();
     if (!MissionProgressMath.advance(this.board, MissionKind.PlayWithFriend, 1, this.today())) return;
     this.persistAndNotify();
+  }
+
+  /** The mission claim, wherever it is decided: the server with a backend, else tryClaimMission. */
+  async claimMission(id: string): Promise<{ ok: boolean; message: string }> {
+    if (!this.backend) return this.tryClaimMission(id);
+    const r = await this.backend.claimMission(id);
+    this.notifyChanged();
+    return r ? { ok: r.ok, message: r.message } : { ok: false, message: "Couldn't reach the server. Try again." };
   }
 
   /** C# TryClaimMission(id, out message). */

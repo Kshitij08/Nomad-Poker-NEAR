@@ -6,7 +6,7 @@
  * Router id 'daily-spin' (overlay). In the shipped Nomad flow the menu shows the Lucky Slot ('lucky-slot') instead;
  * this panel is what the table's Coins chip opens when the Nomad menu is not running.
  */
-import { DailySpinCatalog } from '@nomad/engine/retention';
+import { DailySpinCatalog, type DailySpinResult } from '@nomad/engine/retention';
 import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
 import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import type { UNode } from '../../hud/unityUi';
@@ -144,12 +144,13 @@ export class DailySpinScreen extends PanelScreen {
     this.spinButton?.setInteractable(false);
     this.resultLabel?.setText('');
     this.statusLabel?.setText('Spinning…');
-    this.routine = this.host.start(this.spinRoutine());
+    // The result first (the server's roll when one is configured), then the reels play it out.
+    void svc.engagement.spin().then((outcome) => {
+      this.routine = this.host.start(this.spinRoutine(outcome));
+    });
   }
 
-  private *spinRoutine(): Routine {
-    const svc = this.svc!;
-    const outcome = svc.engagement.trySpin();
+  private *spinRoutine(outcome: DailySpinResult): Routine {
     if (!outcome.awarded) {
       this.busy = false;
       this.refreshIdle();

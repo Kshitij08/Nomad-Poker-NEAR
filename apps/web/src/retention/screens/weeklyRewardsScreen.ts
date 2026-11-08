@@ -140,10 +140,10 @@ export class WeeklyRewardsScreen extends PanelScreen {
     this.refresh();
   }
 
-  private onClaimClicked(): void {
+  private async onClaimClicked(): Promise<void> {
     const svc = this.svc;
     if (!svc) return;
-    const result = svc.engagement.tryClaimLogin();
+    const result = await svc.engagement.claimLogin();
     if (result.canClaim) {
       this.ctx.audio.play(PokerSound.ChipsToWinner);
       this.refresh();

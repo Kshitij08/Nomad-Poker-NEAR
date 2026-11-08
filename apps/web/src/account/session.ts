@@ -195,6 +195,11 @@ export class NomadSession {
     }
   }
 
+  /** An authenticated API call (throws ApiRequestError). For the other account services (progress, rewards). */
+  call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    return this.request<T>(method, path, body);
+  }
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers['content-type'] = 'application/json';

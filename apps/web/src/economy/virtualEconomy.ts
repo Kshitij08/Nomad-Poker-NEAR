@@ -11,6 +11,10 @@ import { Signal } from './signal';
 
 let wallet: VirtualWallet | null = null;
 
+/** A wallet whose balances a server owns (the account module's NomadWallet): read-only here. */
+type ServerOwnedWallet = VirtualWallet & { serverAuthoritative: true; refresh?(): void };
+const serverOwned = (w: VirtualWallet): w is ServerOwnedWallet => (w as { serverAuthoritative?: boolean }).serverAuthoritative === true;
+
 function ensure(): VirtualWallet {
   if (wallet) return wallet;
   const local = new LocalVirtualWallet();
@@ -62,6 +66,12 @@ export const VirtualEconomy = {
   trySpendCoins(chips: number, sink: string): boolean {
     const w = ensure();
     if (chips <= 0) return true;
+    if (serverOwned(w)) {
+      // The Nomad server owns the balance: nothing is spent here (tables debit on the server; other sinks move later).
+      console.warn(`[VirtualEconomy] '${sink}' cannot spend ${chips} coins in the browser: the server owns this balance.`);
+      w.refresh?.();
+      return false;
+    }
     if (w instanceof LocalVirtualWallet) {
       if (!w.trySpendCoins(chips)) return false;
       VirtualEconomy.notify();
@@ -77,6 +87,10 @@ export const VirtualEconomy = {
   creditFreePlay(chips: number): void {
     const w = ensure();
     if (chips <= 0) return;
+    if (serverOwned(w)) {
+      w.refresh?.(); // a table paid out on the server: read the new figure
+      return;
+    }
     if (w instanceof LocalVirtualWallet) {
       w.grant(RewardGrant.coins(chips, 'free_cashout'));
       // C# relies on the wallet; it does not Notify here. The web shell's readouts listen on 'wallet:changed',

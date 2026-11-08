@@ -9,6 +9,7 @@ import {
   DailySpinCatalog, DailySpinMath, DailySpinResult, LoginClaimPreview, LoginStreakMath, UtcDay, type Clock,
   type DailyEngagementState,
 } from '@nomad/engine/retention';
+import type { RetentionBackend } from './backend';
 
 /** The PlayerPrefs surface retention needs (app/services PlayerPrefs, or an in-memory map in tests). */
 export interface PrefsLike {
@@ -49,6 +50,8 @@ export class DailyEngagement {
   /** Fired as 'engagement:changed' on the app bus (C# DailyEngagement.Changed). */
   static readonly CHANGED = 'engagement:changed';
   readonly cloud: EngagementCloud = { load: null, save: null };
+  /** Set when a Nomad server owns retention: state comes from it, and spins / claims are its decisions. */
+  backend: RetentionBackend | null = null;
 
   constructor(private readonly env: RetentionEnv) {}
 
@@ -61,6 +64,15 @@ export class DailyEngagement {
   }
 
   load(): DailyEngagementState {
+    if (this.backend) {
+      const snap = this.backend.snapshot;
+      return {
+        lastSpinDay: snap?.spin.lastSpinDay ?? 0,
+        lastLoginDay: snap?.login.lastLoginDay ?? 0,
+        streakDay: snap?.login.streakDay ?? 0,
+        lastSpinCoins: snap?.spin.lastSpinCoins ?? 0,
+      };
+    }
     if (this.cloud.load) return this.cloud.load();
     const p = this.env.prefs;
     return {
@@ -72,15 +84,39 @@ export class DailyEngagement {
   }
 
   todayDay(): number {
-    return UtcDay.fromUtc(this.env.clock());
+    // The server's day when it owns retention (its clock decides when a new day starts).
+    return this.backend?.snapshot?.today ?? UtcDay.fromUtc(this.env.clock());
   }
 
   canSpin(): boolean {
+    if (this.backend) return this.backend.snapshot?.spin.canSpin ?? false;
     return DailySpinMath.canSpin(this.load().lastSpinDay, this.todayDay());
+  }
+
+  /** The spin, wherever it is decided: the server's roll and payout with a backend, else trySpin. Screens call this. */
+  async spin(): Promise<DailySpinResult> {
+    if (!this.backend) return this.trySpin();
+    const r = await this.backend.spin();
+    this.notifyChanged();
+    if (!r) return { ...DailySpinResult.alreadySpun(), error: "Couldn't reach the server. Try again." };
+    if (!r.awarded) return DailySpinResult.alreadySpun();
+    return DailySpinResult.won(DailySpinCatalog.prizeAt(DailySpinMath.prizeIndex(r.coins)));
+  }
+
+  /** The login claim, wherever it is decided (see spin). */
+  async claimLogin(): Promise<LoginClaimPreview> {
+    if (!this.backend) return this.tryClaimLogin();
+    const r = await this.backend.claimLogin();
+    this.notifyChanged();
+    const tokens = this.env.wallet()?.streakTokens ?? 0;
+    if (!r) return { ...LoginClaimPreview.alreadyClaimed(1, tokens), error: "Couldn't reach the server. Try again." };
+    if (!r.claimed) return LoginClaimPreview.alreadyClaimed(r.day, tokens);
+    return LoginClaimPreview.claim(r.day, tokens, r.tokenConsumed, r.reset);
   }
 
   /** Re-queues today's spin credit if it was recorded but never paid (run once per sign-in). */
   ensureTodaysSpinCredit(): void {
+    if (this.backend) return; // the server pays a spin in the same step that records it
     const s = this.load();
     if (s.lastSpinDay !== this.todayDay() || s.lastSpinCoins <= 0) return;
     this.env.wallet()?.tryGrant(RewardGrant.coins(s.lastSpinCoins, 'daily_spin'));
@@ -122,6 +158,11 @@ export class DailyEngagement {
   }
 
   previewLogin(): LoginClaimPreview {
+    if (this.backend) {
+      const l = this.backend.snapshot?.login;
+      if (!l) return LoginClaimPreview.alreadyClaimed(1, 0);
+      return l.canClaim ? LoginClaimPreview.claim(l.day, l.tokensAfter, l.tokenConsumed, l.reset) : LoginClaimPreview.alreadyClaimed(l.day, l.tokensAfter);
+    }
     const s = this.load();
     return LoginStreakMath.preview(s.lastLoginDay, this.todayDay(), s.streakDay, this.env.wallet()?.streakTokens ?? 0);
   }

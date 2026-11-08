@@ -221,10 +221,10 @@ export class MissionsScreen extends PanelScreen {
 
   // ---------------------------------------------------------------- refresh
 
-  private onClaim(missionId: string): void {
+  private async onClaim(missionId: string): Promise<void> {
     const svc = this.svc;
     if (!svc) return;
-    const res = svc.progression.tryClaimMission(missionId);
+    const res = await svc.progression.claimMission(missionId);
     if (res.ok) this.ctx.audio.play(PokerSound.ChipsToWinner);
     this.statusLabel?.setText(res.message);
     this.refresh();

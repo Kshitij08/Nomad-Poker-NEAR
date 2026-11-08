@@ -24,6 +24,7 @@ import { DailyEngagement, defaultRoll, type PrefsLike, type RetentionEnv } from 
 import { LevelUpQueue, PlayerProgression } from './playerProgression';
 import { StakeSelection } from './stakeSelection';
 import { TableProgressTracker, type TableProgressOptions } from './tableProgress';
+import type { RetentionBackend } from './backend';
 
 export interface RetentionServiceOptions {
   events: EventBus;
@@ -77,6 +78,15 @@ export class RetentionService {
 
   get wallet(): VirtualWallet | undefined {
     return this.env.wallet();
+  }
+
+  /** Hand retention to a Nomad server (null: back to local rules). Screens repaint on 'nomad:progress'. */
+  setBackend(backend: RetentionBackend | null): void {
+    this.engagement.backend = backend;
+    this.progression.backend = backend;
+    this.levelUps.rebaseline();
+    this.progression.notifyChanged();
+    this.engagement.notifyChanged();
   }
 
   /** Swap the clock (tests / debug): every "today" reads it. */

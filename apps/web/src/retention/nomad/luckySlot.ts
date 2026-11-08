@@ -140,7 +140,7 @@ export class LuckySlotController {
     this.views[which].spin?.setInteractable(!this.spinning && canSpin);
   }
 
-  private spin(): void {
+  private async spin(): Promise<void> {
     const svc = this.ctx.services.retention;
     if (this.spinning || !svc) return;
     if (!svc.engagement.canSpin()) {
@@ -150,7 +150,8 @@ export class LuckySlotController {
     const which: SlotScreen = this.surface.isShowing('lost') ? 'lost' : 'win';
     this.spinning = true;
     this.slotWon = false;
-    const result = svc.engagement.trySpin();
+    // The result first (the server's roll when one is configured), then the reels play it out.
+    const result = await svc.engagement.spin();
     this.paint(which);
     const done = this.views[which].slot.spin({ win: result.awarded }) ?? Promise.resolve(result.awarded);
     void done.then(() => {

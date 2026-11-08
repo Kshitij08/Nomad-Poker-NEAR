@@ -7,7 +7,9 @@
  */
 import type { AppContext } from '../app/app';
 import { buildEndpoint, endpointParam } from '../app/flags';
+import { VirtualEconomy } from '../economy/virtualEconomy';
 import { AccountScreen } from './accountScreen';
+import { NomadProgress, NomadWallet } from './progress';
 import { localTokenStore, NomadSession, type WalletSigner } from './session';
 
 export const API_PRESETS: Record<string, string> = {
@@ -19,6 +21,8 @@ declare module '../app/app' {
   interface Services {
     /** The Nomad API session; null when this build has no API configured. */
     nomadApi?: NomadSession | null;
+    /** The player's server-side progress and rewards (retention's backend); unset without an API. */
+    nomadProgress?: NomadProgress;
   }
 }
 
@@ -56,6 +60,20 @@ export function install(ctx: AppContext): void {
   ctx.router.register('nomad-account', (c) => new AccountScreen(c, { session, stage: base ? stageLabel(base) : 'off', wallet }));
 
   if (!session) return;
+  // With a Nomad server, it owns the economy: balances, items and every reward (Phase 3). The wallet becomes a
+  // read-only view of the server's figures and retention asks the server (retention/install wires the backend).
+  const progress = new NomadProgress(session, ctx.events);
+  const serverWallet = new NomadWallet(progress, session);
+  ctx.services.nomadProgress = progress;
+  let lastPlayer: string | null = null;
+  ctx.events.on('nomad:changed', () => {
+    const id = session.me?.player.id ?? null;
+    if (id === lastPlayer || session.busy) return;
+    lastPlayer = id;
+    if (id) void progress.refresh();
+    else progress.snapshot = null;
+  });
+
   const emailToken = ctx.params.get('emailToken');
   void (async () => {
     await session.restore();
@@ -66,6 +84,10 @@ export function install(ctx: AppContext): void {
       history.replaceState(history.state, '', url);
       await session.emailVerify(emailToken);
     }
+    // Everyone plays on a server account: a guest until they sign in (a guest keeps its progress when it links one).
+    if (!session.signedIn) await session.guest();
+    await progress.refresh();
+    if (session.signedIn) VirtualEconomy.setProvider(serverWallet);
   })();
   if (emailToken || ctx.params.get('account') === '1') {
     // Once main.ts has opened the first screen (navigate() clears the stack, so pushing earlier would be lost).

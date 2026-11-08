@@ -60,6 +60,17 @@ export function install(ctx: AppContext): void {
   ctx.services.retention = svc;
   wireCloud(ctx, svc);
 
+  // A Nomad server owns retention (account module): its snapshot is the state, its answers are the rewards, and the
+  // game server counts hands, so the local table hooks below record nothing.
+  const serverProgress = ctx.services.nomadProgress;
+  if (serverProgress) {
+    svc.setBackend(serverProgress);
+    ctx.events.on('nomad:progress', () => {
+      svc.progression.notifyChanged();
+      svc.engagement.notifyChanged();
+    });
+  }
+
   // A cloud pull / sign-out (economy module) reloads the board under LevelUpPanel's hydration guard, so the level
   // jump to the account's XP is never celebrated or rewarded twice.
   ctx.events.on('progress:loaded', () => svc.progression.reloadFromCloud());

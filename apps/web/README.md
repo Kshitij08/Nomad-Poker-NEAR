@@ -22,6 +22,10 @@ Debug URL flags:
 - `?demo=1`: a scripted hand that plays every card animation without the engine.
 - `?online=local&seed=1`: run the PlayFab code against an emulated title in localStorage, with demo friends and rivals.
 - `?practice=8`: jump into an offline practice tournament. `?agents=1`: open the Agents screens.
+- With an API configured (`?api=staging`, `?netServer=staging` or a `VITE_API_URL` build) the server owns the economy:
+  the app signs in (a guest at first), the wallet shows the server's balances and refuses local grants, and the daily
+  spin, login track and missions are server decisions (`src/account/progress.ts`, `src/retention/backend.ts`). Coins
+  Agents' bankroll and tournament XP still need the local economy until they move (Phases 4–5).
 - `?api=staging&account=1`: open the Nomad account panel against the staging API (guest, wallet, email-link sign-in; ledger balance). `?api=local` uses `npm run dev` in `apps/api`.
 - `?netServer=staging`: multiplayer on the staging game server (Cloudflare) with chips on the Nomad ledger; signs in to the staging API as a guest if needed.
 - `?net=create&netPlayer=Alice` / `?net=<CODE>&netPlayer=Bob`: two-tab multiplayer against the local server.

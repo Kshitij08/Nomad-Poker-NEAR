@@ -12,12 +12,18 @@ ledger; the contract (routes, types, error codes) is `packages/contract` (`@noma
 | `POST /v1/auth/sign-out` | Ends this session. |
 | `GET /v1/me` | Profile, linked identities, balances. |
 | `GET /v1/ledger?before=&limit=` | Balances and ledger entries, newest first. |
+| `GET /v1/progress` | Everything the retention screens paint: balances, items, level, spin, login track, missions. |
+| `POST /v1/rewards/spin` | The daily spin: the server rolls (HMAC of a secret, the player and the UTC day, so a retry gets the same prize) and pays a catalogue prize once a day. |
+| `POST /v1/rewards/login` | The 7-day login track: the server reads the streak, spends a shield on a one-day gap, pays the catalogue day. |
+| `POST /v1/missions/claim` `{ id }` | Pays a mission only when the progress the game server counted reaches its target, once per day / week. |
 
 Sessions are opaque bearer tokens (`np_…`, 30 days, sliding); only their SHA-256 is stored. Sending a guest's token
 to a wallet / Google / email sign-in links that identity to the guest and keeps its balance; if the identity already
 belongs to someone, you are signed in to that player instead.
 
-The ledger (`migrations/0001_init.sql`) is append-only. A trigger applies each entry to `balances` in the same
+Rewards are the server's decisions (Phase 3): the rules are the engine's catalogues, run in `packages/db/src/progress.ts`. XP, gems and streak shields are ledger currencies; level-ups are paid as XP crosses them; every grant has an idempotency key (per day, mission period, level or hand). There is no route that takes an amount from a client. `scripts/rewards-check.ts` checks this against a deployed API.
+
+The ledger (`packages/db/migrations/0001_init.sql`) is append-only. A trigger applies each entry to `balances` in the same
 statement, and `balances.amount >= 0` is a CHECK, so an overdraft aborts the entry: the two tables cannot disagree.
 Every entry has an idempotency key per player, so retries never double-pay.
 
@@ -27,7 +33,8 @@ Every entry has an idempotency key per player, so retries never double-pay.
 npm test                    # vitest against real SQLite (node:sqlite stand-in for D1), no Cloudflare needed
 npm run dev                 # local Worker on http://localhost:8788 with local D1/R2 (run db:migrate:local first)
 npm run db:migrate:staging  # apply migrations/ to the staging D1
-npm run deploy:staging      # build + deploy nomad-poker-api-staging
+npm run deploy:staging      # build + deploy nomad-poker-api-staging (needs .secrets.staging.json with SPIN_SECRET)
+npx tsx scripts/rewards-check.ts   # Phase 3 exit gate: no self-granted coins, XP or items; catalogue prizes only
 node scripts/smoke.mjs https://nomad-poker-api-staging.kshitijiitgn.workers.dev https://nomad-poker-web.vercel.app
 ```
 
