@@ -76,7 +76,7 @@ return and withdrawal flights. The return sweep is frame-for-frame identical ove
 
 ## How it was made (and how to rerun)
 
-- **Unity (no live services):** run `Assets/WebParity/` (an untracked PlayMode test with its own asmdef) like this:
+- **Unity (no live services):** run `Assets/WebParity/` (a PlayMode test with its own test-only asmdef, inert unless Unity is launched with `-webParity`) like this:
   `Unity.exe -batchmode -projectPath <repo> -runTests -testPlatform PlayMode -testFilter Poker.WebParity -testResults r.xml
   -logFile u.log -webParity [-webParitySweep] -webParityOut <dir>`. It needs graphics, so don't pass `-nographics`.
   - It takes about 25 s after import.

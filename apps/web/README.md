@@ -46,7 +46,7 @@ is listed in `VITE_ALLOWED_ENDPOINTS` (comma-separated) or the build sets `VITE_
 - **Assets:** images are WebP, right-sized and visually checked (`tools/optimize-assets.mjs`, run by every extractor);
   music streams instead of being decoded into memory.
 - **Parity with Unity:** `docs/parity/` compares the same seeded hand rendered by Unity (headless PlayMode capture,
-  `Assets/WebParity/`, kept out of git) and by the web, frame by frame, with pixel diffs.
+  `Assets/WebParity/`, a test-only assembly that never ships in game builds) and by the web, frame by frame, with pixel diffs.
 - **Particles:** what Unity shows and how to recreate it: `docs/particle-effects.md`.
 
 ## Layout
