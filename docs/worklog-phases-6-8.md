@@ -96,8 +96,7 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     (a fake stake inflated a strategy's record), the market shows creators' Friend IDs (not internal ids), the
     strategies list is cached for a minute, and support staff can't ban admins. Deployed; staging reconciles clean.
     Bans now also stop the player's Agent at the next minute sweep (checked on staging: stopped 40 s after the ban,
-    its stack paid back). Not done: a banned player's already-open table socket stays until they leave (the next sit
-    or sign-in is refused).
+    its stack paid back). A player banned while seated is now removed at the next hand boundary and paid out (tested).
 17. **Phase 6 signing groundwork built and verified offline.** `packages/chain`: the escrow's settlement-authority
     instructions from the IDL, PDAs, transactions compiled like web3.js and signed through WebCrypto Ed25519 (the key
     stays non-extractable; Workers support it), and a devnet-only JSON-RPC client. Tests compare PDAs, message bytes

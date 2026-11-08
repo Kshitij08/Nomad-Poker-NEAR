@@ -183,6 +183,17 @@ export class TableHost extends RoomHost {
     if (h.tableId) {
       const tableId = h.tableId;
       this.queue(`hand ${h.handNumber}`, () => recordHand(this.opts.db, tableId, h.botDelta, h.agentDelta));
+      // Suspended accounts leave at the hand boundary (a ban ends sessions; this ends a seat already taken).
+      const humans = h.stacks.filter((s) => !s.bot && s.id.startsWith('p_')).map((s) => s.id);
+      if (humans.length) {
+        this.queue(`ban check hand ${h.handNumber}`, async () => {
+          const r = await this.opts.db
+            .prepare(`SELECT id FROM players WHERE banned_at IS NOT NULL AND id IN (${humans.map((_, i) => `?${i + 1}`).join(', ')})`)
+            .bind(...humans)
+            .all<{ id: string }>();
+          for (const b of r.results) this.game.removePlayer(b.id, 'account suspended');
+        });
+      }
       // XP and missions for every Nomad player dealt in (the server counts; clients cannot claim hands).
       for (const s of h.stacks) {
         if (s.bot || !s.id.startsWith('p_')) continue;

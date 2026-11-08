@@ -250,6 +250,21 @@ describe('game server: Quick Play on the ledger', () => {
     await leave(d, dave.id);
   }, 30_000);
 
+  it('removes a player whose account is suspended while seated, paying their stack back', async () => {
+    const carol = await account('Carol');
+    const c = await player('Carol', carol, { kind: 'quick', minBuyIn: 100 });
+    await until(() => c.game.localSeat >= 0 && c.game.handsSeen >= 1, 20_000, 'Carol seated and playing');
+    expect(await seatLock(db, carol.id)).not.toBeNull();
+    await db.prepare('UPDATE players SET banned_at = ?2 WHERE id = ?1').bind(carol.id, Date.now()).run();
+    await until(() => c.game.localSeat < 0, 20_000, 'Carol removed');
+    for (let i = 0; i < 400 && (await seatLock(db, carol.id)); i++) await new Promise((r) => setTimeout(r, 50));
+    expect(await seatLock(db, carol.id)).toBeNull();
+    const coins = (await balances(db, carol.id)).coins;
+    expect(coins).toBeGreaterThan(9000); // the stack came back (minus what the hands cost)
+    c.game.stop();
+    c.conn.close();
+  });
+
   it('spawns party rooms over HTTP and refuses codes nobody spawned', async () => {
     const created = await connectTable({ kind: 'create' }, { url: base });
     expect(created.ok, created.message).toBe(true);

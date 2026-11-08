@@ -610,6 +610,28 @@ export class PokerServerGame implements IPokerTableServer {
     this.broadcastLobby();
   }
 
+  /**
+   * Removes a player from their seat as if they had pressed Leave (folded if it's their turn, paid out at the hand
+   * boundary), and closes their connection. For accounts suspended while seated. False when they aren't seated here.
+   */
+  removePlayer(playFabId: string, reason: string): boolean {
+    for (const [seat, occ] of this.humans) {
+      if (occ.playFabId !== playFabId) continue;
+      const player = occ.player;
+      this.log('warn', `[PokerServer] Removing ${occ.name} from seat ${seat}: ${reason}.`);
+      if (player !== PLAYER_NONE) {
+        this.onLeaveTable(player);
+        this.net.disconnect?.(player);
+      } else {
+        occ.leaving = true;
+        if (this.seatsLocked) this.pendingVacate.add(seat);
+        else this.releaseSeat(seat);
+      }
+      return true;
+    }
+    return false;
+  }
+
   private foldNowIfAwaiting(seat: number): void {
     if (!this.engine.handInProgress || this.engine.awaitingActionSeat !== seat) return;
     this.remoteProviders.get(seat)?.deliver(PlayerAction.fold());
