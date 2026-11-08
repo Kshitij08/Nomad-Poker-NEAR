@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit",
     "build:staging": "cf-vite build --mode staging",
     "build:production": "cf-vite build --mode production",
-    "deploy:staging": "node scripts/drain.mjs staging && npm run build:staging && cf deploy --prebuilt --mode staging --secrets-file .secrets.staging.json",
-    "deploy:production": "node scripts/drain.mjs production && npm run build:production && cf deploy --prebuilt --mode production --secrets-file .secrets.production.json"
+    "deploy:staging": "node ../../infra/check-migrations.mjs staging && node scripts/drain.mjs staging && npm run build:staging && cf deploy --prebuilt --mode staging --secrets-file .secrets.staging.json",
+    "deploy:production": "node ../../infra/check-migrations.mjs production && node scripts/drain.mjs production && npm run build:production && cf deploy --prebuilt --mode production --secrets-file .secrets.production.json"
   },
   "dependencies": {
     "@nomad/db": "*",

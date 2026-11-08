@@ -28,7 +28,12 @@ export interface TableHostOptions {
   tableSettings?: Partial<TableSettings>;
   random?: () => number;
   disconnectGrace?: number;
+  /** How long a failing bookkeeping write is retried (default BOOKKEEPING_RETRY_MS). */
+  bookkeepingRetryMs?: number;
 }
+
+/** Ten minutes: long enough to ride out a D1 export or restart, short enough that a drain still finishes. */
+export const BOOKKEEPING_RETRY_MS = 10 * 60_000;
 
 /** A Room that also hands every event it sends to the hand recorder. */
 class RecordingRoom extends Room {
@@ -58,9 +63,11 @@ export class TableHost extends RoomHost {
   private readonly style: StyleRecorder;
   /** D1 bookkeeping (table session row, house totals) runs in order, with retries, off the game loop. */
   private bookkeeping: Promise<void> = Promise.resolve();
+  private readonly retryMs: number;
 
   constructor(private readonly opts: TableHostOptions) {
     super(opts.spec);
+    this.retryMs = opts.bookkeepingRetryMs ?? BOOKKEEPING_RETRY_MS;
     const room = opts.spec.name;
     const ledger = new D1ChipLedger(opts.db, room, (lock) => this.stillSeated(lock), opts.log);
     this.agents = new AgentDesk({
@@ -186,18 +193,26 @@ export class TableHost extends RoomHost {
     }
   }
 
+  /**
+   * Runs D1 bookkeeping in order, off the game loop. A write is retried with backoff (0.5 s doubling to 15 s) for up to
+   * BOOKKEEPING_RETRY_MS of real time before it is given up and logged: D1 can be unavailable for seconds (an export, a
+   * restart), and a dropped house-result write shows up as table drift (load test, 9 Nov). Real-time waits, not the
+   * table's clock, which runs faster in QA rooms.
+   */
   private queue(label: string, fn: () => Promise<void>): void {
     this.bookkeeping = this.bookkeeping.then(async () => {
+      const started = Date.now();
       for (let attempt = 1; ; attempt++) {
         try {
           await fn();
+          if (attempt > 1) this.opts.log('warn', `[TableHost] ${label} written after ${attempt} tries (${Date.now() - started} ms)`);
           return;
         } catch (e) {
-          if (attempt >= 4) {
-            this.opts.log('error', `[TableHost] ${label} failed after ${attempt} tries: ${(e as Error).message}`);
+          if (Date.now() - started >= this.retryMs) {
+            this.opts.log('error', `[TableHost] ${label} GAVE UP after ${attempt} tries over ${Date.now() - started} ms: ${(e as Error).message}`);
             return;
           }
-          await this.opts.clock.wait(0.5 * attempt);
+          await new Promise((r) => setTimeout(r, Math.min(15_000, 500 * 2 ** (attempt - 1))));
         }
       }
     });

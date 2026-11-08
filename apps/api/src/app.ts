@@ -46,6 +46,7 @@ import * as tournaments from '@nomad/db/tournaments';
 import * as strategies from '@nomad/db/strategies';
 import * as admin from '@nomad/db/admin';
 import { reconcile } from '@nomad/db/reconcile';
+import { integrityReport } from '@nomad/db/integrity';
 import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import { ApiError, base58Decode, fail, iso, randomId, readJson, requireString, sha256Hex, utf8 } from '@nomad/db/util';
 
@@ -408,6 +409,7 @@ export function createApp(): Hono<AppEnv> {
   );
   app.post(`${AdminRoutes.player}/:id/unban`, async (c) => c.json(await admin.setBan(c.env.DB, me(c), c.req.param('id'), false, '')));
   app.get(AdminRoutes.reconcile, async (c) => c.json(await reconcile(c.env.DB, { sinceMs: Number(c.req.query('since')) || undefined })));
+  app.get(AdminRoutes.integrity, async (c) => c.json(await integrityReport(c.env.DB, { sinceMs: Number(c.req.query('since')) || undefined })));
   app.get(AdminRoutes.audit, async (c) =>
     c.json(await admin.auditLog(c.env.DB, { before: Number(c.req.query('before')) || undefined, limit: Number(c.req.query('limit')) || 50 })),
   );

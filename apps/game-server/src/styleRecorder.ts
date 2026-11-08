@@ -31,10 +31,15 @@ export class StyleRecorder {
   private readonly stacks = new Map<number, number>();
   private readonly bets = new Map<number, number>();
   private pot = 0;
-  private pending = new Map<number, { toCall: number; minRaiseTo: number }>();
+  private pending = new Map<number, { toCall: number; minRaiseTo: number; askedAt: number }>();
   private decisions: DecisionRow[] = [];
 
-  constructor(private readonly table: StyleTable, private readonly tableName: string) {}
+  constructor(
+    private readonly table: StyleTable,
+    private readonly tableName: string,
+    /** Wall-clock milliseconds, for think times (Workers' clock moves with I/O: an action arriving is I/O). */
+    private readonly now: () => number = () => Date.now(),
+  ) {}
 
   /** Every engine event, in order. */
   observe(e: EngineEvent): void {
@@ -73,7 +78,7 @@ export class StyleRecorder {
         this.bets.clear();
         break;
       case 'ActionRequested':
-        this.pending.set(e.seat, { toCall: e.legal.callAmount, minRaiseTo: e.legal.minRaiseTo });
+        this.pending.set(e.seat, { toCall: e.legal.callAmount, minRaiseTo: e.legal.minRaiseTo, askedAt: this.now() });
         break;
       case 'PlayerActed':
         this.acted(e.seat, e.action, e.amount, e.stackAfter, e.potAfter);
@@ -114,6 +119,7 @@ export class StyleRecorder {
       stack: stackBefore,
       action,
       amount: action === 'bet' || action === 'raise' ? amount : 0,
+      thinkMs: this.now() - req.askedAt,
     });
   }
 

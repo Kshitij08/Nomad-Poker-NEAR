@@ -47,6 +47,23 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
    drift formula includes it. Staging now reconciles clean over its whole history.
 7. **Alerts stay a log search for now.** Turning Cloudflare notifications on (email/webhook alerts) changes account
    settings, which I left for you. The hourly reconcile warning and Worker errors are in Workers Logs today.
+8. **Backups: D1 Time Travel plus dated SQL dumps in R2.** `infra/backup-d1.mjs` exports, gzips and stores the
+   database in the stage's R2 bucket. Ran it on staging and restored the dump into an empty database: every balance
+   matched its ledger entries. Restore steps are in `infra/cloudflare.md`.
+9. **A load test found a real bug: bookkeeping dropped writes during a short D1 outage.** The first 40-player run
+   showed drift on 6 of 8 tables (±20 to 145 coins). The game server's logs showed table bookkeeping writes failing
+   with "D1_ERROR: Currently processing a long-running export": I had run the backup export during the test, which
+   locks the database for a few seconds, and the table queue gave up after about 3 seconds of retries. The R2 hand
+   records (written separately) proved it to the coin: each table's R2 house total minus its D1 total exactly equals its
+   drift, and D1 was short by the 1–3 hands whose writes were dropped. Fix: bookkeeping now retries with backoff for up
+   to 10 minutes of real time, and logs `GAVE UP` if it ever does stop. A test runs a table through an 8-second outage:
+   it fails on the old retry window and passes on the new one. I repaired the six staging tables from their R2
+   records (`infra/table-from-r2.mjs --fix`) and staging reconciles clean. Lessons kept: backups should run at a quiet
+   hour; deploy scripts now refuse to deploy while a D1 migration is pending (`infra/check-migrations.mjs`); and
+   `infra/logs.mjs` searches Worker logs from a terminal.
+10. **Integrity leads, not automatic bans.** `GET /v1/admin/integrity` lists possible chip dumping (one-way chip flow
+    between a pair over many hands), marathon accounts (18+ hours in a day), robotic timing (very fast or very even
+    decisions; think time is now recorded per decision, migration 0008) and win-rate outliers. A person decides.
 
 ## Questions for you
 
@@ -69,3 +86,8 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
    And do you want a small web admin page later? The command-line tool covers it for now; a page is about a day.
 4. **Alerts.** May I set up Cloudflare notifications (to your email) for Worker error spikes, and a Workers Logs alert
    on `[reconcile] PROBLEMS`? That changes account settings, so I didn't.
+5. **Scheduled backups.** Running `infra/backup-d1.mjs` daily needs a Cloudflare API token somewhere that runs on a
+   schedule (a GitHub Actions secret is simplest). Shall I set up the workflow for you to add the token to?
+6. **Expected peak for the load test.** The plan's gate is "3× expected peak". What peak should I assume (players at
+   once)? I ran 40 players over 8 tables at 20× speed (≈ 800 players' worth of hand traffic at normal speed); tell me
+   the number and I'll size a run to 3× it.

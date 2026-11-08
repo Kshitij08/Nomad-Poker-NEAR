@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit",
     "build:staging": "cf-vite build --mode staging",
     "build:production": "cf-vite build --mode production",
-    "deploy:staging": "npm run build:staging && cf deploy --prebuilt --mode staging --secrets-file .secrets.staging.json",
-    "deploy:production": "npm run build:production && cf deploy --prebuilt --mode production --secrets-file .secrets.production.json",
+    "deploy:staging": "node ../../infra/check-migrations.mjs staging && npm run build:staging && cf deploy --prebuilt --mode staging --secrets-file .secrets.staging.json",
+    "deploy:production": "node ../../infra/check-migrations.mjs production && npm run build:production && cf deploy --prebuilt --mode production --secrets-file .secrets.production.json",
     "db:migrate:local": "cf d1 migrations apply --dir ../../packages/db/migrations c9570cef-7f57-4845-b503-03da7893d36d --local --persist-to .cloudflare/state",
     "db:migrate:staging": "cf d1 migrations apply --dir ../../packages/db/migrations c9570cef-7f57-4845-b503-03da7893d36d",
     "db:migrate:production": "cf d1 migrations apply --dir ../../packages/db/migrations e630e086-697c-47c7-84c3-8ad467005c34"

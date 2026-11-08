@@ -316,6 +316,8 @@ export const AdminRoutes = {
   audit: '/v1/admin/audit',
   /** GET `?since=<ms>` — the ledger reconciliation report (every money invariant; `ok` when all hold). */
   reconcile: '/v1/admin/reconcile',
+  /** GET `?since=<ms>` — integrity leads: chip dumping pairs, marathon accounts, robotic timing, win-rate outliers. */
+  integrity: '/v1/admin/integrity',
 } as const;
 
 export type FriendRelationName = 'friend' | 'pending_out' | 'pending_in';

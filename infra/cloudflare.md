@@ -20,3 +20,14 @@ Workers) until a Cloudflare Pages move is decided.
 
 Secrets: the game server's `DRAIN_TOKEN` (admin drain/audit), uploaded from `apps/game-server/.secrets.<stage>.json` (git-ignored). Google sign-in will need `GOOGLE_CLIENT_IDS` (a public value, set in the config), and email links
 a mail provider; neither is configured, so those routes answer `not_configured` (staging echoes email links instead).
+
+## Backups and restore (Phase 7)
+
+- **Point in time (built in):** D1 Time Travel keeps every minute of the retention window (30 days on the paid plan,
+  7 on free). Restore the whole database to a moment: `cf d1 time-travel restore <db-id> --timestamp <ISO time>`
+  (`cf d1 time-travel get-bookmark <db-id>` names the current state first, so the restore itself can be undone).
+- **Off-site dumps:** `node infra/backup-d1.mjs <stage>` exports the database to SQL, gzips it and uploads it to the
+  stage's R2 bucket at `backups/d1/<date>/<bookmark>.sql.gz`. Restore into a fresh database with `cf d1 import`.
+  First run on staging, 9 Nov: 2 MB of SQL (137 KB gzipped); restored into an empty SQLite with every balance equal
+  to its ledger entries. Not scheduled yet: it needs a machine or CI job with a Cloudflare API token.
+- **Hand histories** are already in R2 (`hands/…`) and are not in the database.

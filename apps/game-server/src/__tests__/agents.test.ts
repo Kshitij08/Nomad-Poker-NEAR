@@ -52,7 +52,68 @@ afterAll(async () => {
   for (const h of hosts) await h.close('test over');
 });
 
+/** A D1 that refuses every write and read for `ms` from `start()` (like an export in progress), then recovers. */
+function flaky(db: D1Database): { db: D1Database; start(ms: number): void; refused: () => number } {
+  let until = 0;
+  let refused = 0;
+  const down = () => {
+    if (Date.now() < until) {
+      refused++;
+      throw new Error('D1_ERROR: Currently processing a long-running export.');
+    }
+  };
+  const wrapped = new Proxy(db, {
+    get(target, key) {
+      if (key === 'batch') return async (stmts: D1PreparedStatement[]) => (down(), target.batch(stmts));
+      if (key === 'prepare')
+        return (sql: string) => {
+          const st = target.prepare(sql);
+          for (const m of ['run', 'all', 'first'] as const) {
+            const orig = (st as unknown as Record<string, (...a: unknown[]) => unknown>)[m]!.bind(st);
+            (st as unknown as Record<string, unknown>)[m] = async (...a: unknown[]) => (down(), orig(...a));
+          }
+          const bind = st.bind.bind(st);
+          st.bind = (...a: unknown[]) => {
+            const b = bind(...a);
+            for (const m of ['run', 'all', 'first'] as const) {
+              const orig = (b as unknown as Record<string, (...x: unknown[]) => unknown>)[m]!.bind(b);
+              (b as unknown as Record<string, unknown>)[m] = async (...x: unknown[]) => (down(), orig(...x));
+            }
+            return b;
+          };
+          return st;
+        };
+      return Reflect.get(target, key);
+    },
+  });
+  return { db: wrapped, start: (ms) => void (until = Date.now() + ms), refused: () => refused };
+}
+
 describe('Agents in the game server', () => {
+  it('rides out a D1 outage longer than a few seconds without dropping a hand (zero drift)', async () => {
+    const owner = (await createPlayer(db, { displayName: 'Owner' })).id;
+    const row = await startAgent(db, owner, { session: 'AGENTF1', bankroll: 2000, stake: 100, maxHands: 6 });
+    const f = flaky(db);
+    const s = new TableSlot({
+      session: 'poker-free-st100-9', isSpawned: async () => false, qaRooms: true, qaSpeed: 1, log: quiet,
+      createHost: (spec) => {
+        const host = new TableHost({ spec, db: f.db, clock: realClock(SPEED), log: quiet, stillSeatedElsewhere: async () => false });
+        hosts.push(host);
+        return host;
+      },
+    });
+    expect(await s.seatAgent(row)).toEqual({ seated: true });
+    await until(async () => (await agentRow(db, 'AGENTF1'))!.hands_played >= 1, 30_000);
+    f.start(8000); // well past the old ~3 s of retries
+    await until(async () => (await agentRow(db, 'AGENTF1'))!.phase === 'completed', 60_000);
+    expect(f.refused()).toBeGreaterThan(0);
+    const t = await db.prepare(`SELECT id FROM table_sessions WHERE room = 'poker-free-st100-9'`).first<{ id: string }>();
+    await (hosts[hosts.length - 1] as TableHost).settled();
+    const audit = (await auditTable(db, t!.id))!;
+    expect(audit.hands).toBe(6);
+    expect(audit.drift).toBe(0);
+  }, 90_000);
+
   it('plays to its hand limit at an empty Quick Play table and pays the stack back', async () => {
     const owner = (await createPlayer(db, { displayName: 'Owner' })).id;
     const row = await startAgent(db, owner, { session: 'AGENTA1', agentName: 'Robo', bankroll: 2000, stake: 100, maxHands: 4, profile: 'daredevil' });

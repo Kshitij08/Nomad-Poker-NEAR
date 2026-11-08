@@ -40,6 +40,8 @@ export interface DecisionRow extends Decision {
   table: string;
   handNo: number;
   stack: number;
+  /** Milliseconds from the table asking to the action arriving (bot detection). */
+  thinkMs?: number | null;
 }
 
 export interface StyleHandRow {
@@ -65,10 +67,11 @@ export async function recordDecisions(db: D1Database, rows: DecisionRow[], now =
       db
         .prepare(
           `INSERT INTO style_decisions (player_id, table_name, hand_no, street, position, opponents, strength, pot, to_call, min_raise_to,
-             big_blind, stack, action, amount, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`,
+             big_blind, stack, action, amount, created_at, think_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`,
         )
         .bind(r.playerId, r.table, int(r.handNo), int(r.street), int(r.position), int(r.opponents), r.strength, int(r.pot), int(r.toCall),
-          int(r.minRaiseTo), int(r.bigBlind), int(r.stack), r.action, int(r.amount ?? 0), now),
+          int(r.minRaiseTo), int(r.bigBlind), int(r.stack), r.action, int(r.amount ?? 0), now,
+          r.thinkMs != null && Number.isFinite(r.thinkMs) ? Math.max(0, Math.min(600_000, Math.round(r.thinkMs))) : null),
     ),
   );
   return ok.length;
