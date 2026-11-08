@@ -1,0 +1,47 @@
+name: Android (debug)
+
+# The store app's Android shell (Phase 8): a store build of the web app (no SOL features) against the staging servers,
+# synced into the Capacitor project and built as a debug APK, uploaded as a workflow artifact. Release builds and Play
+# uploads need a signing key and Play credentials as repository secrets (not set up yet).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - '.github/workflows/android.yml'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Store build of the web app (staging servers)
+        working-directory: apps/web
+        env:
+          VITE_STORE_BUILD: '1'
+          VITE_API_URL: https://nomad-poker-api-staging.kshitijiitgn.workers.dev
+          VITE_NET_SERVER: https://nomad-poker-game-staging.kshitijiitgn.workers.dev
+        run: npm run build
+      - name: Sync into the Android project
+        working-directory: apps/web
+        run: npx cap sync android
+      - name: Debug APK
+        working-directory: apps/web/android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nomad-poker-debug-apk
+          path: apps/web/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
