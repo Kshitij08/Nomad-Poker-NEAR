@@ -104,13 +104,28 @@ export async function placeAgent(env: Env, row: AgentRow): Promise<string | null
 }
 
 /**
- * The minute sweep: Agents still queued get another try at a seat; Agents whose table has gone quiet are asked about,
+ * The minute sweep: Agents of banned owners stop; Agents still queued get another try at a seat; Agents whose table has gone quiet are asked about,
  * and if their room no longer has them (it was evicted or crashed), they end with their last checkpointed stack.
  */
 export async function sweepAgents(env: Env, now = Date.now()): Promise<{ placed: number; recovered: number }> {
   let placed = 0;
   let recovered = 0;
-  for (const row of await queuedAgents(env.DB, 15_000, now)) if (await placeAgent(env, row)) placed++;
+  // Agents of banned owners stop (their coins still come back: a ban doesn't confiscate).
+  const banned = await env.DB
+    .prepare(`SELECT d.* FROM agent_deployments d JOIN players p ON p.id = d.owner_id WHERE d.phase IN ('queued', 'playing') AND p.banned_at IS NOT NULL LIMIT 50`)
+    .all<AgentRow>();
+  for (const row of banned.results) {
+    if (row.phase === 'queued') {
+      await completeAgent(env.DB, row.id, { stopReason: 'banned', endingStack: row.bankroll, handsPlayed: 0, from: 'queued' }, now);
+    } else if (!row.stop_requested) {
+      await requestAgentStop(env.DB, row.id, now);
+      if (row.room) await table(env, row.room).fetch(`https://table/agents/stop?session=${encodeURIComponent(row.room)}&id=${encodeURIComponent(row.id)}`, { method: 'POST' }).catch(() => undefined);
+    }
+  }
+  for (const row of await queuedAgents(env.DB, 15_000, now)) {
+    if (banned.results.some((b) => b.id === row.id)) continue;
+    if (await placeAgent(env, row)) placed++;
+  }
   for (const row of await staleAgents(env.DB, now)) {
     let holds = false;
     if (row.room) {

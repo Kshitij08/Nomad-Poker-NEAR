@@ -95,8 +95,9 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     and prizes come from what was actually paid in. Smaller fixes from the same review: Agents only at real stake tiers
     (a fake stake inflated a strategy's record), the market shows creators' Friend IDs (not internal ids), the
     strategies list is cached for a minute, and support staff can't ban admins. Deployed; staging reconciles clean.
-    Not fixed yet: a ban doesn't close a player's open table socket or stop their running Agent (they end at the next
-    sign-in check).
+    Bans now also stop the player's Agent at the next minute sweep (checked on staging: stopped 40 s after the ban,
+    its stack paid back). Not done: a banned player's already-open table socket stays until they leave (the next sit
+    or sign-in is refused).
 
 ## Questions for you
 
