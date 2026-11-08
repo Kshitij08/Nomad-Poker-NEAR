@@ -21,6 +21,8 @@ export interface Env {
   GOOGLE_CLIENT_IDS?: string;
   /** '1' on staging only: email sign-in returns the link instead of mailing it (no mail provider yet). */
   EMAIL_DEV_ECHO?: string;
+  /** Server secret the daily spin's roll is derived from (HMAC of player and day). */
+  SPIN_SECRET?: string;
 }
 
 export type AppEnv = {

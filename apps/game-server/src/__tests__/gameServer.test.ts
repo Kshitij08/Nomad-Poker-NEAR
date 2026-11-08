@@ -11,6 +11,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { PlayerAction } from '@nomad/engine/actions/actions';
 import { createPlayer, createSession } from '@nomad/db/accounts';
 import { balances, entries } from '@nomad/db/ledger';
+import { snapshot } from '@nomad/db/progress';
 import { auditTable, buyIn, seatLock } from '@nomad/db/seatLocks';
 import { D1Shim } from '@nomad/db/testing/d1Shim';
 import { realClock } from '@nomad/table-server/clock';
@@ -172,11 +173,21 @@ describe('game server: Quick Play on the ledger', () => {
     expect(audit.hands).toBeGreaterThanOrEqual(25);
     expect(audit.seatedPlayers).toBe(0);
     expect(audit.drift).toBe(0);
-    // Each player's balance is the starter grant plus what the table paid back.
+    // Each player's coins: the starter grant, the table's buy-in and cash-out, and level-up rewards the server paid
+    // for XP it counted from the hands (10 per hand dealt in, 25 more per pot won).
     for (const p of [alice, bob]) {
-      const e = (await entries(db, p.id, { limit: 10 })).entries;
-      expect(e.map((x) => x.reason)).toEqual(['table:cash_out', 'table:buy_in', 'starter']);
-      expect((await balances(db, p.id)).coins).toBe(10_000 - 2000 + e[0]!.delta);
+      const e = (await entries(db, p.id, { limit: 200 })).entries;
+      const coinsBy = (reason: string) => e.filter((x) => x.currency === 'coins' && x.reason === reason).reduce((sum, x) => sum + x.delta, 0);
+      expect(coinsBy('table:buy_in')).toBe(-2000);
+      expect((await balances(db, p.id)).coins).toBe(10_000 - 2000 + coinsBy('table:cash_out') + coinsBy('level_up'));
+      const xpEntries = e.filter((x) => x.currency === 'xp');
+      expect(xpEntries.length).toBeGreaterThanOrEqual(20);
+      expect(xpEntries.every((x) => x.delta === 10 || x.delta === 35)).toBe(true);
+      const snap = await snapshot(db, p.id);
+      expect(snap.balances.xp).toBe(xpEntries.reduce((sum, x) => sum + x.delta, 0));
+      expect(snap.missions.slots.find((x) => x.id === 'daily_warmup_10')?.progress).toBe(10);
+      expect(snap.missions.slots.find((x) => x.id === 'daily_table_tour_2')?.progress).toBe(1);
+      expect(snap.rewardedLevel).toBe(snap.level);
     }
     // Hand batches: gzipped JSON lines, one per settled hand, with the events that were sent.
     await slots.get('poker-free')!.live!.close('test');

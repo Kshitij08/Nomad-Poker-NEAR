@@ -86,7 +86,8 @@ export interface SettledHand {
   /** Chips the bots won (+) or lost (−) this hand: the house's side of the humans' result. */
   botDelta: number;
   humanDelta: number;
-  stacks: { id: string; seat: number; stack: number; bot: boolean }[];
+  /** Everyone dealt into the hand: final stack, whether they won a pot, and their showdown hand (HandCategory). */
+  stacks: { id: string; seat: number; stack: number; bot: boolean; won: boolean; showdownCategory: number | null }[];
 }
 
 class SeatOccupant {
@@ -172,6 +173,9 @@ export class PokerServerGame implements IPokerTableServer {
   private renderBudget = 0;
   private economy: ChipTableSession | null = null;
   private readonly stacksAtHandStart = new Map<string, number>();
+  /** This hand's pot winners and showdown categories, by seat (for onHandSettled). */
+  private readonly handWinners = new Set<number>();
+  private readonly handShowdown = new Map<number, number>();
 
   private readonly verifiedPlayers = new Map<PlayerRef, string>();
   private readonly avatarsByPlayer = new Map<PlayerRef, number>();
@@ -1481,7 +1485,10 @@ export class PokerServerGame implements IPokerTableServer {
         handNumber: this.engine.table.handNumber,
         botDelta,
         humanDelta,
-        stacks: [...this.stacksAtHandStart.keys()].map((id) => ({ id, seat: this.seatOfPlayer(id), stack: this.stackOfPlayer(id), bot: isBotId(id) })),
+        stacks: [...this.stacksAtHandStart.keys()].map((id) => {
+          const seat = this.seatOfPlayer(id);
+          return { id, seat, stack: this.stackOfPlayer(id), bot: isBotId(id), won: this.handWinners.has(seat), showdownCategory: this.handShowdown.get(seat) ?? null };
+        }),
       });
     } catch (e) {
       this.log('error', `[PokerServer] onHandSettled failed: ${(e as Error)?.message ?? e}`);
@@ -1582,6 +1589,8 @@ export class PokerServerGame implements IPokerTableServer {
       for (const agent of this.agents) this.observeAgent(agent, e);
       switch (e.type) {
         case 'HandStarted':
+          this.handWinners.clear();
+          this.handShowdown.clear();
           this.replicate(e);
           break;
         case 'ActionRequested':
@@ -1615,6 +1624,7 @@ export class PokerServerGame implements IPokerTableServer {
           this.renderBudget += this.settings.actionDelay;
           break;
         case 'Showdown':
+          for (const entry of e.entries) this.handShowdown.set(entry.seat, entry.value.category);
           for (const entry of e.entries) {
             const shown = this.agentAt(entry.seat);
             if (shown) shown.wentToShowdown = true;
@@ -1623,6 +1633,7 @@ export class PokerServerGame implements IPokerTableServer {
           this.renderBudget += this.settings.showdownDelay;
           break;
         case 'PotAwarded': {
+          if (e.amount > 0) this.handWinners.add(e.seat);
           const winner = this.agentAt(e.seat);
           if (winner) winner.handPotWon += e.amount;
           this.replicate(e);

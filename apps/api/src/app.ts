@@ -2,6 +2,7 @@ import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import {
+  ProgressRoutes,
   Routes,
   walletSignInMessage,
   type ApiErrorBody,
@@ -13,6 +14,7 @@ import {
   type HealthResponse,
   type LedgerResponse,
   type MeResponse,
+  type MissionClaimRequest,
   type WalletChallengeRequest,
   type WalletChallengeResponse,
   type WalletVerifyRequest,
@@ -31,6 +33,7 @@ import {
 import type { AppEnv, Env, PlayerRow } from './env';
 import { verifyGoogleIdToken } from './google';
 import * as ledger from '@nomad/db/ledger';
+import * as progress from '@nomad/db/progress';
 import { ApiError, base58Decode, fail, iso, randomId, readJson, requireString, sha256Hex, utf8 } from '@nomad/db/util';
 
 export const VERSION = '0.1.0';
@@ -233,6 +236,22 @@ export function createApp(): Hono<AppEnv> {
       ledger.entries(c.env.DB, p.id, { before: Number.isSafeInteger(before) && before > 0 ? before : undefined, limit }),
     ]);
     return c.json<LedgerResponse>({ balances: bal, ...page });
+  });
+
+  // ---- Progress and rewards: the server decides --------------------------------------------------
+
+  app.get(ProgressRoutes.progress, requirePlayer, async (c) => c.json(await progress.snapshot(c.env.DB, c.get('player').id)));
+
+  app.post(ProgressRoutes.spin, requirePlayer, async (c) => {
+    if (!c.env.SPIN_SECRET) fail(501, 'not_configured', 'The daily spin is not set up on this server yet.');
+    return c.json(await progress.spin(c.env.DB, c.get('player').id, c.env.SPIN_SECRET));
+  });
+
+  app.post(ProgressRoutes.login, requirePlayer, async (c) => c.json(await progress.claimLogin(c.env.DB, c.get('player').id)));
+
+  app.post(ProgressRoutes.missionClaim, requirePlayer, async (c) => {
+    const { id } = await readJson<MissionClaimRequest>(c.req.raw);
+    return c.json(await progress.claimMission(c.env.DB, c.get('player').id, requireString(id, 'id', 64)));
   });
 
   return app;

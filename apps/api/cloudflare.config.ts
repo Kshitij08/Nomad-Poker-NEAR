@@ -54,6 +54,7 @@ export default defineConfig(({ mode }) => {
         ALLOWED_ORIGINS: bindings.text(s.origins.join(',')),
         WALLET_CHAIN_ID: bindings.text('devnet'),
         EMAIL_DEV_ECHO: bindings.text(s.emailDevEcho),
+        SPIN_SECRET: bindings.secret(),
       },
     },
   };

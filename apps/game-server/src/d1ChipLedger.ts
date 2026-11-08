@@ -1,5 +1,6 @@
 import { sessionPlayer } from '@nomad/db/accounts';
 import { balances, post } from '@nomad/db/ledger';
+import { recordTableJoined } from '@nomad/db/progress';
 import { buyIn, cashOut, checkpoint, seatLock, type SeatLockRow } from '@nomad/db/seatLocks';
 import { LedgerResult, type ChipLedger } from '@nomad/table-server/ledger';
 import type { TableEconomy } from '@nomad/table-server/chipTableSession';
@@ -34,6 +35,8 @@ export class D1ChipLedger implements ChipLedger {
       const r = await buyIn(this.db, { playerId, tableId, room: this.room, seat, chips });
       if (r.ok) {
         this.log('info', `[D1Ledger] ${playerId} bought in for ${chips} at ${tableId} seat ${seat} (balance ${r.balance}).`);
+        // "Play 2 tables": this room counts once today. Best effort: a miss only delays a mission.
+        await recordTableJoined(this.db, playerId, this.room).catch((e) => this.log('warn', `[D1Ledger] table mission not recorded: ${(e as Error).message}`));
         return LedgerResult.ok(r.balance);
       }
       switch (r.reason) {

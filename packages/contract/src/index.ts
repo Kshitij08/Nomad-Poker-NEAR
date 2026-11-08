@@ -185,3 +185,70 @@ export function walletSignInMessage(p: {
     `Expiration Time: ${p.expiresAt}`,
   ].join('\n');
 }
+
+// ---- Progress and rewards (Phase 3: the server decides every reward) -----------------------------
+
+export const ProgressRoutes = {
+  progress: '/v1/progress',
+  spin: '/v1/rewards/spin',
+  login: '/v1/rewards/login',
+  missionClaim: '/v1/missions/claim',
+} as const;
+
+export interface MissionSlot {
+  id: string;
+  progress: number;
+  claimed: boolean;
+}
+
+/** Everything the retention screens paint, as the server sees it. */
+export interface ProgressSnapshot {
+  balances: Balances;
+  /** Cosmetics owned (level rewards). */
+  items: string[];
+  /** UTC day number (days since 1970-01-01) the server evaluated this at. */
+  today: number;
+  level: number;
+  /** Highest level whose rewards have been paid. */
+  rewardedLevel: number;
+  spin: { canSpin: boolean; lastSpinDay: number; lastSpinCoins: number };
+  login: {
+    lastLoginDay: number;
+    streakDay: number;
+    /** The claim available now (LoginStreakMath.preview). */
+    canClaim: boolean;
+    day: number;
+    tokensAfter: number;
+    tokenConsumed: boolean;
+    reset: boolean;
+    error: string;
+  };
+  missions: { dayNumber: number; weekNumber: number; slots: MissionSlot[] };
+}
+
+export interface SpinResponse {
+  awarded: boolean;
+  coins: number;
+  label: string;
+  error: string;
+  progress: ProgressSnapshot;
+}
+
+export interface LoginClaimResponse {
+  claimed: boolean;
+  day: number;
+  tokenConsumed: boolean;
+  reset: boolean;
+  error: string;
+  progress: ProgressSnapshot;
+}
+
+export interface MissionClaimRequest {
+  id: string;
+}
+
+export interface MissionClaimResponse {
+  ok: boolean;
+  message: string;
+  progress: ProgressSnapshot;
+}

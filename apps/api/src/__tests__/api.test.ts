@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ProgressRoutes,
   Routes,
+  type ProgressSnapshot,
+  type SpinResponse,
   type ApiErrorBody,
   type EmailStartResponse,
   type LedgerResponse,
@@ -28,6 +31,7 @@ beforeEach(async () => {
     WALLET_CHAIN_ID: 'devnet',
     EMAIL_DEV_ECHO: '1',
     GOOGLE_CLIENT_IDS: 'web-client-id',
+    SPIN_SECRET: 'test-secret',
   };
 });
 
@@ -294,5 +298,44 @@ describe('http', () => {
   it('rate-limits sign-in when the limiter says no', async () => {
     env.AUTH_LIMITER = { limit: async () => ({ success: false }) } as unknown as RateLimit;
     expect((await call<ApiErrorBody>('POST', Routes.guest, {})).status).toBe(429);
+  });
+});
+
+describe('rewards (the server decides)', () => {
+  it('serves progress and pays the daily spin once', async () => {
+    const g = await call<SessionResponse>('POST', Routes.guest, {});
+    const p0 = await call<ProgressSnapshot>('GET', ProgressRoutes.progress, undefined, g.body.token);
+    expect(p0.body).toMatchObject({ level: 1, spin: { canSpin: true }, login: { canClaim: true, day: 1 } });
+    expect(p0.body.missions.slots).toHaveLength(8);
+    const s1 = await call<SpinResponse>('POST', ProgressRoutes.spin, {}, g.body.token);
+    expect(s1.body.awarded).toBe(true);
+    expect(s1.body.progress.balances.coins).toBe(10_000 + s1.body.coins);
+    const s2 = await call<SpinResponse>('POST', ProgressRoutes.spin, {}, g.body.token);
+    expect(s2.body.awarded).toBe(false);
+  });
+
+  it('needs a session, and a spin secret on the server', async () => {
+    expect((await call('POST', ProgressRoutes.spin, {})).status).toBe(401);
+    const g = await call<SessionResponse>('POST', Routes.guest, {});
+    env.SPIN_SECRET = undefined;
+    expect((await call<ApiErrorBody>('POST', ProgressRoutes.spin, {}, g.body.token)).body.error.code).toBe('not_configured');
+  });
+
+  it('gives a scripted client no way to grant itself coins, XP or items', async () => {
+    const g = await call<SessionResponse>('POST', Routes.guest, {});
+    const t = g.body.token;
+    const forged = { amount: 1_000_000, chips: 1_000_000, coins: 1_000_000, xp: 1_000_000, gems: 500, itemId: 'frame_lv100', key: 'daily_spin:x', reason: 'daily_spin', delta: 1_000_000 };
+    for (const path of ['/v1/ledger', '/v1/ledger/grant', '/v1/rewards/grant', '/v1/wallet/grant', '/v1/progress', '/v1/rewards/level', '/v1/items']) {
+      await call('POST', path, forged, t);
+    }
+    // The real routes ignore anything a client says about amounts: a spin is the server's roll, a mission needs
+    // hands the game server counted, the login track pays its catalogue day.
+    await call('POST', ProgressRoutes.spin, forged, t);
+    await call('POST', ProgressRoutes.login, forged, t);
+    expect((await call<{ ok: boolean }>('POST', ProgressRoutes.missionClaim, { id: 'weekly_collector_12', ...forged }, t)).body.ok).toBe(false);
+    const p = await call<ProgressSnapshot>('GET', ProgressRoutes.progress, undefined, t);
+    const spinCoins = p.body.spin.lastSpinCoins;
+    expect(p.body.balances).toEqual({ coins: 10_000 + spinCoins + 500, gems: 0, xp: 0, streak_tokens: 0 });
+    expect(p.body.items).toEqual([]);
   });
 });

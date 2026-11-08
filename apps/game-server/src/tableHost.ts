@@ -1,3 +1,4 @@
+import { recordHand as recordHandProgress } from '@nomad/db/progress';
 import { closeTableSession, openTableSession, recordHand, type SeatLockRow } from '@nomad/db/seatLocks';
 import type { ServerClock } from '@nomad/table-server/clock';
 import { PokerServerGame, type SettledHand } from '@nomad/table-server/pokerServerGame';
@@ -203,6 +204,13 @@ export class TableHost {
     if (h.tableId) {
       const tableId = h.tableId;
       this.queue(`hand ${h.handNumber}`, () => recordHand(this.opts.db, tableId, h.botDelta));
+      // XP and missions for every Nomad player dealt in (the server counts; clients cannot claim hands).
+      for (const s of h.stacks) {
+        if (s.bot || !s.id.startsWith('p_')) continue;
+        this.queue(`progress ${s.id} hand ${h.handNumber}`, async () => {
+          await recordHandProgress(this.opts.db, s.id, { tableId, hand: h.handNumber, won: s.won, showdownCategory: s.showdownCategory });
+        });
+      }
     }
   }
 
