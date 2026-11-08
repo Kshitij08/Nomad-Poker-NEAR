@@ -20,4 +20,6 @@ export interface Env {
   QA_ROOM_SPEED?: string;
   /** Bearer token for POST /v1/admin/drain (a secret). */
   DRAIN_TOKEN?: string;
+  /** Spawns, overflow lookups and Agent starts per address. Optional so tests can leave it out. */
+  HTTP_LIMITER?: RateLimit;
 }

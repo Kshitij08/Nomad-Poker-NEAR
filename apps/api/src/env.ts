@@ -10,6 +10,8 @@ export interface Env {
   HANDS: R2Bucket;
   /** Per-IP limit on sign-in routes. Optional so local tests can leave it out. */
   AUTH_LIMITER?: RateLimit;
+  /** Per-session limit on writes outside sign-in. Optional so local tests can leave it out. */
+  WRITE_LIMITER?: RateLimit;
 
   /** 'development' | 'staging' | 'production'. */
   STAGE: string;

@@ -44,6 +44,14 @@ const json = (body: unknown, status: number, headers: Record<string, string> = {
 
 const table = (env: Env, session: string) => env.TABLES.get(env.TABLES.idFromName(session));
 
+/** The routes that create work (rooms, overflow scans, Agent starts) are limited per address. */
+const LIMITED = new Set(['/v1/tables/spawn', '/v1/tables/overflow', '/v1/agents/start']);
+async function limited(request: Request, env: Env, path: string): Promise<boolean> {
+  if (!env.HTTP_LIMITER || request.method !== 'POST' || !LIMITED.has(path)) return false;
+  const { success } = await env.HTTP_LIMITER.limit({ key: `${path}:${request.headers.get('cf-connecting-ip') ?? 'unknown'}` });
+  return !success;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -51,6 +59,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...h, 'access-control-max-age': '86400' } });
 
     if (url.pathname === '/v1/health') return json({ ok: true, stage: env.STAGE, version: VERSION }, 200, h);
+    if (await limited(request, env, url.pathname)) return json({ error: 'Too many requests; wait a minute.', code: 'rate_limited' }, 429, h);
 
     if (url.pathname === '/v1/tables/ws') {
       if (!originOk(request, env)) return new Response('origin not allowed', { status: 403 });

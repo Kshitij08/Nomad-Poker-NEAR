@@ -6,6 +6,11 @@ import type { AgentRow } from '@nomad/db/agents';
 import type { AgentDesk } from './agentDesk';
 import { canonicalSession } from './roomSpec';
 
+/** A client sends a handful of frames a second at most (actions, chat, pings, voice signalling). */
+const MAX_FRAMES_PER_SECOND = 40;
+/** Voice signalling (SDP) is the largest client frame, a few KB. */
+const MAX_FRAME_CHARS = 64 * 1024;
+
 export type LogFn = (level: 'info' | 'warn' | 'error', message: string) => void;
 
 /** One client socket, whatever the runtime (a Durable Object WebSocket, a `ws` socket in tests). */
@@ -22,6 +27,8 @@ export abstract class RoomHost {
   abstract readonly room: Room;
   protected readonly peers = new Map<HostSocket, Peer>();
   private nextPeer = 1;
+  /** Per-socket flood guard: frames in the current one-second window. */
+  private readonly frames = new Map<HostSocket, { at: number; n: number }>();
   protected draining = false;
   protected closed = false;
 
@@ -76,6 +83,10 @@ export abstract class RoomHost {
   message(sock: HostSocket, text: string): void {
     const peer = this.peers.get(sock);
     if (!peer) return;
+    if (text.length > MAX_FRAME_CHARS || this.flooding(sock)) {
+      sock.close(1008, 'too many messages');
+      return;
+    }
     let m: ClientMessage;
     try {
       m = JSON.parse(text) as ClientMessage;
@@ -99,9 +110,21 @@ export abstract class RoomHost {
     }
   }
 
+  /** More than MAX_FRAMES_PER_SECOND frames in a second: a misbehaving client, not a player. */
+  private flooding(sock: HostSocket): boolean {
+    const now = Date.now();
+    const f = this.frames.get(sock);
+    if (!f || now - f.at >= 1000) {
+      this.frames.set(sock, { at: now, n: 1 });
+      return false;
+    }
+    return ++f.n > MAX_FRAMES_PER_SECOND;
+  }
+
   disconnect(sock: HostSocket): void {
     const peer = this.peers.get(sock);
     this.peers.delete(sock);
+    this.frames.delete(sock);
     if (peer?.room) peer.room.remove(peer);
   }
 

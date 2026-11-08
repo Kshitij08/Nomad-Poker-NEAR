@@ -94,6 +94,18 @@ const authLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
 };
 
+/** Writes outside sign-in: limited per session token (or per address without one). */
+const writeLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const limiter = c.env.WRITE_LIMITER;
+  if (limiter && c.req.method === 'POST' && !c.req.path.startsWith('/v1/auth/')) {
+    const token = bearer(c);
+    const key = token ? `w:${(await sha256Hex(token)).slice(0, 24)}` : `w:ip:${c.req.header('cf-connecting-ip') ?? 'unknown'}`;
+    const { success } = await limiter.limit({ key });
+    if (!success) fail(429, 'rate_limited', 'Slow down a little and try again in a minute.');
+  }
+  await next();
+};
+
 export function createApp(): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
@@ -106,6 +118,8 @@ export function createApp(): Hono<AppEnv> {
       maxAge: 86400,
     }),
   );
+
+  app.use('*', writeLimit);
 
   app.onError((err, c) => {
     if (err instanceof ApiError) {

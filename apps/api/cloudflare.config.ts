@@ -16,6 +16,7 @@ const STAGES = {
     r2: 'nomad-poker-hands-staging',
     origins: ['http://localhost:5180', 'http://127.0.0.1:5180'],
     limiterNamespace: '7101',
+    writeLimiterNamespace: '7104',
     emailDevEcho: '1',
     // Test runs: tournaments may start a minute out; market strategies qualify after 100 hands, no waiting days.
     tournamentMinLead: '60',
@@ -28,6 +29,7 @@ const STAGES = {
     r2: 'nomad-poker-hands-staging',
     origins: ['https://nomad-poker-web.vercel.app', 'http://localhost:5180', 'http://127.0.0.1:5180', 'capacitor://localhost', 'https://localhost'],
     limiterNamespace: '7102',
+    writeLimiterNamespace: '7105',
     emailDevEcho: '1',
     tournamentMinLead: '60',
     listingMinHands: '100',
@@ -39,6 +41,7 @@ const STAGES = {
     r2: 'nomad-poker-hands-production',
     origins: ['https://nomad-poker-web.vercel.app', 'capacitor://localhost', 'https://localhost'],
     limiterNamespace: '7103',
+    writeLimiterNamespace: '7106',
     emailDevEcho: '',
     tournamentMinLead: '',
     listingMinHands: '',
@@ -60,6 +63,8 @@ export default defineConfig(({ mode }) => {
         DB: bindings.d1(s.d1),
         HANDS: bindings.r2({ name: s.r2 }),
         AUTH_LIMITER: bindings.rateLimit({ namespace: s.limiterNamespace, simple: { limit: 30, period: 60 } }),
+        // Every other write (rewards, friends, invites, tournaments, strategies): 60 a minute per session.
+        WRITE_LIMITER: bindings.rateLimit({ namespace: s.writeLimiterNamespace, simple: { limit: 60, period: 60 } }),
         STAGE: bindings.text(stage),
         ALLOWED_ORIGINS: bindings.text(s.origins.join(',')),
         WALLET_CHAIN_ID: bindings.text('devnet'),

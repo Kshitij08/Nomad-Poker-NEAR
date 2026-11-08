@@ -7,13 +7,9 @@
 // Needs apps/web/.vercel/project.json (vercel link / pull); it is git-ignored.
 import { execSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { securityHeaders } from './securityHeaders.mjs';
+import { STAGES } from './stages.mjs';
 
-const STAGES = {
-  staging: {
-    VITE_API_URL: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev',
-    VITE_NET_SERVER: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev',
-  },
-};
 const stage = process.argv[2] ?? 'staging';
 const env = STAGES[stage];
 if (!env) throw new Error(`unknown stage ${stage}`);
@@ -27,7 +23,7 @@ const run = (cmd, extra = {}) => execSync(cmd, { cwd: web, stdio: 'inherit', env
 rmSync(at('dist'), { recursive: true, force: true });
 run('npm run build', env);
 
-// Build Output API v3: the static site plus vercel.json's cache headers.
+// Build Output API v3: the static site, cache headers, and the security headers (CSP etc.) on every response.
 const out = at('.vercel/output/');
 rmSync(out, { recursive: true, force: true });
 mkdirSync(at('.vercel/output/static'), { recursive: true });
@@ -38,6 +34,7 @@ writeFileSync(
     {
       version: 3,
       routes: [
+        { src: '^/(.*)$', headers: securityHeaders({ api: env.VITE_API_URL, game: env.VITE_NET_SERVER }), continue: true },
         { src: '^/assets/([^/]+)\\.(js|css)$', headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }, continue: true },
         { src: '^/assets/([^/]+)/(.*)$', headers: { 'Cache-Control': 'public, max-age=3600, stale-while-revalidate=604800' }, continue: true },
         { handle: 'filesystem' },

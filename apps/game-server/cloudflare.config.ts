@@ -17,6 +17,7 @@ const STAGES = {
     r2: 'nomad-poker-hands-staging',
     origins: ['http://localhost:5180', 'http://127.0.0.1:5180'],
     qa: true,
+    limiter: '7107',
   },
   staging: {
     worker: 'nomad-poker-game-staging',
@@ -24,6 +25,7 @@ const STAGES = {
     r2: 'nomad-poker-hands-staging',
     origins: ['https://nomad-poker-web.vercel.app', 'http://localhost:5180', 'http://127.0.0.1:5180', 'capacitor://localhost', 'https://localhost'],
     qa: true,
+    limiter: '7108',
   },
   production: {
     worker: 'nomad-poker-game',
@@ -31,6 +33,7 @@ const STAGES = {
     r2: 'nomad-poker-hands-production',
     origins: ['https://nomad-poker-web.vercel.app', 'capacitor://localhost', 'https://localhost'],
     qa: false,
+    limiter: '7109',
   },
 } as const;
 
@@ -59,6 +62,8 @@ export default defineConfig(({ mode }) => {
         QA_ROOMS: bindings.text(s.qa ? '1' : ''),
         QA_ROOM_SPEED: bindings.text('20'),
         DRAIN_TOKEN: bindings.secret(),
+        // Room spawns, overflow lookups and Agent starts: 30 a minute per address.
+        HTTP_LIMITER: bindings.rateLimit({ namespace: s.limiter, simple: { limit: 30, period: 60 } }),
       },
     },
   };

@@ -407,3 +407,21 @@ describe('tournaments and the strategies market over HTTP', () => {
     expect((await call('POST', `/v1/strategies/${pub.body.strategyId}/unlist`, {}, bob.body.token)).body).toEqual({ ok: true });
   });
 });
+
+describe('write rate limit', () => {
+  it('refuses writes over the limit but never sign-in, and leaves reads alone', async () => {
+    const s = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Busy' });
+    let allowed = 2;
+    const keys: string[] = [];
+    env.WRITE_LIMITER = { limit: async ({ key }: { key: string }) => (keys.push(key), { success: allowed-- > 0 }) } as unknown as RateLimit;
+    expect((await call('POST', '/v1/friends/request', { idOrName: 'nobody' }, s.body.token)).status).toBe(200);
+    expect((await call('POST', '/v1/friends/request', { idOrName: 'nobody' }, s.body.token)).status).toBe(200);
+    const third = await call<ApiErrorBody>('POST', '/v1/friends/request', { idOrName: 'nobody' }, s.body.token);
+    expect(third.status).toBe(429);
+    expect(third.body.error.code).toBe('rate_limited');
+    expect((await call('GET', '/v1/social', undefined, s.body.token)).status).toBe(200);
+    expect((await call('POST', Routes.guest, { displayName: 'Other' })).status).toBe(201);
+    expect(new Set(keys).size).toBe(1);
+    expect(keys[0]).not.toContain(s.body.token);
+  });
+});
