@@ -1,0 +1,33 @@
+name: D1 backup
+
+# Daily off-site dump of the staging (and, once it exists, production) D1 database to its R2 bucket (infra/backup-d1.mjs).
+# Does nothing until a repository secret CLOUDFLARE_API_TOKEN exists (D1 export + R2 write on the account).
+# Runs at 04:30 UTC, a quiet hour: an export briefly blocks writes (table bookkeeping retries through it).
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 4 * * *'
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: a5e26389a89c0c84a7b4939e38574714
+    steps:
+      - name: Skip without a token
+        if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "No CLOUDFLARE_API_TOKEN secret; nothing to do."
+      - uses: actions/checkout@v4
+        if: env.CLOUDFLARE_API_TOKEN != ''
+      - uses: actions/setup-node@v4
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        with:
+          node-version: 22
+          cache: npm
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npm ci
+      - name: Back up staging
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: PATH="$PWD/node_modules/.bin:$PATH" node infra/backup-d1.mjs staging

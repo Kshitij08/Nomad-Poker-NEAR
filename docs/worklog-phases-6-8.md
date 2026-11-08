@@ -121,7 +121,8 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
 4. **Alerts.** May I set up Cloudflare notifications (to your email) for Worker error spikes, and a Workers Logs alert
    on `[reconcile] PROBLEMS`? That changes account settings, so I didn't.
 5. **Scheduled backups.** Running `infra/backup-d1.mjs` daily needs a Cloudflare API token somewhere that runs on a
-   schedule (a GitHub Actions secret is simplest). Shall I set up the workflow for you to add the token to?
+   schedule. The workflow is ready (`.github/workflows/backup.yml`, daily 04:30 UTC) and does nothing until you add a
+   `CLOUDFLARE_API_TOKEN` repository secret (D1 export + R2 write). Want me to walk you through making that token?
 6. **Expected peak for the load test.** The plan's gate is "3× expected peak". What peak should I assume (players at
    once)? I ran 40 players over 8 tables at 20× speed (≈ 800 players' worth of hand traffic at normal speed); tell me
    the number and I'll size a run to 3× it.
