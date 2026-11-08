@@ -175,7 +175,7 @@ export class TableHost extends RoomHost {
     }
     if (h.tableId) {
       const tableId = h.tableId;
-      this.queue(`hand ${h.handNumber}`, () => recordHand(this.opts.db, tableId, h.botDelta));
+      this.queue(`hand ${h.handNumber}`, () => recordHand(this.opts.db, tableId, h.botDelta, h.agentDelta));
       // XP and missions for every Nomad player dealt in (the server counts; clients cannot claim hands).
       for (const s of h.stacks) {
         if (s.bot || !s.id.startsWith('p_')) continue;

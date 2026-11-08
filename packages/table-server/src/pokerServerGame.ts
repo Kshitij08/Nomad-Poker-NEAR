@@ -88,6 +88,8 @@ export interface SettledHand {
   /** Chips the bots won (+) or lost (−) this hand: the house's side of the humans' result. */
   botDelta: number;
   humanDelta: number;
+  /** Chips owned Agents won (+) or lost (−) this hand. Their money moves through their own ledger entries, not seats. */
+  agentDelta: number;
   /** Everyone dealt into the hand: final stack, whether they won a pot, and their showdown hand (HandCategory). */
   stacks: { id: string; seat: number; startStack: number; stack: number; bot: boolean; won: boolean; showdownCategory: number | null }[];
 }
@@ -1475,19 +1477,21 @@ export class PokerServerGame implements IPokerTableServer {
     if (this.stacksAtHandStart.size === 0) return;
     let humanDelta = 0;
     let botDelta = 0;
+    let agentDelta = 0;
     for (const [id, start] of this.stacksAtHandStart) {
       const diff = this.stackOfPlayer(id) - start;
       if (isBotId(id)) botDelta += diff;
+      else if (isAgentId(id)) agentDelta += diff;
       else humanDelta += diff;
     }
     const residual = this.engine.table.pot;
-    if (humanDelta + botDelta + residual !== 0) {
+    if (humanDelta + botDelta + agentDelta + residual !== 0) {
       const report: string[] = [];
       for (const [id, start] of this.stacksAtHandStart)
         report.push(`\n  ${id}: ${start} -> ${this.stackOfPlayer(id)}${this.seatOfPlayer(id) >= 0 ? '' : '  (NO SEAT — vacated before the read)'}`);
-      const off = humanDelta + botDelta + residual;
+      const off = humanDelta + botDelta + agentDelta + residual;
       this.stacksAtHandStart.clear();
-      this.log('error', `[PokerServer] Chip conservation broken: off by ${off}. Humans ${humanDelta}, bots ${botDelta}, engine pot still holds ${residual}.${report.join('')}`);
+      this.log('error', `[PokerServer] Chip conservation broken: off by ${off}. Humans ${humanDelta}, bots ${botDelta}, Agents ${agentDelta}, engine pot still holds ${residual}.${report.join('')}`);
       this.economy?.halt(`chips are not conserved (off by ${off}) — see the seat breakdown above`);
       return;
     }
@@ -1497,6 +1501,7 @@ export class PokerServerGame implements IPokerTableServer {
         handNumber: this.engine.table.handNumber,
         botDelta,
         humanDelta,
+        agentDelta,
         stacks: [...this.stacksAtHandStart.keys()].map((id) => {
           const seat = this.seatOfPlayer(id);
           return { id, seat, startStack: this.stacksAtHandStart.get(id) ?? 0, stack: this.stackOfPlayer(id), bot: isBotId(id), won: this.handWinners.has(seat), showdownCategory: this.handShowdown.get(seat) ?? null };
@@ -1984,6 +1989,11 @@ function timeoutAction(legal: LegalActions): PlayerAction {
 /** Bots are seated with a synthetic id ("bot3"), which separates house chips from real ones. */
 function isBotId(id: string): boolean {
   return !!id && id.startsWith('bot');
+}
+
+/** An owned Agent's engine seat id (PokerServerGame.seatAgent: `agent-<deploymentId>`). */
+function isAgentId(id: string): boolean {
+  return !!id && id.startsWith('agent-');
 }
 
 function sameOwner(a: string | null | undefined, b: string | null | undefined): boolean {

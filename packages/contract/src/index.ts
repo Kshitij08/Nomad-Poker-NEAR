@@ -303,6 +303,21 @@ export const StrategyRoutes = {
   coach: '/v1/style/coach',
 } as const;
 
+/**
+ * Support tools (Phase 7). The caller's session must belong to a player listed in admin_users (an operator adds them in
+ * D1). `support` may look up, read and ban; `admin` may also adjust balances. Every action lands in the audit log.
+ */
+export const AdminRoutes = {
+  /** GET `?q=` — players by internal id, Friend ID or name prefix. */
+  players: '/v1/admin/players',
+  /** GET `/v1/admin/players/<id>`; POST `/v1/admin/players/<id>/adjust` `{ currency, delta, reason, requestId }`, `/ban` `{ reason }`, `/unban`. */
+  player: '/v1/admin/players',
+  /** GET `?before=&limit=` — every admin action, newest first. */
+  audit: '/v1/admin/audit',
+  /** GET `?since=<ms>` — the ledger reconciliation report (every money invariant; `ok` when all hold). */
+  reconcile: '/v1/admin/reconcile',
+} as const;
+
 export type FriendRelationName = 'friend' | 'pending_out' | 'pending_in';
 
 /** The friends.js error codes, kept so the client's wording carries over. */

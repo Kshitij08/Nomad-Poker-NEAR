@@ -29,6 +29,24 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
    minute per address). Game server: room spawns, overflow scans and Agent starts are 30 a minute per address, and a
    socket sending more than 40 frames a second (or a frame over 64 KB) is closed. Deployed to staging, along with the
    web headers (live on nomad-poker-web.vercel.app).
+5. **Support tools as admin accounts, not a shared admin password.** Admins are player accounts listed in a new
+   `admin_users` table (role `support`: look up, read, ban; role `admin`: also adjust balances). They are added only
+   by an operator with a D1 query, never through the API. Every action, including viewing a player, is written to
+   `admin_audit` in the same batch as the change. Balance adjustments are ledger entries (`admin:adjust`, keyed by a
+   request id so a retry adjusts once, refused below zero). A ban signs the player out everywhere and refuses sign-in;
+   the game server uses the same session check, so a banned player can't sit, register or start an Agent. Non-admins
+   get 404 from `/v1/admin/*`. Tool: `apps/api/scripts/admin.mjs`. Checked on staging with a QA admin account
+   (`p_t8mFwj_vjVWtqnVR`, staging only).
+6. **A ledger reconciliation report, and the bug it found.** `GET /v1/admin/reconcile` (and the game server's cron,
+   hourly, logging `[reconcile] PROBLEMS` when anything is off) checks every money invariant: balances equal their
+   ledger entries, every table has zero drift, no seat or Agent stuck on a dead table, Agents paid exactly, ended
+   tournaments net to zero, nothing stuck. Its first run on staging flagged the two tables where Phase 5's Agents had
+   played: the table books counted Agents with the humans, but Agents' chips move through their own ledger entries,
+   so their losses showed as drift (462 and 200 coins). No coins were lost (the Agents' own entries balanced). Fixed:
+   tables now record Agents' results separately (`agent_net`, migration 0007, with a backfill for older rows) and the
+   drift formula includes it. Staging now reconciles clean over its whole history.
+7. **Alerts stay a log search for now.** Turning Cloudflare notifications on (email/webhook alerts) changes account
+   settings, which I left for you. The hourly reconcile warning and Worker errors are in Workers Logs today.
 
 ## Questions for you
 
@@ -47,3 +65,7 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
    - *C. Hybrid*: routes and data (tables list, SOL strategies, payouts records) in the API on D1; the keeper alone as a
      small container. Pros: most traffic on Workers. Cons: two places for PER logic.
    I lean to C, but it needs PER secrets (`KEEPER_SECRET_KEY`, `AUDITOR_SECRET_KEY`, `ARCHIVE_KEY_HEX`). Which do you want?
+3. **Admins for production.** Which accounts should be admins / support on production? (Staging has one QA admin.)
+   And do you want a small web admin page later? The command-line tool covers it for now; a page is about a day.
+4. **Alerts.** May I set up Cloudflare notifications (to your email) for Worker error spikes, and a Workers Logs alert
+   on `[reconcile] PROBLEMS`? That changes account settings, so I didn't.

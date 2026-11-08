@@ -425,3 +425,22 @@ describe('write rate limit', () => {
     expect(keys[0]).not.toContain(s.body.token);
   });
 });
+
+describe('support tools over HTTP', () => {
+  it('hides the admin routes from players and lets an admin adjust, ban and read the audit', async () => {
+    const boss = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Boss' });
+    const pat = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Pat' });
+    expect((await call('GET', '/v1/admin/audit', undefined, pat.body.token)).status).toBe(404);
+    expect((await call('GET', '/v1/admin/audit')).status).toBe(401);
+    await env.DB.prepare(`INSERT INTO admin_users (player_id, role, added_at) VALUES (?1, 'admin', 0)`).bind(boss.body.player.id).run();
+
+    const found = await call<{ players: { id: string }[] }>('GET', `/v1/admin/players?q=${pat.body.player.friendCode}`, undefined, boss.body.token);
+    expect(found.body.players.map((p) => p.id)).toEqual([pat.body.player.id]);
+    const adj = await call<{ balances: { coins: number } }>('POST', `/v1/admin/players/${pat.body.player.id}/adjust`, { delta: 250, reason: 'refund for a crash', requestId: 'crash-0001' }, boss.body.token);
+    expect(adj.body.balances.coins).toBe(10_250);
+    expect((await call('POST', `/v1/admin/players/${pat.body.player.id}/ban`, { reason: 'abuse' }, boss.body.token)).status).toBe(200);
+    expect((await call('GET', Routes.me, undefined, pat.body.token)).status).toBe(401);
+    const audit = await call<{ entries: { action: string }[] }>('GET', '/v1/admin/audit', undefined, boss.body.token);
+    expect(audit.body.entries.map((e) => e.action)).toEqual(['ban', 'adjust']);
+  });
+});

@@ -6,6 +6,7 @@ import {
   SocialRoutes,
   StrategyRoutes,
   TournamentRoutes,
+  AdminRoutes,
   type ProfileUpdateRequest,
   Routes,
   walletSignInMessage,
@@ -43,6 +44,8 @@ import * as socialDb from '@nomad/db/social';
 import { isLeaderboardKind, leaderboard } from '@nomad/db/leaderboards';
 import * as tournaments from '@nomad/db/tournaments';
 import * as strategies from '@nomad/db/strategies';
+import * as admin from '@nomad/db/admin';
+import { reconcile } from '@nomad/db/reconcile';
 import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import { ApiError, base58Decode, fail, iso, randomId, readJson, requireString, sha256Hex, utf8 } from '@nomad/db/util';
 
@@ -380,6 +383,33 @@ export function createApp(): Hono<AppEnv> {
   app.get(StrategyRoutes.twin, requirePlayer, async (c) => c.json(await strategies.twin(c.env.DB, c.get('player').id)));
   app.get(StrategyRoutes.coach, requirePlayer, async (c) =>
     c.json(await strategies.coachReport(c.env.DB, c.get('player').id, { apiKey: c.env.ANTHROPIC_API_KEY, model: c.env.COACH_MODEL })),
+  );
+
+  // ---- Support tools (admins listed in admin_users) ---------------------------------------------
+
+  const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
+    const token = bearer(c);
+    const s = token ? await sessionPlayer(c.env.DB, token) : null;
+    if (!s) fail(401, 'unauthorized', 'Sign in first.');
+    const role = await admin.adminRole(c.env.DB, s.player.id);
+    if (!role) fail(404, 'not_found', 'No such route.'); // not an admin: the routes don't exist for you
+    c.set('player', s.player);
+    c.set('tokenHash', s.tokenHash);
+    c.set('adminRole', role);
+    await next();
+  };
+  const me = (c: Context<AppEnv>) => ({ player_id: c.get('player').id, role: c.get('adminRole')! });
+  app.use('/v1/admin/*', requireAdmin);
+  app.get(AdminRoutes.players, async (c) => c.json({ players: await admin.searchPlayers(c.env.DB, c.req.query('q') ?? '') }));
+  app.get(`${AdminRoutes.player}/:id`, async (c) => c.json(await admin.playerDetail(c.env.DB, c.get('player').id, c.req.param('id'))));
+  app.post(`${AdminRoutes.player}/:id/adjust`, async (c) => c.json({ balances: await admin.adjustBalance(c.env.DB, me(c), c.req.param('id'), await readJson<Record<string, unknown>>(c.req.raw)) }));
+  app.post(`${AdminRoutes.player}/:id/ban`, async (c) =>
+    c.json(await admin.setBan(c.env.DB, me(c), c.req.param('id'), true, String((await readJson<Record<string, unknown>>(c.req.raw)).reason ?? ''))),
+  );
+  app.post(`${AdminRoutes.player}/:id/unban`, async (c) => c.json(await admin.setBan(c.env.DB, me(c), c.req.param('id'), false, '')));
+  app.get(AdminRoutes.reconcile, async (c) => c.json(await reconcile(c.env.DB, { sinceMs: Number(c.req.query('since')) || undefined })));
+  app.get(AdminRoutes.audit, async (c) =>
+    c.json(await admin.auditLog(c.env.DB, { before: Number(c.req.query('before')) || undefined, limit: Number(c.req.query('limit')) || 50 })),
   );
 
   return app;

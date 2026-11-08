@@ -4,6 +4,7 @@ import { auditTable } from '@nomad/db/seatLocks';
 import { canonicalSession } from './roomSpec';
 import { agentRoute, sweepAgents } from './agentRoutes';
 import { tournamentTick } from '@nomad/db/tournaments';
+import { reconcile } from '@nomad/db/reconcile';
 
 export { TableRoom } from './tableRoom';
 
@@ -123,7 +124,20 @@ export default {
     return json({ error: 'not found' }, 404, h);
   },
 
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Hourly: the ledger reconciliation. A warning in the logs is the alert (search "[reconcile]").
+    if (new Date(controller.scheduledTime).getUTCMinutes() === 7) {
+      ctx.waitUntil(
+        reconcile(env.DB).then(
+          (r) => {
+            const bad = r.checks.filter((c) => !c.ok);
+            if (bad.length) console.warn(`[reconcile] PROBLEMS: ${JSON.stringify(bad)}`);
+            else console.log(`[reconcile] ok (${r.checks.map((c) => `${c.name}: ${c.checked}`).join('; ')})`);
+          },
+          (e) => console.error('[reconcile] failed', e),
+        ),
+      );
+    }
     ctx.waitUntil(
       sweepAgents(env).then(
         (r) => {

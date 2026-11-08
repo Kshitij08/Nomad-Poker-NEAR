@@ -9,4 +9,7 @@ export interface PlayerRow {
   friend_code?: string | null;
   /** AvatarCatalog value, 0 = none. */
   avatar?: number;
+  /** Set while the account is suspended (migrations/0006_admin.sql). */
+  banned_at?: number | null;
+  ban_reason?: string | null;
 }

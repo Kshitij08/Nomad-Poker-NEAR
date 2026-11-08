@@ -35,7 +35,9 @@ stopped heartbeating (3 minutes), and opens the rooms of tournaments starting wi
 - A table that dies (deploy without drain, eviction) leaves locks at their last checkpoint. The player's next sit-down
   anywhere asks the owning table whether it still holds the seat; if not, the checkpoint is paid back (`table:recovered`).
 
-**Drift** for a table = cash-outs + stacks still seated − buy-ins + bot_net. It must be zero.
+**Drift** for a table = cash-outs + stacks still seated − buy-ins + bot_net + agent_net (Agents' result there; their
+chips move through their own ledger entries). It must be zero. `GET /v1/admin/reconcile` on the API checks it for every
+table, with the other money invariants, and the cron runs that hourly (a `[reconcile] PROBLEMS` warning in the logs).
 
 ## Progress
 

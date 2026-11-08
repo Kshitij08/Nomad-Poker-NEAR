@@ -7,6 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPlayer } from '@nomad/db/accounts';
 import { agentHands, agentRow, startAgent } from '@nomad/db/agents';
 import { balances, entries } from '@nomad/db/ledger';
+import { auditTable } from '@nomad/db/seatLocks';
 import { D1Shim } from '@nomad/db/testing/d1Shim';
 import { realClock } from '@nomad/table-server/clock';
 import { TableHost } from '../tableHost';
@@ -68,6 +69,11 @@ describe('Agents in the game server', () => {
     expect(done.returned).toBe(done.stack);
     expect((await balances(db, owner)).coins).toBe(8000 + done.stack);
     expect((await entries(db, owner, { limit: 3 })).entries.map((e) => e.reason)).toEqual(['agent:return', 'agent:bankroll', 'starter']);
+    // The table's books balance with the Agent's result counted beside the bots' (no humans, so it is all theirs).
+    const t = await db.prepare(`SELECT id, bot_net, agent_net FROM table_sessions WHERE room = 'poker-free-st100'`).first<{ id: string; bot_net: number; agent_net: number }>();
+    await hosts[0]!.settled();
+    expect((await auditTable(db, t!.id))!.drift).toBe(0);
+    expect((await db.prepare('SELECT agent_net FROM table_sessions WHERE id = ?1').bind(t!.id).first<{ agent_net: number }>())!.agent_net).toBe(done.stack - 2000);
 
     const hands = await agentHands(db, 'AGENTA1', 10, 0);
     expect(hands.Total).toBe(4);

@@ -8,7 +8,7 @@ import {
 } from '@nomad/contract';
 import type { PlayerRow } from './types';
 import { postingStatement } from './ledger';
-import { iso, randomBytes, randomId, sha256Hex, base64url } from './util';
+import { fail, iso, randomBytes, randomId, sha256Hex, base64url } from './util';
 
 /** Players, identities and sessions. */
 
@@ -117,7 +117,7 @@ export async function sessionPlayer(db: D1Database, token: string, now = Date.no
     )
     .bind(tokenHash)
     .first<PlayerRow & { s_expires: number; s_used: number }>();
-  if (!row || row.s_expires <= now) return null;
+  if (!row || row.s_expires <= now || row.banned_at) return null;
   if (now - row.s_used > SESSION_TOUCH_MS) {
     await db.batch([
       db.prepare('UPDATE sessions SET last_used_at = ?2, expires_at = ?3 WHERE token_hash = ?1').bind(tokenHash, now, now + SESSION_TTL_MS),
@@ -173,6 +173,8 @@ export async function completeSignIn(
 }
 
 export async function session(db: D1Database, player: PlayerRow, created: boolean, linked: boolean, now = Date.now()): Promise<SessionResponse> {
+  const banned = player.banned_at ?? (await db.prepare('SELECT banned_at FROM players WHERE id = ?1').bind(player.id).first<{ banned_at: number | null }>())?.banned_at;
+  if (banned) fail(403, 'forbidden', 'This account is suspended. Contact support if you think this is a mistake.');
   const s = await createSession(db, player.id, now);
   return { token: s.token, expiresAt: iso(s.expiresAt), player: profile(player), created, linked };
 }

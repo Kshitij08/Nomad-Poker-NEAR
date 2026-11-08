@@ -37,5 +37,5 @@ export interface Env {
 
 export type AppEnv = {
   Bindings: Env;
-  Variables: { player: PlayerRow; tokenHash: string };
+  Variables: { player: PlayerRow; tokenHash: string; adminRole?: 'support' | 'admin' };
 };

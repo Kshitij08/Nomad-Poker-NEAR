@@ -110,8 +110,12 @@ export async function openTableSession(db: D1Database, t: { id: string; room: st
     .run();
 }
 
-export async function recordHand(db: D1Database, tableId: string, botDelta: number): Promise<void> {
-  await db.prepare('UPDATE table_sessions SET hands = hands + 1, bot_net = bot_net + ?2 WHERE id = ?1').bind(tableId, botDelta).run();
+/** One settled hand: the bots' (house's) and the owned Agents' result at this table. */
+export async function recordHand(db: D1Database, tableId: string, botDelta: number, agentDelta = 0): Promise<void> {
+  await db
+    .prepare('UPDATE table_sessions SET hands = hands + 1, bot_net = bot_net + ?2, agent_net = agent_net + ?3 WHERE id = ?1')
+    .bind(tableId, botDelta, agentDelta)
+    .run();
 }
 
 export async function closeTableSession(db: D1Database, tableId: string, now = Date.now()): Promise<void> {
@@ -124,6 +128,8 @@ export interface TableAudit {
   buyIns: number;
   cashOuts: number;
   botNet: number;
+  /** Chips owned Agents won at this table (their money moves through their own ledger entries). */
+  agentNet: number;
   /** Chips still in seat locks for this table (last checkpoint). */
   seatedStacks: number;
   seatedPlayers: number;
@@ -133,7 +139,10 @@ export interface TableAudit {
 
 /** Where every chip that entered this table went. */
 export async function auditTable(db: D1Database, tableId: string): Promise<TableAudit | null> {
-  const t = await db.prepare('SELECT hands, bot_net FROM table_sessions WHERE id = ?1').bind(tableId).first<{ hands: number; bot_net: number }>();
+  const t = await db
+    .prepare('SELECT hands, bot_net, agent_net FROM table_sessions WHERE id = ?1')
+    .bind(tableId)
+    .first<{ hands: number; bot_net: number; agent_net: number }>();
   if (!t) return null;
   const sums = await db
     .prepare(
@@ -157,8 +166,9 @@ export async function auditTable(db: D1Database, tableId: string): Promise<Table
     buyIns,
     cashOuts,
     botNet: t.bot_net,
+    agentNet: t.agent_net,
     seatedStacks,
     seatedPlayers: seated?.n ?? 0,
-    drift: cashOuts + seatedStacks - buyIns + t.bot_net,
+    drift: cashOuts + seatedStacks - buyIns + t.bot_net + t.agent_net,
   };
 }
