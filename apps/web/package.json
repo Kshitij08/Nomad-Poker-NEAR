@@ -12,17 +12,24 @@
     "server": "npm run dev -w nomad-poker-local-server"
   },
   "dependencies": {
-    "@nomad/table-server": "*",
-    "@nomad/contract": "*",
-    "@nomad/engine": "*",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capacitor/status-bar": "8.0.4",
     "@noble/curves": "1.9.7",
     "@noble/hashes": "1.8.0",
+    "@nomad/contract": "*",
+    "@nomad/engine": "*",
+    "@nomad/table-server": "*",
     "@solana/web3.js": "1.98.4",
     "bs58": "6.0.0",
     "buffer": "6.0.3",
     "three": "0.170.0"
   },
   "devDependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/cli": "8.5.3",
+    "@capacitor/ios": "8.5.3",
     "@types/three": "0.170.0",
     "sharp": "0.35.5",
     "typescript": "5.7.3",

@@ -97,7 +97,9 @@ export function makeConfig(params: URLSearchParams = new URLSearchParams()): Web
     gameBackendUrl,
     perBackendUrl,
     allowDeployed,
-    web2Only: params.get('web2only') === '1',
+    // Store builds (VITE_STORE_BUILD=1, the Capacitor apps) ship without SOL features: no wallet chrome, no on-chain
+    // tables (store rules: virtual coins only; plan Phase 8).
+    web2Only: params.get('web2only') === '1' || (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_STORE_BUILD === '1',
     requestTimeoutSeconds: 20,
     attestScriptUrl: base + 'assets/web3/per-attest.js',
     attestationPins: Object.freeze({

@@ -13,5 +13,7 @@ import { install as agents } from './agents/install';
 import { install as tournaments } from './tournaments/install';
 import { install as net } from './net/install';
 import { install as menu } from './menu/install';
+import { install as native } from './native/install';
 
-export const MODULES: readonly AppModule[] = [theming, account, economy, web3, retention, agents, tournaments, net, menu];
+// native (store apps only) last: its deep links use net and tournaments, and it hides the splash on the first screen.
+export const MODULES: readonly AppModule[] = [theming, account, economy, web3, retention, agents, tournaments, net, menu, native];

@@ -64,6 +64,15 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
 10. **Integrity leads, not automatic bans.** `GET /v1/admin/integrity` lists possible chip dumping (one-way chip flow
     between a pair over many hands), marathon accounts (18+ hours in a day), robotic timing (very fast or very even
     decisions; think time is now recorded per decision, migration 0008) and win-rate outliers. A person decides.
+11. **Phase 6 is written down, not built.** `docs/phase-6-design.md` maps every escrow instruction to the moment the
+    game server calls it, the signer (a new key of its own) and how to sign on Workers without Anchor (the existing
+    IDL coder + WebCrypto Ed25519 + JSON-RPC). Building it blind, without being able to send a devnet transaction,
+    would be guesswork; with your OK it is a few days of work.
+12. **Store apps (Phase 8): Capacitor shell in `apps/web`.** Store builds set `VITE_STORE_BUILD=1`, which turns the SOL
+    features off (store rules: virtual coins only). Deep links (`nomadpoker://join/CODE`, `https://…/?net=CODE`,
+    `…/t/CODE`) join a party or open the tournament; a tournament link never registers by itself (that spends the
+    entry fee). Android's back button closes the top screen. The status bar draws over the game (the layout already
+    pads for notches).
 
 ## Questions for you
 
@@ -91,3 +100,9 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
 6. **Expected peak for the load test.** The plan's gate is "3× expected peak". What peak should I assume (players at
    once)? I ran 40 players over 8 tables at 20× speed (≈ 800 players' worth of hand traffic at normal speed); tell me
    the number and I'll size a run to 3× it.
+7. **App identity for the stores.** The Unity project's app ids and icon are template placeholders
+   (`com.moremountains.topdownengine`, TopDownEngine's icon). What bundle id do you want (I used `com.nomadpoker.app`
+   provisionally; it can't change after the first store upload), and is there a real app icon / splash art?
+8. **Android build tools.** Capacitor 8 needs JDK 21; this machine only has Unity's JDK 17. May I install a JDK 21
+   (Temurin) so I can build the Android debug APK here? (Building iOS needs a Mac in any case.)
+9. **Native Google sign-in** needs OAuth client ids (Android SHA-1 + iOS) from your Google Cloud project.

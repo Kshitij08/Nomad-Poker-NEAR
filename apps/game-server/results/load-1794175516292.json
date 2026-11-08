@@ -1,0 +1,213 @@
+{
+  "stage": "staging",
+  "at": "2026-11-08T22:05:16.289Z",
+  "players": 40,
+  "rooms": 8,
+  "minutes": 5,
+  "speed": 20,
+  "joinMs": {
+    "p50": 1023,
+    "p95": 1245,
+    "max": 1267,
+    "count": 64
+  },
+  "tableHands": 672,
+  "handsPerMinute": 134,
+  "clientHandsSeen": 3363,
+  "rejoins": 24,
+  "sequenceErrors": 0,
+  "errors": [],
+  "drift": 0,
+  "audits": [
+    {
+      "room": "qa-load-mw8dlbjq-0-st100",
+      "tables": [
+        {
+          "tableId": "t-242e931648474b97b002",
+          "hands": 85,
+          "buyIns": 3500,
+          "cashOuts": 2459,
+          "botNet": 1041,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw8dlbjq-1-st100",
+      "tables": [
+        {
+          "tableId": "t-a53fd50daaea4006ab8d",
+          "hands": 87,
+          "buyIns": 4000,
+          "cashOuts": 2151,
+          "botNet": 1849,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw8dlbjq-2-st100",
+      "tables": [
+        {
+          "tableId": "t-99a37d8c85b041e993ab",
+          "hands": 80,
+          "buyIns": 5000,
+          "cashOuts": 2570,
+          "botNet": 2430,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw8dlbjq-3-st100",
+      "tables": [
+        {
+          "tableId": "t-01552e7cd6b34ef3bbe9",
+          "hands": 83,
+          "buyIns": 4500,
+          "cashOuts": 2477,
+          "botNet": 2023,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw8dlbjq-4-st100",
+      "tables": [
+        {
+          "tableId": "t-50a310ac49274b859d7a",
+          "hands": 82,
+          "buyIns": 4000,
+          "cashOuts": 2059,
+          "botNet": 1941,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw8dlbjq-5-st100",
+      "tables": [
+        {
+          "tableId": "t-cfdf258a4a8d4c1a989d",
+          "hands": 88,
+          "buyIns": 3000,
+          "cashOuts": 2012,
+          "botNet": 988,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw8dlbjq-6-st100",
+      "tables": [
+        {
+          "tableId": "t-cd71bfd1327142239bb4",
+          "hands": 80,
+          "buyIns": 4500,
+          "cashOuts": 2748,
+          "botNet": 1752,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw8dlbjq-7-st100",
+      "tables": [
+        {
+          "tableId": "t-b6f3de83718a465c88b5",
+          "hands": 87,
+          "buyIns": 3500,
+          "cashOuts": 2117,
+          "botNet": 1383,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    }
+  ],
+  "reconcile": {
+    "ok": true,
+    "at": "2026-11-08T22:05:16.479Z",
+    "checks": [
+      {
+        "name": "balances match the ledger",
+        "ok": true,
+        "checked": 168,
+        "problems": [],
+        "note": "balance = sum of ledger entries, per player and currency"
+      },
+      {
+        "name": "no ledger entries without a balance",
+        "ok": true,
+        "checked": 0,
+        "problems": [],
+        "note": "entries whose balance row is missing"
+      },
+      {
+        "name": "tables have zero drift",
+        "ok": true,
+        "checked": 28,
+        "problems": [],
+        "note": "per table session: cash-outs + seated stacks − buy-ins + bot net + Agent net"
+      },
+      {
+        "name": "no seat held by a quiet table",
+        "ok": true,
+        "checked": 0,
+        "problems": [],
+        "note": "seat locks not checkpointed for an hour (stranded stacks waiting for recovery)"
+      },
+      {
+        "name": "Agents paid exactly",
+        "ok": true,
+        "checked": 3,
+        "problems": [],
+        "note": "bankroll debited once; the return credited equals the recorded return"
+      },
+      {
+        "name": "no Agent stuck on a lost table",
+        "ok": true,
+        "checked": 0,
+        "problems": [],
+        "note": "playing Agents not checkpointed for 10 minutes (the cron's sweep should have paid them back)"
+      },
+      {
+        "name": "ended tournaments net to zero",
+        "ok": true,
+        "checked": 2,
+        "problems": [],
+        "note": "per ended tournament: sum of its ledger entries = 0"
+      },
+      {
+        "name": "no tournament stuck",
+        "ok": true,
+        "checked": 0,
+        "problems": [],
+        "note": "locked or running six hours after the start"
+      }
+    ]
+  }
+}

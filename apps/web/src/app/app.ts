@@ -94,6 +94,11 @@ export class Router {
     this.ctx.events.emit('router:changed', id);
   }
 
+  /** Screens open (1 = only the base screen). */
+  get depth(): number {
+    return this.stack.length;
+  }
+
   /** Closes the top screen. */
   back(): void {
     if (this.stack.length > 1) this.popTop();
