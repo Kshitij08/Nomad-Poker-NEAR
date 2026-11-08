@@ -1,10 +1,12 @@
-import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { ErrorCode } from '@nomad/contract';
 
 /** A failure the client should see: becomes `{ error: { code, message } }` with `status`. */
+/** HTTP statuses the API answers errors with. */
+export type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500 | 501 | 502 | 503;
+
 export class ApiError extends Error {
   constructor(
-    readonly status: ContentfulStatusCode,
+    readonly status: ErrorStatus,
     readonly code: ErrorCode,
     message: string,
   ) {
@@ -12,7 +14,7 @@ export class ApiError extends Error {
   }
 }
 
-export function fail(status: ContentfulStatusCode, code: ErrorCode, message: string): never {
+export function fail(status: ErrorStatus, code: ErrorCode, message: string): never {
   throw new ApiError(status, code, message);
 }
 

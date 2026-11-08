@@ -82,7 +82,11 @@ export interface BrowserIdentity extends ClientIdentity {
   buyInOverride: number | null;
 }
 
-export function browserIdentity(ctx: AppContext, wallet: WalletPort): BrowserIdentity {
+/**
+ * `cloud`: tables on the game server, whose ledger verifies the Nomad API session token; the local server takes a
+ * local ticket instead.
+ */
+export function browserIdentity(ctx: AppContext, wallet: WalletPort, cloud = false): BrowserIdentity {
   const tab = tabIdentity(ctx.params);
   const id: BrowserIdentity = {
     buyInOverride: null,
@@ -120,6 +124,7 @@ export function browserIdentity(ctx: AppContext, wallet: WalletPort): BrowserIde
       return ctx.services.account.avatar ?? 0;
     },
     sessionTicket() {
+      if (cloud) return ctx.services.nomadApi?.token ?? '';
       return `local:${this.playerId}:${Math.max(0, Math.floor(wallet.coins))}`;
     },
     selectedBuyInChips() {

@@ -142,7 +142,10 @@ export interface Headless {
   wallet: { coins: number; adopt(b: number): void };
 }
 
-export function headlessClient(conn: NetConnection, opts: { name: string; token: string; playerId: string; coins: number; speed: number; buyIn?: number }): Headless {
+export function headlessClient(
+  conn: NetConnection,
+  opts: { name: string; token: string; playerId: string; coins: number; speed: number; buyIn?: number; /** The hello ticket (game server: a Nomad session token); default a local ticket. */ ticket?: () => string },
+): Headless {
   const panel = new InstantPanel();
   const view = new RecordingView(panel);
   const wallet = {
@@ -163,7 +166,7 @@ export function headlessClient(conn: NetConnection, opts: { name: string; token:
       playerName: opts.name,
       token: opts.token,
       avatar: 0,
-      sessionTicket: () => `local:${opts.playerId}:${wallet.coins}`,
+      sessionTicket: opts.ticket ?? (() => `local:${opts.playerId}:${wallet.coins}`),
       selectedBuyInChips: () => opts.buyIn ?? 1000,
     },
     log: (level, m) => {

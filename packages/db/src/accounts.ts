@@ -6,7 +6,7 @@ import {
   type PlayerProfile,
   type SessionResponse,
 } from '@nomad/contract';
-import type { PlayerRow } from './env';
+import type { PlayerRow } from './types';
 import { postingStatement } from './ledger';
 import { iso, randomBytes, randomId, sha256Hex, base64url } from './util';
 

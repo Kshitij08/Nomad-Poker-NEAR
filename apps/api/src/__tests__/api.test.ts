@@ -11,9 +11,9 @@ import {
 import { createApp } from '../app';
 import type { Env } from '../env';
 import { resetGoogleKeyCache } from '../google';
-import * as ledger from '../ledger';
-import { base58Encode, base64url, utf8 } from '../util';
-import { D1Shim } from './d1Shim';
+import * as ledger from '@nomad/db/ledger';
+import { base58Encode, base64url, utf8 } from '@nomad/db/util';
+import { D1Shim } from '@nomad/db/testing/d1Shim';
 
 const ORIGIN = 'http://localhost:5180';
 const app = createApp();

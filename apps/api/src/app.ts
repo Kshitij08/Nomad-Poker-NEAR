@@ -1,5 +1,6 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import {
   Routes,
   walletSignInMessage,
@@ -26,11 +27,11 @@ import {
   profile,
   session,
   sessionPlayer,
-} from './accounts';
+} from '@nomad/db/accounts';
 import type { AppEnv, Env, PlayerRow } from './env';
 import { verifyGoogleIdToken } from './google';
-import * as ledger from './ledger';
-import { ApiError, base58Decode, fail, iso, randomId, readJson, requireString, sha256Hex, utf8 } from './util';
+import * as ledger from '@nomad/db/ledger';
+import { ApiError, base58Decode, fail, iso, randomId, readJson, requireString, sha256Hex, utf8 } from '@nomad/db/util';
 
 export const VERSION = '0.1.0';
 const WALLET_CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -95,7 +96,7 @@ export function createApp(): Hono<AppEnv> {
 
   app.onError((err, c) => {
     if (err instanceof ApiError) {
-      return c.json<ApiErrorBody>({ error: { code: err.code, message: err.message } }, err.status);
+      return c.json<ApiErrorBody>({ error: { code: err.code, message: err.message } }, err.status as ContentfulStatusCode);
     }
     console.error('[api] unhandled', err);
     return c.json<ApiErrorBody>({ error: { code: 'internal', message: 'Something went wrong.' } }, 500);

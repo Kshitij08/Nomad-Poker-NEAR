@@ -102,6 +102,11 @@ export class NomadSession {
     return this.me !== null;
   }
 
+  /** The bearer token (the game server's table ticket), or null when signed out. */
+  get token(): string | null {
+    return this.store.get();
+  }
+
   /** Brings back a stored session (GET /me); clears it if the server no longer knows it. */
   async restore(): Promise<void> {
     if (!this.store.get()) return;

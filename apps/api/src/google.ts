@@ -1,4 +1,4 @@
-import { base64urlDecode, fail, utf8 } from './util';
+import { base64urlDecode, fail, utf8 } from '@nomad/db/util';
 
 /**
  * Verifies a Google ID token (RS256 JWT) against Google's published keys: signature, issuer, audience (one of

@@ -1,0 +1,32 @@
+{
+  "name": "@nomad/game-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The Nomad Poker game server: one Durable Object per table, running @nomad/table-server with chips on the D1 ledger and hands recorded to R2.",
+  "scripts": {
+    "dev": "cf-vite dev --mode development",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build:staging": "cf-vite build --mode staging",
+    "build:production": "cf-vite build --mode production",
+    "deploy:staging": "node scripts/drain.mjs staging && npm run build:staging && cf deploy --prebuilt --mode staging --secrets-file .secrets.staging.json",
+    "deploy:production": "node scripts/drain.mjs production && npm run build:production && cf deploy --prebuilt --mode production --secrets-file .secrets.production.json"
+  },
+  "dependencies": {
+    "@nomad/db": "*",
+    "@nomad/engine": "*",
+    "@nomad/table-server": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.sha-805ec1ff3",
+    "@cloudflare/workers-types": "5.20261024.1",
+    "@types/node": "22.20.5",
+    "@types/ws": "8.18.2",
+    "cf": "0.15.0",
+    "typescript": "5.7.3",
+    "vite": "7.3.7",
+    "vitest": "2.1.8",
+    "ws": "8.22.1"
+  }
+}

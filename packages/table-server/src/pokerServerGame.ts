@@ -73,6 +73,20 @@ export interface PokerServerGameOptions {
   /** Deck RNG override (tests). Default CryptoRandom, or SeededRandom(seed) with useFixedSeed. */
   deckRandom?: IRandom;
   agentHooks?: AgentHooks;
+  /**
+   * After each chip hand passes the conservation check (before the checkpoints): the bots' (house's) and humans' net
+   * for the hand and every seated stack. Hosts record it (game server: house totals in D1, hand batches in R2).
+   */
+  onHandSettled?: (hand: SettledHand) => void;
+}
+
+export interface SettledHand {
+  tableId: string | null;
+  handNumber: number;
+  /** Chips the bots won (+) or lost (−) this hand: the house's side of the humans' result. */
+  botDelta: number;
+  humanDelta: number;
+  stacks: { id: string; seat: number; stack: number; bot: boolean }[];
 }
 
 class SeatOccupant {
@@ -189,6 +203,16 @@ export class PokerServerGame implements IPokerTableServer {
 
   get isChipTable(): boolean {
     return this.economy !== null;
+  }
+
+  /** The chip session's table id (fresh per table session), or null on a table with no ledger. */
+  get tableId(): string | null {
+    return this.economy?.tableId ?? null;
+  }
+
+  /** True while this table holds a seat for `playerId` (seated, or dropped within the grace). */
+  holdsSeatFor(playerId: string): boolean {
+    return this.holdsSeat(playerId);
   }
 
   get tablePhase(): TablePhase {
@@ -1450,6 +1474,17 @@ export class PokerServerGame implements IPokerTableServer {
       this.log('error', `[PokerServer] Chip conservation broken: off by ${off}. Humans ${humanDelta}, bots ${botDelta}, engine pot still holds ${residual}.${report.join('')}`);
       this.economy?.halt(`chips are not conserved (off by ${off}) — see the seat breakdown above`);
       return;
+    }
+    try {
+      this.opts.onHandSettled?.({
+        tableId: this.economy?.tableId ?? null,
+        handNumber: this.engine.table.handNumber,
+        botDelta,
+        humanDelta,
+        stacks: [...this.stacksAtHandStart.keys()].map((id) => ({ id, seat: this.seatOfPlayer(id), stack: this.stackOfPlayer(id), bot: isBotId(id) })),
+      });
+    } catch (e) {
+      this.log('error', `[PokerServer] onHandSettled failed: ${(e as Error)?.message ?? e}`);
     }
     if (botDelta !== 0)
       this.log('info', `[Economy] house delta ${-botDelta > 0 ? '+' : ''}${-botDelta} (table ${this.economy?.tableId ?? 'legacy-free'}, hand ${this.engine.table.handNumber})`);

@@ -1,5 +1,9 @@
 /**
- * One connection to the local table server — the NetworkRunner of the Unity client. Works with the browser's
+ * One connection to a table server — the NetworkRunner of the Unity client. Two servers speak this protocol:
+ * - the local Node server (`ws://…`): one socket for everything; `join` / `spawnRoom` / `requestOverflow` ride it;
+ * - the game server on Cloudflare (`https://…`): one socket per table (`/v1/tables/ws?session=`, a Durable
+ *   Object each), and the session-layer requests are HTTP (`/v1/tables/spawn`, `/v1/tables/overflow`).
+ * The rest is identical. Works with the browser's
  * WebSocket and Node 22's global WebSocket (the headless test clients). Binary frames are table events (C# codec
  * bytes); text frames are JSON control messages (see shared/protocol.ts).
  */
@@ -33,8 +37,17 @@ export class NetConnection {
   kind = '';
   region = '';
   private closedByUs = false;
+  /** Game-server mode: the https base; sockets open per session. */
+  private readonly cloudBase: string | null;
 
-  constructor(readonly url: string) {}
+  constructor(readonly url: string) {
+    this.cloudBase = /^https?:\/\//i.test(url) ? url.replace(/\/+$/, '') : null;
+  }
+
+  /** True for the Cloudflare game server (per-table sockets, Nomad session tickets). */
+  get isCloud(): boolean {
+    return this.cloudBase !== null;
+  }
 
   get isOpen(): boolean {
     return !!this.ws && this.ws.readyState === WebSocket.OPEN;
@@ -45,7 +58,23 @@ export class NetConnection {
     return Math.max(0, this.rttSeconds * 0.5);
   }
 
-  open(timeoutMs = 5000): Promise<void> {
+  /** Local server: opens the one socket. Game server: checks it answers (sockets open per table at join). */
+  async open(timeoutMs = 5000): Promise<void> {
+    if (this.cloudBase) return this.probeCloud(timeoutMs);
+    return this.openSocket(this.url, timeoutMs);
+  }
+
+  private async probeCloud(timeoutMs: number): Promise<void> {
+    try {
+      const res = await fetch(`${this.cloudBase}/v1/health`, { signal: AbortSignal.timeout(timeoutMs) });
+      if (res.ok) return;
+    } catch {
+      /* fall through */
+    }
+    throw new Error(import.meta.env.DEV ? `The game server at ${this.cloudBase} did not answer.` : 'The multiplayer table server is not available right now.');
+  }
+
+  private openSocket(url: string, timeoutMs = 5000): Promise<void> {
     if (this.isOpen) return Promise.resolve();
     this.closedByUs = false;
     return new Promise<void>((resolve, reject) => {
@@ -55,15 +84,15 @@ export class NetConnection {
       const unavailable = (detail: string) =>
         new Error(import.meta.env.DEV ? `${detail} Start it with \`npm run server\` in web/.` : 'The multiplayer table server is not available right now.');
       try {
-        ws = new WebSocket(this.url);
+        ws = new WebSocket(url);
       } catch {
-        reject(unavailable(`Could not open a connection to the table server at ${this.url}.`));
+        reject(unavailable(`Could not open a connection to the table server at ${url}.`));
         return;
       }
       ws.binaryType = 'arraybuffer';
       this.ws = ws;
       const timer = setTimeout(() => {
-        reject(unavailable(`The table server at ${this.url} did not answer.`));
+        reject(unavailable(`The table server at ${url} did not answer.`));
         try {
           ws.close();
         } catch {
@@ -77,10 +106,11 @@ export class NetConnection {
       };
       ws.onerror = () => {
         clearTimeout(timer);
-        reject(unavailable(`Could not reach the table server at ${this.url}.`));
+        reject(unavailable(`Could not reach the table server at ${url}.`));
       };
       ws.onclose = () => {
         clearTimeout(timer);
+        if (this.ws !== ws) return; // a socket we replaced (game server: moving to another table's socket)
         this.stopPing();
         const reason = this.closedByUs ? 'closed' : 'lost';
         this.session = null;
@@ -149,7 +179,15 @@ export class NetConnection {
 
   /** NetworkRunner.StartGame(GameMode.Client, session). */
   async join(session: string, timeoutMs = 8000): Promise<JoinResult> {
-    await this.open();
+    if (this.cloudBase) {
+      // One socket per table: drop the previous table's socket quietly, open this one's.
+      this.replaceSocket();
+      try {
+        await this.openSocket(`${this.cloudBase.replace(/^http/i, 'ws')}/v1/tables/ws?session=${encodeURIComponent(session)}`);
+      } catch (e) {
+        return { ok: false, reason: 'Disconnected', message: (e as Error).message };
+      }
+    } else await this.open();
     const reply = this.await<JoinResult>((m) => {
       if (m.t === 'joined') return { ok: true, session: m.session, player: m.player, kind: m.kind, region: m.region, properties: m.properties };
       if (m.t === 'joinFailed') return { ok: false, reason: m.reason, message: m.message };
@@ -169,6 +207,10 @@ export class NetConnection {
 
   /** PokerPartyClient.EnsureDedicatedRoomAsync: null on success, else the error to show. */
   async spawnRoom(code: string, money = false): Promise<string | null> {
+    if (this.cloudBase) {
+      const r = await this.post<{ code?: string; error?: string }>('/v1/tables/spawn', { code, money });
+      return r ? (r.error ?? null) : 'The table server did not answer.';
+    }
     await this.open();
     const reply = this.await((m) => (m.t === 'roomReady' ? m : undefined), 8000);
     this.send({ t: 'spawnRoom', code, money });
@@ -179,11 +221,37 @@ export class NetConnection {
 
   /** PokerPartyClient.RequestOverflowAsync. */
   async requestOverflow(money: boolean, failed: string, minBuyIn: number): Promise<{ session?: string; error?: string }> {
+    if (this.cloudBase) {
+      const r = await this.post<{ session?: string; error?: string }>('/v1/tables/overflow', { money, failed, minBuyIn });
+      return r ?? { error: 'The table server did not answer.' };
+    }
     await this.open();
     const reply = this.await((m) => (m.t === 'overflow' ? m : undefined), 8000);
     this.send({ t: 'requestOverflow', money, failed, minBuyIn });
     const r = await reply;
     return r ? { session: r.session, error: r.error } : { error: 'The table server did not answer.' };
+  }
+
+  private async post<T>(path: string, body: unknown): Promise<T | null> {
+    try {
+      const res = await fetch(this.cloudBase + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000) });
+      return (await res.json()) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Closes the current socket without reporting a lost connection (it is being replaced). */
+  private replaceSocket(): void {
+    const old = this.ws;
+    this.ws = null;
+    this.stopPing();
+    this.session = null;
+    try {
+      old?.close();
+    } catch {
+      /* ignore */
+    }
   }
 
   /** Runner.Shutdown(): leaves the session (and closes the socket). */

@@ -284,8 +284,16 @@ export class NetConnectError extends Error {
   }
 }
 
+/** Known game servers for `?netServer=` (fixed addresses, so allowed in any build). */
+export const GAME_SERVER_PRESETS: Record<string, string> = {
+  staging: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev',
+  local: 'http://localhost:8789',
+};
+
 export class NetService {
   readonly serverUrl: string;
+  /** The Cloudflare game server (chips on the Nomad ledger) rather than the local Node server. */
+  readonly cloud: boolean;
   readonly identity: BrowserIdentity;
   readonly wallet: WalletPort;
   /** PokerVoiceSettings.IsEnabled is false in the shipped Unity build; `?voice=1` turns WebRTC table voice on. */
@@ -298,9 +306,11 @@ export class NetService {
 
   constructor(private readonly ctx: AppContext) {
     const host = typeof location !== 'undefined' ? location.hostname || '127.0.0.1' : '127.0.0.1';
-    this.serverUrl = endpointParam(ctx.params, 'netServer') ?? buildEndpoint('VITE_NET_SERVER') ?? `ws://${host}:${DEFAULT_SERVER_PORT}`;
+    const preset = GAME_SERVER_PRESETS[ctx.params.get('netServer') ?? ''];
+    this.serverUrl = preset ?? endpointParam(ctx.params, 'netServer') ?? buildEndpoint('VITE_NET_SERVER') ?? `ws://${host}:${DEFAULT_SERVER_PORT}`;
+    this.cloud = /^https?:\/\//i.test(this.serverUrl);
     this.wallet = browserWallet(ctx);
-    this.identity = browserIdentity(ctx, this.wallet);
+    this.identity = browserIdentity(ctx, this.wallet, this.cloud);
     this.voiceEnabled = ctx.params.get('voice') === '1';
     // TournamentsHud.JoinAsync → Connection.ConnectAsync(session): the tournaments module calls this.
     // FriendInvites: an accepted invite joins the inviter's session.
@@ -393,10 +403,20 @@ export class NetService {
     this.searching = true;
     this.cancelled = false;
     try {
+      let coins = this.wallet.coins;
+      if (this.cloud) {
+        // Game-server chips live on the Nomad ledger: be signed in (a guest if nobody is) and use that balance.
+        const api = this.ctx.services.nomadApi;
+        if (!api) throw new NetConnectError('Online tables need the Nomad account service, which this build does not set.', false);
+        if (!api.signedIn) await api.restore();
+        if (!api.signedIn) await api.guest(this.identity.playerName);
+        if (!api.signedIn || !api.me) throw new NetConnectError(api.error ?? 'Could not sign in to play online.', false);
+        coins = api.me.balances.coins;
+      }
       const r = await connectTable(route, {
         url: this.serverUrl,
         cancelled: () => this.cancelled,
-        coins: route.kind === 'quick' ? this.wallet.coins : undefined,
+        coins: route.kind === 'quick' ? coins : undefined,
         selectedBuyIn: buyIn,
         lobbyCheck: (session, properties) => lobbyCheck(this.ctx, session, properties),
       });

@@ -25,6 +25,7 @@ declare module '../app/app' {
 export function apiBase(params: URLSearchParams): string | null {
   const p = params.get('api');
   if (p && API_PRESETS[p]) return API_PRESETS[p];
+  if (!p && params.get('netServer') === 'staging') return API_PRESETS.staging; // the staging game server signs in here
   return (p ? endpointParam(params, 'api') : null) ?? buildEndpoint('VITE_API_URL');
 }
 

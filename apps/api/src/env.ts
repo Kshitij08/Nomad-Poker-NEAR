@@ -1,3 +1,7 @@
+import type { PlayerRow } from '@nomad/db/types';
+
+export type { PlayerRow };
+
 /** The Worker's bindings (declared in cloudflare.config.ts). */
 export interface Env {
   /** Players, identities, sessions, challenges, ledger (migrations/). */
@@ -17,14 +21,6 @@ export interface Env {
   GOOGLE_CLIENT_IDS?: string;
   /** '1' on staging only: email sign-in returns the link instead of mailing it (no mail provider yet). */
   EMAIL_DEV_ECHO?: string;
-}
-
-export interface PlayerRow {
-  id: string;
-  display_name: string;
-  kind: 'guest' | 'registered';
-  created_at: number;
-  last_seen_at: number;
 }
 
 export type AppEnv = {
