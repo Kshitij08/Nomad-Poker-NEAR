@@ -20,7 +20,6 @@ import { ClientGame, type WalletPort } from './clientGame';
 import { connectTable, type ConnectRoute } from './matchmaking';
 import type { NetConnection } from './netConnection';
 import { NetTableView } from './netTableView';
-import { DEFAULT_SERVER_PORT } from '@nomad/table-server/protocol';
 import { ChainTableMode } from '@nomad/table-server/sessions';
 import { TableChat } from './tableChat';
 import { TableVoice } from './voice/tableVoice';
@@ -29,7 +28,7 @@ import { FreePlayLeaderboardMath } from '@nomad/engine/leaderboards/freePlayLead
 import { RewardGrant } from '../app/services';
 import { VirtualEconomy } from '../economy/virtualEconomy';
 import type { TournamentClientState } from '../tournaments/clientState';
-import { buildEndpoint, endpointParam } from '../app/flags';
+import { gameServerUrl } from './serverUrl';
 
 const LastSessionKey = 'Poker.Net.LastSession';
 
@@ -284,11 +283,7 @@ export class NetConnectError extends Error {
   }
 }
 
-/** Known game servers for `?netServer=` (fixed addresses, so allowed in any build). */
-export const GAME_SERVER_PRESETS: Record<string, string> = {
-  staging: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev',
-  local: 'http://localhost:8789',
-};
+export { GAME_SERVER_PRESETS } from './serverUrl';
 
 export class NetService {
   readonly serverUrl: string;
@@ -305,9 +300,7 @@ export class NetService {
   privateBuyInPrompt: ((game: ClientGame) => void) | null = null;
 
   constructor(private readonly ctx: AppContext) {
-    const host = typeof location !== 'undefined' ? location.hostname || '127.0.0.1' : '127.0.0.1';
-    const preset = GAME_SERVER_PRESETS[ctx.params.get('netServer') ?? ''];
-    this.serverUrl = preset ?? endpointParam(ctx.params, 'netServer') ?? buildEndpoint('VITE_NET_SERVER') ?? `ws://${host}:${DEFAULT_SERVER_PORT}`;
+    this.serverUrl = gameServerUrl(ctx.params);
     this.cloud = /^https?:\/\//i.test(this.serverUrl);
     this.wallet = browserWallet(ctx);
     this.identity = browserIdentity(ctx, this.wallet, this.cloud);

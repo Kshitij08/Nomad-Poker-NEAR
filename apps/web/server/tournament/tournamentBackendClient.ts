@@ -6,7 +6,7 @@
  * Only constructed when POKER_TOURNAMENT_BACKEND_URL (+ POKER_INTERNAL_API_KEY) are set — point it at a LOCAL backend
  * (`backend/` dev server). Never at a deployed one without an explicit OK.
  */
-import type { StandingBody, TournamentBackend, TournamentRoster, VerifiedPlayer } from '../../src/tournaments/runtime/wire';
+import type { StandingBody, TournamentBackend, TournamentRoster, VerifiedPlayer } from '@nomad/table-server/tournament/wire';
 
 export class TournamentBackendClient implements TournamentBackend {
   private readonly base: string;

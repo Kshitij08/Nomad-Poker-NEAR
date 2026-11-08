@@ -1,4 +1,4 @@
-import { bindings, defineConfig, exports } from 'cf/config';
+import { bindings, defineConfig, exports, triggers } from 'cf/config';
 
 import * as entrypoint from './src/index.ts' with { type: 'cf-worker' };
 
@@ -44,6 +44,8 @@ export default defineConfig(({ mode }) => {
       entrypoint,
       compatibilityDate: '2026-09-20',
       observability: { enabled: true },
+      // The minute sweep: Agents waiting for a seat, Agents on a lost table, the tournament clock.
+      triggers: [triggers.scheduled({ schedule: '* * * * *' })],
       exports: {
         TableRoom: exports.durableObject({ storage: 'sqlite' }),
       },

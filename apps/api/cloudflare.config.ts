@@ -17,6 +17,10 @@ const STAGES = {
     origins: ['http://localhost:5180', 'http://127.0.0.1:5180'],
     limiterNamespace: '7101',
     emailDevEcho: '1',
+    // Test runs: tournaments may start a minute out; market strategies qualify after 100 hands, no waiting days.
+    tournamentMinLead: '60',
+    listingMinHands: '100',
+    listingMinDays: '0',
   },
   staging: {
     worker: 'nomad-poker-api-staging',
@@ -25,6 +29,9 @@ const STAGES = {
     origins: ['https://nomad-poker-web.vercel.app', 'http://localhost:5180', 'http://127.0.0.1:5180', 'capacitor://localhost', 'https://localhost'],
     limiterNamespace: '7102',
     emailDevEcho: '1',
+    tournamentMinLead: '60',
+    listingMinHands: '100',
+    listingMinDays: '0',
   },
   production: {
     worker: 'nomad-poker-api',
@@ -33,6 +40,9 @@ const STAGES = {
     origins: ['https://nomad-poker-web.vercel.app', 'capacitor://localhost', 'https://localhost'],
     limiterNamespace: '7103',
     emailDevEcho: '',
+    tournamentMinLead: '',
+    listingMinHands: '',
+    listingMinDays: '',
   },
 } as const;
 
@@ -55,6 +65,9 @@ export default defineConfig(({ mode }) => {
         WALLET_CHAIN_ID: bindings.text('devnet'),
         EMAIL_DEV_ECHO: bindings.text(s.emailDevEcho),
         SPIN_SECRET: bindings.secret(),
+        TOURNAMENT_MIN_LEAD_SECONDS: bindings.text(s.tournamentMinLead),
+        LISTING_MIN_HANDS: bindings.text(s.listingMinHands),
+        LISTING_MIN_DAYS: bindings.text(s.listingMinDays),
       },
     },
   };

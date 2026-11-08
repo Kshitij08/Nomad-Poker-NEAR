@@ -366,3 +366,44 @@ describe('social over HTTP (two accounts)', () => {
     expect((await call('GET', '/v1/social')).status).toBe(401);
   });
 });
+
+describe('tournaments and the strategies market over HTTP', () => {
+  it('hosts, registers by join code, takes fees through the ledger, and shows my tournaments', async () => {
+    env.TOURNAMENT_MIN_LEAD_SECONDS = '60';
+    const host = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Host' });
+    const ann = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Ann' });
+    const startsAtUnix = Math.floor(Date.now() / 1000) + 120;
+    type One = { serverNowUnix: number; tournament: { id: string; joinCode: string; status: string; players: number; myStatus: string; hostPlayFabId: string } };
+    const made = await call<One>('POST', '/v1/tournaments', { name: 'Lunch Cup', entryFee: 300, hostPrize: 1000, visibility: 'private', speed: 'turbo', startsAtUnix }, host.body.token);
+    expect(made.status).toBe(200);
+    expect(made.body.tournament).toMatchObject({ status: 'registering', hostPlayFabId: host.body.player.friendCode });
+    const code = made.body.tournament.joinCode;
+    expect((await call<{ tournaments: unknown[] }>('GET', '/v1/tournaments')).body.tournaments).toEqual([]); // private
+
+    const found = await call<One>('GET', `/v1/tournaments/code/${code}`, undefined, ann.body.token);
+    expect(found.body.tournament.id).toBe(made.body.tournament.id);
+    const reg = await call<One>('POST', `/v1/tournaments/${found.body.tournament.id}/register`, {}, ann.body.token);
+    expect(reg.body.tournament).toMatchObject({ players: 1, myStatus: 'registered' });
+    const l = await call<LedgerResponse>('GET', Routes.ledger, undefined, ann.body.token);
+    expect(l.body.balances.coins).toBe(9700);
+    const mine = await call<{ entries: { id: string }[] }>('GET', '/v1/me/tournaments', undefined, ann.body.token);
+    expect(mine.body.entries.map((t) => t.id)).toEqual([made.body.tournament.id]);
+    expect((await call<ApiErrorBody>('POST', `/v1/tournaments/${made.body.tournament.id}/cancel`, {}, ann.body.token)).status).toBe(403);
+    expect((await call<One>('POST', `/v1/tournaments/${made.body.tournament.id}/cancel`, {}, host.body.token)).body.tournament.status).toBe('cancelled');
+    expect((await call<LedgerResponse>('GET', Routes.ledger, undefined, ann.body.token)).body.balances.coins).toBe(10_000);
+    expect((await call<ApiErrorBody>('POST', '/v1/tournaments', { name: 'Too soon', startsAtUnix: Math.floor(Date.now() / 1000) + 10 }, host.body.token)).status).toBe(400);
+  });
+
+  it('publishes a strategy, lists it, and answers twin and coach', async () => {
+    const bob = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Bob' });
+    const profile = { foldBelow: 0.2, raiseAbove: 0.55, aggression: 0.8, bluffChance: 0.1, raiseFractionOfPot: 0.9 };
+    const pub = await call<{ strategyId: string; name: string; version: number; qualified: boolean }>('POST', '/v1/strategies', { name: 'Shark', profile }, bob.body.token);
+    expect(pub.body).toMatchObject({ name: 'Shark', version: 1, qualified: false });
+    expect((await call<{ strategies: unknown[] }>('GET', '/v1/strategies?sort=top')).body.strategies).toEqual([]); // nothing qualified yet
+    expect((await call<{ strategyId: string }>('GET', `/v1/strategies/${pub.body.strategyId}`)).body.strategyId).toBe(pub.body.strategyId);
+    expect((await call<{ strategies: unknown[]; earned: number }>('GET', '/v1/strategies/mine', undefined, bob.body.token)).body).toMatchObject({ earned: 0 });
+    expect((await call<{ decisions: number }>('GET', '/v1/style/twin', undefined, bob.body.token)).body.decisions).toBe(0);
+    expect((await call<{ hands: number; note: null }>('GET', '/v1/style/coach', undefined, bob.body.token)).body).toMatchObject({ hands: 0, note: null });
+    expect((await call('POST', `/v1/strategies/${pub.body.strategyId}/unlist`, {}, bob.body.token)).body).toEqual({ ok: true });
+  });
+});

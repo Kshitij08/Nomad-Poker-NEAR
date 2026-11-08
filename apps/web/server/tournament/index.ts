@@ -13,7 +13,7 @@
 import type { ServerClock } from '@nomad/table-server/clock';
 import type { IPokerTableServer } from '@nomad/table-server/tableNet';
 import { TournamentBackendClient } from './tournamentBackendClient';
-import { TournamentTableServer } from './tournamentTableServer';
+import { TournamentTableServer } from '@nomad/table-server/tournament/tournamentTableServer';
 
 /** The slice of PokerServer this needs (server/src/server.ts). */
 export interface TournamentServerHost {
@@ -61,5 +61,5 @@ export function registerTournaments(server: TournamentServerHost, opts: Register
   );
 }
 
-export { TournamentTableServer } from './tournamentTableServer';
+export { TournamentTableServer } from '@nomad/table-server/tournament/tournamentTableServer';
 export { TournamentBackendClient } from './tournamentBackendClient';

@@ -157,7 +157,7 @@ describe('game server: Quick Play on the ledger', () => {
     await until(() => b.game.localSeat >= 0, 5000, 'Bob seat');
     expect(a.conn.session).toBe('poker-free');
     expect(b.conn.session).toBe('poker-free');
-    tableId = slots.get('poker-free')!.live!.game.tableId!;
+    tableId = (slots.get('poker-free')!.live as TableHost).game.tableId!;
     expect(await seatLock(db, alice.id)).toMatchObject({ table_id: tableId, buy_in: 2000, room: 'poker-free' });
     expect((await balances(db, alice.id)).coins).toBe(8000);
     await until(() => a.wallet.coins === 8000, 5000, 'balance pushed to the client');
@@ -168,11 +168,19 @@ describe('game server: Quick Play on the ledger', () => {
     expect(a.game.sequenceErrors + b.game.sequenceErrors).toBe(0);
     await leave(a, alice.id);
     await leave(b, bob.id);
-    await slots.get('poker-free')!.live!.settled();
+    await (slots.get('poker-free')!.live as TableHost).settled();
     const audit = (await auditTable(db, tableId))!;
     expect(audit.hands).toBeGreaterThanOrEqual(25);
     expect(audit.seatedPlayers).toBe(0);
     expect(audit.drift).toBe(0);
+    // My Twin / the coach: every decision and hand outcome of the signed-in players was recorded (bots' were not).
+    const d = await db.prepare('SELECT count(*) AS n, count(DISTINCT player_id) AS p, min(strength) AS lo, max(strength) AS hi FROM style_decisions').first<{ n: number; p: number; lo: number; hi: number }>();
+    expect(d!.n).toBeGreaterThan(20);
+    expect(d!.p).toBe(2);
+    expect(d!.lo).toBeGreaterThanOrEqual(0);
+    expect(d!.hi).toBeLessThanOrEqual(1);
+    const sh = await db.prepare('SELECT count(*) AS n FROM style_hands WHERE player_id = ?1').bind(alice.id).first<{ n: number }>();
+    expect(sh!.n).toBeGreaterThanOrEqual(25);
     // Each player's coins: the starter grant, the table's buy-in and cash-out, and level-up rewards the server paid
     // for XP it counted from the hands (10 per hand dealt in, 25 more per pot won).
     for (const p of [alice, bob]) {

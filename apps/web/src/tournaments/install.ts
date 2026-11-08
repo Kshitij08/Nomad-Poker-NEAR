@@ -19,12 +19,17 @@ import { endpointParam } from '../app/flags';
  * Debug: `?practice=5|8|16` jumps straight into a practice tournament.
  */
 export function install(ctx: AppContext): void {
-  const live = ctx.params.get('tournaments') === 'live';
+  // With the Nomad API, tournaments are live there (hosted, registered and paid through the ledger; the game server runs
+  // them). Without it, demo data, unless the old backend is explicitly configured.
+  const nomad = ctx.services.nomadApi ?? null;
+  const live = !!nomad || ctx.params.get('tournaments') === 'live';
   const service = new TournamentsService(ctx, {
     live,
+    nomad,
     backendUrl: endpointParam(ctx.params, 'tournamentBackend') ?? '',
     sessionTicket: () => sessionTicketOf(ctx),
-    playFabId: () => (live ? ctx.services.account?.playerId ?? null : null),
+    // Who "you" are in a tournament: the Nomad API names players by Friend ID.
+    playFabId: () => (nomad ? nomad.me?.player.friendCode ?? null : live ? ctx.services.account?.playerId ?? null : null),
   });
   ctx.services.tournaments = service;
   ctx.router.register('tournaments', (c) => new TournamentsPanelScreen(c));

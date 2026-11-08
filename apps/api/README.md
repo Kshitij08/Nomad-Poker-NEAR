@@ -21,12 +21,23 @@ ledger; the contract (routes, types, error codes) is `packages/contract` (`@noma
 | `POST /v1/me/profile` `{ displayName?, avatar? }` | Rename (2–24 characters) and avatar. |
 | `GET /v1/leaderboards/:kind?page=` | Weekly / season earnings, weekly / all-time hands won, friends weekly — from the hands the game server recorded. |
 | `POST /v1/missions/claim` `{ id }` | Pays a mission only when the progress the game server counted reaches its target, once per day / week. |
+| `GET /v1/tournaments?filter=upcoming\|running\|finished` · `POST /v1/tournaments` | Public tournaments; host one (the host prize leaves the balance with the record). |
+| `GET /v1/tournaments/code/:code` · `GET /v1/tournaments/:id` · `GET /v1/me/tournaments` | One tournament by join code or id (`{ serverNowUnix, tournament }`); my entries and hosted ones. |
+| `POST /v1/tournaments/:id/register` · `unregister` · `edit` · `raise-prize` · `cancel` · `remove` | Entry fees and refunds move through the ledger in the same batch as the entry. The game server runs the tournament and pays the prizes. |
+| `GET /v1/strategies?sort=` · `POST /v1/strategies` · `GET /v1/strategies/:id` · `GET /v1/strategies/mine` · `POST /v1/strategies/:id/unlist` | The Coins copy-strategy marketplace: publish (custom numbers or My Twin), track records from every hand copied Agents played, qualification against Autopilot, the creator's dashboard. |
+| `GET /v1/style/twin` · `GET /v1/style/coach` | My Twin (a profile fitted to the player's recorded decisions) and the coach report. |
 
 Sessions are opaque bearer tokens (`np_…`, 30 days, sliding); only their SHA-256 is stored. Sending a guest's token
 to a wallet / Google / email sign-in links that identity to the guest and keeps its balance; if the identity already
 belongs to someone, you are signed in to that player instead.
 
 Rewards are the server's decisions (Phase 3): the rules are the engine's catalogues, run in `packages/db/src/progress.ts`. XP, gems and streak shields are ledger currencies; level-ups are paid as XP crosses them; every grant has an idempotency key (per day, mission period, level or hand). There is no route that takes an amount from a client. `scripts/rewards-check.ts` checks this against a deployed API.
+
+Phase 5 moved the backend's tournament, strategies, twin and coach services here (`packages/db/src/tournaments.ts`,
+`strategies.ts`, `style/`). Staging lets tournaments start a minute out (`TOURNAMENT_MIN_LEAD_SECONDS`) and qualifies
+market strategies after 100 hands (`LISTING_MIN_HANDS`, `LISTING_MIN_DAYS`); production keeps 10 minutes, 2,000 hands
+and 7 days. The coach's written note needs `ANTHROPIC_API_KEY`, which is not configured; the computed report works
+without it. Agent sessions are on the game server (`/v1/agents/*`).
 
 The ledger (`packages/db/migrations/0001_init.sql`) is append-only. A trigger applies each entry to `balances` in the same
 statement, and `balances.amount >= 0` is a CHECK, so an overdraft aborts the entry: the two tables cannot disagree.

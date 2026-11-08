@@ -7,9 +7,10 @@ Worker is described by `apps/api/cloudflare.config.ts` (no Wrangler config). Pri
 |---|---|---|
 | API Worker | `nomad-poker-api-staging` · https://nomad-poker-api-staging.kshitijiitgn.workers.dev | `nomad-poker-api` · not deployed yet |
 | Game server Worker + `TableRoom` Durable Object | `nomad-poker-game-staging` · https://nomad-poker-game-staging.kshitijiitgn.workers.dev | `nomad-poker-game` · not deployed yet |
-| D1 (players, sessions, ledger, seat locks) | `nomad-poker-staging` · `c9570cef-7f57-4845-b503-03da7893d36d` · migrations `0001_init`, `0002_tables` applied 2026-11-08 | `nomad-poker-production` · `e630e086-697c-47c7-84c3-8ad467005c34` · empty |
+| D1 (players, sessions, ledger, seat locks) | `nomad-poker-staging` · `c9570cef-7f57-4845-b503-03da7893d36d` · migrations `0001`–`0005` applied (`0005_agents_tournaments` on 2026-11-09) | `nomad-poker-production` · `e630e086-697c-47c7-84c3-8ad467005c34` · empty |
 | R2 (hand histories, replays) | `nomad-poker-hands-staging` | `nomad-poker-hands-production` |
 | Rate limiter (sign-in, 30/min per IP) | namespace `7102` | namespace `7103` |
+| Cron trigger on the game server (Agents sweep, tournament clock) | `* * * * *` | `* * * * *` (when deployed) |
 
 `cf dev` (mode `development`, namespace `7101`) uses local D1/R2 simulations, not the resources above.
 

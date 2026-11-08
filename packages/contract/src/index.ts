@@ -272,6 +272,37 @@ export const SocialRoutes = {
   leaderboards: '/v1/leaderboards',
 } as const;
 
+/**
+ * Tournaments (Phase 5). Every answer about one tournament is `{ serverNowUnix, tournament }` (TournamentInfo in the
+ * web client); lists are `{ serverNowUnix, tournaments }` and mine is `{ serverNowUnix, entries, hosted }`.
+ * The tournament itself runs on the game server (a TRN… room), which also pays the prizes.
+ */
+export const TournamentRoutes = {
+  /** GET `?filter=upcoming|running|finished&limit=` (public tournaments); POST creates one. */
+  list: '/v1/tournaments',
+  /** GET `/v1/tournaments/code/<code>`: a tournament by its 6-letter join code. */
+  byCode: '/v1/tournaments/code',
+  /** GET `/v1/tournaments/<id>`; POST `/v1/tournaments/<id>/<action>`: edit | raise-prize | cancel | remove | register | unregister. */
+  one: '/v1/tournaments',
+  /** GET: the signed-in player's entries and hosted tournaments. */
+  mine: '/v1/me/tournaments',
+} as const;
+
+/**
+ * The copy-strategy marketplace, My Twin and the coach (Phase 5). Agent sessions themselves are on the game server
+ * (`/v1/agents/*`), which seats them at its tables.
+ */
+export const StrategyRoutes = {
+  /** GET `?sort=top|styles|new|popular&limit=&style=`; POST publishes `{ name, description?, fromTwin?, profile? }`. */
+  strategies: '/v1/strategies',
+  /** GET: the creator's dashboard (their strategies, earned and paid). */
+  mine: '/v1/strategies/mine',
+  /** GET `/v1/strategies/<id>`; POST `/v1/strategies/<id>/unlist`. */
+  one: '/v1/strategies',
+  twin: '/v1/style/twin',
+  coach: '/v1/style/coach',
+} as const;
+
 export type FriendRelationName = 'friend' | 'pending_out' | 'pending_in';
 
 /** The friends.js error codes, kept so the client's wording carries over. */

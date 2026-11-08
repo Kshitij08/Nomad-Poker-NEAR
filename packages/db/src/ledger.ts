@@ -29,6 +29,28 @@ export function postingStatement(db: D1Database, p: LedgerPosting, now = Date.no
   return db.prepare(INSERT_ENTRY).bind(p.playerId, p.currency, p.delta, p.reason, p.ref ?? null, p.idempotencyKey, now);
 }
 
+/**
+ * A posting that applies only when `condition` (SQL, numbered from ?8 with `params`) holds when the batch reaches it.
+ * Lets a batch pay for a state change only if that change actually happened (a seat was free, a status still open).
+ */
+export function conditionalPostingStatement(
+  db: D1Database,
+  p: LedgerPosting,
+  condition: string,
+  params: unknown[],
+  now = Date.now(),
+): D1PreparedStatement {
+  if (!Number.isSafeInteger(p.delta) || p.delta === 0) throw new Error(`ledger: bad delta ${p.delta}`);
+  if (!CURRENCIES.includes(p.currency)) throw new Error(`ledger: bad currency ${p.currency}`);
+  return db
+    .prepare(
+      `INSERT INTO ledger_entries (player_id, currency, delta, reason, ref, idempotency_key, created_at)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 WHERE ${condition}
+       ON CONFLICT (player_id, idempotency_key) DO NOTHING`,
+    )
+    .bind(p.playerId, p.currency, p.delta, p.reason, p.ref ?? null, p.idempotencyKey, now, ...params);
+}
+
 export function isInsufficientFunds(err: unknown): boolean {
   return /CHECK constraint failed.*amount/i.test(String((err as Error)?.message ?? err));
 }

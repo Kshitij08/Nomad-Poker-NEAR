@@ -10,7 +10,7 @@ import { buildEndpoint, endpointParam } from '../app/flags';
 import { VirtualEconomy } from '../economy/virtualEconomy';
 import { AccountScreen } from './accountScreen';
 import { NomadProgress, NomadWallet } from './progress';
-import { localTokenStore, NomadSession, type WalletSigner } from './session';
+import { ApiRequestError, localTokenStore, NomadSession, type WalletSigner } from './session';
 
 export const API_PRESETS: Record<string, string> = {
   staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev',
@@ -24,6 +24,30 @@ declare module '../app/app' {
     /** The player's server-side progress and rewards (retention's backend); unset without an API. */
     nomadProgress?: NomadProgress;
   }
+}
+
+/** The old backend's marketplace paths, as the Nomad API names them. */
+export function nomadMarketPath(path: string): string | null {
+  if (path.startsWith('/api/strategies')) return '/v1/strategies' + path.slice('/api/strategies'.length);
+  if (path.startsWith('/api/style/')) return '/v1/style/' + path.slice('/api/style/'.length);
+  return null;
+}
+
+/** menu/deps.ts BackendApiLike over the Nomad session: `{ ok, body, error }`, never throwing. */
+export function nomadBackendApi(session: NomadSession) {
+  return {
+    async call(method: string, path: string, json?: string | null): Promise<{ ok: boolean; body: string; error: string }> {
+      const mapped = nomadMarketPath(path);
+      if (!mapped) return { ok: false, body: '', error: 'That service is not available on the Nomad server yet.' };
+      try {
+        const body = await session.call<unknown>(method, mapped, json ? JSON.parse(json) : undefined);
+        return { ok: true, body: JSON.stringify(body ?? null), error: '' };
+      } catch (e) {
+        const message = e instanceof ApiRequestError ? e.message : "Couldn't reach the Nomad server. Check your connection.";
+        return { ok: false, body: '', error: message };
+      }
+    },
+  };
 }
 
 export function apiBase(params: URLSearchParams): string | null {
@@ -65,6 +89,9 @@ export function install(ctx: AppContext): void {
   const progress = new NomadProgress(session, ctx.events);
   const serverWallet = new NomadWallet(progress, session);
   ctx.services.nomadProgress = progress;
+  // The market dialogs (strategies, My Twin, coach) call the backend through `backendApi`: the Nomad API answers the
+  // Coins marketplace's paths. The SOL marketplace (/sol-strategies) moves over with on-chain tables (Phase 6).
+  (ctx.services as unknown as Record<string, unknown>).backendApi = nomadBackendApi(session);
   let lastPlayer: string | null = null;
   ctx.events.on('nomad:changed', () => {
     const id = session.me?.player.id ?? null;

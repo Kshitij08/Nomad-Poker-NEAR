@@ -242,10 +242,19 @@ async function errorOf(res: Response, fallback: string): Promise<string> {
   }
 }
 
+/**
+ * The Agent routes over HTTP: the Nomad game server's `/v1/agents/*` (Bearer: the Nomad session token; it seats the
+ * Agent at its own tables and settles through the ledger), or the old backend's `/api/agent/*` when explicitly asked.
+ */
 export class HttpAgentBackend implements AgentBackend {
   readonly kind = 'http' as const;
 
-  constructor(private readonly baseUrl: string, private readonly token: () => Promise<string | null>) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly token: () => Promise<string | null>,
+    /** '/v1/agents' on the Nomad game server; '/api/agent' on the old backend. */
+    private readonly prefix = '/api/agent',
+  ) {}
 
   signInToken(): Promise<string | null> {
     return this.token();
@@ -276,7 +285,7 @@ export class HttpAgentBackend implements AgentBackend {
 
   async start(req: AgentStartRequest): Promise<AgentStartResponse> {
     try {
-      const res = await fetch(this.url('/api/agent/start'), {
+      const res = await fetch(this.url(`${this.prefix}/start`), {
         method: 'POST', headers: await this.headers(true), body: JSON.stringify(req), signal: AbortSignal.timeout(20_000),
       });
       if (!res.ok) return { error: await errorOf(res, 'Could not reach the Agent service.') };
@@ -291,12 +300,12 @@ export class HttpAgentBackend implements AgentBackend {
   }
 
   progress(session: string, ownerId: string): Promise<AgentDeploymentProgress | null> {
-    return this.get('/api/agent/progress', { session, ownerId });
+    return this.get(`${this.prefix}/progress`, { session, ownerId });
   }
 
   async stop(session: string, ownerId: string): Promise<{ error: string | null; progress: AgentDeploymentProgress | null }> {
     try {
-      const res = await fetch(this.url('/api/agent/stop'), {
+      const res = await fetch(this.url(`${this.prefix}/stop`), {
         method: 'POST', headers: await this.headers(true), body: JSON.stringify({ session, ownerId }), signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) return { error: await errorOf(res, 'Could not reach the agent table.'), progress: null };
@@ -313,21 +322,21 @@ export class HttpAgentBackend implements AgentBackend {
   }
 
   result(session: string, ownerId: string): Promise<AgentDeploymentSummary | null> {
-    return this.get('/api/agent/result', { session, ownerId });
+    return this.get(`${this.prefix}/result`, { session, ownerId });
   }
 
   async active(ownerId: string): Promise<{ deploymentId: string; bankroll: number } | null> {
-    const r = await this.get<{ active: { deploymentId: string; bankroll: number } | null }>('/api/agent/active', { ownerId });
+    const r = await this.get<{ active: { deploymentId: string; bankroll: number } | null }>(`${this.prefix}/active`, { ownerId });
     return r?.active ?? null;
   }
 
   history(ownerId: string, limit: number, offset: number): Promise<AgentSessionHistory | null> {
-    return this.get('/api/agent/history', { ownerId, limit: Math.max(1, Math.min(limit, 100)), offset: Math.max(0, offset) });
+    return this.get(`${this.prefix}/history`, { ownerId, limit: Math.max(1, Math.min(limit, 100)), offset: Math.max(0, offset) });
   }
 
   hands(ownerId: string, deploymentId: string, limit: number, offset: number): Promise<AgentHandHistory | null> {
     if (!deploymentId.trim()) return Promise.resolve(null);
-    return this.get('/api/agent/hands', { ownerId, deploymentId, limit: Math.max(1, Math.min(limit, 100)), offset: Math.max(0, offset) });
+    return this.get(`${this.prefix}/hands`, { ownerId, deploymentId, limit: Math.max(1, Math.min(limit, 100)), offset: Math.max(0, offset) });
   }
 
   dispose(): void {}

@@ -1,0 +1,58 @@
+{
+  "stage": "staging",
+  "at": "2026-11-08T21:24:07.563Z",
+  "player": "p_Z67E-T77DYR6a5eq",
+  "limit": {
+    "session": "QADORAGXKZ",
+    "stopReason": "max_hands",
+    "handsPlayed": 8,
+    "endingStack": 1563,
+    "table": "poker-free-st100",
+    "handRecords": 8,
+    "withReplay": 8,
+    "ledger": [
+      {
+        "reason": "agent:return",
+        "delta": 1563
+      },
+      {
+        "reason": "agent:bankroll",
+        "delta": -2000
+      }
+    ]
+  },
+  "ownerStop": {
+    "session": "QAPX7KEHMJ",
+    "stopReason": "owner_stop",
+    "handsPlayed": 1,
+    "endingStack": 1475,
+    "ledger": [
+      {
+        "reason": "agent:return",
+        "delta": 1475
+      },
+      {
+        "reason": "agent:bankroll",
+        "delta": -1500
+      }
+    ]
+  },
+  "history": 2,
+  "balance": {
+    "before": 10000,
+    "after": 9538,
+    "expected": 9538,
+    "matches": true
+  },
+  "progress": [
+    "playing at poker-free-st100: hand 0/8, stack 2000",
+    "playing at poker-free-st100: hand 1/8, stack 1910",
+    "playing at poker-free-st100: hand 2/8, stack 1925",
+    "playing at poker-free-st100: hand 3/8, stack 1940",
+    "playing at poker-free-st100: hand 4/8, stack 1985",
+    "playing at poker-free-st100: hand 5/8, stack 1983",
+    "playing at poker-free-st100: hand 6/8, stack 1893",
+    "playing at poker-free-st100: hand 7/8, stack 1893",
+    "completed at poker-free-st100: hand 8/8, stack 1563"
+  ]
+}

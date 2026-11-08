@@ -2,6 +2,8 @@ import { StakeSessionNames, PartyCodes } from '@nomad/table-server/sessions';
 import type { Env } from './env';
 import { auditTable } from '@nomad/db/seatLocks';
 import { canonicalSession } from './roomSpec';
+import { agentRoute, sweepAgents } from './agentRoutes';
+import { tournamentTick } from '@nomad/db/tournaments';
 
 export { TableRoom } from './tableRoom';
 
@@ -15,6 +17,10 @@ export { TableRoom } from './tableRoom';
  *   POST /v1/tables/overflow  { money, failed, minBuyIn }   → { session } | { error }
  *   POST /v1/admin/drain      (Bearer DRAIN_TOKEN)          finish hands, pay out, close every open table
  *   GET  /v1/admin/audit?room= (Bearer DRAIN_TOKEN)         where every chip of that room's tables went (drift)
+ *   /v1/agents/*              the owner's Agent sessions (agentRoutes.ts)
+ *
+ * Every minute (cron): queued Agents get another try at a seat, and Agents on a table that died are paid back; the
+ * tournament clock locks or cancels at start times, aborts tournaments no room ran, and opens the rooms about to start.
  */
 
 const VERSION = '0.1.0';
@@ -31,7 +37,7 @@ function originOk(request: Request, env: Env): boolean {
 function cors(request: Request, env: Env): Record<string, string> {
   const origin = request.headers.get('origin');
   if (!origin || !origins(env).includes(origin)) return {};
-  return { 'access-control-allow-origin': origin, 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS', vary: 'origin' };
+  return { 'access-control-allow-origin': origin, 'access-control-allow-headers': 'content-type, authorization', 'access-control-allow-methods': 'GET, POST, OPTIONS', vary: 'origin' };
 }
 
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) => Response.json(body, { status, headers });
@@ -76,6 +82,11 @@ export default {
       return json({ error: 'Every overflow table is full.' }, 200, h);
     }
 
+    if (url.pathname.startsWith('/v1/agents/')) {
+      if (!originOk(request, env)) return json({ error: 'Origin not allowed.' }, 403);
+      return (await agentRoute(request, env, url, (body, status = 200) => json(body, status, h)))!;
+    }
+
     if (url.pathname === '/v1/admin/drain' && request.method === 'POST') {
       if (!env.DRAIN_TOKEN || request.headers.get('authorization') !== `Bearer ${env.DRAIN_TOKEN}`) return json({ error: 'unauthorized' }, 401);
       const open = await env.DB.prepare('SELECT DISTINCT room FROM table_sessions WHERE closed_at IS NULL').all<{ room: string }>();
@@ -101,5 +112,26 @@ export default {
     }
 
     return json({ error: 'not found' }, 404, h);
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      sweepAgents(env).then(
+        (r) => {
+          if (r.placed || r.recovered) console.log(`[cron] agents placed ${r.placed}, recovered ${r.recovered}`);
+        },
+        (e) => console.error('[cron] agent sweep failed', e),
+      ),
+    );
+    ctx.waitUntil(
+      tournamentTick(env.DB).then(
+        async (r) => {
+          if (r.ended.length) console.log(`[cron] tournaments ended: ${r.ended.join(', ')}`);
+          // Rooms open a few minutes early so players can connect; opening is idempotent.
+          await Promise.all(r.open.map((s) => table(env, s).fetch(`https://table/open?session=${s}`, { method: 'POST' }).catch(() => undefined)));
+        },
+        (e) => console.error('[cron] tournament tick failed', e),
+      ),
+    );
   },
 } satisfies ExportedHandler<Env>;

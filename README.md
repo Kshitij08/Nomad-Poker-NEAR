@@ -10,8 +10,8 @@ the folders below kept.
 | `packages/contract` | `@nomad/contract`: the API's routes, request/response types and error codes, shared by the web app and the API. |
 | `packages/db` | `@nomad/db`: the D1 schema (migrations), sessions, the ledger, seat locks and table audits, shared by the API and the game server. |
 | `packages/table-server` | `@nomad/table-server`: the authoritative table (rooms, PokerServerGame, chip-ledger contract, wire protocol), hosted by the local Node server and the game server. |
-| `apps/game-server` | One Durable Object per table, chips on the ledger, hands to R2 — `apps/game-server/README.md`. Staging: https://nomad-poker-game-staging.kshitijiitgn.workers.dev |
-| `apps/api` | The API Worker on Cloudflare (sign-in, sessions, ledger) — `apps/api/README.md`. Staging: https://nomad-poker-api-staging.kshitijiitgn.workers.dev |
+| `apps/game-server` | One Durable Object per table, chips on the ledger, hands to R2; Agents play at its tables and tournaments run in its `TRN…` rooms — `apps/game-server/README.md`. Staging: https://nomad-poker-game-staging.kshitijiitgn.workers.dev |
+| `apps/api` | The API Worker on Cloudflare (sign-in, ledger, rewards, social, tournaments, strategies market, twin, coach) — `apps/api/README.md`. Staging: https://nomad-poker-api-staging.kshitijiitgn.workers.dev |
 | `apps/web` | The web app: 3D table, Nomad menus, every feature module, and today's local table server (`apps/web/server`). See `apps/web/README.md`. |
 | `onchain/programs`, `onchain/per`, `onchain/idl` | Solana programs (`poker-escrow`, `poker-per`), the PER keeper/payout services and IDLs. Devnet only for now. |
 | `reference/backend` | The old Node backend, kept only as a reference while its routes are ported; removed after Phase 6. |

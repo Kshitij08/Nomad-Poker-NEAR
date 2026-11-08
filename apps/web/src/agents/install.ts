@@ -9,6 +9,7 @@ import type { AgentMoney } from './server/agentFarm';
 import { registerNomadPartial } from '../menu/host';
 import { agentsPartial } from './nomad/agentsPartial';
 import { endpointParam } from '../app/flags';
+import { cloudGameServer } from '../net/serverUrl';
 
 declare module '../app/app' {
   interface Services {
@@ -73,10 +74,16 @@ export function install(ctx: AppContext): void {
   const strategy = new AgentStrategyState(prefsStore);
   let deploy: AgentDeployService | null = null;
 
-  // The real backend only when explicitly asked for (?agentBackend=https://…); never by default (PORTING-RULES).
+  // With the Nomad servers (an API session and the Cloudflare game server), Agents play at the game server's tables and
+  // their bankroll moves through the ledger. The old backend only when explicitly asked for (?agentBackend=https://…).
+  // Otherwise the local farm in this tab (no servers).
   const remote = endpointParam(ctx.params, 'agentBackend');
+  const nomad = ctx.services.nomadApi ?? null;
+  const game = cloudGameServer(ctx.params);
   const backend: AgentBackend = remote
     ? new HttpAgentBackend(remote, async () => null)
+    : nomad && game
+    ? new HttpAgentBackend(game, async () => nomad.token, '/v1/agents')
     : new LocalAgentBackend({
         money: walletMoney(ctx),
         load: () => prefsStore.getString(LOCAL_FARM_KEY, '') || null,

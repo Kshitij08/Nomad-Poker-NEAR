@@ -23,6 +23,14 @@ export interface Env {
   EMAIL_DEV_ECHO?: string;
   /** Server secret the daily spin's roll is derived from (HMAC of player and day). */
   SPIN_SECRET?: string;
+  /** Earliest a new tournament may start, in seconds (default 600; staging shortens it for test runs). */
+  TOURNAMENT_MIN_LEAD_SECONDS?: string;
+  /** What a market strategy needs before others may copy it (defaults: 2000 hands, 7 days). */
+  LISTING_MIN_HANDS?: string;
+  LISTING_MIN_DAYS?: string;
+  /** Optional: the coach adds a short note written by Claude. Unset: the computed report only. */
+  ANTHROPIC_API_KEY?: string;
+  COACH_MODEL?: string;
 }
 
 export type AppEnv = {

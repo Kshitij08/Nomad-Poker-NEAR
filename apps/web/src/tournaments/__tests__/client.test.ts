@@ -8,8 +8,8 @@ import { PlayerAction } from '@nomad/engine/actions/actions';
 import type { BettingPanelPort, TableViewPort } from '@nomad/engine/orchestration/tableView';
 import type { AudioPort } from '@nomad/engine/orchestration/pokerSound';
 import { TournamentPhase } from '@nomad/engine/tournament';
-import { TournamentServerGame } from '../runtime/tournamentServerGame';
-import type { RuntimeTiming } from '../runtime/wire';
+import { TournamentServerGame } from '@nomad/table-server/tournament/tournamentServerGame';
+import type { RuntimeTiming } from '@nomad/table-server/tournament/wire';
 import { TournamentClientState } from '../clientState';
 import { TournamentTableClient } from '../client/tournamentTableClient';
 

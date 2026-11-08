@@ -7,7 +7,7 @@ import type { TableViewPort } from '@nomad/engine/orchestration/tableView';
 import { BettingRound } from '@nomad/engine/state/state';
 import { TournamentRules, TournamentViewReason, type TournamentResultEvent, type TournamentViewEvent } from '@nomad/engine/tournament';
 import type { TournamentClientState } from '../clientState';
-import { OUT_OF_BAND, type TournamentPacing, type WireEvent } from '../runtime/wire';
+import { OUT_OF_BAND, type TournamentPacing, type WireEvent } from '@nomad/table-server/tournament/wire';
 import { SeatMapView } from './seatMapView';
 
 interface Queued {

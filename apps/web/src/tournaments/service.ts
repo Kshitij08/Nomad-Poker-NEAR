@@ -5,7 +5,7 @@ import { isDemo, type CreateRequest, type ListResult, type MineResult, type Repl
 import { tournamentClientState, type TournamentClientState } from './clientState';
 import { isReadyToJoin } from './format';
 import { PRACTICE_FIELDS, practiceTournamentSession } from './offline/practiceSession';
-import { isTournamentSession } from './runtime/tournamentServerGame';
+import { isTournamentSession } from '@nomad/table-server/tournament/tournamentServerGame';
 
 /** TournamentsHud.MinePollSeconds / AutoJoinSeconds. */
 const MINE_POLL_SECONDS = 10;

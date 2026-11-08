@@ -8,7 +8,7 @@ import { PlayerAction } from '@nomad/engine/actions/actions';
 import { PokerEventCodec, isHiddenCard, type WireEvent } from '@nomad/engine/events/pokerEventCodec';
 import type { ServerClock } from '@nomad/table-server/clock';
 import type { PlayerRef, TableNet } from '@nomad/table-server/tableNet';
-import { TournamentTableServer } from '../tournamentTableServer';
+import { TournamentTableServer } from '@nomad/table-server/tournament/tournamentTableServer';
 import { devPlayersFor, registerTournaments } from '..';
 
 class VirtualClock implements ServerClock {

@@ -13,12 +13,28 @@ export interface TournamentApiConfig {
   sessionTicket: () => string | null;
   /** The PlayFab id when signed in (PokerClientIdentity.PlayFabId). */
   playFabId: () => string | null;
+  /**
+   * The Nomad API (Phase 5): its /v1/tournaments routes, signed in with the Nomad session (no PlayFab ticket swap).
+   * When set, live mode is on and `backendUrl` / `sessionTicket` are unused.
+   */
+  nomad?: NomadTournamentLink | null;
   /** Injected for tests. */
   fetch?: typeof fetch;
   now?: () => number;
 }
 
 interface ErrorBody { error?: string; code?: string }
+
+/** What the client needs from the Nomad session (account/session.ts NomadSession fits). */
+export interface NomadTournamentLink {
+  readonly signedIn: boolean;
+  readonly token: string | null;
+  /** Throws an error with `status`, `code` and a player-facing message on a failed call. */
+  call<T>(method: string, path: string, body?: unknown): Promise<T>;
+}
+
+/** The old backend's paths, as the Nomad API names them. */
+const nomadPath = (path: string): string => path.replace(/^\/api\/me\/tournaments/, '/v1/me/tournaments').replace(/^\/api\/tournaments/, '/v1/tournaments');
 interface AuthReply { token?: string; playFabId?: string; expiresIn?: number }
 
 /**
@@ -41,7 +57,7 @@ export class TournamentApiClient {
 
   /** DemoMode: sample tournaments instead of the backend. */
   get demoMode(): boolean {
-    return !this.config.live;
+    return !this.config.live && !this.config.nomad;
   }
 
   private get deviceNowUnix(): number {
@@ -59,6 +75,7 @@ export class TournamentApiClient {
   }
 
   get signedIn(): boolean {
+    if (this.config.nomad) return this.config.nomad.signedIn;
     return this.demoMode || !!this.config.sessionTicket();
   }
 
@@ -119,6 +136,7 @@ export class TournamentApiClient {
 
   /** The backend sign-in token for the signed-in PlayFab player (null when not signed in). */
   async signInToken(): Promise<string | null> {
+    if (this.config.nomad) return this.config.nomad.token;
     const ticket = this.config.sessionTicket();
     const playFabId = this.config.playFabId();
     if (!ticket) return null;
@@ -138,6 +156,17 @@ export class TournamentApiClient {
   }
 
   private async send<T>(method: string, path: string, json: string | null, auth: boolean): Promise<Reply<T>> {
+    const nomad = this.config.nomad;
+    if (nomad) {
+      if (auth && !nomad.signedIn && (path.startsWith('/api/me') || method === 'POST')) return fail('Sign in to take part in tournaments.', 'sign_in');
+      try {
+        return ok(await nomad.call<T>(method, nomadPath(path), json ? JSON.parse(json) : undefined));
+      } catch (e) {
+        const err = e as { status?: number; code?: string; message?: string };
+        if (err.status === undefined) return fail("Couldn't reach the tournament service. Check your connection.");
+        return fail(err.message || 'Something went wrong. Try again.', err.code ?? null);
+      }
+    }
     let token: string | null = null;
     if (auth) {
       token = await this.signInToken();

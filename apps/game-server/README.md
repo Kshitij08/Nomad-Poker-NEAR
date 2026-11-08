@@ -12,10 +12,17 @@ ledger in D1 and every hand recorded to R2. Staging: https://nomad-poker-game-st
 | `POST /v1/tables/overflow` `{ failed, minBuyIn }` | The next Quick Play overflow table that is not full. |
 | `POST /v1/admin/drain` | Bearer `DRAIN_TOKEN`. Every open table finishes its hand, pays everyone out and closes. Run before each deploy (the deploy scripts do). |
 | `GET /v1/admin/audit?room=` | Bearer `DRAIN_TOKEN`. Where every chip of that room's tables went (see Drift). |
+| `POST /v1/agents/start` · `GET /v1/agents/progress?session=` · `POST /v1/agents/stop` · `GET /v1/agents/result?session=` · `GET /v1/agents/active` · `GET /v1/agents/history` · `GET /v1/agents/hands?deploymentId=` | Bearer: the Nomad session token. The owner's Agent sessions, in Unity's AgentDeployService wire shapes (see Agents). |
 
 Rooms by name: Quick Play pools and overflow (`poker-free`, `poker-free-st50-2`) open on first join; party codes need
-a spawn first; `qa-…` rooms exist on staging only and run 20× faster (soak tests); money pools stay off until the
-on-chain phase. Every room closes after idling empty and reopens on the next join.
+a spawn first; hosted tournaments are one `TRN…` room each (see Tournaments); `qa-…` rooms exist on staging only and
+run 20× faster (soak tests); money pools stay off until the on-chain phase. Every room closes after idling empty
+(Agents and running tournaments keep it open) and reopens on the next join.
+
+**Every minute (cron):** Agents still waiting for a seat get another try; Agents whose table went quiet for 2 minutes
+are asked about, and if their room no longer has them they end with their last checkpointed stack (`server_lost`);
+the tournament clock locks or cancels at start times, aborts tournaments no room started (3 minutes) or whose room
+stopped heartbeating (3 minutes), and opens the rooms of tournaments starting within 3 minutes.
 
 ## Chips
 
@@ -36,6 +43,35 @@ After each hand the table records, for every Nomad player dealt in, 10 XP (+25 f
 progress (hands played, hands won, wins with a pair / two pair or better), keyed per hand so a retry counts once; a
 buy-in counts the table toward Table Hopper. Level-ups are paid by the server as the XP lands.
 
+## Agents
+
+The tables are the Agent farm: `POST /v1/agents/start` takes the bankroll from the ledger in the same D1 batch that
+creates the deployment (one active Agent per owner, enforced by a unique index), then seats it at the Quick Play table
+for its stake or an overflow table with room. `PokerServerGame` already had the seating rules (an empty chair or a
+filler bot's, never at its owner's table, filler bots when alone, stops only at a hand boundary); `src/agentDesk.ts`
+adds each Agent's limits, its hand records and privacy-filtered replays, a stack checkpoint every hand, and the
+completion, which pays the stack back (`agent:<id>:return`) in one batch. A copied market strategy plays its published
+numbers, and on a profitable session above the copier's high-water mark its creator's 8 % is credited in that same
+batch (the platform's 2 % is withheld). The backend farm's claim / release / control protocol is gone.
+
+A table with only Agents has no sockets, so the Durable Object sets an alarm every 30 s while anything is seated (it
+also refreshes the Agents' rows).
+
+## Tournaments
+
+The API creates tournaments and registers players (host prize and entry fees leave through the ledger in the same
+batch as the record). The game server runs them: a `TRN…` room hosts `TournamentServerGame` (moved to
+`@nomad/table-server/tournament`) with `src/tournamentHost.ts` reading the roster from D1, verifying each player's
+hello ticket (their Nomad token), freezing the roster at the start time, heartbeating, and posting the standings,
+which pay 1st and 2nd (`trn:<id>:payout:<place>`) once. A cancelled or aborted tournament refunds every entry and the
+host prize. Players are named by Friend ID in rosters and standings. A deploy restarts Durable Objects, so a
+tournament running across a deploy is aborted and refunded by the cron.
+
+## Play style (My Twin, coach)
+
+`src/styleRecorder.ts` records every decision a Nomad player makes (strength, pot, price, position, action) and each
+hand's outcome into `style_decisions` / `style_hands`; the API fits My Twin and the coach report from them.
+
 ## Hand records
 
 Each settled hand (every event the table sent, to everyone and to each player, plus stacks and the house result) is
@@ -48,9 +84,12 @@ npm test                      # end-to-end in Node: real client, real tables, le
 npm run dev                   # local Worker on http://localhost:8789 (local D1/R2)
 npm run deploy:staging        # drain, build, deploy (needs .secrets.staging.json)
 npx tsx scripts/soak.ts 1000  # exit-gate soak: two staging guests, 1,000 hands with bots, zero drift
+npx tsx scripts/agent-check.ts 8      # Phase 5 gate: an Agent plays 8 hands and pays back; a second is stopped
+npx tsx scripts/tournament-check.ts   # Phase 5 gate: 8 staging guests play a hosted tournament; prizes in the ledger
 ```
 
 `.secrets.<stage>.json` (git-ignored) holds `{ "DRAIN_TOKEN": "<random>" }`; it is uploaded with each deploy.
 
-The web client plays here with `?netServer=staging` (it signs in to the staging API as a guest if needed).
-Tournaments and Agents still run on the local Node server (Phases 4–5).
+The web client plays here with `?netServer=staging` (it signs in to the staging API as a guest if needed); its Agents
+and tournaments use these servers too. Without a Nomad server configured, Agents run in the browser's local farm and
+tournaments show demo data.

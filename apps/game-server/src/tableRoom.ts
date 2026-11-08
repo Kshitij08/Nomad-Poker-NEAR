@@ -1,8 +1,11 @@
 import { DurableObject } from 'cloudflare:workers';
 import { realClock } from '@nomad/table-server/clock';
+import type { AgentRow } from '@nomad/db/agents';
 import type { Env } from './env';
 import { HandRecorder } from './handRecorder';
+import { tournamentBySession } from '@nomad/db/tournaments';
 import { TableHost, type HostSocket, type LogFn } from './tableHost';
+import { TournamentHost } from './tournamentHost';
 import { TableSlot } from './tableSlot';
 
 /**
@@ -15,9 +18,14 @@ import { TableSlot } from './tableSlot';
  *   GET  /occupancy             { open, players, full } for overflow placement
  *   GET  /holds?player=&table=  does this table still hold that seat? (before paying a stranded stack back)
  *   POST /drain                 finish the hand, pay everyone out, close (before a deploy)
+ *   POST /open?session=         open the room now (the cron, a few minutes before a tournament starts)
+ *   POST /agents/seat?session=  body: an agent_deployments row → { seated } (opens the table if needed)
+ *   POST /agents/stop?id=       the owner pressed Stop → { ok }
+ *   GET  /agents/holds?id=      is that Agent still playing here? (before the stale sweep pays it back)
  *
  * Sockets use the standard (non-hibernating) API: a table runs timers the whole time it has players, and the object
- * goes idle, and can be evicted, only after the room has closed.
+ * goes idle, and can be evicted, only after the room has closed. A table with only Agents has no sockets, so while
+ * anything is seated an alarm wakes the object every 30 s (and refreshes the Agents' rows).
  */
 export class TableRoom extends DurableObject<Env> {
   private slot: TableSlot | null = null;
@@ -41,6 +49,23 @@ export class TableRoom extends DurableObject<Env> {
         await slot?.drain();
         this.stopSweep();
         return Response.json({ ok: true });
+      case '/open': {
+        if (!slot) return new Response('no session', { status: 400 });
+        const r = await slot.ensureOpen();
+        if (r.ok && slot.busy) await this.keepAwake();
+        return Response.json(r);
+      }
+      case '/agents/seat': {
+        if (!slot) return new Response('no session', { status: 400 });
+        const row = (await request.json()) as AgentRow;
+        const r = await slot.seatAgent(row);
+        if (r.seated) await this.keepAwake();
+        return Response.json(r);
+      }
+      case '/agents/stop':
+        return Response.json({ ok: slot?.stopAgent(url.searchParams.get('id') ?? '') ?? false });
+      case '/agents/holds':
+        return Response.json({ holds: slot?.holdsAgent(url.searchParams.get('id') ?? '') ?? false });
       default:
         return new Response('not found', { status: 404 });
     }
@@ -57,8 +82,13 @@ export class TableRoom extends DurableObject<Env> {
       qaRooms: env.QA_ROOMS === '1',
       qaSpeed: Number(env.QA_ROOM_SPEED) || 1,
       log,
-      createHost: (spec, speed) => {
+      createHost: async (spec, speed) => {
         this.startSweep();
+        if (spec.kind === 'tournament') {
+          const t = await tournamentBySession(env.DB, spec.name);
+          if (!t) throw new Error(`Tournament '${spec.name}' was not found.`);
+          return new TournamentHost({ spec, db: env.DB, tournamentId: t.id, clock: realClock(speed), log });
+        }
         return new TableHost({
           spec,
           db: env.DB,
@@ -83,6 +113,7 @@ export class TableRoom extends DurableObject<Env> {
     const client = pair[0];
     const server = pair[1];
     server.accept();
+    void this.keepAwake();
     const sock: HostSocket = {
       send: (data) => {
         try {
@@ -105,6 +136,18 @@ export class TableRoom extends DurableObject<Env> {
     server.addEventListener('close', () => slot.disconnect(sock));
     server.addEventListener('error', () => slot.disconnect(sock));
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** While the table has players or Agents, an alarm keeps waking the object (timers alone don't keep it resident). */
+  private async keepAwake(): Promise<void> {
+    if ((await this.ctx.storage.getAlarm()) == null) await this.ctx.storage.setAlarm(Date.now() + 30_000);
+  }
+
+  async alarm(): Promise<void> {
+    const slot = this.slot;
+    if (!slot?.busy) return; // a fresh object (evicted meanwhile) or an empty table: let it sleep
+    slot.touchAgents();
+    await this.ctx.storage.setAlarm(Date.now() + 30_000);
   }
 
   /** PokerDedicatedIdleQuit: close the table once it has idled empty; stop ticking so the object can be evicted. */

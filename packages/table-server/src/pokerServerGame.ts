@@ -78,6 +78,8 @@ export interface PokerServerGameOptions {
    * for the hand and every seated stack. Hosts record it (game server: house totals in D1, hand batches in R2).
    */
   onHandSettled?: (hand: SettledHand) => void;
+  /** Every engine event as the server processes it, before anything is filtered for players (hosts' recorders). */
+  onEngineEvent?: (e: EngineEvent) => void;
 }
 
 export interface SettledHand {
@@ -225,6 +227,16 @@ export class PokerServerGame implements IPokerTableServer {
 
   get isQuickPlay(): boolean {
     return this.autoStart;
+  }
+
+  /** Owned agents seated here or waiting for a hand boundary to sit. */
+  get agentCount(): number {
+    return this.agents.length + this.pendingAgents.length;
+  }
+
+  /** Is this deployment seated here, or about to be? */
+  hostsAgent(deploymentId: string): boolean {
+    return this.agents.some((a) => a.deploymentId === deploymentId && a.active) || this.pendingAgents.some((p) => p.deploymentId === deploymentId);
   }
 
   get pokerEngine(): PokerEngine {
@@ -1587,6 +1599,13 @@ export class PokerServerGame implements IPokerTableServer {
         continue;
       }
       for (const agent of this.agents) this.observeAgent(agent, e);
+      if (this.opts.onEngineEvent) {
+        try {
+          this.opts.onEngineEvent(e);
+        } catch (ex) {
+          this.log('warn', `[PokerServer] engine event observer failed: ${(ex as Error)?.message ?? ex}`);
+        }
+      }
       switch (e.type) {
         case 'HandStarted':
           this.handWinners.clear();

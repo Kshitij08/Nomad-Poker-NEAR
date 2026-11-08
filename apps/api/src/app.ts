@@ -4,6 +4,8 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import {
   ProgressRoutes,
   SocialRoutes,
+  StrategyRoutes,
+  TournamentRoutes,
   type ProfileUpdateRequest,
   Routes,
   walletSignInMessage,
@@ -39,6 +41,8 @@ import * as ledger from '@nomad/db/ledger';
 import * as progress from '@nomad/db/progress';
 import * as socialDb from '@nomad/db/social';
 import { isLeaderboardKind, leaderboard } from '@nomad/db/leaderboards';
+import * as tournaments from '@nomad/db/tournaments';
+import * as strategies from '@nomad/db/strategies';
 import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import { ApiError, base58Decode, fail, iso, randomId, readJson, requireString, sha256Hex, utf8 } from '@nomad/db/util';
 
@@ -288,6 +292,81 @@ export function createApp(): Hono<AppEnv> {
     if (!isLeaderboardKind(kind)) fail(404, 'not_found', 'No such leaderboard.');
     return c.json(await leaderboard(c.env.DB, c.get('player').id, kind, Number(c.req.query('page')) || 0));
   });
+
+  // ---- Tournaments (the game server runs them; the API hosts, registers and shows them) --------
+
+  const json = (c: Context<AppEnv>) => readJson<Record<string, unknown>>(c.req.raw);
+
+  const rules = (env: Env): tournaments.TournamentRules => ({
+    ...tournaments.DEFAULT_RULES,
+    minLeadMs: Number(env.TOURNAMENT_MIN_LEAD_SECONDS) > 0 ? Number(env.TOURNAMENT_MIN_LEAD_SECONDS) * 1000 : tournaments.DEFAULT_RULES.minLeadMs,
+  });
+  app.get(TournamentRoutes.list, async (c) =>
+    c.json(await tournaments.listTournaments(c.env.DB, c.req.query('filter') ?? 'upcoming', Number(c.req.query('limit')) || 50)),
+  );
+  app.get(TournamentRoutes.mine, requirePlayer, async (c) => c.json(await tournaments.myTournaments(c.env.DB, c.get('player').id)));
+  app.get(`${TournamentRoutes.byCode}/:code`, async (c) =>
+    c.json(await tournaments.tournamentByCode(c.env.DB, c.req.param('code'), (await optionalPlayer(c))?.id ?? null)),
+  );
+  app.get(`${TournamentRoutes.one}/:id`, async (c) =>
+    c.json(await tournaments.tournamentView(c.env.DB, c.req.param('id'), (await optionalPlayer(c))?.id ?? null)),
+  );
+  app.post(TournamentRoutes.list, requirePlayer, async (c) =>
+    c.json(await tournaments.createTournament(c.env.DB, c.get('player').id, await json(c), rules(c.env))),
+  );
+  app.post(`${TournamentRoutes.one}/:id/:action`, requirePlayer, async (c) => {
+    const db = c.env.DB;
+    const me = c.get('player');
+    const id = c.req.param('id');
+    const b = await json(c);
+    switch (c.req.param('action')) {
+      case 'register':
+        return c.json(await tournaments.register(db, me, id));
+      case 'unregister':
+        return c.json(await tournaments.unregister(db, me.id, id));
+      case 'edit':
+        return c.json(await tournaments.editTournament(db, me.id, id, b, rules(c.env)));
+      case 'raise-prize':
+        return c.json(await tournaments.raisePrize(db, me.id, id, b.amount));
+      case 'cancel':
+        return c.json(await tournaments.cancelTournament(db, me.id, id));
+      case 'remove':
+        return c.json(await tournaments.removePlayer(db, me.id, id, String(b.playFabId ?? b.friendId ?? '')));
+      default:
+        return fail(404, 'not_found', 'No such route.');
+    }
+  });
+
+  // ---- Strategies market, My Twin, coach -------------------------------------------------------
+
+  const listing = (env: Env): strategies.ListingRules => {
+    const r = { ...strategies.DEFAULT_LISTING };
+    if (Number(env.LISTING_MIN_HANDS) > 0) r.minHands = Number(env.LISTING_MIN_HANDS);
+    if (env.LISTING_MIN_DAYS && Number(env.LISTING_MIN_DAYS) >= 0) r.minDays = Number(env.LISTING_MIN_DAYS);
+    return r;
+  };
+  app.get(StrategyRoutes.strategies, async (c) =>
+    c.json({
+      strategies: await strategies.listStrategies(
+        c.env.DB,
+        { sort: c.req.query('sort') ?? 'top', limit: Number(c.req.query('limit')) || 30, style: c.req.query('style') || null },
+        listing(c.env),
+      ),
+    }),
+  );
+  app.get(StrategyRoutes.mine, requirePlayer, async (c) => c.json(await strategies.creatorDashboard(c.env.DB, c.get('player').id, listing(c.env))));
+  app.get(`${StrategyRoutes.one}/:id`, async (c) => c.json(await strategies.getStrategy(c.env.DB, c.req.param('id'), listing(c.env))));
+  app.post(StrategyRoutes.strategies, requirePlayer, async (c) =>
+    c.json(await strategies.publishStrategy(c.env.DB, c.get('player'), await json(c), listing(c.env))),
+  );
+  app.post(`${StrategyRoutes.one}/:id/unlist`, requirePlayer, async (c) => {
+    await strategies.unlistStrategy(c.env.DB, c.get('player').id, c.req.param('id'));
+    return c.json({ ok: true });
+  });
+  app.get(StrategyRoutes.twin, requirePlayer, async (c) => c.json(await strategies.twin(c.env.DB, c.get('player').id)));
+  app.get(StrategyRoutes.coach, requirePlayer, async (c) =>
+    c.json(await strategies.coachReport(c.env.DB, c.get('player').id, { apiKey: c.env.ANTHROPIC_API_KEY, model: c.env.COACH_MODEL })),
+  );
 
   return app;
 }

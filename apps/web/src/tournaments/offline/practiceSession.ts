@@ -6,8 +6,8 @@ import type { TableSessionFactory } from '../../table/tableScreen';
 import { RewardGrant } from '../../app/services';
 import { tournamentClientState } from '../clientState';
 import { TournamentTableClient } from '../client/tournamentTableClient';
-import { TournamentServerGame } from '../runtime/tournamentServerGame';
-import type { PlayerRef, RuntimeTiming, TournamentPacing, TournamentTransport } from '../runtime/wire';
+import { TournamentServerGame } from '@nomad/table-server/tournament/tournamentServerGame';
+import type { PlayerRef, RuntimeTiming, TournamentPacing, TournamentTransport } from '@nomad/table-server/tournament/wire';
 
 /** The practice presets of Tools > Poker > Tournament (TournamentPracticeMenu): one table, two tables, four tables. */
 export const PRACTICE_FIELDS = [5, 8, 16] as const;

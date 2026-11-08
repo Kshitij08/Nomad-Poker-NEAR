@@ -23,8 +23,10 @@ Debug URL flags:
 - `?practice=8`: jump into an offline practice tournament. `?agents=1`: open the Agents screens.
 - With an API configured (`?api=staging`, `?netServer=staging` or a `VITE_API_URL` build) the server owns the economy:
   the app signs in (a guest at first), the wallet shows the server's balances and refuses local grants, and the daily
-  spin, login track and missions are server decisions (`src/account/progress.ts`, `src/retention/backend.ts`). Coins
-  Agents' bankroll and tournament XP still need the local economy until they move (Phases 4–5).
+  spin, login track and missions are server decisions (`src/account/progress.ts`, `src/retention/backend.ts`). With the
+  Cloudflare game server too (`?netServer=staging`, or both `VITE_` URLs), Coins Agents play at its tables
+  (`/v1/agents/*`), tournaments are live on the API and run in the game server's rooms, and the market, My Twin and the
+  coach answer from the API (`backendApi` in `src/account/install.ts`).
 - `?api=staging&account=1`: open the Nomad account panel against the staging API (guest, wallet, email-link sign-in; ledger balance). `?api=local` uses `npm run dev` in `apps/api`.
 - `?netServer=staging`: multiplayer on the staging game server (Cloudflare) with chips on the Nomad ledger; signs in to the staging API as a guest if needed.
 - `?net=create&netPlayer=Alice` / `?net=<CODE>&netPlayer=Bob`: two-tab multiplayer against the local server.

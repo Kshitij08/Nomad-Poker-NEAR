@@ -1,6 +1,7 @@
+import type { AgentRow } from '@nomad/db/agents';
 import type { RoomSpec } from '@nomad/table-server/rooms';
 import { isQaRoom, roomSpecFor } from './roomSpec';
-import type { HostSocket, LogFn, TableHost } from './tableHost';
+import type { HostSocket, LogFn, RoomHost } from './roomHost';
 
 export interface TableSlotDeps {
   /** The session (room) name this slot serves: its Durable Object name. */
@@ -10,7 +11,8 @@ export interface TableSlotDeps {
   qaRooms: boolean;
   /** Time scale for qa rooms. */
   qaSpeed: number;
-  createHost(spec: RoomSpec, speed: number): TableHost;
+  /** Builds what the room hosts: a cash table, or a tournament (which looks its record up first, hence async). */
+  createHost(spec: RoomSpec, speed: number): RoomHost | Promise<RoomHost>;
   log: LogFn;
 }
 
@@ -20,9 +22,9 @@ export interface TableSlotDeps {
  * the Node tests run the same code behind a stand-in Worker.
  */
 export class TableSlot {
-  private host: TableHost | null = null;
-  private opening: Promise<TableHost | { reason: string; message: string }> | null = null;
-  private readonly attached = new Map<HostSocket, TableHost>();
+  private host: RoomHost | null = null;
+  private opening: Promise<RoomHost | { reason: string; message: string }> | null = null;
+  private readonly attached = new Map<HostSocket, RoomHost>();
 
   constructor(private readonly deps: TableSlotDeps) {}
 
@@ -30,7 +32,7 @@ export class TableSlot {
     return this.deps.session;
   }
 
-  get live(): TableHost | null {
+  get live(): RoomHost | null {
     return this.host && !this.host.isClosed ? this.host : null;
   }
 
@@ -41,6 +43,37 @@ export class TableSlot {
 
   holds(playerId: string, tableId: string): boolean {
     return this.live?.holds(playerId, tableId) ?? false;
+  }
+
+  /** Seats a queued Agent here, opening the table if it isn't running (an Agent keeps a Quick Play table alive). */
+  async seatAgent(row: AgentRow): Promise<{ seated: boolean; reason?: string }> {
+    const opened = await this.open();
+    if ('reason' in opened) return { seated: false, reason: opened.message };
+    return { seated: await opened.seatAgent(row) };
+  }
+
+  stopAgent(deploymentId: string): boolean {
+    return this.live?.agents?.stop(deploymentId) ?? false;
+  }
+
+  holdsAgent(deploymentId: string): boolean {
+    return this.live?.agents?.holds(deploymentId) ?? false;
+  }
+
+  /** Something here needs the object kept awake (players connected, or Agents playing). */
+  get busy(): boolean {
+    return this.live?.keepAwake ?? false;
+  }
+
+  /** Opens the room without a socket (the cron opening a tournament room before its start). */
+  async ensureOpen(): Promise<{ ok: boolean; message?: string }> {
+    const opened = await this.open();
+    return 'reason' in opened ? { ok: false, message: opened.message } : { ok: true };
+  }
+
+  /** Keeps Agent rows fresh while the table runs (the stale-Agent sweep leaves them alone). */
+  touchAgents(): void {
+    this.live?.agents?.touch();
   }
 
   /** A text frame from a socket. Before the table exists only `ping` and `join` mean anything. */
@@ -85,7 +118,7 @@ export class TableSlot {
     this.host = null;
   }
 
-  private open(): Promise<TableHost | { reason: string; message: string }> {
+  private open(): Promise<RoomHost | { reason: string; message: string }> {
     const live = this.live;
     if (live) return Promise.resolve(live);
     this.opening ??= (async () => {
@@ -93,8 +126,12 @@ export class TableSlot {
         const spec = roomSpecFor(this.deps.session, { spawned: await this.deps.isSpawned(), qaRooms: this.deps.qaRooms });
         if (!spec.ok) return { reason: spec.reason, message: spec.message };
         const speed = isQaRoom(this.deps.session) ? Math.max(1, this.deps.qaSpeed) : 1;
-        this.host = this.deps.createHost(spec.spec, speed);
-        this.deps.log('info', `opened (${spec.spec.kind}${speed > 1 ? `, ${speed}x` : ''}), table ${this.host.game.tableId}`);
+        try {
+          this.host = await this.deps.createHost(spec.spec, speed);
+        } catch (e) {
+          return { reason: 'GameNotFound', message: (e as Error).message };
+        }
+        this.deps.log('info', `opened (${spec.spec.kind}${speed > 1 ? `, ${speed}x` : ''}), ${this.host.label}`);
         return this.host;
       } finally {
         this.opening = null;

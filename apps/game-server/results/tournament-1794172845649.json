@@ -1,0 +1,130 @@
+{
+  "stage": "staging",
+  "at": "2026-11-08T21:20:45.648Z",
+  "tournament": "af3c6012-c0b9-4bef-ac60-8c73e3b2a712",
+  "session": "",
+  "status": "finished",
+  "pool": 6000,
+  "results": [
+    {
+      "name": "TrnP4",
+      "place": 1,
+      "prize": 3600,
+      "status": "finished",
+      "balance": 13100,
+      "entries": [
+        {
+          "reason": "tournament:prize",
+          "delta": 3600
+        },
+        {
+          "reason": "tournament:entry",
+          "delta": -500
+        }
+      ]
+    },
+    {
+      "name": "TrnP3",
+      "place": 2,
+      "prize": 2400,
+      "status": "finished",
+      "balance": 11900,
+      "entries": [
+        {
+          "reason": "tournament:prize",
+          "delta": 2400
+        },
+        {
+          "reason": "tournament:entry",
+          "delta": -500
+        }
+      ]
+    },
+    {
+      "name": "TrnP8",
+      "place": 3,
+      "prize": 0,
+      "status": "finished",
+      "balance": 9500,
+      "entries": [
+        {
+          "reason": "tournament:entry",
+          "delta": -500
+        }
+      ]
+    },
+    {
+      "name": "TrnP7",
+      "place": 4,
+      "prize": 0,
+      "status": "finished",
+      "balance": 9500,
+      "entries": [
+        {
+          "reason": "tournament:entry",
+          "delta": -500
+        }
+      ]
+    },
+    {
+      "name": "TrnP5",
+      "place": 5,
+      "prize": 0,
+      "status": "finished",
+      "balance": 9500,
+      "entries": [
+        {
+          "reason": "tournament:entry",
+          "delta": -500
+        }
+      ]
+    },
+    {
+      "name": "TrnP1",
+      "place": 6,
+      "prize": 0,
+      "status": "finished",
+      "balance": 9500,
+      "entries": [
+        {
+          "reason": "tournament:entry",
+          "delta": -500
+        }
+      ]
+    },
+    {
+      "name": "TrnP6",
+      "place": 7,
+      "prize": 0,
+      "status": "finished",
+      "balance": 9500,
+      "entries": [
+        {
+          "reason": "tournament:entry",
+          "delta": -500
+        }
+      ]
+    },
+    {
+      "name": "TrnP2",
+      "place": 8,
+      "prize": 0,
+      "status": "finished",
+      "balance": 9500,
+      "entries": [
+        {
+          "reason": "tournament:entry",
+          "delta": -500
+        }
+      ]
+    }
+  ],
+  "host": [
+    {
+      "reason": "tournament:host_prize",
+      "delta": -2000
+    }
+  ],
+  "ledgerNet": 0,
+  "pass": true
+}
