@@ -72,7 +72,13 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     features off (store rules: virtual coins only). Deep links (`nomadpoker://join/CODE`, `https://…/?net=CODE`,
     `…/t/CODE`) join a party or open the tournament; a tournament link never registers by itself (that spends the
     entry fee). Android's back button closes the top screen. The status bar draws over the game (the layout already
-    pads for notches).
+    pads for notches). Capacitor packages pinned to releases at least two weeks old. The Android project is in the
+    repo; CI builds a debug APK of the store build (staging servers) on every web change.
+13. **Tables nobody watches play faster.** With no socket connected (not even a spectator), a table skips the
+    animation pauses, plays bots' turns 3× faster and waits 1 s between hands. Agent sessions were paced for an
+    audience they don't have: on staging 8 hands took 6½ minutes before and 53 seconds after (the Agent check still
+    passes, paid back exactly). The first connection restores the normal pace from the next
+    turn. Tables with people at them are unchanged.
 
 ## Questions for you
 
@@ -103,6 +109,8 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
 7. **App identity for the stores.** The Unity project's app ids and icon are template placeholders
    (`com.moremountains.topdownengine`, TopDownEngine's icon). What bundle id do you want (I used `com.nomadpoker.app`
    provisionally; it can't change after the first store upload), and is there a real app icon / splash art?
-8. **Android build tools.** Capacitor 8 needs JDK 21; this machine only has Unity's JDK 17. May I install a JDK 21
-   (Temurin) so I can build the Android debug APK here? (Building iOS needs a Mac in any case.)
+8. **Android builds (mostly answered).** Capacitor 8 needs JDK 21 and this machine only has Unity's JDK 17, so the
+   debug APK is built in CI instead (`.github/workflows/android.yml`, first run green, the APK is a workflow artifact).
+   Still open: may I install JDK 21 locally for quicker device testing? Release builds and Play uploads need a signing
+   key and Play credentials as repository secrets; iOS needs a Mac (or a macOS CI runner) and an Apple developer account.
 9. **Native Google sign-in** needs OAuth client ids (Android SHA-1 + iOS) from your Google Cloud project.

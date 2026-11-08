@@ -927,7 +927,7 @@ export class PokerServerGame implements IPokerTableServer {
     const buyIn = stack >= 0 ? stack : this.rollFillerBuyIn();
     this.engine.seatPlayer(seat, `bot${seat}`, name, true, buyIn);
     const botSeed = this.settings.useFixedSeed ? this.settings.seed + seat * 101 : null;
-    this.router.set(seat, new BotActionProvider(new HeuristicBot(botSeed), this.settings.botThinkMin, this.settings.botThinkMax, this.clock.wait, this.random));
+    this.router.set(seat, new BotActionProvider(new HeuristicBot(botSeed), this.settings.botThinkMin, this.settings.botThinkMax, this.botWait, this.random));
   }
 
   private rollFillerBuyIn(): number {
@@ -1280,7 +1280,7 @@ export class PokerServerGame implements IPokerTableServer {
     const name = c.agentName || 'Agent';
     const stack = c.bankroll > 0 ? c.bankroll : this.settings.startingStack;
     this.engine.seatPlayer(seat, `agent-${c.deploymentId}`, name, true, stack, true);
-    this.router.set(seat, new BotActionProvider(bot, this.settings.botThinkMin, this.settings.botThinkMax, this.clock.wait, this.random));
+    this.router.set(seat, new BotActionProvider(bot, this.settings.botThinkMin, this.settings.botThinkMax, this.botWait, this.random));
     agent.seat = seat;
     agent.lastStack = stack;
     this.agents.push(agent);
@@ -1446,7 +1446,7 @@ export class PokerServerGame implements IPokerTableServer {
       await this.settleRender();
       this.broadcastRoster();
       this.broadcastLobby();
-      await this.clock.wait(this.settings.betweenHands);
+      await this.clock.wait(this.unwatched ? Math.min(1, this.settings.betweenHands) : this.settings.betweenHands);
     }
 
     this.closeSettle();
@@ -1690,11 +1690,23 @@ export class PokerServerGame implements IPokerTableServer {
     }
   }
 
-  /** Holds the table until the clients have finished animating what was last replicated. */
+  /** Holds the table until the clients have finished animating what was last replicated (no one to animate for: no wait). */
   private async settleRender(): Promise<void> {
-    if (this.renderBudget > 0) await this.clock.wait(this.renderBudget);
+    if (this.renderBudget > 0 && !this.unwatched) await this.clock.wait(this.renderBudget);
     this.renderBudget = 0;
   }
+
+  /**
+   * Nobody is connected (not even a spectator): only Agents and filler bots are playing. The table then skips the
+   * animation pauses and plays bots' turns faster, so an Agent session isn't paced for an audience it doesn't have
+   * (about 7 s a hand instead of about 45). The first connection brings the normal pace back from the next turn.
+   */
+  private get unwatched(): boolean {
+    return !!this.net && this.net.activePlayers().length === 0;
+  }
+
+  /** Bot think time: as configured, or a third of it while nobody watches. */
+  private readonly botWait = (seconds: number, signal?: AbortSignal): Promise<void> => this.clock.wait(this.unwatched ? seconds / 3 : seconds, signal);
 
   private async onActionRequested(e: ActionRequestedEvent): Promise<void> {
     // Betting opens — and the turn clock starts — only once the cards have landed on the clients.
