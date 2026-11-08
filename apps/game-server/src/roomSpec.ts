@@ -1,12 +1,14 @@
 import type { RoomSpec } from '@nomad/table-server/rooms';
 import { ChainTableMode, PartyCodes, StakeSessionNames } from '@nomad/table-server/sessions';
+import { StakeCatalog } from '@nomad/engine/stakes/stakes';
 import type { JoinFailReason } from '@nomad/table-server/protocol';
 
 /**
  * Which room a session name means, for the game server. One Durable Object per session name:
  * - Quick Play pools and their overflow tables (`poker-free`, `poker-free-st50-2`) open on first join;
  * - party rooms (8-character codes) must be spawned first, as PokerDedicatedPartySpawner did;
- * - `qa-…` rooms exist only where QA rooms are switched on (staging): Quick Play tables for test harnesses;
+ * - `qa-…` rooms exist only where QA rooms are switched on (staging): Quick Play tables for test harnesses, at the
+ *   default stake or at the one a `-st<stake>` suffix names (`qa-soak-1-st100`);
  * - money pools stay off until on-chain tables move over (Phase 6).
  * Every room here is a "child": it closes after idling empty, and the next join opens it again.
  */
@@ -52,7 +54,14 @@ export function roomSpecFor(session: string, opts: RoomSpecOptions): RoomSpecRes
   }
   if (isQaRoom(session)) {
     if (!opts.qaRooms) return { ok: false, reason: 'GameNotFound', message: `Room '${session}' was not found.` };
-    return { ok: true, spec: quick(StakeSessionNames.parseMinBuyIn(StakeSessionNames.FreeRoot)) };
+    return { ok: true, spec: quick(qaStake(session)) };
   }
   return { ok: false, reason: 'InvalidArguments', message: 'Bad session name.' };
+}
+
+/** A QA room's stake: its `-st<stake>` suffix when that is a known tier, else the default. */
+export function qaStake(session: string): number {
+  const m = /-st(\d+)$/.exec(session);
+  const n = m ? Number(m[1]) : NaN;
+  return StakeCatalog.isKnown(n) ? n : StakeCatalog.DefaultMinBuyIn;
 }

@@ -1,0 +1,52 @@
+{
+  "room": "qa-soak-mw85a5il",
+  "stage": "staging",
+  "target": 1000,
+  "minutes": 28.6,
+  "pass": true,
+  "totals": {
+    "hands": 1001,
+    "buyIns": 25000,
+    "cashOuts": 2625,
+    "botNet": 22375,
+    "drift": 0,
+    "seated": 0
+  },
+  "humansNet": -22375,
+  "players": [
+    {
+      "name": "SoakA",
+      "playerId": "p_UGLMGjjdUco-jkIF",
+      "hands": 1001,
+      "rejoins": 4,
+      "balance": 18125,
+      "ledgerSum": 18125,
+      "tableNet": -11875,
+      "entries": 8,
+      "balanceMatchesEntries": true
+    },
+    {
+      "name": "SoakB",
+      "playerId": "p_dZDzI8D5CnDeEqzf",
+      "hands": 1003,
+      "rejoins": 4,
+      "balance": 19500,
+      "ledgerSum": 19500,
+      "tableNet": -10500,
+      "entries": 8,
+      "balanceMatchesEntries": true
+    }
+  ],
+  "tables": [
+    {
+      "tableId": "t-3ee8b393d0304f1ca090",
+      "hands": 1001,
+      "buyIns": 25000,
+      "cashOuts": 2625,
+      "botNet": 22375,
+      "seatedStacks": 0,
+      "seatedPlayers": 0,
+      "drift": 0
+    }
+  ]
+}

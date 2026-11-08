@@ -18,9 +18,10 @@ const stage = process.argv[3] ?? 'staging';
 const API = { staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev' }[stage]!;
 const GAME = { staging: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev' }[stage]!;
 const SPEED = 20; // QA_ROOM_SPEED on staging
-const BUY_IN = 5000;
+const STAKE = 100; // Low: 2/5 blinds, so folding around costs ~1.4 a hand and a guest's 10,000 covers the run
+const BUY_IN = 500; // the Low tier's full stack
 const { DRAIN_TOKEN } = JSON.parse(readFileSync(new URL(`../.secrets.${stage}.json`, import.meta.url), 'utf8')) as { DRAIN_TOKEN: string };
-const room = `qa-soak-${Date.now().toString(36)}`;
+const room = `qa-soak-${Date.now().toString(36)}-st${STAKE}`;
 const t0 = Date.now();
 const log = (m: string) => console.log(`[${((Date.now() - t0) / 1000).toFixed(0).padStart(5)}s] ${m}`);
 
@@ -34,11 +35,9 @@ async function api<T>(method: string, path: string, token?: string, body?: unkno
   return res.json() as Promise<T>;
 }
 
-/** Check when free, call only tiny bets, fold the rest: bleeds about the blinds, so 1,000 hands fit one buy-in. */
+/** Check when free, else fold: costs only the blinds, with a rebuy whenever the stack runs out. */
 function steady(legal: LegalActions): PlayerAction {
-  if (legal.canCheck) return PlayerAction.check();
-  if (legal.canCall && legal.callAmount <= 10) return PlayerAction.call();
-  return PlayerAction.fold();
+  return legal.canCheck ? PlayerAction.check() : PlayerAction.fold();
 }
 
 interface Seat {
