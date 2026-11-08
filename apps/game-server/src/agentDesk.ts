@@ -98,7 +98,7 @@ export class AgentDesk implements AgentHooks {
       this.desks.delete(deploymentId);
       const row = desk.row;
       this.opts.queue(`agent ${deploymentId} stop`, async () => {
-        await completeAgent(this.opts.db, deploymentId, { stopReason: AgentStopReasons.OwnerStop, endingStack: row.bankroll, room: this.opts.room, handsPlayed: 0 });
+        await completeAgent(this.opts.db, deploymentId, { stopReason: AgentStopReasons.OwnerStop, endingStack: row.bankroll, room: this.opts.room, handsPlayed: 0, from: 'playing' });
       });
       return true;
     }

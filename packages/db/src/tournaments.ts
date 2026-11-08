@@ -361,17 +361,23 @@ export async function editTournament(db: D1Database, hostId: string, id: string,
     if (max < t.players) fail(409, 'conflict', `${t.players} players are already in.`);
     set('max_players', max);
   }
+  let feeChange = false;
   if (input?.entryFee !== undefined) {
     const fee = whole(input.entryFee, 0, MAX_ENTRY_FEE, 'Entry fee');
     if (fee !== t.entry_fee) {
-      const anyone = await db.prepare('SELECT 1 AS x FROM tournament_entries WHERE tournament_id = ?1 LIMIT 1').bind(id).first();
-      if (anyone) fail(409, 'conflict', "The entry fee can't change once someone has registered.");
+      const max = input?.maxPlayers !== undefined ? whole(input.maxPlayers, 2, 30, 'Max players') : t.max_players;
+      if (t.host_prize + fee * max > MAX_POOL) fail(400, 'bad_request', 'That prize pool is too big.');
       set('entry_fee', fee);
+      feeChange = true;
     }
   }
   if (sets.length) {
     set('updated_at', now);
-    await db.prepare(`UPDATE tournaments SET ${sets.join(', ')} WHERE id = ?1 AND status = 'registering'`).bind(id, ...args).run();
+    // A fee change applies only while nobody has registered, checked in the same statement: a registration racing the
+    // edit either lands first (and the edit is refused) or after (and pays the new fee). Security review, 9 Nov.
+    const nobodyIn = feeChange ? ' AND NOT EXISTS (SELECT 1 FROM tournament_entries WHERE tournament_id = ?1)' : '';
+    const r = await db.prepare(`UPDATE tournaments SET ${sets.join(', ')} WHERE id = ?1 AND status = 'registering'${nobodyIn}`).bind(id, ...args).run();
+    if (feeChange && !r.meta.changes) fail(409, 'conflict', "The entry fee can't change once someone has registered.");
   }
   return tournamentView(db, id, hostId, now);
 }
@@ -460,7 +466,7 @@ export async function register(db: D1Database, player: { id: string; display_nam
       .prepare(
         `INSERT INTO tournament_entries (tournament_id, player_id, display_name, status, attempt, paid_amount, created_at, updated_at)
          SELECT ?1, ?2, ?3, 'registered', ?4, ?5, ?6, ?6
-         WHERE EXISTS (SELECT 1 FROM tournaments t WHERE t.id = ?1 AND t.status = 'registering' AND t.starts_at > ?6
+         WHERE EXISTS (SELECT 1 FROM tournaments t WHERE t.id = ?1 AND t.status = 'registering' AND t.starts_at > ?6 AND t.entry_fee = ?5
            AND (SELECT count(*) FROM tournament_entries e WHERE e.tournament_id = ?1 AND e.status = 'registered') < t.max_players)
          ON CONFLICT (tournament_id, player_id) DO UPDATE SET status = 'registered', attempt = excluded.attempt, paid_amount = excluded.paid_amount,
            display_name = excluded.display_name, place = 0, round_reached = 0, prize = 0, updated_at = excluded.updated_at
@@ -486,7 +492,11 @@ export async function register(db: D1Database, player: { id: string; display_nam
     throw err;
   }
   const after = await entryOf(db, id, player.id);
-  if (after?.status !== 'registered') fail(409, 'conflict', 'This tournament is full.');
+  if (after?.status !== 'registered') {
+    const now2 = await db.prepare('SELECT entry_fee FROM tournaments WHERE id = ?1').bind(id).first<{ entry_fee: number }>();
+    if (now2 && now2.entry_fee !== fee) fail(409, 'conflict', 'The entry fee just changed. Check it and register again.');
+    fail(409, 'conflict', 'This tournament is full.');
+  }
   return tournamentView(db, id, player.id, now);
 }
 
@@ -588,12 +598,12 @@ export async function roster(db: D1Database, id: string, now = Date.now()): Prom
   if (!t) notFound();
   const entries = await db
     .prepare(
-      `SELECT p.friend_code, e.display_name FROM tournament_entries e JOIN players p ON p.id = e.player_id
+      `SELECT p.friend_code, e.display_name, e.paid_amount FROM tournament_entries e JOIN players p ON p.id = e.player_id
        WHERE e.tournament_id = ?1 AND e.status IN ('registered', 'playing', 'finished') ORDER BY e.created_at, p.id`,
     )
     .bind(id)
-    .all<{ friend_code: string; display_name: string }>();
-  const prizes = computePayout(t!.host_prize, t!.entry_fee, entries.results.length);
+    .all<{ friend_code: string; display_name: string; paid_amount: number }>();
+  const prizes = computePayout(t!.host_prize + entries.results.reduce((sum, e) => sum + e.paid_amount, 0), 0, 0);
   return {
     serverNowUnix: unix(now),
     tournamentId: t!.id,
@@ -677,7 +687,9 @@ export async function postResult(db: D1Database, id: string, body: { championId?
   const bad = validateStandings(standings, championId, [...byCode.keys()]);
   if (bad) return { status: 400, error: bad };
 
-  const payout = computePayout(t.host_prize, t.entry_fee, playing.results.filter((e) => e.paid_amount > 0).length);
+  // The pool is what was actually paid in (the host's prize and each entry's paid amount), never fee × players.
+  const paidIn = playing.results.reduce((sum, e) => sum + e.paid_amount, 0);
+  const payout = computePayout(t.host_prize + paidIn, 0, 0);
   const did = `EXISTS (SELECT 1 FROM tournaments WHERE id = ?8 AND status = 'finished' AND result_hash = ?9)`;
   const stmts: D1PreparedStatement[] = [
     db

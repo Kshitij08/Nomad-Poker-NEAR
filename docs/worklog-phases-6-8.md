@@ -85,6 +85,18 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     production steps, the beta gate and how to back out of each kind of problem.
 15. **iOS shell generated** (Swift Package Manager, `nomadpoker://` scheme). It needs a Mac to build; no microphone
     permission is declared, since table voice is off in the apps.
+16. **A security review found two coin-minting races; both are fixed.** I had a second agent review the new server code.
+    (1) Stopping a just-queued Agent at the moment a table seated it refunded the whole bankroll while the Agent kept
+    playing with it. (2) Raising a tournament's entry fee while players registered let them pay the old fee but count
+    at the new one in the prize pool (a host with alt accounts could mint millions). Both were reproduced in failing
+    tests first (the second minted 1,999,998 coins in the replay). Fixes: an Agent completion applies only from the
+    phase the caller saw, and every payment in it is conditional on the completion having happened; a fee change
+    applies only while nobody is registered (checked in the same statement), a registration only at the fee it read,
+    and prizes come from what was actually paid in. Smaller fixes from the same review: Agents only at real stake tiers
+    (a fake stake inflated a strategy's record), the market shows creators' Friend IDs (not internal ids), the
+    strategies list is cached for a minute, and support staff can't ban admins. Deployed; staging reconciles clean.
+    Not fixed yet: a ban doesn't close a player's open table socket or stop their running Agent (they end at the next
+    sign-in check).
 
 ## Questions for you
 
@@ -120,3 +132,5 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
    Still open: may I install JDK 21 locally for quicker device testing? Release builds and Play uploads need a signing
    key and Play credentials as repository secrets; iOS needs a Mac (or a macOS CI runner) and an Apple developer account.
 9. **Native Google sign-in** needs OAuth client ids (Android SHA-1 + iOS) from your Google Cloud project.
+10. **The production domain.** What domain will the web app and the APIs live on (e.g. `play.<domain>`)? It sets
+    the production allowed origins, the CSP, the deep-link app verification files and the launch step.

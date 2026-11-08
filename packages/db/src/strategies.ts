@@ -189,6 +189,7 @@ const BB_SQL = `(CASE d.stake WHEN 50 THEN 2 WHEN 100 THEN 5 WHEN 500 THEN 25 WH
 interface RecordRow {
   id: string;
   creator_id: string;
+  creator_code: string | null;
   creator_name: string;
   name: string;
   description: string;
@@ -209,7 +210,7 @@ interface RecordRow {
 async function records(db: D1Database, where: string, params: unknown[], rules: ListingRules, now: number): Promise<PublicStrategy[]> {
   const r = await db
     .prepare(
-      `SELECT s.*, count(DISTINCT d.owner_id) AS copiers, count(DISTINCT d.id) AS sessions, count(h.hand_number) AS hands,
+      `SELECT s.*, (SELECT friend_code FROM players WHERE id = s.creator_id) AS creator_code, count(DISTINCT d.owner_id) AS copiers, count(DISTINCT d.id) AS sessions, count(h.hand_number) AS hands,
          sum(h.net) AS net, sum(h.net * 1.0 / ${BB_SQL}) AS sum_bb, sum((h.net * 1.0 / ${BB_SQL}) * (h.net * 1.0 / ${BB_SQL})) AS sum_bb2
        FROM strategies s
        LEFT JOIN agent_deployments d ON d.strategy_id = s.id AND d.phase IN ('completed', 'failed')
@@ -262,7 +263,8 @@ function toPublic(r: RecordRow, now: number, house: number, rules: ListingRules)
   const vsHouse = bb100 - house;
   const b = behaviour(profile as never);
   return {
-    strategyId: r.id, name: r.name, description: r.description, version: r.version, creatorId: r.creator_id, creatorName: r.creator_name,
+    // The creator's public Friend ID, never the internal player id.
+    strategyId: r.id, name: r.name, description: r.description, version: r.version, creatorId: r.creator_code ?? '', creatorName: r.creator_name,
     source: r.source, listed: !!r.listed, profile, tags: tags(profile), behaviour: b, style: styleCell(b),
     record: {
       copiers: Number(r.copiers ?? 0), sessions: Number(r.sessions ?? 0), hands, net: Number(r.net ?? 0),
@@ -282,11 +284,30 @@ function toPublic(r: RecordRow, now: number, house: number, rules: ListingRules)
  * The marketplace lists: "top" (qualified, by score), "styles" (the best qualified per style cell), "new" (under 30 days
  * with 300+ hands, qualified or not), "popular" (qualified, by copiers). `style` keeps one cell ("Loose Aggressive"…).
  */
+const listCache = new Map<string, { at: number; value: PublicStrategy[] }>();
+/** How long one isolate reuses a computed list (the query joins every copied hand; the list is anonymous). */
+export const LIST_CACHE_MS = 60_000;
+
 export async function listStrategies(
   db: D1Database,
   q: { sort?: string; limit?: number; style?: string | null },
   rules: ListingRules = DEFAULT_LISTING,
   now = Date.now(),
+  cache = true,
+): Promise<PublicStrategy[]> {
+  const key = JSON.stringify([q.sort ?? 'top', q.limit ?? 30, q.style ?? null, rules]);
+  const hit = cache ? listCache.get(key) : undefined;
+  if (hit && now - hit.at < LIST_CACHE_MS) return hit.value;
+  const value = await listStrategiesUncached(db, q, rules, now);
+  if (cache) listCache.set(key, { at: now, value });
+  return value;
+}
+
+async function listStrategiesUncached(
+  db: D1Database,
+  q: { sort?: string; limit?: number; style?: string | null },
+  rules: ListingRules,
+  now: number,
 ): Promise<PublicStrategy[]> {
   let all = await records(db, 's.listed = 1', [], rules, now);
   if (q.style) all = all.filter((x) => x.style === q.style);
@@ -408,7 +429,8 @@ export function agentStrategyOf(p: Profile): AgentStrategy {
 export async function strategyForAgent(db: D1Database, id: string, ownerId: string, rules: ListingRules = DEFAULT_LISTING, now = Date.now()): Promise<AgentStrategy> {
   const s = (await records(db, 's.id = ?1', [id], rules, now))[0];
   if (!s) fail(404, 'not_found', "That strategy doesn't exist.");
-  if (s.creatorId !== ownerId && (!s.listed || !s.qualified)) {
+  const creator = await db.prepare('SELECT creator_id FROM strategies WHERE id = ?1').bind(id).first<{ creator_id: string }>();
+  if (creator?.creator_id !== ownerId && (!s.listed || !s.qualified)) {
     fail(403, 'forbidden', `That strategy can't be copied yet: it needs ${rules.minHands.toLocaleString('en-US')} hands over ${rules.minDays} days and a result that beats Autopilot.`);
   }
   return agentStrategyOf(s.profile);

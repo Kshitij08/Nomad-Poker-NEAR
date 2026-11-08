@@ -53,10 +53,12 @@ export async function agentRoute(request: Request, env: Env, url: URL, json: Jso
     }
     if (route === 'stop' && request.method === 'POST') {
       const body = (await request.json().catch(() => ({}))) as { session?: string };
-      const row = await ownedAgent(env.DB, String(body.session ?? ''), owner);
+      let row = await ownedAgent(env.DB, String(body.session ?? ''), owner);
       if (row.phase === 'queued') {
-        await completeAgent(env.DB, row.id, { stopReason: AgentStopReasons.OwnerStop, endingStack: row.bankroll, handsPlayed: 0 });
-      } else if (row.phase === 'playing') {
+        // Completes only if it is still queued; a table that seated it meanwhile keeps it, and we stop it there instead.
+        row = (await completeAgent(env.DB, row.id, { stopReason: AgentStopReasons.OwnerStop, endingStack: row.bankroll, handsPlayed: 0, from: 'queued' })) ?? row;
+      }
+      if (row.phase === 'playing') {
         await requestAgentStop(env.DB, row.id);
         if (row.room) await table(env, row.room).fetch(`https://table/agents/stop?session=${encodeURIComponent(row.room)}&id=${encodeURIComponent(row.id)}`, { method: 'POST' });
       }
@@ -120,7 +122,7 @@ export async function sweepAgents(env: Env, now = Date.now()): Promise<{ placed:
       }
     }
     if (holds) continue;
-    await completeAgent(env.DB, row.id, { stopReason: 'server_lost', endingStack: row.stack, phase: 'failed' }, now);
+    await completeAgent(env.DB, row.id, { stopReason: 'server_lost', endingStack: row.stack, phase: 'failed', from: 'playing', room: row.room }, now);
     console.warn(`[agents] ${row.id} lost with ${row.room}; paid back its checkpoint ${row.stack}.`);
     recovered++;
   }

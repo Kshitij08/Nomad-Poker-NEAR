@@ -116,6 +116,8 @@ export async function setBan(db: D1Database, admin: AdminRow, playerId: string, 
   if (playerId === admin.player_id) fail(400, 'bad_request', "You can't ban yourself.");
   const target = await db.prepare('SELECT id FROM players WHERE id = ?1').bind(playerId).first();
   if (!target) fail(404, 'not_found', 'No such player.');
+  const targetRole = await adminRole(db, playerId);
+  if (targetRole === 'admin' && admin.role !== 'admin') fail(403, 'forbidden', 'Only an admin can ban an admin.');
   const stmts = [
     banned
       ? db.prepare('UPDATE players SET banned_at = ?2, ban_reason = ?3 WHERE id = ?1').bind(playerId, now, why)

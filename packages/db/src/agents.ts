@@ -3,8 +3,9 @@ import {
   type AgentDeploymentProgress, type AgentDeploymentSummary, type AgentHandHistory, type AgentHandRecord, type AgentSessionHistory,
   type CopyFeeInfo, type StreetProfileSnapshot,
 } from '@nomad/engine/agents';
-import { balances, isInsufficientFunds, postingStatement } from './ledger';
+import { balances, conditionalPostingStatement, isInsufficientFunds, postingStatement } from './ledger';
 import { settleCopy } from './style/fees';
+import { StakeCatalog } from '@nomad/engine/stakes/stakes';
 import { fail } from './util';
 
 /**
@@ -138,7 +139,9 @@ export async function startAgent(
   const now = opts.now ?? Date.now();
   const id = String(input.session ?? '');
   if (!AGENT_SESSION.test(id)) fail(400, 'bad_request', 'Invalid agent session code.');
-  const stake = Math.max(50, Math.trunc(num(input.stake)) || 1000);
+  const stake = Math.trunc(num(input.stake)) || StakeCatalog.DefaultMinBuyIn;
+  // Only real stake tiers: the strategies market scores hands in big blinds from the stake (security review, 9 Nov).
+  if (!StakeCatalog.isKnown(stake)) fail(400, 'bad_request', 'Unknown stake.');
   const bankroll = Math.trunc(num(input.bankroll)) || 5000;
   if (bankroll < stake || bankroll > MAX_AGENT_BANKROLL) fail(400, 'bad_request', `The bankroll must be between ${stake} and ${MAX_AGENT_BANKROLL}.`);
   const strategy: AgentStrategy = opts.strategy ?? {
@@ -251,6 +254,11 @@ export interface AgentCompletion {
   showdowns?: number;
   /** Fence: only the room that seated it may complete a playing Agent (null: a queued Agent, or the stale-row sweep). */
   room?: string | null;
+  /**
+   * The phase the caller saw (default: the phase read here). The completion applies only if the row is still in it, so
+   * a queued Agent stopped by its owner can't be paid back after a table has seated it meanwhile (security review).
+   */
+  from?: 'queued' | 'playing';
 }
 
 /**
@@ -263,6 +271,8 @@ export async function completeAgent(db: D1Database, id: string, c: AgentCompleti
   if (!row) return null;
   if (row.phase === 'completed' || row.phase === 'failed') return row;
   if (c.room && row.room && row.room !== c.room) return row;
+  const from = c.from ?? row.phase;
+  if (row.phase !== from) return row;
   const phase = c.phase ?? 'completed';
   const ending = Math.max(0, Math.trunc(c.endingStack));
 
@@ -286,17 +296,20 @@ export async function completeAgent(db: D1Database, id: string, c: AgentCompleti
   const fees = fee ? fee.creatorFee + fee.platformFee : 0;
   const returned = Math.max(0, ending - fees);
 
+  // Every statement after the UPDATE is conditional on it having happened: no coins move for a completion that lost a
+  // race (the phase changed under it, another completion won, another room holds it).
   const done = `EXISTS (SELECT 1 FROM agent_deployments WHERE id = ?1 AND phase = '${phase}' AND completed_at = ?2)`;
+  const did = `EXISTS (SELECT 1 FROM agent_deployments WHERE id = ?8 AND phase = '${phase}' AND completed_at = ?9 AND returned = ?10)`;
   const stmts: D1PreparedStatement[] = [
     db
       .prepare(
         `UPDATE agent_deployments SET phase = ?2, stop_reason = ?3, stack = ?4, net_pnl = ?4 - bankroll, returned = ?5, copy_fee = ?6,
            hands_played = COALESCE(?7, hands_played), runtime_seconds = COALESCE(?8, runtime_seconds), wins = COALESCE(?9, wins),
            losses = COALESCE(?10, losses), showdowns = COALESCE(?11, showdowns), stop_requested = 0, completed_at = ?12, updated_at = ?12
-         WHERE id = ?1 AND phase IN ${ACTIVE}`,
+         WHERE id = ?1 AND phase = ?13 AND (?14 IS NULL OR room = ?14)`,
       )
       .bind(id, phase, c.stopReason, ending, returned, fee ? JSON.stringify(fee) : null, c.handsPlayed ?? null, c.runtimeSeconds ?? null,
-        c.wins ?? null, c.losses ?? null, c.showdowns ?? null, now),
+        c.wins ?? null, c.losses ?? null, c.showdowns ?? null, now, from, c.room ?? null),
   ];
   if (fee && creatorId && position) {
     stmts.push(
@@ -316,11 +329,27 @@ export async function completeAgent(db: D1Database, id: string, c: AgentCompleti
         .bind(id, now, row.strategy_id, row.owner_id, creatorId, fee.sessionPnl, fee.feeBase, fee.creatorFee, fee.platformFee),
     );
     if (fee.creatorFee > 0) {
-      stmts.push(postingStatement(db, { playerId: creatorId, currency: 'coins', delta: fee.creatorFee, reason: 'strategy:copy_fee', ref: id, idempotencyKey: `copyfee:${id}` }, now));
+      stmts.push(
+        conditionalPostingStatement(
+          db,
+          { playerId: creatorId, currency: 'coins', delta: fee.creatorFee, reason: 'strategy:copy_fee', ref: id, idempotencyKey: `copyfee:${id}` },
+          did,
+          [id, now, returned],
+          now,
+        ),
+      );
     }
   }
   if (returned > 0) {
-    stmts.push(postingStatement(db, { playerId: row.owner_id, currency: 'coins', delta: returned, reason: 'agent:return', ref: id, idempotencyKey: `agent:${id}:return` }, now));
+    stmts.push(
+      conditionalPostingStatement(
+        db,
+        { playerId: row.owner_id, currency: 'coins', delta: returned, reason: 'agent:return', ref: id, idempotencyKey: `agent:${id}:return` },
+        did,
+        [id, now, returned],
+        now,
+      ),
+    );
   }
   await db.batch(stmts);
   return agentRow(db, id);
