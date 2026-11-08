@@ -2,7 +2,7 @@
 export interface Env {
   /** Players, identities, sessions, challenges, ledger (migrations/). */
   DB: D1Database;
-  /** Hand histories (written from Phase 3). */
+  /** Hand histories (written from Phase 2). */
   HANDS: R2Bucket;
   /** Per-IP limit on sign-in routes. Optional so local tests can leave it out. */
   AUTH_LIMITER?: RateLimit;

@@ -1,7 +1,7 @@
 /**
  * 'nomad-account' (overlay): sign in to the Nomad API and see the ledger balance. Guest, wallet and email link work
  * today; Google needs an OAuth client id first. The game's table coins still come from the local wallet until tables
- * run on the server (Phase 3): this panel shows the server ledger, which is what they will move to.
+ * run on the server (Phase 2): this panel shows the server ledger, which is what they will move to.
  */
 import type { LedgerEntry } from '@nomad/contract';
 import type { AppContext, Screen } from '../app/app';

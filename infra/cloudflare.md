@@ -12,7 +12,7 @@ Worker is described by `apps/api/cloudflare.config.ts` (no Wrangler config). Pri
 
 `cf dev` (mode `development`, namespace `7101`) uses local D1/R2 simulations, not the resources above.
 
-Not created yet: the table Durable Object class (Phase 3) and a production deploy. The web app stays on Vercel
+Not created yet: the table Durable Object class (Phase 2) and a production deploy. The web app stays on Vercel
 (`nomad-poker-web`) until a Cloudflare Pages move is decided.
 
 Secrets: none yet. Google sign-in will need `GOOGLE_CLIENT_IDS` (a public value, set in the config), and email links
