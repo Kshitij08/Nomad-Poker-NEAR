@@ -2,113 +2,101 @@
  * Installs the economy, accounts and social module (Assets/Scripts/Economy, Game/Economy, Social, Core/Social,
  * Core/Leaderboards, Game/Leaderboards, Analytics).
  *
- * Services (see services.ts): wallet, account (replaces the base LocalAccount), progress, leaderboards, friends,
- * avatars, telemetry, economy. Nomad partials (nomad/social.ts): Friends, PartyMenu, Leaderboard. Screens: 'friends' (FriendsHud's sheet + avatar picker, overlay) and 'login-playfab'
- * (PlayFabLoginUI's panel, overlay). The friends invite toast is a persistent layer above the screens.
+ * Services (see services.ts): wallet, account (replaces the base LocalAccount), leaderboards, friends, avatars,
+ * telemetry, economy. Nomad partials (nomad/social.ts): Friends, PartyMenu, Leaderboard. Screen: 'friends' (FriendsHud's
+ * sheet + avatar picker, overlay). The friends invite toast is a persistent layer above the screens.
  *
- * Backend: offline by default; `?online=local` runs the PlayFab code against an in-browser emulated title;
- * `?online=1` (+ ALLOW_LIVE_PLAYFAB) talks to the real title. See config.ts.
+ * Backend: the Nomad server when the account module has one (ctx.services.nomadApi — it installs first): account,
+ * friends, invites, presence, profile and leaderboards are the server's. Without one: offline, a local guest.
+ * (PlayFab and its in-browser emulation were removed in Phase 4.)
  */
 import type { AppContext } from '../app/app';
+import { SocialRoutes, type LeaderboardPage } from '@nomad/contract';
 import { EconomyAccount } from './account';
 import { PokerFunnel } from './analytics/pokerFunnel';
 import { installLocalTelemetrySink, PokerTelemetry } from './analytics/pokerTelemetry';
-import { backendMode, PlayFabConfig } from './config';
 import { PokerClientIdentity } from './identity';
 import { FreePlayLeaderboard } from './leaderboards/freePlayLeaderboard';
-import { PlayFabAuth } from './playfab/auth';
-import { FetchTransport, PlayFabClient } from './playfab/client';
-import { PlayFabEconomyBridge } from './playfab/economyBridge';
-import { browserTitle, LocalTitleTransport, seedLocalDemo } from './playfab/localTitle';
-import { PlayFabPlayerProgress } from './playfab/playerProgress';
-import { configurePlayFab } from './playfab/runtime';
-import { PlayFabWallet } from './playfab/wallet';
-import { RetentionGrantQueue } from './retentionGrantQueue';
+import { DisplayNames } from './names';
+import { NomadLink } from './nomadLink';
 import { TitleChipLedger } from './server/chipLedger';
-import { memoryTitle, type TitleStateHandle } from './server/titleState';
-import {
-  avatarService, economyWallet, friendsService, friendsUi, leaderboardService, progressService,
-  type EconomyService,
-} from './services';
-import { PlayFabAvatar } from './social/playerAvatar';
-import { FreePlayBank, VirtualEconomy } from './virtualEconomy';
+import { memoryTitle } from './server/titleState';
+import { avatarService, economyWallet, friendsService, friendsUi, leaderboardService, type EconomyService } from './services';
+import { Friends } from './social/friends';
+import { AccountAvatar } from './social/playerAvatar';
+import { VirtualEconomy } from './virtualEconomy';
 import { FriendsHud } from './ui/friendsHud';
-import { PlayFabLoginPanel } from './ui/loginPanel';
 import { registerSocialPartials } from './nomad/social';
 
 export function install(ctx: AppContext): void {
-  const mode = backendMode(ctx.params);
+  const session = ctx.services.nomadApi ?? null;
+  NomadLink.bind(session);
   const sink = installLocalTelemetrySink(ctx.params.get('telemetry') === '1');
   // PokerFunnel.bootstrap (session_started / session_ended) is run by the menu module's own funnel port (menu/funnel.ts).
-  PlayFabAuth.bootDisplayName();
-
-  // ---- PlayFab client for the chosen backend
-  let title: TitleStateHandle | null = null;
-  if (mode === 'local') {
-    title = browserTitle();
-    configurePlayFab(new PlayFabClient(PlayFabConfig.TitleId, new LocalTitleTransport(title)));
-  } else if (mode === 'live') {
-    configurePlayFab(new PlayFabClient(PlayFabConfig.TitleId, new FetchTransport(PlayFabConfig.TitleId)));
-  } else configurePlayFab(null);
+  DisplayNames.boot();
 
   // ---- events onto the app bus
   VirtualEconomy.changed.on(() => ctx.events.emit('wallet:changed'));
-  PlayFabPlayerProgress.changed.on(() => ctx.events.emit('progress:loaded'));
-  PlayFabEconomyBridge.attached.on(() => {
-    void PlayFabAvatar.pullAsync();
-    ctx.events.emit('economy:attached');
-  });
-  PlayFabEconomyBridge.detached.on(() => ctx.events.emit('progress:loaded'));
-  PlayFabAuth.displayNameChanged.on((name) => {
+  DisplayNames.changed.on((name) => {
     FreePlayLeaderboard.localDisplayName = name || 'You';
     ctx.events.emit('account:changed');
   });
   FreePlayLeaderboard.localDisplayName = PokerClientIdentity.playerName || 'You';
-  PlayFabAvatar.hook();
-  void VirtualEconomy.wallet; // VirtualEconomy.Bootstrap: the local wallet exists from the start
+  AccountAvatar.hook();
+  void VirtualEconomy.wallet; // VirtualEconomy.Bootstrap: the local wallet exists until the server's replaces it
 
   // ---- services
-  const account = new EconomyAccount(mode, ctx.events);
+  const account = new EconomyAccount(ctx.events);
   ctx.services.account = account;
   ctx.services.wallet = economyWallet;
-  ctx.services.progress = progressService;
   ctx.services.leaderboards = leaderboardService;
   ctx.services.friends = friendsService;
   ctx.services.avatars = avatarService;
   ctx.services.telemetry = { telemetry: PokerTelemetry, funnel: PokerFunnel, events: sink.events };
   const economy: EconomyService = {
-    mode,
-    grantQueue: RetentionGrantQueue,
-    freePlayBank: FreePlayBank,
-    requestFlushPendingGrants: () => PlayFabEconomyBridge.requestFlushPendingGrants(),
-    markAtTable: () => PlayFabWallet.markAtTable(PokerClientIdentity.playFabId),
-    clearAtTable: () => PlayFabWallet.clearAtTable(),
-    createChipLedger: () => new TitleChipLedger(title ?? memoryTitle()),
-    seedLocalDemo: async () => {
-      if (!title || !PokerClientIdentity.playFabId) {
-        console.warn('[Economy] seedLocalDemo needs ?online=local and a signed-in player.');
-        return;
-      }
-      seedLocalDemo(title, PokerClientIdentity.playFabId);
-      await friendsService.refresh();
-      await friendsService.pollInvites();
-    },
+    mode: session ? 'nomad' : 'offline',
+    createChipLedger: () => new TitleChipLedger(memoryTitle()),
   };
   ctx.services.economy = economy;
 
-  // ---- UI: FriendsHud (persistent toast + 'friends' sheet) and PlayFabLoginUI ('login-playfab')
+  if (session) {
+    // Leaderboards come from the hands the game server recorded.
+    FreePlayLeaderboard.fetchOverride = async (kind, pageIndex) => {
+      const p = await NomadLink.call<LeaderboardPage>('GET', `${SocialRoutes.leaderboards}/${kind}?page=${pageIndex}`);
+      return {
+        kind,
+        title: FreePlayLeaderboard.titleFor(kind),
+        status: '',
+        localRank: p.localRank,
+        localScore: p.localScore,
+        pageIndex: p.pageIndex,
+        pageSize: p.pageSize,
+        hasMore: p.hasMore,
+        rows: p.rows,
+      };
+    };
+    // Each time a (different) player signs in: mirror their profile, adopt their avatar, load their friends.
+    let lastPlayer: string | null = null;
+    ctx.events.on('nomad:changed', () => {
+      const id = session.me?.player.id ?? null;
+      if (!id || id === lastPlayer) return;
+      if (lastPlayer) Friends.clear();
+      lastPlayer = id;
+      account.adoptServerProfile();
+      void AccountAvatar.pullAsync();
+      void Friends.refreshAsync();
+    });
+  }
+
+  // ---- UI: FriendsHud (persistent toast + 'friends' sheet)
   const hud = new FriendsHud(ctx);
   friendsUi.openAvatarPicker = () => hud.openAvatarPicker();
   friendsUi.openPanel = () => hud.openPanel();
   ctx.router.register('friends', (c) => hud.screen(c));
-  ctx.router.register('login-playfab', (c) => new PlayFabLoginPanel(c, account));
   // NomadUiHost.Social (Friends, Party) + the Leaderboard screen, on the menu module's host.
   registerSocialPartials();
 
-  // PlayFabLoginUI.OnEnable → StartUpAsync: quiet sign-in when Keep me signed in was ticked.
-  void account.startUpAsync().then(async () => {
-    if (mode === 'local' && ctx.params.get('seed') === '1') await economy.seedLocalDemo();
-  });
+  void account.startUpAsync();
 
-  (window as unknown as Record<string, unknown>).__economy = { ctx, account, economy, wallet: economyWallet, friends: friendsService, leaderboards: leaderboardService, telemetry: sink, title };
+  (window as unknown as Record<string, unknown>).__economy = { ctx, account, economy, wallet: economyWallet, friends: friendsService, leaderboards: leaderboardService, telemetry: sink };
 }

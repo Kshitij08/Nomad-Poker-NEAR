@@ -20,7 +20,6 @@ Debug URL flags:
 - `?speed=3`: run the whole game, animations included, 3× faster.
 - `?paused=1`: freeze the game. Then call `__poker.step(seconds)` in the console to advance in fixed 1/60 s frames.
 - `?demo=1`: a scripted hand that plays every card animation without the engine.
-- `?online=local&seed=1`: run the PlayFab code against an emulated title in localStorage, with demo friends and rivals.
 - `?practice=8`: jump into an offline practice tournament. `?agents=1`: open the Agents screens.
 - With an API configured (`?api=staging`, `?netServer=staging` or a `VITE_API_URL` build) the server owns the economy:
   the app signs in (a guest at first), the wallet shows the server's balances and refuses local grants, and the daily
@@ -33,7 +32,8 @@ Debug URL flags:
 ### Live backends are OFF by default
 
 Nothing calls the live PlayFab title, the deployed (Railway) servers, Photon or Solana mainnet unless you opt in:
-`?online=1` also needs `ALLOW_LIVE_PLAYFAB` set in `src/economy/config.ts`; `?web3deployed=1` / `?web3backend=` /
+PlayFab is gone (Phase 4): accounts, the economy, friends, invites and leaderboards are the Nomad server's when an
+API is configured, else the game plays offline on a local guest. `?web3deployed=1` / `?web3backend=` /
 `?perbackend=` point web3 at a backend; `?tournaments=live&tournamentBackend=<url>`; `?agentBackend=<url>`. Web3 uses
 devnet and never signs or sends without an explicit user action. Photon Fusion has no browser client, so multiplayer
 runs on `web/server` (the ported engine with PokerServerGame's rules, byte-identical event codec) — local only until

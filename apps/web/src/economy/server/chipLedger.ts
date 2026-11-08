@@ -10,7 +10,7 @@
  *
  * Implementations never throw: every method resolves to a result carrying its own failure.
  */
-import { PlayFabConfig } from '../config';
+import { EconomyConfig } from '../config';
 import { grantIdempotencyId, welcomeIdempotencyId } from './ids';
 import { moveChips, setObject, type TitlePlayer, type TitleStateHandle } from './titleState';
 
@@ -234,9 +234,9 @@ export class TitleChipLedger implements ChipLedger {
     if (log.welcomed) return 0;
     log.welcomed = true;
     if (!this.writeObject(p, GrantsObjectName, log, version)) return p.chips ?? -1;
-    moveChips(p, PlayFabConfig.StartingBalance, welcomeIdempotencyId(p.id));
+    moveChips(p, EconomyConfig.StartingBalance, welcomeIdempotencyId(p.id));
     this.title.save();
-    this.log('info', `[ChipLedger] Welcomed ${p.id} with ${PlayFabConfig.StartingBalance} chips.`);
+    this.log('info', `[ChipLedger] Welcomed ${p.id} with ${EconomyConfig.StartingBalance} chips.`);
     return p.chips ?? -1;
   }
 

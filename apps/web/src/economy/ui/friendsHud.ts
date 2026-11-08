@@ -18,10 +18,9 @@ import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import { FriendCode } from '@nomad/engine/social/friendCode';
 import { FriendLastSeen, FriendRelation, FriendTags } from '@nomad/engine/social/friendRules';
 import { PokerClientIdentity } from '../identity';
-import { PlayFabAuth } from '../playfab/auth';
 import { FriendInvites, inviteLabel, type FriendInvite } from '../social/friendInvites';
-import { friendLabel, PlayFabFriends, type FriendEntry } from '../social/playFabFriends';
-import { PlayerAvatar, PlayFabAvatar } from '../social/playerAvatar';
+import { Friends, friendLabel, type FriendEntry } from '../social/friends';
+import { AccountAvatar, PlayerAvatar } from '../social/playerAvatar';
 import {
   applyAspectFitter, attachInput, avatarSprite, buildEconomyCanvas, clean, DEFAULT_SCALER, makeButton, makeNode,
   OverlayCanvas, place, RetentionUiColors as C, setImage, setLabel, stretch, unityColor, wireButton, WHITE,
@@ -44,7 +43,7 @@ interface RowButtonSpec {
 }
 
 const realtime = () => performance.now() / 1000;
-const signedIn = () => PlayFabAuth.isSignedIn && PokerClientIdentity.isPlayFabSignedIn;
+const signedIn = () => Friends.available;
 
 export class FriendsHud {
   private readonly layer = document.createElement('div');
@@ -69,7 +68,7 @@ export class FriendsHud {
     const root = makeNode('FriendsCanvas');
     this.toast = this.buildToast(root);
     this.toastCanvas = new OverlayCanvas(this.layer, root, DEFAULT_SCALER, 510);
-    PlayFabFriends.changed.on(() => this.onFriendsChanged());
+    Friends.changed.on(() => this.onFriendsChanged());
     FriendInvites.changed.on(() => this.refreshToast());
     FriendInvites.tableChanged.on(() => this.tick());
     PlayerAvatar.changed.on(() => this.sheet?.onOwnAvatarChanged());
@@ -151,19 +150,19 @@ export class FriendsHud {
     const id = PokerClientIdentity.playFabId;
     if (id !== this.playerId) {
       if (this.playerId !== null) {
-        PlayFabFriends.clear();
+        Friends.clear();
         FriendInvites.clear();
       }
       this.playerId = id;
       this.nextListPoll = 0;
       this.nextInboxPoll = 0;
       this.sheet?.updateIdLabel();
-      void PlayFabAvatar.pullAsync();
+      void AccountAvatar.pullAsync();
     }
     const now = realtime();
     if (now >= this.nextListPoll) {
       this.nextListPoll = now + (this.panelOpen ? ListPollOpenSeconds : ListPollSeconds);
-      void PlayFabFriends.refreshAsync();
+      void Friends.refreshAsync();
     }
     if (!this.atTable && now >= this.nextInboxPoll) {
       this.nextInboxPoll = now + InboxPollSeconds;
@@ -240,7 +239,7 @@ export class FriendsHud {
     if (show) {
       const inv = this.toastInvite!;
       this.toast.title.setText(`${clean(inviteLabel(inv))} invited you to play`);
-      const friend = PlayFabFriends.find(inv.fromId);
+      const friend = Friends.find(inv.fromId);
       const face = avatarSprite(friend?.avatar ?? AvatarCatalog.None, inviteLabel(inv));
       if (face && this.toast.avatar.image) {
         this.toast.avatar.image.sprite = face;
@@ -373,12 +372,12 @@ class FriendsSheet {
     const header = (text: string) => items.push({ node: setLabel(makeNode('Header'), text, 15, C.Gold, { bold: true, alignH: 'left', alignV: 'bottom' }), h: 28 });
 
     if (!signedIn()) note('Signing in…');
-    else if (!PlayFabFriends.hasLoaded) note(PlayFabFriends.lastError ?? 'Loading friends…');
+    else if (!Friends.hasLoaded) note(Friends.lastError ?? 'Loading friends…');
     else {
       const incoming: FriendEntry[] = [];
       const friends: FriendEntry[] = [];
       const outgoing: FriendEntry[] = [];
-      for (const e of PlayFabFriends.all) {
+      for (const e of Friends.all) {
         if (e.relation === FriendRelation.IncomingRequest) incoming.push(e);
         else if (e.relation === FriendRelation.Friend) friends.push(e);
         else if (e.relation === FriendRelation.OutgoingRequest) outgoing.push(e);
@@ -452,7 +451,7 @@ class FriendsSheet {
   private onAdd(): void {
     const input = this.addInput?.value ?? null;
     void this.hud.run(async () => {
-      const result = await PlayFabFriends.sendRequestAsync(input);
+      const result = await Friends.sendRequestAsync(input);
       if (!result.success) return result.error;
       if (this.addInput) {
         this.addInput.value = '';
@@ -471,7 +470,7 @@ class FriendsSheet {
 
   private accept(f: FriendEntry): void {
     void this.hud.run(async () => {
-      const r = await PlayFabFriends.acceptAsync(f.id);
+      const r = await Friends.acceptAsync(f.id);
       return r.success ? `You and ${friendLabel(f)} are now friends.` : r.error;
     });
   }
@@ -493,7 +492,7 @@ class FriendsSheet {
 
   private remove(f: FriendEntry, done: string): void {
     void this.hud.run(async () => {
-      const r = await PlayFabFriends.removeAsync(f.id);
+      const r = await Friends.removeAsync(f.id);
       return r.success ? done : r.error;
     });
   }

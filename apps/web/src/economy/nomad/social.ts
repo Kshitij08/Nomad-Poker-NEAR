@@ -16,7 +16,7 @@ import { widgetsOf } from '../../menu/ui/tree';
 import { PokerClientIdentity } from '../identity';
 import { FreePlayLeaderboard, type LeaderboardSnapshot } from '../leaderboards/freePlayLeaderboard';
 import { FriendInvites, type FriendInvite } from '../social/friendInvites';
-import { friendLabel, PlayFabFriends, type FriendEntry } from '../social/playFabFriends';
+import { Friends, friendLabel, type FriendEntry } from '../social/friends';
 import { VirtualEconomy } from '../virtualEconomy';
 
 /** ChainTableMode.PrivateMinBuyIn / PrivateMaxBuyIn (Coins private tables). */
@@ -34,7 +34,8 @@ interface NetParty {
 /** Hooks other partials may take (NomadUiHost.Onchain: OnchainPartyCreate / OnchainPartyJoin). */
 export const nomadSocialHooks: { onchainParty?: (create: boolean, code: string) => void } = {};
 
-const isOnline = (f: FriendEntry): boolean => f.lastLogin !== null && (Date.now() - f.lastLogin) / 60_000 < 15;
+/** The server's presence when it sent one (active in the last two minutes), else the old 15-minute last-login rule. */
+const isOnline = (f: FriendEntry): boolean => f.online ?? (f.lastLogin !== null && (Date.now() - f.lastLogin) / 60_000 < 15);
 const signedIn = (ctx: AppContext): boolean => ctx.services.account.signedIn;
 const net = (ctx: AppContext): NetParty | undefined => (ctx.services as unknown as { net?: NetParty }).net;
 
@@ -63,7 +64,7 @@ function bindFriends(host: NomadHost, ctx: AppContext): void {
   const addFriend = () =>
     host.message('Add a friend', 'Enter their friend ID or name.', 'Send request', undefined, 'Cancel', undefined, 'Friend ID or name', (id) =>
       void host.run(async () => {
-        const r = await PlayFabFriends.sendRequestAsync(id);
+        const r = await Friends.sendRequestAsync(id);
         return r.success ? null : r.error;
       }, () => host.message('Request sent', "They'll see it under Requests.")));
 
@@ -74,13 +75,13 @@ function bindFriends(host: NomadHost, ctx: AppContext): void {
   host.bind(root, 'Frame/ProfileColumn/Btn_EditPicture', editAvatar);
   host.bind(root, 'Frame/ProfileColumn/Btn_CopyID', copyFriendId);
   host.bind(root, 'Frame/ProfileColumn/FriendIdField/Btn_CopySmall', copyFriendId);
-  PlayFabFriends.changed.on(() => host.isShowing('Friends') && paint());
+  Friends.changed.on(() => host.isShowing('Friends') && paint());
   FriendInvites.changed.on(() => host.isShowing('Friends') && paint());
 
   // RefreshFriendsAsync (OnScreenShown "Friends").
   host.onScreenShown('Friends', () => {
     paint();
-    void PlayFabFriends.refreshAsync().then(() => {
+    void Friends.refreshAsync().then(() => {
       void FriendInvites.pollAsync();
       paint();
     });
@@ -95,7 +96,7 @@ function bindFriends(host: NomadHost, ctx: AppContext): void {
 
     const friends: FriendEntry[] = [];
     const requests: FriendEntry[] = [];
-    for (const f of PlayFabFriends.all) {
+    for (const f of Friends.all) {
       if (f.relation === FriendRelation.Friend) friends.push(f);
       else if (f.relation === FriendRelation.IncomingRequest) requests.push(f);
     }
@@ -112,7 +113,7 @@ function bindFriends(host: NomadHost, ctx: AppContext): void {
     tint(host.find(root, 'Frame/Tabs/Tab_Requests'), tab === 'requests');
 
     const list = tab === 'requests' ? requests : friends;
-    // List.Sort by IsOnline descending (List<T>.Sort is not stable; ties keep PlayFabFriends' name order here).
+    // List.Sort by IsOnline descending (List<T>.Sort is not stable; ties keep the server's name order here).
     list.sort((a, b) => Number(isOnline(b)) - Number(isOnline(a)));
     rows.fill(list.length, (row, i) => paintRow(row, list[i]!, tab === 'requests'));
     host.emptyNote(host.find(root, 'Frame/List'), tab === 'requests' ? 'No friend requests.' : 'No friends yet.\nTap Add Friend and enter their friend ID or name.', list.length === 0);
@@ -124,7 +125,7 @@ function bindFriends(host: NomadHost, ctx: AppContext): void {
     const label = friendLabel(f);
     host.setText(row, 'Name', NomadHost.short(label, 16));
     host.setText(row, 'Status', request ? 'Wants to be friends' : online ? 'Online' : 'Offline');
-    host.setText(row, 'Where', request ? '' : invite ? 'Invited you to a table' : f.lastLogin !== null ? `Last seen ${seenDate(f.lastLogin)}` : '');
+    host.setText(row, 'Where', request ? '' : invite ? 'Invited you to a table' : f.table ? 'At a table' : f.lastLogin !== null ? `Last seen ${seenDate(f.lastLogin)}` : '');
     const dot = host.find(row, 'StatusDot');
     if (dot?.image) {
       dot.image.color = online ? Online : Offline;
@@ -137,7 +138,7 @@ function bindFriends(host: NomadHost, ctx: AppContext): void {
       const b = host.ensureButton(more);
       b.reset();
       b.addListener(() => host.message(label, 'Remove this friend?', 'Remove', () => void host.run(async () => {
-        const r = await PlayFabFriends.removeAsync(f.id);
+        const r = await Friends.removeAsync(f.id);
         return r.success ? null : r.error;
       }), 'Cancel'));
     }
@@ -156,7 +157,7 @@ function bindFriends(host: NomadHost, ctx: AppContext): void {
     if (request) {
       host.setText(action, 'Label', 'Accept');
       b.addListener(() => void host.run(async () => {
-        const r = await PlayFabFriends.acceptAsync(f.id);
+        const r = await Friends.acceptAsync(f.id);
         return r.success ? null : r.error;
       }));
     } else if (invite) {

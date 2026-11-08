@@ -1,3 +1,7 @@
+> **Historical (Unity-era backends).** Superseded by the Nomad Cloudflare stack: accounts, the economy, rewards,
+> friends and leaderboards are `apps/api`, tables are `apps/game-server`, and PlayFab was removed from the web app in
+> Phase 4. Kept for the on-chain and tournament notes until those phases move.
+
 # Live backends for the web port: how to turn them on, and whether to replace PlayFab
 
 Written 7 Nov 2026 from the code on `web/unity-port`. No live service was called while writing it. Prices come

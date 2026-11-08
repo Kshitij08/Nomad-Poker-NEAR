@@ -1,12 +1,12 @@
 /**
- * Ports of Game/PlayerAvatar.cs (this player's own picture, PlayerPrefs "Poker.Avatar") and Social/PlayFabAvatar.cs
- * (keeps it in step with the PlayFab account's AvatarUrl: the account wins on sign-in unless it has none).
+ * Port of Game/PlayerAvatar.cs (this player's own picture, PlayerPrefs "Poker.Avatar"), kept in step with the Nomad
+ * account's avatar (it was PlayFab's AvatarUrl): the account wins on sign-in unless it has none, and every local pick
+ * is saved to the account.
  */
 import { PlayerPrefs } from '../../app/services';
 import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
-import { AvatarUrl } from '@nomad/engine/social/avatarUrl';
-import { errorReport } from '../playfab/client';
-import { isClientLoggedIn, playFab } from '../playfab/runtime';
+import { SocialRoutes } from '@nomad/contract';
+import { NomadLink } from '../nomadLink';
 import { Signal } from '../signal';
 
 const Pref = 'Poker.Avatar';
@@ -56,13 +56,16 @@ export const PlayerAvatar = {
 };
 
 async function pushAsync(avatar: number): Promise<void> {
-  if (!isClientLoggedIn() || !AvatarCatalog.isValid(avatar)) return;
-  const r = await playFab()!.client('UpdateAvatarUrl', { ImageUrl: AvatarUrl.urlFor(avatar) });
-  if (r.error) console.warn(`[Avatar] Could not save the picture to the account: ${errorReport(r.error)}`);
+  if (!NomadLink.signedIn || !AvatarCatalog.isValid(avatar)) return;
+  try {
+    await NomadLink.call('POST', SocialRoutes.profile, { avatar });
+  } catch (e) {
+    console.warn('[Avatar] Could not save the picture to the account', e);
+  }
 }
 
-export const PlayFabAvatar = {
-  /** Hook (AfterAssembliesLoaded): every local pick is pushed to the account. */
+export const AccountAvatar = {
+  /** Every local pick is saved to the account. Returns the unhook. */
   hook(): () => void {
     return PlayerAvatar.changed.on(() => {
       if (!PlayerAvatar.lastChangeFromAccount) void pushAsync(PlayerAvatar.current);
@@ -71,14 +74,9 @@ export const PlayFabAvatar = {
 
   /** After a sign-in: adopt the account's picture, or give the account this device's. */
   async pullAsync(): Promise<void> {
-    if (!isClientLoggedIn()) return;
-    const r = await playFab()!.client<{ AccountInfo?: { TitleInfo?: { AvatarUrl?: string } } }>('GetAccountInfo', {});
-    if (r.error) {
-      console.warn(`[Avatar] Could not read the account's picture: ${errorReport(r.error)}`);
-      return;
-    }
-    const fromAccount = AvatarUrl.fromUrl(r.data.AccountInfo?.TitleInfo?.AvatarUrl ?? '');
-    if (AvatarCatalog.isValid(fromAccount)) PlayerAvatar.adoptFromAccount(fromAccount);
+    const me = NomadLink.session?.me;
+    if (!me) return;
+    if (AvatarCatalog.isValid(me.player.avatar)) PlayerAvatar.adoptFromAccount(me.player.avatar);
     else if (AvatarCatalog.isValid(PlayerAvatar.current)) await pushAsync(PlayerAvatar.current);
   },
 };

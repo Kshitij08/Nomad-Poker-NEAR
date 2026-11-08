@@ -1,7 +1,6 @@
 /** The offline chip ledger (PlayFabChipLedger rules) and the CloudScript ports (friends.js, economy.js). */
 import { describe, expect, it } from 'vitest';
 import { TitleChipLedger, readGrantLog } from '../server/chipLedger';
-import { runCloudScript, type CloudResult } from '../server/cloudScript';
 import { createPlayer, memoryTitle, type TitleStateHandle } from '../server/titleState';
 
 const quiet = { log: () => {} };
@@ -73,61 +72,5 @@ describe('TitleChipLedger (Economy/Server/PlayFabChipLedger.cs)', () => {
     expect(await ledger.authenticateAsync('good')).toBe(A);
     expect(await ledger.authenticateAsync('old')).toBeNull();
     expect(await ledger.authenticateAsync('nope')).toBeNull();
-  });
-});
-
-describe('CloudScript friends.js', () => {
-  const call = (t: TitleStateHandle, me: string, fn: string, args: object): CloudResult => runCloudScript({ title: t, currentPlayerId: me, now: Date.now() }, fn, args)!;
-
-  it('request → both lists tagged; asking back befriends; remove clears both', () => {
-    const t = title();
-    expect(call(t, A, 'sendFriendRequest', { friendId: A.toLowerCase() })).toEqual({ ok: false, error: 'self' });
-    expect(call(t, A, 'sendFriendRequest', { friendId: 'nope' })).toEqual({ ok: false, error: 'invalid_id' });
-    expect(call(t, A, 'sendFriendRequest', { friendId: 'CCCC-0000-1111-2222' })).toEqual({ ok: false, error: 'not_found' });
-    expect(call(t, A, 'sendFriendRequest', { friendId: 'bbbb-0000-1111-2222' })).toEqual({ ok: true, relation: 'pending_out' });
-    expect(t.state.players[B]!.friends[A]!.tags).toEqual(['pending_in']);
-    expect(call(t, A, 'sendFriendRequest', { friendId: B })).toEqual({ ok: false, error: 'already_requested' });
-    expect(call(t, A, 'acceptFriendRequest', { friendId: B })).toEqual({ ok: false, error: 'no_request' });
-    expect(call(t, B, 'sendFriendRequest', { friendId: A })).toEqual({ ok: true, relation: 'friend' });
-    expect(t.state.players[A]!.friends[B]!.tags).toEqual(['friend']);
-    expect(call(t, A, 'sendFriendRequest', { friendId: B })).toEqual({ ok: false, error: 'already_friends' });
-    expect(call(t, A, 'removeFriend', { friendId: B })).toEqual({ ok: true });
-    expect(t.state.players[A]!.friends[B]).toBeUndefined();
-    expect(t.state.players[B]!.friends[A]).toBeUndefined();
-  });
-
-  it('invites: friends only, one per sender, dismissable, pruned after the TTL', () => {
-    const t = title();
-    expect(call(t, A, 'sendInvite', { friendId: B, session: 'S1' })).toEqual({ ok: false, error: 'not_friends' });
-    call(t, A, 'sendFriendRequest', { friendId: B });
-    call(t, B, 'acceptFriendRequest', { friendId: A });
-    expect(call(t, A, 'sendInvite', { friendId: B, session: '' })).toEqual({ ok: false, error: 'invalid_session' });
-    expect(call(t, A, 'sendInvite', { friendId: B, session: 'S1', money: true })).toEqual({ ok: true });
-    expect(call(t, A, 'sendInvite', { friendId: B, session: 'S2' })).toEqual({ ok: true });
-    const mailbox = JSON.parse(t.state.players[B]!.readOnlyData['Poker.Social.Invites']!.Value);
-    expect(mailbox.length).toBe(1);
-    expect(mailbox[0]).toMatchObject({ from: A, name: 'Alice', session: 'S2', money: false });
-    expect(call(t, B, 'dismissInvite', { fromId: A })).toEqual({ ok: true });
-    expect(t.state.players[B]!.readOnlyData['Poker.Social.Invites']).toBeUndefined();
-  });
-});
-
-describe('CloudScript economy.js claimRetentionGrant', () => {
-  const today = new Date().toISOString().substring(0, 10);
-  const claim = (t: TitleStateHandle, key: string, chips: number, reason: string, now = Date.now()) =>
-    runCloudScript({ title: t, currentPlayerId: A, now }, 'claimRetentionGrant', { key, chips, reason })!;
-
-  it('pays catalog amounts once per key and per-day caps; refuses forged ones', () => {
-    const t = title();
-    const k = `daily_spin:${A}:${today}:Coins:500:`;
-    expect(claim(t, k, 500, 'daily_spin')).toEqual({ ok: true, granted: true, balance: 10500 });
-    expect(claim(t, k, 500, 'daily_spin')).toEqual({ ok: true, granted: false, balance: 10500 });
-    expect(claim(t, `daily_spin:${A}:${today}:Coins:1000:`, 1000, 'daily_spin')).toEqual({ ok: false, error: 'daily_limit' });
-    expect(claim(t, `daily_spin:${A}:${today}:Coins:777:`, 777, 'daily_spin')).toEqual({ ok: false, error: 'invalid_grant' });
-    expect(claim(t, `daily_spin:${B}:${today}:Coins:500:`, 500, 'daily_spin')).toEqual({ ok: false, error: 'invalid_grant' });
-    expect(claim(t, `mission:${A}:${today}:Coins:500:`, 500, 'daily_spin')).toEqual({ ok: false, error: 'invalid_grant' });
-    expect(claim(t, `login_reward:${A}:2020-01-01:Coins:500:`, 500, 'login_reward')).toEqual({ ok: false, error: 'too_old' });
-    // level_up: 100 + (L-1)*25, doubled on every 10th level (level 10 → 650).
-    expect(claim(t, `level_up:${A}:${today}:Coins:650:`, 650, 'level_up')).toMatchObject({ ok: true, granted: true });
   });
 });

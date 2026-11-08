@@ -1,10 +1,8 @@
-/** LocalVirtualWallet, VirtualEconomy + FreePlayBank, RetentionGrantQueue, grant keys and idempotency ids. */
+/** LocalVirtualWallet, VirtualEconomy + FreePlayBank, and the idempotency ids the local ledger uses. */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { RewardGrant, RewardKind, type VirtualWallet } from '../../app/services';
+import { RewardGrant, type VirtualWallet } from '../../app/services';
 import { LocalVirtualWallet } from '../localVirtualWallet';
 import { FreePlayBank, VirtualEconomy } from '../virtualEconomy';
-import { escapeDataString, RetentionGrantQueue } from '../retentionGrantQueue';
-import { buildIdempotencyKey } from '../playfab/virtualWallet';
 import { deterministicId, grantIdempotencyId, sha256, utf8, welcomeIdempotencyId } from '../server/ids';
 import { installLocalTelemetrySink } from '../analytics/pokerTelemetry';
 import { installMemoryStorage } from './memoryStorage';
@@ -98,47 +96,7 @@ describe('VirtualEconomy + FreePlayBank', () => {
   });
 });
 
-describe('RetentionGrantQueue (Economy/RetentionGrantQueue.cs)', () => {
-  const id = 'ABCDEF0123456789';
-  const key = (src: string, amount: number) => `${src}:${id}:2026-11-07:Coins:${amount}:`;
-
-  it('rows use Uri.EscapeDataString and the key|chips|reason;… format', () => {
-    expect(escapeDataString("a:b|c d!'()*~")).toBe('a%3Ab%7Cc%20d%21%27%28%29%2A~');
-    expect(RetentionGrantQueue.tryEnqueue(key('daily_spin', 500), 500, 'daily_spin')).toBe(true);
-    expect(RetentionGrantQueue.tryEnqueue(key('mission', 750), 750, 'mission')).toBe(true);
-    expect(store.get('Poker.Retention.PendingGrants')).toBe(
-      `daily_spin%3A${id}%3A2026-11-07%3ACoins%3A500%3A|500|daily_spin;mission%3A${id}%3A2026-11-07%3ACoins%3A750%3A|750|mission`);
-    expect(RetentionGrantQueue.pendingCoinsFor(id)).toBe(1250);
-    expect(RetentionGrantQueue.pendingCoinsFor('0000000000000000')).toBe(0);
-  });
-
-  it('refuses duplicates, non-positive, over-jackpot amounts and settled keys', () => {
-    expect(RetentionGrantQueue.tryEnqueue(key('daily_spin', 500), 500, 'daily_spin')).toBe(true);
-    expect(RetentionGrantQueue.tryEnqueue(key('daily_spin', 500), 500, 'daily_spin')).toBe(false);
-    expect(RetentionGrantQueue.tryEnqueue(key('x', 0), 0, 'x')).toBe(false);
-    expect(RetentionGrantQueue.tryEnqueue(key('x', 25001), 25001, 'x')).toBe(false);
-    expect(RetentionGrantQueue.tryEnqueue(key('x', 25000), 25000, 'x')).toBe(true);
-    RetentionGrantQueue.settle(key('daily_spin', 500));
-    expect(RetentionGrantQueue.contains(key('daily_spin', 500))).toBe(false);
-    expect(RetentionGrantQueue.isSettled(key('daily_spin', 500))).toBe(true);
-    expect(RetentionGrantQueue.tryEnqueue(key('daily_spin', 500), 500, 'daily_spin')).toBe(false);
-  });
-
-  it('keeps the newest 32 pending entries', () => {
-    for (let i = 1; i <= 40; i++) RetentionGrantQueue.tryEnqueue(`level_up:${id}:2026-11-07:Coins:${i}:`, i, 'level_up');
-    const snap = RetentionGrantQueue.snapshot();
-    expect(snap.length).toBe(32);
-    expect(snap[0]!.chips).toBe(9);
-  });
-});
-
 describe('grant keys and idempotency ids', () => {
-  it('BuildIdempotencyKey: source:PlayFabId:yyyy-MM-dd(UTC):Kind:amount:item', () => {
-    const t = Date.UTC(2026, 10, 7, 23, 30);
-    expect(buildIdempotencyKey(RewardGrant.coins(500, 'daily_spin'), 'ABCDEF0123456789', t)).toBe('daily_spin:ABCDEF0123456789:2026-11-07:Coins:500:');
-    expect(buildIdempotencyKey(RewardGrant.of(RewardKind.Coins, 10, '', ''), '', t)).toBe('grant:local:2026-11-07:Coins:10:');
-  });
-
   it('SHA-256 (FIPS 180-4 vectors) and the .NET Guid layout match Node crypto', () => {
     const hex = (b: number[]) => b.map((x) => x.toString(16).padStart(2, '0')).join('');
     expect(hex(sha256(utf8('abc')))).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');

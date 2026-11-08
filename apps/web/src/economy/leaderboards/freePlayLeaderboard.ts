@@ -34,6 +34,8 @@ export interface LeaderboardSnapshot {
 }
 
 let loaded = false;
+/** The viewer's score per board as the server last reported it (server mode). */
+const serverScores = new Map<LeaderboardKind, number>();
 let weeklyEarnings = 0;
 let weeklyHandsWon = 0;
 let seasonEarnings = 0;
@@ -112,7 +114,10 @@ export const FreePlayLeaderboard = {
     if (override) {
       try {
         const cloud = await override(kind, pageIndex);
-        if (cloud) return cloud;
+        if (cloud) {
+          serverScores.set(kind, cloud.localScore);
+          return cloud;
+        }
       } catch (e) {
         console.warn('[Leaderboard] Fetch failed', e);
       }
@@ -135,6 +140,8 @@ export const FreePlayLeaderboard = {
   },
 
   localScore(kind: LeaderboardKind): number {
+    const server = serverScores.get(kind);
+    if (server !== undefined) return server;
     ensurePeriod();
     switch (kind) {
       case LeaderboardKind.HandsWon: return handsWon;
@@ -159,6 +166,7 @@ export const FreePlayLeaderboard = {
     weeklyEarnings = weeklyHandsWon = seasonEarnings = handsWon = 0;
     FreePlayLeaderboard.fetchOverride = null;
     FreePlayLeaderboard.submitOverride = null;
+    serverScores.clear();
   },
 };
 
@@ -168,7 +176,7 @@ function localOnly(kind: LeaderboardKind, pageIndex: number): LeaderboardSnapsho
   return {
     kind,
     title: FreePlayLeaderboard.titleFor(kind),
-    status: 'Sign in to PlayFab to see global ranks.',
+    status: 'Global ranks need the Nomad server.',
     localRank: 1,
     localScore: score,
     pageIndex,

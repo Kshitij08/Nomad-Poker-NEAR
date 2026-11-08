@@ -1,51 +1,56 @@
 /**
- * The account service: who is playing, and every sign-in flow the UI offers. It is the flow half of
- * Economy/Ui/PlayFabLoginUI.cs (StartUpAsync, Play as Guest, Continue with Google, email sign-in / save account,
- * sign-out) on top of PlayFabAuth + PlayFabGate, usable by this module's own panel and by the Nomad menu's Login
- * screen (the menu module) alike.
+ * The account service: who is playing, and every sign-in flow the UI offers (the menu's Login screen and profile).
  *
- * Offline mode has no PlayFab: "Play as Guest" signs a local guest in (same guest name, same Keep me signed in
- * pref), Google and email answer that they need online mode, and the wallet is LocalVirtualWallet.
+ * With a Nomad server (the account module's session, NomadLink) the account is the server's: everyone plays as a
+ * server guest until they sign in, Google and email-link sign-in link to that guest (keeping its coins), renames and
+ * avatars are saved there, and PokerClientIdentity mirrors the server (its "playFabId" is the public Friend ID, so the
+ * Friends screens show it unchanged). Without one there is a local guest only — the game still plays offline.
  */
 import type { EventBus } from '../app/app';
 import { PlayerPrefs, type AccountService } from '../app/services';
 import { FriendCode } from '@nomad/engine/social/friendCode';
-import type { BackendMode } from './config';
-import { MenuUsernamePref, PokerClientIdentity } from './identity';
-import { PlayFabAuth } from './playfab/auth';
-import { PlayFabEconomyBridge, PlayFabGate } from './playfab/economyBridge';
-import { requestGoogleCredential } from './playfab/googleSignIn';
-import { PlayFabWallet } from './playfab/wallet';
+import { SocialRoutes, type PlayerProfile } from '@nomad/contract';
+import { PokerClientIdentity } from './identity';
+import { DisplayNames } from './names';
+import { NomadLink } from './nomadLink';
 import { Signal } from './signal';
 import { FriendInvites } from './social/friendInvites';
-import { PlayFabFriends } from './social/playFabFriends';
+import { Friends } from './social/friends';
 import { PlayerAvatar } from './social/playerAvatar';
 
-const KeepMeSignedInPref = 'Poker.PlayFab.KeepMeSignedIn';
+const KeepMeSignedInPref = 'Poker.KeepMeSignedIn';
 
 export class EconomyAccount implements AccountService {
-  /** Status line (the login panel's status text): progress, a failure, or a confirmation. */
+  /** Status line: progress, a failure, or a confirmation. */
   readonly statusChanged = new Signal<string | null>();
   private _status: string | null = null;
   private _busy = false;
-  private _signingInQuietly = false;
   private localSignedIn = false;
 
-  constructor(readonly mode: BackendMode, private readonly events: EventBus) {
+  constructor(private readonly events: EventBus) {
     const changed = () => events.emit('account:changed');
     PokerClientIdentity.changed.on(changed);
     PlayerAvatar.changed.on(changed);
+    // The server's view of this player is the truth: mirror it whenever the session changes.
+    events.on('nomad:changed', () => this.adoptServerProfile());
+  }
+
+  /** A Nomad server is configured (else: offline, local guest). */
+  get online(): boolean {
+    return NomadLink.configured;
+  }
+
+  private get me(): PlayerProfile | null {
+    return NomadLink.session?.me?.player ?? null;
   }
 
   // ---- AccountService
 
-  /** PlayFabLoginUI.IsReady (offline: a local guest is signed in). The menu gates Play on this. */
   get signedIn(): boolean {
-    if (this.mode === 'offline') return this.localSignedIn;
-    return PlayFabGate.isReady && PokerClientIdentity.isPlayFabSignedIn;
+    return this.online ? NomadLink.signedIn : this.localSignedIn;
   }
   get playerId(): string {
-    return this.mode === 'offline' ? 'guest-' + PokerClientIdentity.token.substring(0, 8) : PokerClientIdentity.playFabId;
+    return this.me?.id ?? 'guest-' + PokerClientIdentity.token.substring(0, 8);
   }
   get displayName(): string {
     return PokerClientIdentity.playerName;
@@ -57,200 +62,146 @@ export class EconomyAccount implements AccountService {
     return PokerClientIdentity.walletPubkey || null;
   }
 
-  // ---- Extras
+  // ---- Extras the menu reads (menu/deps.ts AccountExtras)
 
   get isGuest(): boolean {
-    return this.mode === 'offline' ? this.localSignedIn : PokerClientIdentity.isGuest;
+    return this.online ? (this.me?.kind ?? 'guest') === 'guest' : this.localSignedIn;
   }
-  /** "1A2B-3C4D-5E6F-7A8B" — the formatted PlayFabId; '' offline (no account to add). */
+  /** "1A2B-3C4D-5E6F-7A8B" — the Friend ID; '' offline. */
   get friendId(): string {
-    return FriendCode.format(PokerClientIdentity.playFabId);
+    return this.me ? FriendCode.format(this.me.friendCode) : '';
   }
   get busy(): boolean {
-    return this._busy;
+    return this._busy || !!NomadLink.session?.busy;
   }
   get signingInQuietly(): boolean {
-    return this._signingInQuietly;
+    return this.online && !NomadLink.signedIn && !!NomadLink.session?.busy;
   }
   get status(): string | null {
     return this._status;
   }
   get lastError(): string | null {
-    return this.mode === 'offline' ? null : PlayFabGate.lastError;
+    return NomadLink.session?.error ?? null;
   }
   get keepMeSignedIn(): boolean {
-    return PlayerPrefs.getInt(KeepMeSignedInPref, 0) !== 0;
+    // With a server the session token persists by itself; the toggle only matters offline.
+    return this.online || PlayerPrefs.getInt(KeepMeSignedInPref, 0) !== 0;
   }
-  /** Nomad Login screen's Keep me signed in (PlayFabLoginUI.SetKeepMeSignedIn). */
   setKeepMeSignedIn(on: boolean): void {
-    if (this.mode === 'offline') PlayerPrefs.setInt(KeepMeSignedInPref, on ? 1 : 0);
-    else PlayFabAuth.keepMeSignedIn = on;
+    PlayerPrefs.setInt(KeepMeSignedInPref, on ? 1 : 0);
     this.changed();
   }
-
-  /** PlayFabLoginUI.StartUpAsync: only auto-sign when the player opted into Keep me signed in. */
-  async startUpAsync(): Promise<void> {
-    if (this.mode === 'offline') {
-      if (this.keepMeSignedIn) this.signInLocalGuest();
-      return;
-    }
-    if (!PlayFabAuth.keepMeSignedIn && !PokerClientIdentity.isPlayFabSignedIn) {
-      this.setBusy(false, null);
-      return;
-    }
-    this._signingInQuietly = true;
-    this.changed();
-    const ok = await PlayFabGate.initializeAsync();
-    this._signingInQuietly = false;
-    this.setStatus(ok ? null : PlayFabGate.lastError);
-    this.changed();
-  }
-
-  /** Play as Guest. Resolves null when signed in, else the reason. */
-  async continueAsGuest(): Promise<string | null> {
-    if (this._busy) return null;
-    if (this.mode === 'offline') {
-      this.signInLocalGuest();
-      return null;
-    }
-    if (PokerClientIdentity.isPlayFabSignedIn) {
-      this.setStatus(null);
-      this.changed();
-      return null;
-    }
-    this.setBusy(true, 'Signing in…');
-    const ok = await PlayFabGate.signInExplicitAsync();
-    this.setBusy(false, ok ? null : PlayFabGate.lastError);
-    this.changed();
-    return ok ? null : PlayFabGate.lastError ?? 'Sign-in failed.';
-  }
-
-  /** Continue with Google: links Google onto a guest, else signs in with it. Null when signed in. */
-  async continueWithGoogle(): Promise<string | null> {
-    if (this._busy) return null;
-    if (this.mode === 'offline') return this.fail('Google sign-in needs the live PlayFab title (online mode). Guest still works here.');
-    const wasGuest = PokerClientIdentity.isGuest && PokerClientIdentity.isPlayFabSignedIn;
-    const idBefore = PokerClientIdentity.playFabId;
-    this.setBusy(true, 'Opening Google…');
-    try {
-      const cred = await requestGoogleCredential();
-      if (!cred.ok) return this.fail(cred.value || 'Google sign-in failed.');
-      this.setBusy(true, 'Signing in…');
-      const result = await PlayFabAuth.continueWithGoogleCredentialAsync(cred.value);
-      if (!result.success) return this.fail(result.error ?? 'Google sign-in failed.');
-      PlayFabGate.notifySignedIn();
-      PlayFabAuth.keepMeSignedIn = true;
-      const linkedInPlace = wasGuest && !!idBefore && idBefore === PokerClientIdentity.playFabId;
-      this.setStatus(linkedInPlace ? 'Google linked — your progress is saved.' : 'Signed in with Google.');
-      try {
-        await PlayFabEconomyBridge.attachAfterSignInAsync();
-      } catch (e) {
-        console.warn('[Account] Post-Google attach failed', e);
-      }
-      return null;
-    } catch (e) {
-      console.error('[Account] Google sign-in threw', e);
-      return this.fail('Google sign-in failed. Try again.');
-    } finally {
-      if (this._busy) this.setBusy(false, null);
-      this.changed();
-    }
-  }
-
-  /** Email sign-in (PlayFabLoginUI.SignInWithEmailAsync / the panel's Sign in). Null when signed in. */
-  async signInWithEmail(email: string, password: string): Promise<string | null> {
-    if (this.mode === 'offline') return this.fail('Email sign-in needs PlayFab (online mode).');
-    this.setBusy(true, 'Signing in…');
-    const result = await PlayFabAuth.loginWithEmailAsync(email, password);
-    if (result.success && PlayFabAuth.keepMeSignedIn) await PlayFabAuth.linkDeviceAsync();
-    this.setBusy(false, result.success ? null : result.error);
-    if (!result.success) {
-      this.changed();
-      return result.error ?? 'Sign-in failed.';
-    }
-    PlayFabGate.notifySignedIn();
-    this.setStatus('Signed in.');
-    await PlayFabEconomyBridge.attachAfterSignInAsync();
-    this.changed();
-    return null;
-  }
-
-  /** Save your account: attach email + password to THIS account (a guest keeps their chips). */
-  async saveAccount(email: string, password: string): Promise<string | null> {
-    if (this.mode === 'offline') return this.fail('Saving an account needs PlayFab (online mode).');
-    this.setBusy(true, 'Saving your account…');
-    const result = await PlayFabAuth.addRecoveryLoginAsync(email, password, null);
-    this.setBusy(false, result.success ? null : result.error);
-    if (!result.success) {
-      this.changed();
-      return result.error ?? 'Could not save the account.';
-    }
-    PlayFabGate.notifySignedIn();
-    this.setStatus('Account saved.');
-    await PlayFabEconomyBridge.attachAfterSignInAsync();
-    this.changed();
-    return null;
-  }
-
-  /** The menu's rename (PlayFabAuth.RenameAsync): null when the name stands, else why not. */
-  async rename(name: string): Promise<string | null> {
-    const error = await PlayFabAuth.renameAsync(name);
-    if (error === null && !PlayFabAuth.isSignedIn) {
-      // Signed out the Fusion menu saves its own username field; this port has no Fusion menu, so save it here.
-      PlayerPrefs.setString(MenuUsernamePref, PokerClientIdentity.playerName);
-    }
-    this.changed();
-    return error;
-  }
-
-  /** AccountService.setDisplayName: rejects with the player-facing reason when the name is refused. */
-  async setDisplayName(name: string): Promise<void> {
-    const error = await this.rename(name);
-    if (error) throw new Error(error);
-  }
-
-  async setAvatar(avatar: number): Promise<void> {
-    PlayerAvatar.choose(avatar);
-  }
-
-  /** PlayFabLoginUI.SignOutFromChrome: clears Keep me signed in, no auto-login again. */
-  async signOut(): Promise<void> {
-    if (this.mode === 'offline') {
-      PlayerPrefs.setInt(KeepMeSignedInPref, 0);
-      this.localSignedIn = false;
-    } else {
-      PlayFabAuth.signOut();
-      PlayFabWallet.clear();
-      PlayFabGate.reset();
-      PlayFabEconomyBridge.detachToLocal();
-      PlayFabFriends.clear();
-      FriendInvites.clear();
-      PlayerAvatar.forgetLocal();
-    }
-    this.setStatus('Signed out.');
-    this.changed();
-  }
-
-  // ---- Names the Nomad menu reads (menu/deps.ts AccountExtras) and the tournaments module (session ticket)
-
   get keepSignedIn(): boolean {
     return this.keepMeSignedIn;
   }
   setKeepSignedIn(on: boolean): void {
     this.setKeepMeSignedIn(on);
   }
+
+  /** At boot: offline, sign the local guest in again when the player asked to be kept signed in. */
+  async startUpAsync(): Promise<void> {
+    if (!this.online && this.keepMeSignedIn) this.signInLocalGuest();
+  }
+
+  /** Play as Guest. Resolves null when signed in, else the reason. */
+  async continueAsGuest(): Promise<string | null> {
+    const s = NomadLink.session;
+    if (!s) {
+      this.signInLocalGuest();
+      return null;
+    }
+    if (s.signedIn) return null;
+    this.setBusy(true, 'Signing in…');
+    await s.guest(PokerClientIdentity.playerName);
+    this.setBusy(false, s.signedIn ? null : s.error);
+    return s.signedIn ? null : (s.error ?? 'Sign-in failed.');
+  }
+
+  /** Continue with Google: needs a Google OAuth client id on the server, which is not set up yet. */
+  async continueWithGoogle(): Promise<string | null> {
+    return this.fail(this.online ? 'Google sign-in is not set up yet. Use your email instead.' : 'Google sign-in needs the Nomad server. Play as Guest instead.');
+  }
+
+  /**
+   * Email sign-in: a one-time link (no passwords). The link signs this browser in when opened; on staging, where no
+   * mail is sent, the server hands the link back and it is followed here. Linking keeps a guest's coins.
+   */
+  async signInWithEmail(email: string, _password = ''): Promise<string | null> {
+    const s = NomadLink.session;
+    if (!s) return this.fail('Email sign-in needs the Nomad server. Play as Guest instead.');
+    const address = (email ?? '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return this.fail('Enter your email address.');
+    this.setBusy(true, 'Sending your sign-in link…');
+    const r = await s.emailStart(address);
+    if (!r) return this.fail(s.error ?? 'Could not send the link.');
+    if (r.devLink) {
+      const token = new URL(r.devLink).searchParams.get('emailToken');
+      if (token) await s.emailVerify(token);
+      this.setBusy(false, s.signedIn ? 'Signed in.' : s.error);
+      return s.error;
+    }
+    this.setBusy(false, `Check ${address} for your sign-in link.`);
+    return null;
+  }
+
+  /** Save your account: attach an email to THIS account (a guest keeps its coins and progress). */
+  addRecoveryLogin(email: string, password = ''): Promise<string | null> {
+    return this.signInWithEmail(email, password);
+  }
+
+  /** The menu's rename: null when the name stands, else why not. */
+  async rename(name: string): Promise<string | null> {
+    const invalid = DisplayNames.validate(name);
+    if (invalid) return invalid;
+    const trimmed = name.trim();
+    if (NomadLink.signedIn) {
+      try {
+        const p = await NomadLink.call<PlayerProfile>('POST', SocialRoutes.profile, { displayName: trimmed });
+        DisplayNames.apply(p.displayName);
+        await NomadLink.session?.refresh();
+      } catch (e) {
+        return (e as Error).message || 'Could not save the name.';
+      }
+    } else DisplayNames.apply(trimmed);
+    this.changed();
+    return null;
+  }
+
+  async setDisplayName(name: string): Promise<void> {
+    const error = await this.rename(name);
+    if (error) throw new Error(error);
+  }
+
+  async setAvatar(avatar: number): Promise<void> {
+    PlayerAvatar.choose(avatar); // AccountAvatar saves it to the server
+  }
+
+  async signOut(): Promise<void> {
+    const s = NomadLink.session;
+    if (s) {
+      await s.signOut();
+      Friends.clear();
+      FriendInvites.clear();
+      PlayerAvatar.forgetLocal();
+      PokerClientIdentity.playFabId = '';
+    } else {
+      PlayerPrefs.setInt(KeepMeSignedInPref, 0);
+      this.localSignedIn = false;
+    }
+    this.setStatus('Signed out.');
+    this.changed();
+  }
+
   async signInAsGuest(): Promise<void> {
     await this.continueAsGuest();
   }
   async signInWithGoogle(): Promise<void> {
     await this.continueWithGoogle();
   }
-  addRecoveryLogin(email: string, password: string): Promise<string | null> {
-    return this.saveAccount(email, password);
-  }
-  /** This session's PlayFab ticket ('' offline) — what a table server verifies (ChipLedger.authenticateAsync). */
+
+  /** The ticket a table server verifies: the Nomad session token ('' offline). */
   get playFabSessionTicket(): string {
-    return PokerClientIdentity.playFabSessionTicket;
+    return NomadLink.session?.token ?? '';
   }
 
   /** The web3 module calls this after it wrote / cleared Poker.WalletPubkey + Poker.SessionJwt. */
@@ -258,10 +209,20 @@ export class EconomyAccount implements AccountService {
     this.changed();
   }
 
+  /** Mirror the server's player into the local identity (name, Friend ID, guest flag). */
+  adoptServerProfile(): void {
+    const me = this.me;
+    if (!me) return;
+    if (PokerClientIdentity.playFabId !== me.friendCode) PokerClientIdentity.playFabId = me.friendCode;
+    if (PokerClientIdentity.isGuest !== (me.kind === 'guest')) PokerClientIdentity.isGuest = me.kind === 'guest';
+    DisplayNames.apply(me.displayName);
+    this.changed();
+  }
+
   private signInLocalGuest(): void {
     this.localSignedIn = true;
-    if (PlayFabAuth.isFusionPlaceholderUsername(PokerClientIdentity.playerName) || PokerClientIdentity.playerName === 'Player') {
-      PlayFabAuth.applyLocalDisplayName(PokerClientIdentity.getOrCreateGuestName());
+    if (DisplayNames.isFusionPlaceholder(PokerClientIdentity.playerName) || PokerClientIdentity.playerName === 'Player') {
+      DisplayNames.apply(PokerClientIdentity.getOrCreateGuestName());
     }
     this.setStatus(null);
     this.changed();
@@ -276,6 +237,7 @@ export class EconomyAccount implements AccountService {
   private setBusy(busy: boolean, message: string | null): void {
     this._busy = busy;
     if (message !== null) this.setStatus(message);
+    this.changed();
   }
 
   private setStatus(message: string | null): void {

@@ -3,14 +3,16 @@
  *
  *   ctx.services.wallet        EconomyWallet  — VirtualEconomy.Wallet (+ free-play buy-in / cash-out)
  *   ctx.services.account       EconomyAccount — who is playing + every sign-in flow (account.ts)
- *   ctx.services.progress      ProgressService — cloud save of retention progress (PlayFabPlayerProgress keys)
- *   ctx.services.leaderboards  LeaderboardService — FreePlayLeaderboard (+ PlayFab boards when online)
- *   ctx.services.friends       FriendsService — friends list, requests, table invites, friend codes
+ *   ctx.services.leaderboards  LeaderboardService — the Nomad server's boards (local counters offline)
+ *   ctx.services.friends       FriendsService — friends list, requests, table invites, friend codes (Nomad server)
  *   ctx.services.avatars       AvatarService — own picture (PlayerAvatar) + catalogue helpers
  *   ctx.services.telemetry     TelemetryService — PokerTelemetry + PokerFunnel, local sink only
- *   ctx.services.economy       EconomyService — backend mode, grant queue, chip-ledger factory for the net server
+ *   ctx.services.economy       EconomyService — the chip-ledger factory for the local table server
+ *
+ * PlayFab is gone (Phase 4): with a Nomad server configured the account, wallet, rewards, friends and leaderboards
+ * are the server's; without one the game plays offline on a local guest and wallet.
  */
-import { PlayerPrefs, type RewardGrant, type VirtualWallet } from '../app/services';
+import type { RewardGrant, VirtualWallet } from '../app/services';
 import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
 import { AvatarUrl } from '@nomad/engine/social/avatarUrl';
 import { FriendCode } from '@nomad/engine/social/friendCode';
@@ -19,31 +21,25 @@ import type { LeaderboardKind } from '@nomad/engine/leaderboards/freePlayLeaderb
 import type { EconomyAccount } from './account';
 import { PokerFunnel } from './analytics/pokerFunnel';
 import { PokerTelemetry, type LocalTelemetrySink } from './analytics/pokerTelemetry';
-import type { BackendMode } from './config';
-import { PokerClientIdentity } from './identity';
 import { FreePlayLeaderboard, type LeaderboardSnapshot } from './leaderboards/freePlayLeaderboard';
-import { PlayFabEconomyBridge } from './playfab/economyBridge';
-import { PlayFabAgentProgress, PlayFabPlayerProgress, ProgressKeys, type AgentDeploymentSummary, type DailyEngagementState } from './playfab/playerProgress';
-import { PlayFabWallet } from './playfab/wallet';
-import { RetentionGrantQueue } from './retentionGrantQueue';
 import type { ChipLedger } from './server/chipLedger';
 import type { Signal } from './signal';
 import { FriendInvites, type CurrentTable, type FriendInvite } from './social/friendInvites';
-import { PlayFabFriends, type FriendEntry, type FriendsResult } from './social/playFabFriends';
+import { Friends, type FriendEntry, type FriendsResult } from './social/friends';
 import { PlayerAvatar } from './social/playerAvatar';
-import { FreePlayBank, VirtualEconomy } from './virtualEconomy';
+import { VirtualEconomy } from './virtualEconomy';
 
 // ---- wallet ------------------------------------------------------------------------------------------
 
 /** VirtualWallet over VirtualEconomy (so grants notify + log like VirtualEconomy.Grant in C#). */
 export interface EconomyWallet extends VirtualWallet {
-  /** Free-play buy-in with no server ledger (local wallet spends; PlayFab wallet moves FreePlayBank). */
+  /** Free-play buy-in with no server ledger (the local wallet spends; a server wallet refuses). */
   tryDebitFreePlay(chips: number): boolean;
   /** Same debit with the telemetry sink named (agent bankroll: 'agent_bankroll'). False when short. */
   trySpendCoins(amount: number, source: string): boolean;
   /** Returns a free-play stack / an unspent agent bankroll. */
   creditFreePlay(chips: number): void;
-  /** Re-read the authoritative balance (PlayFab) — no-op offline. */
+  /** Re-read the authoritative balance (the server's, when it owns the wallet). */
   refresh(): Promise<void>;
   readonly changed: Signal;
 }
@@ -73,87 +69,16 @@ export const economyWallet: EconomyWallet = {
   trySpendCoins: (amount: number, source: string) => VirtualEconomy.trySpendCoins(amount, source),
   creditFreePlay: (chips: number) => VirtualEconomy.creditFreePlay(chips),
   refresh: async () => {
-    if (PokerClientIdentity.isPlayFabSignedIn) await PlayFabWallet.refreshAsync();
+    (VirtualEconomy.wallet as { refresh?: () => void }).refresh?.();
   },
   changed: VirtualEconomy.changed,
-};
-
-// ---- progress ----------------------------------------------------------------------------------------
-
-/**
- * Cloud save of retention progress (PlayFabPlayerProgress / PlayFabAgentProgress), shaped as the retention module's
- * EngagementCloud / ProgressionCloud seam. While a PlayFab account is signed in (`isCloud`) reads and writes go to
- * UserData; otherwise they go to PlayerPrefs with the C# keys — exactly what EngagementCloud does with no override —
- * so retention can wire this once at install. 'progress:loaded' fires on ctx.events after every pull / sign-out.
- */
-export interface ProgressService {
-  readonly isCloud: boolean;
-  readonly changed: Signal;
-  loadEngagement(): DailyEngagementState;
-  saveEngagement(state: DailyEngagementState): void;
-  loadMissions(): string;
-  saveMissions(packed: string): void;
-  readonly agentIsCloud: boolean;
-  readonly agentChanged: Signal;
-  loadAgentSummary(): AgentDeploymentSummary | null;
-  saveAgentSummary(summary: AgentDeploymentSummary): void;
-  /** After a PlayFab sign-in installed the cloud wallet (C#: DailyEngagement.EnsureTodaysSpinCredit runs here). */
-  readonly attached: Signal;
-}
-
-const localLong = (key: string): number => {
-  const raw = PlayerPrefs.getString(key, '').trim();
-  return /^[+-]?\d+$/.test(raw) ? Number(raw) : 0;
-};
-
-export const progressService: ProgressService = {
-  get isCloud() {
-    return PlayFabPlayerProgress.isReady;
-  },
-  changed: PlayFabPlayerProgress.changed,
-  loadEngagement: () => PlayFabPlayerProgress.isReady ? PlayFabPlayerProgress.loadEngagement() : {
-    lastSpinDay: PlayerPrefs.getInt(ProgressKeys.LastSpinDay, 0),
-    lastLoginDay: PlayerPrefs.getInt(ProgressKeys.LastLoginDay, 0),
-    streakDay: PlayerPrefs.getInt(ProgressKeys.StreakDay, 0),
-    lastSpinCoins: localLong(ProgressKeys.LastSpinCoins),
-  },
-  saveEngagement: (s) => {
-    if (PlayFabPlayerProgress.isReady) return PlayFabPlayerProgress.saveEngagement(s);
-    PlayerPrefs.setInt(ProgressKeys.LastSpinDay, s.lastSpinDay);
-    PlayerPrefs.setInt(ProgressKeys.LastLoginDay, s.lastLoginDay);
-    PlayerPrefs.setInt(ProgressKeys.StreakDay, s.streakDay);
-    PlayerPrefs.setString(ProgressKeys.LastSpinCoins, String(s.lastSpinCoins));
-  },
-  loadMissions: () => (PlayFabPlayerProgress.isReady ? PlayFabPlayerProgress.loadMissionsPacked() : PlayerPrefs.getString(ProgressKeys.Missions, '')),
-  saveMissions: (p) => {
-    if (PlayFabPlayerProgress.isReady) PlayFabPlayerProgress.saveMissionsPacked(p);
-    else PlayerPrefs.setString(ProgressKeys.Missions, p);
-  },
-  get agentIsCloud() {
-    return PlayFabAgentProgress.isReady;
-  },
-  agentChanged: PlayFabAgentProgress.changed,
-  loadAgentSummary: () => {
-    if (PlayFabAgentProgress.isReady) return PlayFabAgentProgress.loadSummary();
-    try {
-      const v = JSON.parse(PlayerPrefs.getString(ProgressKeys.AgentLastSummary, '')) as unknown;
-      return v && typeof v === 'object' ? (v as AgentDeploymentSummary) : null;
-    } catch {
-      return null;
-    }
-  },
-  saveAgentSummary: (s) => {
-    if (PlayFabAgentProgress.isReady) PlayFabAgentProgress.saveSummary(s);
-    else PlayerPrefs.setString(ProgressKeys.AgentLastSummary, JSON.stringify(s));
-  },
-  attached: PlayFabEconomyBridge.attached,
 };
 
 // ---- leaderboards ------------------------------------------------------------------------------------
 
 export interface LeaderboardService {
   fetch(kind: LeaderboardKind, pageIndex?: number): Promise<LeaderboardSnapshot>;
-  /** Once per finished free-play hand (net chips, won?). Also submits to PlayFab when signed in. */
+  /** Once per finished free-play hand (net chips, won?) — local counters; the server counts its own hands. */
   recordHand(netChips: number, won: boolean): void;
   localScore(kind: LeaderboardKind): number;
   titleFor(kind: LeaderboardKind): string;
@@ -181,7 +106,7 @@ export interface FriendsService {
   sendRequest(idOrName: string): Promise<FriendsResult>;
   accept(friendId: string): Promise<FriendsResult>;
   remove(friendId: string): Promise<FriendsResult>;
-  find(playFabId: string): FriendEntry | null;
+  find(friendId: string): FriendEntry | null;
   // invites
   readonly inbox: readonly FriendInvite[];
   readonly invitesChanged: Signal;
@@ -195,7 +120,7 @@ export interface FriendsService {
   /** The net module: performs the join of an accepted invite (resolve null once under way). */
   setJoinHandler(fn: ((invite: FriendInvite) => Promise<string | null>) | null): void;
   // pure helpers (Core/Social)
-  formatCode(playFabId: string): string;
+  formatCode(friendId: string): string;
   parseCode(input: string): string | null;
   lastSeen(lastLoginUtcMs: number | null, nowMs?: number): string;
   /** FriendsHud.OpenAvatarPicker (the Nomad menu's Edit Avatar / Edit Picture): opens the friends sheet + picker. */
@@ -206,20 +131,20 @@ export interface FriendsService {
 
 export const friendsService: FriendsService = {
   get all() {
-    return PlayFabFriends.all;
+    return Friends.all;
   },
   get incomingCount() {
-    return PlayFabFriends.incomingCount;
+    return Friends.incomingCount;
   },
   get lastError() {
-    return PlayFabFriends.lastError;
+    return Friends.lastError;
   },
-  changed: PlayFabFriends.changed,
-  refresh: () => PlayFabFriends.refreshAsync(),
-  sendRequest: (q) => PlayFabFriends.sendRequestAsync(q),
-  accept: (id) => PlayFabFriends.acceptAsync(id),
-  remove: (id) => PlayFabFriends.removeAsync(id),
-  find: (id) => PlayFabFriends.find(id),
+  changed: Friends.changed,
+  refresh: () => Friends.refreshAsync(),
+  sendRequest: (q) => Friends.sendRequestAsync(q),
+  accept: (id) => Friends.acceptAsync(id),
+  remove: (id) => Friends.removeAsync(id),
+  find: (id) => Friends.find(id),
   get inbox() {
     return FriendInvites.inbox;
   },
@@ -292,24 +217,15 @@ export interface TelemetryService {
 // ---- economy (module-level) --------------------------------------------------------------------------
 
 export interface EconomyService {
-  readonly mode: BackendMode;
-  readonly grantQueue: typeof RetentionGrantQueue;
-  readonly freePlayBank: typeof FreePlayBank;
-  /** Settle queued retention coin grants now (no-op offline). */
-  requestFlushPendingGrants(): void;
-  /** PlayFabWallet.MarkAtTable / ClearAtTable for the net module (reload-safe cash-out follow). */
-  markAtTable(): void;
-  clearAtTable(): void;
-  /** A chip ledger for the dedicated-server stand-in (offline: over the local title, in memory or localStorage). */
+  /** 'nomad' with a Nomad server configured, else 'offline'. */
+  readonly mode: 'nomad' | 'offline';
+  /** A chip ledger for the local table server (in memory). */
   createChipLedger(): ChipLedger;
-  /** `?online=local` only: seed demo friends / requests / an invite / leaderboard rivals for the signed-in player. */
-  seedLocalDemo(): Promise<void>;
 }
 
 declare module '../app/app' {
   interface Services {
     economy?: EconomyService;
-    progress?: ProgressService;
     leaderboards?: LeaderboardService;
     friends?: FriendsService;
     avatars?: AvatarService;
