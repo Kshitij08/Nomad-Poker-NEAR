@@ -139,6 +139,7 @@ export class ThemePickerScreen implements Screen {
     if (!el) return;
     const w = el.clientWidth || innerWidth;
     const h = el.clientHeight || innerHeight;
+    if (!(w > 0 && h > 0)) return; // zero-size viewport (hidden tab / pane): the scale would be 0 and w / s NaN; the next resize lays out
     const sc = THEME_DATA.picker.canvas?.scaler ?? { referenceResolution: [1920, 1080], matchWidthOrHeight: 0.75 };
     const [rw, rh] = sc.referenceResolution;
     const m = sc.matchWidthOrHeight;

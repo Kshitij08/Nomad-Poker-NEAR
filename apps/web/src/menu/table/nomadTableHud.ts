@@ -82,6 +82,7 @@ export function nomadTableChrome(nomad: NomadHost): TableChrome {
       // CanvasScaler as the betting panel's (Scale With Screen Size, 1920×1080, match 0.5).
       const w = holder.clientWidth || window.innerWidth;
       const h = holder.clientHeight || window.innerHeight;
+      if (!(w > 0 && h > 0)) return; // zero-size viewport (hidden tab / pane): the scale would be 0 and w / s NaN; the next resize lays out
       const s = overlayScale(w, h); // portrait: layout/portraitHud.ts
       root.sizeDelta = [w / s, h / s];
       root.renderScale = s;

@@ -122,6 +122,7 @@ export class OverlayCanvas {
   layout(): void {
     const w = this.host.clientWidth || window.innerWidth;
     const h = this.host.clientHeight || window.innerHeight;
+    if (!(w > 0 && h > 0)) return; // zero-size viewport (hidden tab / pane): the scale would be 0 and w / s NaN; the next resize lays out
     const s = scaleFactor(this.scaler, w, h);
     this.scale = s;
     const r = this.root;

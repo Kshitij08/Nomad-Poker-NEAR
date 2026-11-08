@@ -577,6 +577,7 @@ export class UNode {
     const q = Math.round(this.pixelScale() * 100) / 100;
     const W = Math.max(1, Math.round(this.w * q));
     const H = Math.max(1, Math.round(this.h * q));
+    if (!Number.isFinite(W) || !Number.isFinite(H)) return; // Math.max(1, NaN) is NaN: no size yet, nothing to draw
     const key = `${sp.file}|${W}x${H}|${ppuM}|${tint ? `${tint.r.toFixed(3)},${tint.g.toFixed(3)},${tint.b.toFixed(3)}` : ''}`;
     if (key === this.sliceKey) return;
     const im = loadImage(sp.file!, () => this.render());

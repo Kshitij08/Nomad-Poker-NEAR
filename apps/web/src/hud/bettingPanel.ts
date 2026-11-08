@@ -278,6 +278,7 @@ export class BettingPanelView implements BettingPanelPort {
   /** CanvasScaler (Scale With Screen Size, 1920×1080, match 0.5) → root size in canvas units + CSS scale. */
   layout(w: number, h: number): void {
     // Portrait (layout/portraitHud.ts): 720-wide reference and a thumb-sized row + stacked raise panel.
+    if (!(w > 0 && h > 0)) return; // zero-size viewport (hidden tab / pane): the scale would be 0 and w / s NaN; the next resize lays out
     const s = overlayScale(w, h);
     this.scaleFactor = s;
     this.root.sizeDelta = [w / s, h / s];

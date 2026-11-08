@@ -74,6 +74,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
     const layout = () => {
       const w = holder.clientWidth || window.innerWidth;
       const h = holder.clientHeight || window.innerHeight;
+      if (!(w > 0 && h > 0)) return; // zero-size viewport (hidden tab / pane): the scale would be 0 and w / s NaN; the next resize lays out
       const s = overlayScale(w, h); // portrait: everything in the top row (layout/portraitHud.ts)
       root.sizeDelta = [w / s, h / s];
       root.renderScale = s;
