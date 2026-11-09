@@ -93,7 +93,6 @@ export class WalletLoginScreen implements Screen {
       const r = await this.solana.auth.login(PokerClientIdentity.playerName);
       if (!r.ok) return this.setStatus(r.error ?? 'Login failed.');
       this.setStatus('Signed in.');
-      await this.adoptChainConfig();
       if (!r.email && !PokerClientIdentity.emailPromptDismissed) this.emailPanel.hidden = false;
     } finally {
       this.busy = false;
@@ -115,20 +114,10 @@ export class WalletLoginScreen implements Screen {
       const r = await this.solana.auth.restoreSession();
       if (!r.ok) return this.setStatus(PokerClientIdentity.isLoggedIn ? 'Session found — reconnect your wallet.' : 'Not signed in.');
       this.setStatus('Signed in.');
-      await this.adoptChainConfig();
     } finally {
       this.busy = false;
       this.setButtons(true);
       this.refresh();
-    }
-  }
-
-  /** The backend's program id before anything signs an escrow instruction (non-fatal). */
-  private async adoptChainConfig(): Promise<void> {
-    try {
-      await (await w3(this.ctx).chain.get()).initializeFromBackend();
-    } catch (e) {
-      console.warn('[WalletLoginUI] Could not read /api/config, using built-in chain defaults:', (e as Error).message);
     }
   }
 

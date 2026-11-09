@@ -1,6 +1,6 @@
 # poker-per
 
-On-chain program for private poker tables on a MagicBlock Private Ephemeral Rollup (TEE), dealt with MagicBlock VRF. It sits next to the older `programs/poker-escrow`, which stays deployed and untouched as the rollback path.
+On-chain program for private poker tables on a MagicBlock Private Ephemeral Rollup (TEE), dealt with MagicBlock VRF. The older escrow program (`poker-escrow`) is no longer used by the new stack (removed 9 Nov 2026); it stays deployed on devnet, untouched.
 
 - **Program (devnet):** `7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv` (since 7 Oct; the first id, `6Pzbm2…RjvVR`, stopped reloading upgrades in the TEE)
 - **Upgrade authority:** devnet deployer `4kiqWY1NRf2syDhw7GQSJkbPzGwCibT2E9GdVC9dh3kD`

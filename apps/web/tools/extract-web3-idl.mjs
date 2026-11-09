@@ -1,6 +1,6 @@
-// Slims the Anchor IDLs of the two Solana programs the client talks to into what src/web3 needs:
+// Slims the Anchor IDL of the Solana program the client talks to into what src/web3 needs (escrow money tables were
+// removed on 9 Nov 2026; SOL play is the private tables only):
 //   per/idl/poker_per.json       → src/data/web3-per-idl.json     (private tables, MagicBlock TEE rollup)
-//   shared/idl/poker_escrow.json → src/data/web3-escrow-idl.json  (escrow money tables)
 // Same selection as per/scripts/gen-csharp.ts (which generates Assets/Scripts/Per/Core/Generated/PokerPerIdl.cs):
 // every type an account or an instruction argument uses, each instruction's discriminator, args and FLATTENED
 // account list (nested groups become "group.name", exactly like the C# IxAccount names), account
@@ -58,7 +58,6 @@ function slim(idl) {
 
 for (const [src, out] of [
   ['per/idl/poker_per.json', 'web/src/data/web3-per-idl.json'],
-  ['shared/idl/poker_escrow.json', 'web/src/data/web3-escrow-idl.json'],
 ]) {
   const idl = JSON.parse(fs.readFileSync(path.join(repo, src), 'utf8'));
   const json = JSON.stringify(slim(idl));

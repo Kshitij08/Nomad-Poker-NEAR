@@ -414,7 +414,6 @@ export class NetService {
         cancelled: () => this.cancelled,
         coins: route.kind === 'quick' ? coins : undefined,
         selectedBuyIn: buyIn,
-        lobbyCheck: (session, properties) => lobbyCheck(this.ctx, session, properties),
       });
       if (!r.ok || !r.conn) {
         if (this.cancelled) return;
@@ -436,22 +435,3 @@ export class NetService {
   }
 }
 
-/**
- * ChainLobbyProbe through the web3 module: the room's economy from its listed properties (the web table server answers
- * a join with them; there is no separate lobby list), refused when it isn't the player's lobby (ChainTableMode). Fails
- * open: no web3 module, or an unknown mode, goes ahead. Rooms without the "chain" mode are free tables, which a player
- * in the free lobby may join, so only a money room loads the chain code to decide.
- */
-async function lobbyCheck(ctx: AppContext, session: string, properties: Record<string, string>): Promise<string | null> {
-  const chain = ctx.services.chain;
-  const { ChainTableMode: Lobby } = await import('../web3/solana/identity');
-  if (!chain || (properties[Lobby.MODE_PROPERTY] !== Lobby.MODE_CHAIN && !Lobby.chainLobby)) return null;
-  const { TableMode } = await import('../web3/chain/service');
-  const found = await (await chain.get()).lookUpTableMode(session, async () => [{ name: session, properties }]);
-  if (found === TableMode.Unknown) return null;
-  const isChainTable = found === TableMode.Chain;
-  if (isChainTable === Lobby.chainLobby) return null;
-  return isChainTable
-    ? `'${session}' is a real-money table. Turn on the money table switch and connect your wallet to join it.`
-    : `'${session}' is a free-play table. Turn off the money table switch to join it.`;
-}

@@ -20,12 +20,6 @@ export interface Env {
   QA_ROOM_SPEED?: string;
   /** Bearer token for POST /v1/admin/drain (a secret). */
   DRAIN_TOKEN?: string;
-  /** '1': SOL tables (`poker-money…`) open on the escrow program. Needs ESCROW_AUTHORITY_SECRET. */
-  MONEY_TABLES?: string;
-  /** The game server's devnet settlement key (base58 64-byte secret; a secret, from .secrets.<stage>.json). */
-  ESCROW_AUTHORITY_SECRET?: string;
-  /** Devnet JSON-RPC for the escrow (a secret; default https://api.devnet.solana.com, which refuses Workers). Mainnet is refused. */
-  SOLANA_RPC_URL?: string;
   /** Spawns, overflow lookups and Agent starts per address. Optional so tests can leave it out. */
   HTTP_LIMITER?: RateLimit;
 }

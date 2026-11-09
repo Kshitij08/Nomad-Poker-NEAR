@@ -1,4 +1,0 @@
-target/
-.anchor/
-**/*.rs.bk
-test-ledger/

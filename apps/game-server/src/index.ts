@@ -1,6 +1,4 @@
 import { StakeSessionNames, PartyCodes } from '@nomad/table-server/sessions';
-import { chainConfig, escrowClient } from './chain';
-import { sweepEscrowTables } from './escrowTable';
 import type { Env } from './env';
 import { auditTable } from '@nomad/db/seatLocks';
 import { canonicalSession } from './roomSpec';
@@ -15,12 +13,10 @@ export { TableRoom } from './tableRoom';
  * local server took over its one socket.
  *
  *   GET  /v1/health
- *   GET  /v1/chain/config     SOL tables: { moneyTables, programId, settlementAuthority, rpcUrl } (devnet)
  *   GET  /v1/tables/ws?session=<name>   WebSocket to that table (then `join`, `hello`, …: the local server's protocol)
  *   POST /v1/tables/spawn     { code, money }               → { code } | { error }
  *   POST /v1/tables/overflow  { money, failed, minBuyIn }   → { session } | { error }
  *   POST /v1/admin/drain      (Bearer DRAIN_TOKEN)          finish hands, pay out, close every open table
- *   POST /v1/admin/escrow-sweep (Bearer DRAIN_TOKEN)        pay out and close SOL tables their rooms left behind (the cron runs it too)
  *   GET  /v1/admin/audit?room= (Bearer DRAIN_TOKEN)         where every chip of that room's tables went (drift)
  *   /v1/agents/*              the owner's Agent sessions (agentRoutes.ts)
  *
@@ -64,14 +60,6 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...h, 'access-control-max-age': '86400' } });
 
     if (url.pathname === '/v1/health') return json({ ok: true, stage: env.STAGE, version: VERSION }, 200, h);
-    if (url.pathname === '/v1/chain/config' && request.method === 'GET') {
-      try {
-        return json(await chainConfig(env), 200, h);
-      } catch (e) {
-        console.error(`chain config: ${(e as Error).message}`);
-        return json({ moneyTables: false, error: 'The SOL table key is misconfigured.' }, 503, h);
-      }
-    }
     if (await limited(request, env, url.pathname)) return json({ error: 'Too many requests; wait a minute.', code: 'rate_limited' }, 429, h);
 
     if (url.pathname === '/v1/tables/ws') {
@@ -109,23 +97,10 @@ export default {
       return (await agentRoute(request, env, url, (body, status = 200) => json(body, status, h)))!;
     }
 
-    if (url.pathname === '/v1/admin/escrow-sweep' && request.method === 'POST') {
-      if (!env.DRAIN_TOKEN || request.headers.get('authorization') !== `Bearer ${env.DRAIN_TOKEN}`) return json({ error: 'unauthorized' }, 401);
-      const logs: string[] = [];
-      try {
-        const closed = await runEscrowSweep(env, (level, m) => logs.push(`${level} ${m}`));
-        return json({ closed, logs }, 200);
-      } catch (e) {
-        return json({ error: (e as Error).message, logs }, 500);
-      }
-    }
-
     if (url.pathname === '/v1/admin/drain' && request.method === 'POST') {
       if (!env.DRAIN_TOKEN || request.headers.get('authorization') !== `Bearer ${env.DRAIN_TOKEN}`) return json({ error: 'unauthorized' }, 401);
       const open = await env.DB.prepare('SELECT DISTINCT room FROM table_sessions WHERE closed_at IS NULL').all<{ room: string }>();
-      // SOL tables keep no table_sessions row: their rooms come from escrow_tables (draining pays every seat out).
-      const sol = await env.DB.prepare("SELECT DISTINCT room FROM escrow_tables WHERE state IN ('creating', 'open')").all<{ room: string }>();
-      const rooms = [...new Set([...open.results, ...sol.results].map((r) => r.room))];
+      const rooms = open.results.map((r) => r.room);
       const startedAt = Date.now();
       await Promise.all(rooms.map((room) => table(env, room).fetch(`https://table/drain?session=${encodeURIComponent(room)}`, { method: 'POST' })));
       // A drained room has no live table. Rows still open for it belong to tables that died without closing (an
@@ -163,15 +138,6 @@ export default {
         ),
       );
     }
-    // SOL tables a room left behind (closed mid-way, or a failed create): pay every seat out and close them.
-    ctx.waitUntil(
-      runEscrowSweep(env, (level, m) => console[level === 'info' ? 'log' : level](m)).then(
-        (n) => {
-          if (n) console.log(`[cron] escrow tables closed: ${n}`);
-        },
-        (e) => console.error('[cron] escrow sweep failed', e),
-      ),
-    );
     ctx.waitUntil(
       sweepAgents(env).then(
         (r) => {
@@ -192,13 +158,3 @@ export default {
     );
   },
 } satisfies ExportedHandler<Env>;
-
-/** Pays out and closes SOL tables their rooms left behind (sweepEscrowTables), asking each room whether it still runs its table. */
-async function runEscrowSweep(env: Env, log: (level: 'info' | 'warn' | 'error', m: string) => void): Promise<number> {
-  const client = escrowClient(env, log);
-  if (!client) return 0;
-  return sweepEscrowTables(env.DB, await client, log, async (room, tableId) => {
-    const res = await table(env, room).fetch(`https://table/hosts?session=${encodeURIComponent(room)}&table=${encodeURIComponent(tableId)}`);
-    return ((await res.json()) as { hosts: boolean }).hosts;
-  });
-}

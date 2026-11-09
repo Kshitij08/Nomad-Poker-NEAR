@@ -6,7 +6,6 @@
 import type { AppContext } from '../app/app';
 import type { Web3Config } from './config';
 import type { SolanaService } from './solana/service';
-import type { ChainService } from './chain/service';
 import type { PerRuntime } from './per/service';
 
 /** A service whose implementation loads on first use (a separate chunk). */
@@ -19,7 +18,6 @@ declare module '../app/app' {
   interface Services {
     web3Config?: Web3Config;
     solana?: SolanaService;
-    chain?: LazyService<ChainService>;
     per?: LazyService<PerRuntime>;
   }
 }
@@ -27,12 +25,11 @@ declare module '../app/app' {
 export interface Web3Services {
   web3Config: Web3Config;
   solana: SolanaService;
-  chain: LazyService<ChainService>;
   per: LazyService<PerRuntime>;
 }
 
 export function w3(ctx: AppContext): Web3Services {
   const s = ctx.services;
-  if (!s.web3Config || !s.solana || !s.chain || !s.per) throw new Error('[web3] the web3 module is not installed');
+  if (!s.web3Config || !s.solana || !s.per) throw new Error('[web3] the web3 module is not installed');
   return s as Web3Services;
 }

@@ -14,7 +14,6 @@
     "deploy:production": "node ../../infra/check-migrations.mjs production && node scripts/drain.mjs production && npm run build:production && cf deploy --prebuilt --mode production --secrets-file .secrets.production.json"
   },
   "dependencies": {
-    "@nomad/chain": "*",
     "@nomad/db": "*",
     "@nomad/engine": "*",
     "@nomad/table-server": "*"

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { tmpToHtml } from '../ui/richText';
 import { resolveOnce } from '../ui/walletPicker';
 import { buyInRange } from '../ui/buyInPrompt';
-import { format } from '../ui/cashOut';
 import { codeBytes, ordinal, span } from '../ui/lobbyTourney';
 import { agentLabel, sessionWhen } from '../ui/lobbyAgent';
 import { u64 } from '../ui/lobby';
@@ -57,13 +56,6 @@ describe('PrivateBuyInPrompt numbers', () => {
     expect(buyInRange(5000)).toEqual({ min: 500, max: 1000, canAfford: true, value: 1000 });
     expect(buyInRange(750)).toEqual({ min: 500, max: 750, canAfford: true, value: 750 });
     expect(buyInRange(300)).toEqual({ min: 500, max: 500, canAfford: false, value: 500 });
-  });
-});
-
-describe('CashOutPanel wording', () => {
-  it('formats like string.Format', () => {
-    expect(format('Cash out {0} chips for {1} SOL', '1,567', '0.1567')).toBe('Cash out 1,567 chips for 0.1567 SOL');
-    expect(format('txn id:\n{0}', 'sig')).toBe('txn id:\nsig');
   });
 });
 

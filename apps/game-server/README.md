@@ -7,7 +7,6 @@ ledger in D1 and every hand recorded to R2. Staging: https://nomad-poker-game-st
 | Route | What it does |
 |---|---|
 | `GET /v1/health` | Liveness. |
-| `GET /v1/chain/config` | SOL tables: `{ moneyTables, programId, settlementAuthority, rpcUrl, authorityLamports, rpcError? }` (devnet). |
 | `GET /v1/tables/ws?session=<name>` | WebSocket to that table's Durable Object. The client then speaks the local server's protocol unchanged (`join`, `hello`, actions, chat, voice signalling; binary frames are C# codec events). Origin must be an allowed web origin (staging also accepts no Origin, for test harnesses). |
 | `POST /v1/tables/spawn` `{ code }` | Creates a party room under its code (PokerDedicatedPartySpawner). |
 | `POST /v1/tables/overflow` `{ failed, minBuyIn }` | The next Quick Play overflow table that is not full. |
@@ -70,16 +69,6 @@ which pay 1st and 2nd (`trn:<id>:payout:<place>`) once. A cancelled or aborted t
 host prize. Players are named by Friend ID in rosters and standings. A deploy restarts Durable Objects, so a
 tournament running across a deploy is aborted and refunded by the cron.
 
-## SOL tables (escrow, devnet)
-
-Where `MONEY_TABLES=1` (staging) and `ESCROW_AUTHORITY_SECRET` is set, `poker-money…` rooms are SOL tables on the
-poker-escrow program (`src/escrowTable.ts`, `@nomad/chain/escrowClient`). The room creates its own table on chain,
-with the game server's key as the settlement authority. Players buy in with their own wallet (`buy_in`) and sit with
-their seat's chips. Every hand is a round: `begin_round` before the deal, `settle_round` with each player's change
-after it. Leavers are paid at the hand boundary, and closing the room pays out every seat and closes the table. No
-bots or Agents, no XP. The chain is the ledger; D1 only lists the tables (`escrow_tables`). Devnet's public RPC
-refuses Workers, so `SOLANA_RPC_URL` must be a provider's devnet URL. See `docs/phase-6-design.md`.
-
 ## Play style (My Twin, coach)
 
 `src/styleRecorder.ts` records every decision a Nomad player makes (strength, pot, price, position, action) and each
@@ -99,12 +88,9 @@ npm run deploy:staging        # drain, build, deploy (needs .secrets.staging.jso
 npx tsx scripts/soak.ts 1000  # exit-gate soak: two staging guests, 1,000 hands with bots, zero drift
 npx tsx scripts/agent-check.ts 8      # Phase 5 gate: an Agent plays 8 hands and pays back; a second is stopped
 npx tsx scripts/tournament-check.ts   # Phase 5 gate: 8 staging guests play a hosted tournament; prizes in the ledger
-npx tsx scripts/escrow-check.ts 20 staging [--local]  # Phase 6 gate: 3 devnet wallets play a SOL table; every lamport checked
-node ../../infra/escrow-key.mjs staging show          # the settlement key's address and devnet balance
 ```
 
-`.secrets.<stage>.json` (git-ignored) holds `DRAIN_TOKEN`, `ESCROW_AUTHORITY_SECRET` (made by
-`infra/escrow-key.mjs <stage> create`) and `SOLANA_RPC_URL`; it is uploaded with each deploy.
+`.secrets.<stage>.json` (git-ignored) holds `{ "DRAIN_TOKEN": "<random>" }`; it is uploaded with each deploy.
 
 The web client plays here with `?netServer=staging` (it signs in to the staging API as a guest if needed); its Agents
 and tournaments use these servers too. Without a Nomad server configured, Agents run in the browser's local farm and

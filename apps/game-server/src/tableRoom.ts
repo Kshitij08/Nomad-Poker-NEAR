@@ -7,7 +7,6 @@ import { tournamentBySession } from '@nomad/db/tournaments';
 import { TableHost, type HostSocket, type LogFn } from './tableHost';
 import { TournamentHost } from './tournamentHost';
 import { TableSlot } from './tableSlot';
-import { escrowClient, moneyTablesOn } from './chain';
 
 /**
  * One table, as a Durable Object named by its session ('poker-free', 'poker-free-st50-2', a party code…). The logic
@@ -18,7 +17,6 @@ import { escrowClient, moneyTablesOn } from './chain';
  *   POST /spawn?session=        mark a party room as created (PokerDedicatedPartySpawner)
  *   GET  /occupancy             { open, players, full } for overflow placement
  *   GET  /holds?player=&table=  does this table still hold that seat? (before paying a stranded stack back)
- *   GET  /hosts?table=          is that table session (a SOL table) still running here? (the escrow sweep)
  *   POST /drain                 finish the hand, pay everyone out, close (before a deploy)
  *   POST /open?session=         open the room now (the cron, a few minutes before a tournament starts)
  *   POST /agents/seat?session=  body: an agent_deployments row → { seated } (opens the table if needed)
@@ -45,8 +43,6 @@ export class TableRoom extends DurableObject<Env> {
         return Response.json({ ok: true });
       case '/occupancy':
         return Response.json(slot?.occupancy() ?? { open: false, players: 0, full: false });
-      case '/hosts':
-        return Response.json({ hosts: slot?.hostsTable(url.searchParams.get('table') ?? '') ?? false });
       case '/holds':
         return Response.json({ holds: slot?.holds(url.searchParams.get('player') ?? '', url.searchParams.get('table') ?? '') ?? false });
       case '/drain':
@@ -84,7 +80,6 @@ export class TableRoom extends DurableObject<Env> {
       session,
       isSpawned: async () => (await this.ctx.storage.get<boolean>('spawned')) === true,
       qaRooms: env.QA_ROOMS === '1',
-      moneyTables: moneyTablesOn(env),
       qaSpeed: Number(env.QA_ROOM_SPEED) || 1,
       log,
       createHost: async (spec, speed) => {
@@ -94,10 +89,8 @@ export class TableRoom extends DurableObject<Env> {
           if (!t) throw new Error(`Tournament '${spec.name}' was not found.`);
           return new TournamentHost({ spec, db: env.DB, tournamentId: t.id, clock: realClock(speed), log });
         }
-        const escrow = spec.properties.mode === 'chain' ? await escrowClient(env, log) : undefined;
         return new TableHost({
           spec,
-          escrow: escrow ?? undefined,
           db: env.DB,
           clock: realClock(speed),
           log,

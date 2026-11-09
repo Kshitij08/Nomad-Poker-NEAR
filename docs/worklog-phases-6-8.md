@@ -214,6 +214,19 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
       repo.
     - **Web client:** `?perprogram=nomad` (the default in the staging web build) uses this program and service.
       The existing test and live options are unchanged.
+27. **Escrow money tables removed from the new stack** (your call, 9 Nov: PER only, as in Unity).
+    - **Removed:**
+      - the game server's money rooms, escrow host, chain routes and sweep;
+      - the engine's hand gate;
+      - the `@nomad/chain` package and the `escrow_tables` record (migration 0010);
+      - the web client's escrow program client, cash-out screen and room-mode probe;
+      - the escrow program's source and IDL.
+    - **Kept:** all of it is in git history (`5645313`, `92c490d`). Every escrow table was already paid out and
+      closed on chain. The game server's devnet key, holding about 1.45 devnet SOL from your WSL wallet, is kept
+      retired in the git-ignored `apps/game-server/.secrets.retired-escrow.json`.
+    - **Staging redeployed.** One ordering slip: I applied the drop migration before deploying the code that stopped
+      using the table, so the old code's pre-deploy drain failed. No table was open and nobody was seated, so I
+      deployed directly, and the drain works again.
 
 ## Questions for you
 
@@ -244,15 +257,8 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     the production allowed origins, the CSP, the deep-link app verification files and the launch step.
 11. **The coach's written note.** It uses Claude (default model `claude-haiku-5-5`) when the API has an
     `ANTHROPIC_API_KEY` secret; without it players get the computed report only. Do you want the note, and whose key?
-12. **Build the player side of escrow SOL tables, or drop the escrow?** Unity already turned escrow money tables off
-    (decision 20). The server side is built. The player side isn't: a buy-in button that signs `buy_in`, rebuy, the
-    cash-out panel, and the lobby entry.
-    - *A. Build it* (about a day). Pros: matches the plan doc; a simple SOL table with no MagicBlock dependency.
-      Cons: it revives a mode the Unity game deliberately retired, and it overlaps the PER private tables.
-    - *B. Keep the server side behind the staging switch and spend Phase 6 on PER* (question 2). Pros: effort goes to
-      the SOL mode players use today. Cons: the escrow work stays unused for now.
-    - *C. Remove the escrow from the new stack.* Pros: less code. Cons: throws away tested work, and the plan changes.
-    I lean to B.
+12. ~~**Build the player side of escrow SOL tables, or drop the escrow?**~~ Answered 9 Nov: removed; PER only
+    (decision 27).
 13. ~~**A devnet RPC the Worker can reach.**~~ Answered 9 Nov: reuse the Alchemy devnet URL the Unity client ships
     (decision 24). It shares the live game's free-tier quota, so a key of the new stack's own is still worth getting
     before launch.

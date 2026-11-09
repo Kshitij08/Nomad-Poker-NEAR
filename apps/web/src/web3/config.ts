@@ -17,9 +17,6 @@ export type Cluster = 'devnet';
 
 /** Program ids and fixed accounts (PerIds / PokerChainConfig). */
 export const IDS = {
-  /** poker-escrow (Chain/PokerEscrowProgram.cs ProgramIdBase58). The backend's /api/config may replace it. */
-  escrowProgram: 'GdduGzsoiEamv285Z4DnBapmkMScnHLDdUAdWPywHozo',
-  escrowSettlementAuthority: 'FcjrYf725azTnMao6xEzKPSrT4hD5YKYhKUHnVbWCUMH',
   /** poker-per: the live program (PerIds.LiveProgramId) and the internal test program (the IDL's address). */
   perLiveProgram: '7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv',
   perTestProgram: '4A3DZW5zvmG6v6C47UqooVbnTvNtgRQJ5fKDMZ62FNMZ',
@@ -55,8 +52,6 @@ export interface Web3Config {
   readonly cluster: Cluster;
   /** Solana devnet JSON-RPC for reads and wallet-signed L1 transactions (PerGameWallet.SolanaRpcUrl). */
   readonly solanaRpcUrl: string;
-  /** Escrow reads (PokerChainConfig.DevnetRpcUrl falls back to the public devnet RPC here: no API key in the web build). */
-  readonly escrowRpcUrl: string;
   /** MagicBlock's devnet TEE rollup (PerSettings.TeeUrl). */
   readonly teeUrl: string;
   /** The poker-per program the client addresses. Test builds (editor/staging) use the IDL's test program. */
@@ -106,7 +101,6 @@ export function makeConfig(params: URLSearchParams = new URLSearchParams()): Web
   return Object.freeze({
     cluster: 'devnet',
     solanaRpcUrl: clean(endpointParam(params, 'web3rpc')) ?? 'https://api.devnet.solana.com',
-    escrowRpcUrl: clean(endpointParam(params, 'web3rpc')) ?? 'https://api.devnet.solana.com',
     teeUrl: 'https://devnet-tee.magicblock.app',
     perProgram: which === 'nomad' ? IDS.perNomadProgram : perIsTestProgram ? IDS.perTestProgram : IDS.perLiveProgram,
     perIsTestProgram,

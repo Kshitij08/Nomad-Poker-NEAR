@@ -115,7 +115,7 @@ Ported: the table (3D deal/reveal/return, river slam, pot chips, HUD, sound), th
 menu and every screen it shows (table select, stakes, settings, market, friends, party, leaderboard, tournaments,
 Agents, level rewards, Lucky Slot, weekly rewards), themes, PlayFab economy/progress/social (offline by default),
 multiplayer (quick play, parties, chat, reactions, voice over WebRTC, reconnect), tournaments (offline practice and
-server-run), Coins Agents with replays, and Solana wallet / escrow / PER private tables.
+server-run), Coins Agents with replays, and Solana wallet / PER private tables (escrow money tables were removed on 9 Nov 2026).
 
 Known gaps and deliberate differences are listed in each module's report notes and code comments; the main ones:
 the world-space HUD is depth-sorted against opaque 3D cards and tokens like Unity (`src/three/hudDepth.ts`), but

@@ -1,18 +1,15 @@
 /**
- * The web3 module's pure parts: network policy, the escrow program (decoders checked against Chain/AccountDecoder.cs
- * byte offsets, instruction data against PokerEscrowProgram.cs discriminators), PER instruction lists against the IDL,
+ * The web3 module's pure parts: network policy, PER instruction lists against the IDL,
  * the betting-panel legality port, and the seat rotation the PER table uses.
  */
 import { describe, expect, it } from 'vitest';
 import { Keypair, PublicKey } from '@solana/web3.js';
 import { makeConfig, assertAllowedUrl, NetworkPolicyError, DEPLOYED } from '../config';
-import { decodeSeat, decodeTable, EscrowProgram, escrowIdl, quoteBuyIn, tableIdToBytes, SeatStatus } from '../chain/escrow';
 import { PerTableAddresses } from '../per/addresses';
 import { PerIx } from '../per/ix';
 import { PerGame } from '../per/legal';
 import { perIdl } from '../per/types';
 import { RotatedView } from '../per/perTableController';
-import { ChainTableSession } from '../chain/chainTableSession';
 import type { TableViewPort } from '@nomad/engine';
 
 describe('network policy (config.ts)', () => {
@@ -42,88 +39,6 @@ describe('network policy (config.ts)', () => {
     const live = makeConfig(new URLSearchParams('web3deployed=1'));
     expect(live.gameBackendUrl).toBe(DEPLOYED.gameBackend);
     expect(() => assertAllowedUrl(live, DEPLOYED.gameBackend)).not.toThrow();
-  });
-});
-
-/** Chain/AccountDecoder.cs, byte for byte, as the reference for the IDL decoder. */
-function referenceDecodeTable(d: Uint8Array) {
-  const v = new DataView(d.buffer, d.byteOffset);
-  let o = 8 + 32 + 32 + 32;
-  const buyIn = v.getBigUint64(o, true); o += 8;
-  const rake = v.getUint16(o, true); o += 2;
-  const sb = v.getBigUint64(o, true); o += 8;
-  const bb = v.getBigUint64(o, true); o += 8;
-  const maxSeats = d[o++]!;
-  const seated = d[o++]!;
-  const chipsInPlay = v.getBigUint64(o, true); o += 8;
-  const nonce = v.getBigUint64(o, true); o += 8;
-  const active = d[o++] !== 0;
-  o += 8;
-  const pending = v.getBigUint64(o, true);
-  return { buyIn, rake, sb, bb, maxSeats, seated, chipsInPlay, nonce, active, pending };
-}
-
-describe('poker-escrow (Chain/*)', () => {
-  const host = Keypair.generate().publicKey;
-  const tableData = escrowIdl.encodeAccount('Table', {
-    host: host.toBytes(), settlementAuthority: host.toBytes(), tableId: tableIdToBytes('x2c-abc'), buyInLamports: 100_000_000n, rakeBps: 250,
-    smallBlindChips: 10n, bigBlindChips: 20n, maxSeats: 6, seatedCount: 2, chipsInPlay: 2000n, roundNonce: 7n, roundActive: true,
-    lastSettlementTs: 123n, pendingChipsInPlay: 50n, bump: 254,
-  });
-
-  it('decodes Table exactly like AccountDecoder.DecodeTable', () => {
-    const t = decodeTable('x2c-abc', tableData);
-    const r = referenceDecodeTable(tableData);
-    expect([t.buyInLamports, t.rakeBps, t.smallBlindChips, t.bigBlindChips, t.maxSeats, t.seatedCount, t.chipsInPlay, t.roundNonce, t.roundActive, t.pendingChipsInPlay])
-      .toEqual([r.buyIn, r.rake, r.sb, r.bb, r.maxSeats, r.seated, r.chipsInPlay, r.nonce, r.active, r.pending]);
-    expect(t.host).toBe(host.toBase58());
-  });
-
-  it('decodes Seat (status enum, pending chips)', () => {
-    const seat = decodeSeat(escrowIdl.encodeAccount('Seat', {
-      table: host.toBytes(), player: host.toBytes(), chips: 900n, depositedLamports: 1n, rakePaidLamports: 2n, status: 1, lastActiveTs: 0n, pendingChips: 100n, bump: 1,
-    }));
-    expect(seat.status).toBe(SeatStatus.Leaving);
-    expect(seat.chips + seat.pendingChips).toBe(1000n);
-  });
-
-  it('quotes a buy-in like PokerChain.QuoteBuyIn', () => {
-    expect(quoteBuyIn(100_000_000n, 250)).toEqual({ buyInLamports: 100_000_000n, rakeLamports: 2_500_000n, totalLamports: 102_500_000n, chips: 1000n });
-  });
-
-  it('builds buy_in / rebuy / request_leave with PokerEscrowProgram.cs discriminators and accounts', () => {
-    const p = new EscrowProgram();
-    const player = Keypair.generate().publicKey;
-    const dev = Keypair.generate().publicKey;
-    const buy = p.buyInIx(player, 'x2c-abc', dev);
-    expect([...buy.data.subarray(0, 8)]).toEqual([126, 94, 133, 165, 163, 236, 161, 152]);
-    expect([...buy.data.subarray(8, 15)]).toEqual([...new TextEncoder().encode('x2c-abc')]);
-    expect(buy.keys.map((k) => [k.isSigner, k.isWritable])).toEqual([[true, true], [false, false], [false, true], [false, true], [false, true], [false, true], [false, false]]);
-    expect(buy.keys[4]!.pubkey.equals(p.deriveSeat(tableIdToBytes('x2c-abc'), player))).toBe(true);
-    const rebuy = p.rebuyIx(player, 'x2c-abc', 100_000_000n, dev);
-    expect([...rebuy.data.subarray(0, 8)]).toEqual([147, 185, 111, 149, 82, 245, 49, 165]);
-    expect(new DataView(rebuy.data.buffer, rebuy.data.byteOffset).getBigUint64(40, true)).toBe(100_000_000n);
-    expect([...p.requestLeaveIx(player, 'x2c-abc').data.subarray(0, 8)]).toEqual([25, 112, 92, 69, 219, 248, 146, 134]);
-  });
-
-  it('ChainTableSession treats a lost begin_round that landed as success, and halts after three failed settles', async () => {
-    let roundActive = true;
-    const fake = {
-      getTable: async () => ({ roundActive }) as never,
-      getTableWithRetry: async () => ({}) as never,
-      tryGetSeat: async () => null,
-      host: {
-        beginHand: async () => ({ success: false, alreadyActive: false, roundNonce: 0n, signature: null, error: 'timeout' }),
-        settleHand: async () => ({ success: false, signature: null, error: 'boom' }),
-      } as never,
-    };
-    const s = ChainTableSession.adopt(fake, 'jwt', 'x2c-t', 1n, 1n, 2n, async () => {});
-    expect(await s.beginHand()).toBe(true);
-    let halted = false;
-    s.onHalted(() => (halted = true));
-    expect(await s.settleHand([], 0)).toBe(false); // round still active after every attempt
-    expect(halted).toBe(true);
-    roundActive = false;
   });
 });
 
