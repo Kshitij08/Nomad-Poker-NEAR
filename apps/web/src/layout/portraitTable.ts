@@ -21,43 +21,16 @@ import type { TableStage } from '../table/tableStage';
 import type { UnitySpline } from '../anim/unitySpline';
 import { worldCanvasSpace } from './canvasSpace';
 import { isPortrait, safeArea } from './orientation';
-import { PortraitSeats, STACKED_SEAT_BOX } from './portraitSeats';
+import { PortraitSeats } from './portraitSeats';
 import { overlayScale } from './portraitRects';
 import { PORTRAIT_ROW, PORTRAIT_TOP_ROW_Y } from './portraitHud';
+import { PORTRAIT_LAYOUT as P, portraitCardSpot, SEAT_UNIT, STACKED_SEAT_BOX } from './portraitLayout';
 
 /** Slot i is drawn in place of landscape slot (i + SHIFT) mod 8: a quarter of the oval, so slot 0 (you) is at the bottom. */
 export const PORTRAIT_SLOT_SHIFT = 2;
 
 /** Portrait screen coords (world units, x right / y up on screen) → Unity world: sx = −z, sy = x. */
 const unityOf = (sx: number, sy: number, y: number): [number, number, number] => [sy, y, -sx];
-
-type XY = [number, number];
-
-/**
- * Layout of the turned table in portrait screen coords (world units before the fit zoom). Seat = avatar centre;
- * cards = where card 0 of the seat's hole cards lands.
- */
-const P = {
-  seats: [
-    { avatar: [0, -5.5], cards: [0.05, -3.3] }, // 0 you (bottom)
-    { avatar: [-3.25, -5.2], cards: [-2.45, -3.75] }, // 1 bottom-left
-    { avatar: [-3.25, -0.7], cards: [-1.45, -0.15] }, // 2 left
-    { avatar: [-3.25, 5.7], cards: [-1.6, 3.75] }, // 3 top-left
-    { avatar: [0, 6.85], cards: [0.05, 3.7] }, // 4 top
-    { avatar: [3.25, 5.7], cards: [1.7, 3.75] }, // 5 top-right
-    { avatar: [3.25, -0.7], cards: [1.55, -0.15] }, // 6 right
-    { avatar: [3.25, -5.2], cards: [2.55, -3.75] }, // 7 bottom-right
-  ] as { avatar: XY; cards: XY }[],
-  /** Community row: centre, spacing and size (landscape spacing is ~1.0). */
-  board: { x: 0, y: 1.5, spacing: 1.2, scale: 1.2 },
-  /** Pot pill (Pot_UI canvas, drawn at `scale` × the 3D zoom) and the chip piles (Token Parents) beside it. */
-  pot: { x: 0.45, y: 2.8, scale: 0.95 },
-  tokens: { x: -1.75, y: 2.8 },
-  /** Seat HUD canvases are drawn this much larger than the 3D projection. */
-  hudScale: 1.55,
-  /** Your hole cards grow to this size as they land. */
-  ownCardScale: 1.7,
-};
 
 /** Canvas units (portrait overlay reference) kept clear above and below the table: the top row and the action row. */
 /** Canvas units the tournament banner adds under the top row (portrait.css). */
@@ -70,8 +43,6 @@ interface CardViewLike {
   retargetSpline(s: UnitySpline | null): void;
 }
 type SplineFields = Record<string, unknown>;
-
-const SEAT_UNIT = 0.0022457757; // Name_Canvas lossy scale (world units per canvas unit)
 
 export class PortraitTable {
   private portrait = false;
@@ -88,7 +59,7 @@ export class PortraitTable {
   private bannerShown = false;
   /** Unity-space rotation that undoes the world's quarter turn (for the community slots). */
   private readonly counter = new Quaternion();
-  private readonly cardHome = new Map<Object3D, { p: Vector3; q: Quaternion; s: Vector3 }>();
+  private readonly cardHome = new Map<Object3D, CardHome>();
   /** Fit region (portrait coords), from the seat grid and the stacked seat box. */
   private readonly extent: { x0: number; x1: number; y0: number; y1: number };
 
@@ -148,28 +119,30 @@ export class PortraitTable {
   // ---------------------------------------------------------------- splines
 
   /**
-   * Slot i's portrait splines: landscape slot (i+SHIFT)'s pair, with a similarity about card 0's start (the deck) —
-   * a turn about Y and a uniform scale — that lands card 0 on the slot's portrait card spot.
+   * Slot i's portrait splines: landscape slot (i+SHIFT)'s pair, each with a similarity about its start (the deck) —
+   * a turn about Y and a uniform scale — that lands that card on its portrait spot (portraitLayout.ts: the pair side
+   * by side, card 0 on the left).
    */
   private buildPortraitSplines(slot: number): SplineFields[] {
     const n = this.stage.table.seatSplines.length;
     const src = this.stage.table.seatSplines[(slot + PORTRAIT_SLOT_SHIFT) % n];
-    const start = src[0].evaluatePosition(0);
-    const end = src[0].evaluatePosition(1);
-    const target = unityOf(P.seats[slot].cards[0], P.seats[slot].cards[1], end.y);
-    const v0x = end.x - start.x;
-    const v0z = end.z - start.z;
-    const v1x = target[0] - start.x;
-    const v1z = target[2] - start.z;
-    // three's makeRotationY(θ) maps (x, z) → (x cosθ + z sinθ, −x sinθ + z cosθ): a turn of −θ in atan2(z, x) terms.
-    const theta = -(Math.atan2(v1z, v1x) - Math.atan2(v0z, v0x));
-    const k = Math.hypot(v1x, v1z) / Math.max(1e-6, Math.hypot(v0x, v0z));
-    const sim = new Matrix4()
-      .makeTranslation(start.x, start.y, start.z)
-      .multiply(new Matrix4().makeRotationY(theta))
-      .multiply(new Matrix4().makeScale(k, k, k))
-      .multiply(new Matrix4().makeTranslation(-start.x, -start.y, -start.z));
-    return src.map((s) => {
+    return src.map((s, card) => {
+      const start = s.evaluatePosition(0);
+      const end = s.evaluatePosition(1);
+      const spot = portraitCardSpot(slot, card);
+      const target = unityOf(spot[0], spot[1], end.y);
+      const v0x = end.x - start.x;
+      const v0z = end.z - start.z;
+      const v1x = target[0] - start.x;
+      const v1z = target[2] - start.z;
+      // three's makeRotationY(θ) maps (x, z) → (x cosθ + z sinθ, −x sinθ + z cosθ): a turn of −θ in atan2(z, x) terms.
+      const theta = -(Math.atan2(v1z, v1x) - Math.atan2(v0z, v0x));
+      const k = Math.hypot(v1x, v1z) / Math.max(1e-6, Math.hypot(v0x, v0z));
+      const sim = new Matrix4()
+        .makeTranslation(start.x, start.y, start.z)
+        .multiply(new Matrix4().makeRotationY(theta))
+        .multiply(new Matrix4().makeScale(k, k, k))
+        .multiply(new Matrix4().makeTranslation(-start.x, -start.y, -start.z));
       const fields = { ...(s as unknown as SplineFields) };
       const world = sim.clone().multiply(s.world);
       const rot = new Quaternion();
@@ -314,14 +287,20 @@ export class PortraitTable {
 
   /**
    * Dealt cards turn upright in their own plane as they leave the deck (and back as they return): the deck group
-   * inside each CardView gets a yaw about the card's normal (sign follows the face — the normal flips with the card).
-   * Your own two cards also grow to `ownCardScale` as they land.
+   * inside each CardView gets a yaw about the card's normal that stands the card's long side up the screen, leaning
+   * `lean` degrees out from the pair's middle. The yaw is solved each frame from the card's live pose, so it holds
+   * for every seat's path, through the showdown flip and through the river-slam camera moves. Your own two cards
+   * also grow to `ownCardScale` as they land.
    */
   private adjustCards(): void {
-    const own = new Set<Object3D>();
-    const ownSplines = this.stage.table.seatSplines[0] as readonly UnitySpline[];
-    for (const cv of this.spawned()) {
-      if ((ownSplines as unknown[]).includes((cv as unknown as { spline: unknown }).spline)) own.add(cv.transform);
+    const which = new Map<Object3D, { seat: number; card: number }>();
+    if (this.portrait) {
+      const index = new Map<unknown, { seat: number; card: number }>();
+      this.stage.table.seatSplines.forEach((pair, seat) => pair.forEach((s, card) => index.set(s, { seat, card })));
+      for (const cv of this.spawned()) {
+        const at = index.get((cv as unknown as { spline: unknown }).spline);
+        if (at) which.set(cv.transform, at);
+      }
     }
     const live = new Set<Object3D>();
     for (const card of this.stage.dealer.dealtRoot.children) {
@@ -329,15 +308,27 @@ export class PortraitTable {
       if (!deck) continue;
       live.add(deck);
       let home = this.cardHome.get(deck);
-      if (!home) this.cardHome.set(deck, (home = { p: deck.position.clone(), q: deck.quaternion.clone(), s: deck.scale.clone() }));
+      if (!home) {
+        home = { p: deck.position.clone(), q: deck.quaternion.clone(), s: deck.scale.clone(), long: longAxisOf(deck), angle: 0 };
+        this.cardHome.set(deck, home);
+      }
       let angle = 0;
       let grow = 1;
       if (this.portrait) {
-        // 0 at the deck, 1 once the card is ~2 units out (every seat's spline end is 3–7 units away).
-        const wgt = MathUtils.smoothstep(Math.hypot(card.position.x - DECK.x, card.position.z - DECK.z), 0.4, 2.2);
-        _up.set(0, 1, 0).applyQuaternion(card.quaternion);
-        angle = (_up.y >= 0 ? 1 : -1) * CARD_TURN * wgt;
-        if (own.has(card)) grow = 1 + (P.ownCardScale - 1) * MathUtils.smoothstep(Math.hypot(card.position.x - DECK.x, card.position.z - DECK.z), 2, 5);
+        const out = Math.hypot(card.position.x - DECK.x, card.position.z - DECK.z);
+        const at = which.get(card);
+        // 0 at the deck, 1 from about half way to the card's spot. Measured against that seat's own distance: the
+        // side seats' spots are only ~1 unit from the deck, the top seat's ~7.
+        const spot = at ? portraitCardSpot(at.seat, at.card) : null;
+        const far = spot ? Math.max(0.5, Math.hypot(spot[1] - DECK.x, -spot[0] - DECK.z)) : 3.6;
+        const wgt = MathUtils.smoothstep(out / far, 0.1, 0.6);
+        const own = at?.seat === 0;
+        const lean = MathUtils.degToRad(own ? P.ownLean : P.lean) * (at?.card === 1 ? -1 : 1);
+        const solved = this.uprightYaw(card, home, Math.PI / 2 + lean);
+        // Same orientation, nearest turn to last frame's: no full spins when the solution crosses ±180°.
+        if (solved !== null) home.angle += wrapAngle(solved - home.angle);
+        angle = home.angle * wgt;
+        if (own) grow = 1 + (P.ownCardScale - 1) * MathUtils.smoothstep(out, 1, 3.2);
       }
       _yaw.setFromAxisAngle(Y_AXIS, angle);
       deck.quaternion.copy(_yaw).multiply(home.q);
@@ -346,12 +337,63 @@ export class PortraitTable {
     }
     for (const k of [...this.cardHome.keys()]) if (!live.has(k)) this.cardHome.delete(k);
   }
+
+  /**
+   * The yaw (about the card's own normal) that turns the card's long axis to screen angle `target` (radians, 0 = right,
+   * π/2 = up). Null while the card is edge-on to the camera (mid-flip), where the angle is undefined: keep the last one.
+   * Screen axes are the resting top-down camera's (three +x right, −z up), so a river-slam camera roll still rolls
+   * the cards with the table.
+   */
+  private uprightYaw(card: Object3D, home: CardHome, target: number): number | null {
+    card.updateWorldMatrix(true, false);
+    const at = (yaw: number): number | null => {
+      _yaw.setFromAxisAngle(Y_AXIS, yaw);
+      _dir.copy(home.long).applyQuaternion(home.q).applyQuaternion(_yaw).transformDirection(card.matrixWorld);
+      const x = _dir.dot(_right);
+      const y = _dir.dot(_screenUp);
+      return Math.hypot(x, y) < 0.35 ? null : Math.atan2(y, x);
+    };
+    const a0 = at(0);
+    const a1 = at(0.1);
+    if (a0 === null || a1 === null) return null;
+    // Turning about the normal moves the projected axis with a sign that depends on which face is up (and the mirror).
+    const sign = Math.sign(wrapAngle(a1 - a0)) || 1;
+    return sign * wrapAngle(target - a0);
+  }
+}
+
+interface CardHome {
+  p: Vector3;
+  q: Quaternion;
+  s: Vector3;
+  /** The card face's long axis in the deck group's own space. */
+  long: Vector3;
+  /** Last solved upright yaw (kept while the card is edge-on). */
+  angle: number;
+}
+
+/** The card mesh's long side (its local y) expressed in the deck group's space. */
+function longAxisOf(deck: Object3D): Vector3 {
+  const mesh = deck.getObjectByName('CardMesh');
+  const v = new Vector3(0, 1, 0);
+  if (!mesh) return v;
+  const m = new Matrix4();
+  for (let o: Object3D | null = mesh; o && o !== deck; o = o.parent) {
+    o.updateMatrix();
+    m.premultiply(o.matrix);
+  }
+  // Include the deck's own scale (not its rotation, which `home.q` carries).
+  return v.transformDirection(new Matrix4().makeScale(deck.scale.x, deck.scale.y, deck.scale.z).multiply(m));
+}
+
+function wrapAngle(a: number): number {
+  return Math.atan2(Math.sin(a), Math.cos(a));
 }
 
 const Y_AXIS = new Vector3(0, 1, 0);
-const _up = new Vector3();
 const _yaw = new Quaternion();
+const _dir = new Vector3();
+const _right = new Vector3(1, 0, 0);
+const _screenUp = new Vector3(0, 0, -1);
 /** Spline start (the deck), Unity world x/z — every seat's splines start within ~0.1 of it. */
 const DECK = { x: -0.33, z: 2.46 };
-/** Quarter turn for a face-down card (Unity space, about the card's own normal). */
-const CARD_TURN = Math.PI / 2;

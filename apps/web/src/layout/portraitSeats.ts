@@ -30,8 +30,8 @@ const STACK: RectTarget[] = [
 /** The hand-strength panel (local seat): under the stack. */
 const HAND: RectTarget = { path: 'Graphics/Hand', anchor: [0.5, 0.5], pos: [0, -820] };
 
-/** Extent of the stacked seat in canvas units from the avatar centre (for the table fit). */
-export const STACKED_SEAT_BOX = { left: -420, right: 420, top: 250, bottom: -740, handBottom: -894 };
+/** Extent of the stacked seat in canvas units from the avatar centre (for the table fit and the overlap check). */
+export { STACKED_SEAT_BOX } from './portraitLayout';
 
 interface Saved {
   node: UNode;

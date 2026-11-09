@@ -42,16 +42,23 @@ What C does:
   clockwise order: bottom = you, three seats on each side, one at the top. Because only the *drawing* moves, the seat
   mapping of every session type (offline identity, `NetTableView`/`SetLocalPerspective`, tournaments' seat map, PER's
   rotated view) is untouched.
-- **Deal splines**: each slot's two splines are the landscape splines of slot *i+2* with a similarity (turn + uniform
-  scale) about their start, the deck, that lands the cards beside the re-placed seat. The UnitySpline *contents* are
-  swapped in place, so every holder of the spline objects follows; the paths' shape, `SplineAnimate` timing and easing
-  are Unity's.
-- **Cards**: dealt cards turn upright in their own plane as they leave the deck (a yaw on the card's deck node, signed by
-  which face is up, weighted by distance from the deck) and back as they return. Your own two grow to 1.7× as they land,
-  so they are readable at phone size.
-- **Board**: the five Animator slots get anchors that put them in a left-to-right row (1.2×) and undo the quarter turn,
+- **Layout** (`portraitLayout.ts`): every seat, card pair, the board, the pot pill and the chip piles have a spot in
+  portrait coords, and `__tests__/portraitLayout.test.ts` checks their footprints never overlap, each pair sits nearer
+  its own seat than any other, and no pair shares the board's row (a showdown must not read as one long row of cards).
+  Side seats' cards sit on the avatar's inner side; the top corners' under their own status pill; the top seat's under
+  its stack; the board crosses the middle with the pot above it.
+- **Deal splines**: each slot's two splines are the landscape splines of slot *i+2*, each with its own similarity
+  (turn + uniform scale) about its start, the deck, that lands that card on its spot: the pair side by side, card 0 on
+  the left. The UnitySpline *contents* are swapped in place, so every holder of the spline objects follows; the paths'
+  shape, `SplineAnimate` timing and easing are Unity's.
+- **Cards**: dealt cards turn upright in their own plane as they leave the deck and back as they return: a yaw on the
+  card's deck node, solved each frame from the card's live pose so its long side stands up the screen, leaning 4° out
+  from the pair's middle (5° for yours). It holds for every seat's path and through the showdown flip; it uses the
+  resting camera's axes, so the river-slam camera roll still moves the cards with the table. Your own two grow to 1.7×
+  and fan 0.8 apart, so both are readable at phone size.
+- **Board**: the five Animator slots get anchors that put them in a left-to-right row (1.05×) and undo the quarter turn,
   so reveal, withdrawal, smoke and the river-slam bounces play exactly as in landscape.
-- **Pot**: the pill and the 3D chip piles move above the board.
+- **Pot**: the pill (0.85×) and the 3D chip piles move above the board.
 - **Seat HUD**: world canvases are drawn upright and 1.55× the 3D zoom (avatar ~70 px, stack ~16 px on a 390-px phone),
   and stacked: avatar, the same `Name_bar` art centred under it (840 wide), status pill peeking out below, D/S/B token on
   the bar's end, hand-strength panel under your stack. The on-enable clips still pop the seat in; the bar's slide-out
@@ -101,6 +108,12 @@ rule: centred panels scale up to fill the column.
 - Practice tournament: banner under the top row, table refitted beneath it.
 - Live rotation mid-hand portrait → landscape → portrait: no reload, cards and board follow.
 - Landscape 800×360 / 1280×720 / 2400×1080: identical to before (numbers match unity-hud-notes §1).
+- 10 Nov card re-layout, measured in the browser (every seat part, card, board card, pot pill and chip pile projected
+  to screen px): 375×640 had 17 overlaps before (top seats' cards on their own bars, the pot on the top seat's cards,
+  your two cards almost exactly on top of each other); after, 0 at 360×740, 375×812, 390×664, 390×844 and 412×915,
+  every hole card upright (90° ± the lean), the same after landscape → portrait mid-hand, and revealed cards read the
+  right way up. Measure with the pane visible: a hidden pane draws no frames, so the per-frame portrait re-layout does
+  not run and the numbers are stale.
 
 ## Left / follow-ups
 
