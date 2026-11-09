@@ -107,7 +107,7 @@ export class PerWithdrawal {
   private readonly wait: (ms: number) => Promise<void>;
 
   constructor(private readonly gameWallet: PerGameWallet, private readonly opts: PerWithdrawalOptions = {}) {
-    this.auto = opts.auto ?? PerIds.program.toBase58() === IDS.perTestProgram;
+    this.auto = opts.auto ?? [IDS.perTestProgram, IDS.perNomadProgram].includes(PerIds.program.toBase58() as never);
     this.nowFn = opts.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
     this.wait = opts.wait ?? ((ms) => (opts.http ? opts.http.delay(ms) : new Promise((r) => setTimeout(r, ms))));
   }

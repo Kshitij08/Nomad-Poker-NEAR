@@ -1,0 +1,26 @@
+{
+  "name": "nomad-per-container",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "The PER service (lobby index, hand archive, keeper, SOL Agents, payouts) as a Cloudflare Container behind apps/per. Ported from Poker/per/backend: Postgres replaced by D1 through the Worker's bridge.",
+  "engines": { "node": ">=20.18.0" },
+  "scripts": {
+    "check": "tsc --noEmit -p .",
+    "start": "node --import tsx src/index.ts",
+    "test": "node --import tsx test/agentBot.test.ts && node --import tsx test/brain.test.ts && node --import tsx test/db.test.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.32.1",
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.17.3",
+    "@solana/web3.js": "1.98.4",
+    "express": "5.1.0",
+    "tsx": "4.20.6",
+    "tweetnacl": "1.0.3"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.3",
+    "@types/node": "22.18.0",
+    "typescript": "5.9.3"
+  }
+}

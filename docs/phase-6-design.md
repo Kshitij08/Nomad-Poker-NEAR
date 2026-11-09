@@ -10,7 +10,15 @@ Status, 9 Nov 2026 (evening): the escrow tables' server side is built and passed
 - Code: `apps/game-server/src/escrowTable.ts` and `packages/chain/src/escrowClient.ts`.
 - Exit gate: `apps/game-server/scripts/escrow-check.ts`.
 - Open: whether to build the player side, since Unity retired escrow money tables (question 12 in
-  `worklog-phases-6-8.md`), and PER (question 2).
+  `worklog-phases-6-8.md`).
+
+PER (private tables), 9 Nov: on the new stack, staging.
+- `apps/per` runs a new devnet program instance, `7LcbAnHB…LKBn`, with its own keeper and auditor.
+- The lobby reads come from D1 in the Worker; the ported Railway service, keeper included, runs as one Cloudflare
+  Container whose data is in D1 through the Worker.
+- The PER keeper suite passed (27/27) against it.
+- The web client uses it with `?perprogram=nomad`, the staging default.
+- See `apps/per/README.md` and worklog decision 26.
 
 Programs stay as they are (`poker-escrow` `GdduGz…ozo`, `poker-per` test `4A3DZW…MZ` / live `7q2vxh…pv`).
 

@@ -13,3 +13,4 @@ obj/
 .load-guests*.json
 infra/backups/
 .escrow-check-wallets*.json
+.local-per.sqlite*

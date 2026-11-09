@@ -11,7 +11,7 @@
  *    `cd backend && npm run dev` on http://localhost:8787), else "not configured";
  *  - mainnet is refused outright (`assertAllowedUrl`).
  */
-import { endpointParam } from '../app/flags';
+import { buildEndpoint, endpointParam } from '../app/flags';
 
 export type Cluster = 'devnet';
 
@@ -23,6 +23,8 @@ export const IDS = {
   /** poker-per: the live program (PerIds.LiveProgramId) and the internal test program (the IDL's address). */
   perLiveProgram: '7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv',
   perTestProgram: '4A3DZW5zvmG6v6C47UqooVbnTvNtgRQJ5fKDMZ62FNMZ',
+  /** The new stack's own devnet instance (deployed 9 Nov 2026 for apps/per; its own keeper and auditor). */
+  perNomadProgram: '7LcbAnHBFHkviM6AhGgmm871VYNkTU8HTt2bTWVWLKBn',
   teeValidator: 'MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo',
   permissionProgram: 'ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1',
   delegationProgram: 'DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh',
@@ -45,6 +47,9 @@ export const DEPLOYED = {
   perTestBackend: 'https://poker-per-api-production.up.railway.app',
   perAgentsV2Backend: 'https://per-api-v3-production.up.railway.app',
 } as const;
+
+/** The new stack's PER service (apps/per) for the perNomadProgram. Its own staging, so no ?web3deployed=1 needed. */
+export const NOMAD_PER_STAGING = 'https://nomad-poker-per-staging.kshitijiitgn.workers.dev';
 
 export interface Web3Config {
   readonly cluster: Cluster;
@@ -82,17 +87,28 @@ const ZERO96 = '0'.repeat(96);
 export function makeConfig(params: URLSearchParams = new URLSearchParams()): Web3Config {
   const allowDeployed = params.get('web3deployed') === '1';
   // Test builds of Unity (editor, POKER_STAGING) use the test program; the web port is a test build.
-  const perIsTestProgram = params.get('perprogram') !== 'live';
+  // ?perprogram=live | nomad | (default) test. 'nomad' is the new stack's instance and service (apps/per); a build
+  // can default to it (VITE_PER_PROGRAM=nomad, the staging web build).
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
+  const which = params.get('perprogram') ?? (env.VITE_PER_PROGRAM === 'nomad' ? 'nomad' : 'test');
+  const perIsTestProgram = which !== 'live';
   const gameBackendUrl = clean(endpointParam(params, 'web3backend')) ?? (allowDeployed ? DEPLOYED.gameBackend : '');
   const perBackendUrl =
-    clean(endpointParam(params, 'perbackend')) ?? (allowDeployed ? (perIsTestProgram ? DEPLOYED.perAgentsV2Backend : DEPLOYED.perTestBackend) : '');
+    clean(endpointParam(params, 'perbackend')) ??
+    (which === 'nomad'
+      ? clean(buildEndpoint('VITE_PER_BACKEND')) ?? NOMAD_PER_STAGING
+      : allowDeployed
+        ? perIsTestProgram
+          ? DEPLOYED.perAgentsV2Backend
+          : DEPLOYED.perTestBackend
+        : '');
   const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
   return Object.freeze({
     cluster: 'devnet',
     solanaRpcUrl: clean(endpointParam(params, 'web3rpc')) ?? 'https://api.devnet.solana.com',
     escrowRpcUrl: clean(endpointParam(params, 'web3rpc')) ?? 'https://api.devnet.solana.com',
     teeUrl: 'https://devnet-tee.magicblock.app',
-    perProgram: perIsTestProgram ? IDS.perTestProgram : IDS.perLiveProgram,
+    perProgram: which === 'nomad' ? IDS.perNomadProgram : perIsTestProgram ? IDS.perTestProgram : IDS.perLiveProgram,
     perIsTestProgram,
     gameBackendUrl,
     perBackendUrl,

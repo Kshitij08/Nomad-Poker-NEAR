@@ -26,6 +26,17 @@ describe('network policy (config.ts)', () => {
     expect(() => assertAllowedUrl(cfg, 'https://api.devnet.solana.com')).not.toThrow();
     expect(() => assertAllowedUrl(cfg, 'http://localhost:8787/api/me')).not.toThrow();
   });
+  it('?perprogram=nomad: the new stack PER instance and its own service, no ?web3deployed=1 needed', () => {
+    const c = makeConfig(new URLSearchParams('perprogram=nomad'));
+    expect(c.perProgram).toBe('7LcbAnHBFHkviM6AhGgmm871VYNkTU8HTt2bTWVWLKBn');
+    expect(c.perBackendUrl).toBe('https://nomad-poker-per-staging.kshitijiitgn.workers.dev');
+    expect(c.perIsTestProgram).toBe(true);
+    expect(c.allowDeployed).toBe(false);
+    // The other two are unchanged.
+    expect(makeConfig(new URLSearchParams()).perProgram).toBe('4A3DZW5zvmG6v6C47UqooVbnTvNtgRQJ5fKDMZ62FNMZ');
+    expect(makeConfig(new URLSearchParams('perprogram=live&web3deployed=1')).perProgram).toBe('7q2vxh2rNioeY5wsTpfvVGDR2yg3xhkqRYC5Urq4gwpv');
+  });
+
   it('?web3backend= names a local backend; ?web3deployed=1 is the only way to the Railway servers', () => {
     expect(makeConfig(new URLSearchParams('web3backend=http://localhost:8787/')).gameBackendUrl).toBe('http://localhost:8787');
     const live = makeConfig(new URLSearchParams('web3deployed=1'));

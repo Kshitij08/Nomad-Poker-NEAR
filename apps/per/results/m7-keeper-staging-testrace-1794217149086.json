@@ -1,0 +1,240 @@
+{
+  "suite": "m7-keeper",
+  "program": "7LcbAnHBFHkviM6AhGgmm871VYNkTU8HTt2bTWVWLKBn",
+  "ranAt": "2026-11-09T09:39:09.084Z",
+  "pass": 24,
+  "fail": 3,
+  "knownPlatformIssues": 0,
+  "table": "7VyDayxDDiUGyuA1hvSWGS4itjkdbuiVVRnxPUcVGDys",
+  "backend": "https://nomad-poker-per-staging.kshitijiitgn.workers.dev",
+  "outcomes": [
+    {
+      "name": "backend health: ok, keeper looping, auditor is the config's",
+      "status": "PASS",
+      "detail": {
+        "status": 200,
+        "loops": 51
+      }
+    },
+    {
+      "name": "create + delegate a 6-seat table",
+      "status": "PASS",
+      "detail": {
+        "sig": "4dedLLqZ2zeZAjEp2Y2ovi7nXxW8o4VpKi12ToNbGGe7W2HS4ftqSqrwEytftqkxxPQmd3ffswq7Rsi4e8cLMRvo",
+        "problem": null
+      }
+    },
+    {
+      "name": "open",
+      "status": "PASS",
+      "detail": {
+        "sig": "wwNnQWAvggHDTvhTggYfkfT9481LqBnpCHRxYGrgaWEhoHyofChgi4eS6U5NfusWL6XDaezWKCDssdw6gVLC2Yu",
+        "problem": null
+      }
+    },
+    {
+      "name": "the lobby lists the new table (keeper discovery)",
+      "status": "PASS",
+      "detail": {
+        "listed": {
+          "address": "7VyDayxDDiUGyuA1hvSWGS4itjkdbuiVVRnxPUcVGDys",
+          "tableId": "913978613916071540",
+          "creator": "4kiqWY1NRf2syDhw7GQSJkbPzGwCibT2E9GdVC9dh3kD",
+          "open": true,
+          "maxSeats": 6,
+          "seated": 0,
+          "live": true,
+          "inviteOnly": false,
+          "smallBlind": "100000",
+          "bigBlind": "200000",
+          "minBuyIn": "2000000",
+          "maxBuyIn": "20000000",
+          "handNo": "0",
+          "updatedAt": "2026-11-09T09:38:06.103Z"
+        }
+      }
+    },
+    {
+      "name": "p1 sits in seat 0, p2 in seat 3",
+      "status": "PASS",
+      "detail": {
+        "sig": "5m8ygMffbWs4cdfquG3UciCe6UYnCezW3vEV6Diq8dkpuec8uVpXVMkfb6zqLixuzLhqXTY5e6fhNf5tye5e9A2w",
+        "problem": null
+      }
+    },
+    {
+      "name": "the lobby shows 2 seated",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "p1 and p2 commit seeds",
+      "status": "PASS",
+      "detail": {
+        "sig": "2SSh8W7xmXPnZJnC5ULK2CRxGszedqsSupJENM7NqE52nyPxVrmZs31PgH2o5XppPztTeqT5M7LiuNDY1gRgnM9q",
+        "problem": null
+      }
+    },
+    {
+      "name": "the host presses Start round; an outsider (p3) starts hand 1",
+      "status": "PASS",
+      "detail": {
+        "sig": "3eyKqimjncbyXHeSxd1B3fawtkUSR41oB6psjfnHAuwDb4SozMnZEkLdcVeTTfXkBbxmujii8yzT4hUhmgCapQHi",
+        "problem": null
+      }
+    },
+    {
+      "name": "the dealt hand was begun by the keeper's tick (the test never calls begin_hand)",
+      "status": "PASS",
+      "detail": {
+        "tick": "5yVRpoZ7GhyMVKMWs9UH15A7FGuFKK5SF1oiwputsaqJ75BkgYe8ung8JpeFsCEAAREokEL6athwWGGSxe62hYoL"
+      }
+    },
+    {
+      "name": "seat 255 raises to 512000",
+      "status": "FAIL",
+      "detail": {
+        "unexpectedError": "Cannot read properties of undefined (reading '0')"
+      }
+    },
+    {
+      "name": "seat 255 never acts: a second keeper tick times them out after their 15 s and the hand ends",
+      "status": "FAIL",
+      "detail": {
+        "secondsAfterRaise": 21
+      }
+    },
+    {
+      "name": "hand 2 starts at once: p1 and p2 commit seeds, an outsider starts it",
+      "status": "PASS",
+      "detail": {
+        "sig": "44R2nZfVbGZ1SmhjCF4rq4T3g1eHoLu2u3vP4jvBitHgkrxbCD9F1DM7QzbQ5UsitDpNQLUsPL2QTUUDUByBa9vd",
+        "problem": null
+      }
+    },
+    {
+      "name": "the keeper began hand 2",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "hand 2: seat 3 folds, the hand ends",
+      "status": "PASS",
+      "detail": {
+        "sig": "3NK5wabjxGDPHX31uTCoFdicY28UDHPo5184mwerWX5UjABctMBmGHztN2CUj1Yoh6mX8ykhQLH534zgXqN4ALaf",
+        "problem": null
+      }
+    },
+    {
+      "name": "fast play: hand 1's log was archived before hand 2 began (not missed)",
+      "status": "PASS",
+      "detail": {
+        "hand1Log": {
+          "status": "archived",
+          "verified": true
+        }
+      }
+    },
+    {
+      "name": "hand 2's log archived too",
+      "status": "PASS",
+      "detail": {
+        "hand2Log": {
+          "status": "archived",
+          "verified": true
+        }
+      }
+    },
+    {
+      "name": "the backend archived hand 1: record verified (recomputed), log archived and its hash checked",
+      "status": "PASS",
+      "detail": {
+        "verified": true,
+        "recomputed": true,
+        "log": {
+          "status": "archived",
+          "verified": true
+        }
+      }
+    },
+    {
+      "name": "the public hand route carries no action log, bets or wallets",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "audit route (admin token): the archived log equals the one the players read, with the raise and the timeout",
+      "status": "FAIL",
+      "detail": {
+        "status": 200,
+        "entries": 3
+      }
+    },
+    {
+      "name": "audit route without the token: 401",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "POST /verify: a player's downloaded log verifies; the same log with a changed bet doesn't",
+      "status": "PASS",
+      "detail": {
+        "ok": {
+          "ok": true,
+          "problems": []
+        },
+        "tampered": {
+          "ok": false,
+          "problems": [
+            "the log doesn't hash to the record's log hash"
+          ]
+        }
+      }
+    },
+    {
+      "name": "the keeper committed the new table (its first commit is due at once)",
+      "status": "PASS",
+      "detail": {
+        "commits": [
+          "2/0/0 27YACCZ8GSMThpVp2TSSkAEHPimkjS75VxHevQbykxxMCUv5hgNTtmZsL6vBcUDSjJsHDjW4fAHx38oWxNcNc8Ma"
+        ]
+      }
+    },
+    {
+      "name": "p1 and p2 cash out",
+      "status": "PASS",
+      "detail": {
+        "sig": "XiuBJXjin1g9cDPK8JTZKAAvCT8bAcppMkf2gfSYfWeZTCayCdiSMbPGRmj33bMQAiSERVXb2Fxb1WBWra7MVvq",
+        "problem": null
+      }
+    },
+    {
+      "name": "collect rake",
+      "status": "PASS",
+      "detail": {
+        "sig": "56GmzapVyC827nut3mmuEYzXwweKEVFQgEqQdd9zWFeDkd2uK1xsp8DyCzpoi7aQs7BgzcJTDogrYGvZxGrAPJHZ",
+        "problem": null
+      }
+    },
+    {
+      "name": "creator closes the table",
+      "status": "PASS",
+      "detail": {
+        "sig": "mtT5stKaomDnPBJBmTfamxUd5CyUuUj26KL2DX44ZhwgWfmwXUv8KqTdLge51XDZWvqrCAh26nXaa3sueP8FxWL",
+        "problem": null
+      }
+    },
+    {
+      "name": "the lobby drops the closed table",
+      "status": "PASS",
+      "detail": {}
+    },
+    {
+      "name": "no failed keeper action on this table",
+      "status": "PASS",
+      "detail": {
+        "failures": []
+      }
+    }
+  ]
+}

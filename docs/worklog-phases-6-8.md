@@ -166,21 +166,62 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     - Payouts were Alice 1,100, Bob 1,000 and Carol 900 chips: exactly three buy-ins.
     - The room idled out and closed the table and the vault.
     - The test wallets went back to the server key.
+26. **PER on the new stack: a new program instance, the keeper in a Cloudflare Container, data in D1** (your choices,
+    9 Nov: hybrid, a new program, Cloudflare Containers).
+    - **Program:** `7LcbAnHBFHkviM6AhGgmm871VYNkTU8HTt2bTWVWLKBn`, built from `Poker/per` with the repo's pinned
+      script (your global Solana and Anchor untouched). It was deployed by your deployer `4kiqWY…`, which stays the
+      upgrade authority and admin. It reserves 3% growth room instead of the script's 25%: the deployer had 17.3 SOL
+      and 25% needed 18.9, and the program can be extended later.
+    - **Setup:** the same one-time setup the test program had (`v3-setup.ts` with the v4 keys): config, fees
+      (2% / 8%, hosting fees off), a delegated Agent sponsor, the keeper funded with 1.5 SOL, and both game balances
+      opened.
+    - **New keys:** `v4-keeper` (`GV5LYv…EcJw`) and `v4-auditor` (`5hEB5u…RQaWi`), in your WSL `poker-per` folder
+      and in the git-ignored `apps/per/.secrets.staging.json`. The archive key and admin token are new. The Poker
+      repo was put back to the test program's id afterwards.
+    - **Service (`apps/per`):** the Railway service copied into `container/` and run as one Cloudflare Container
+      (`basic`, max 1 instance). The Worker in front of it does three things:
+      - answers the lobby reads (`/tables…`) from its own D1 database (`nomad-poker-per-staging`);
+      - forwards everything else, with the caller's IP for the 120-a-minute limit;
+      - pings the container every minute so the keeper keeps running.
+
+      The container reaches D1 only through the Worker (an outbound handler at `http://d1.per/query`), so it
+      holds no database credential.
+    - **Postgres → D1:** a shim keeps the node-postgres interface. It translates the Postgres-only SQL and returns
+      the same types. Two queries were rewritten (the rollback move, and `stddev_samp`, now computed in JS).
+      `admitSpend`'s transaction is one atomic insert. Advisory locks are replaced by a 30 s lease in D1, so a
+      deploy's brief overlap can't run two keepers.
+    - **Port testing:** a test prepares all 73 queries against the D1 schema and checks the types and the rewritten
+      ones. It caught two real problems: SQLite has no data-modifying CTE, and SQLite treats a numeric string as
+      larger than any number, which would have let host credits overspend.
+    - **Exit gate:** the PER keeper suite (`Poker/per/tests/keeper.devnet.ts`, 27 checks) passed against the
+      service run locally (`apps/per/results/m7-keeper-local-…json`), then against deployed staging
+      (`m7-keeper-staging-pass-…json`). It covers the lobby finding the table, the keeper starting hands and timing
+      a player out, archived and audited logs, verify, commit, cash-out, close and the lobby dropping the table.
+      Staging failed at first, for three reasons, each proved before fixing:
+      - **D1 was on another continent.** The container runs in Chicago (`ORD`, from `/audit/where`) and the first D1
+        database was in APAC, so each keeper query took about 220 ms and a hand's log was missed. It is now on a
+        D1 in ENAM, at 16–19 ms. The APAC database (`nomad-poker-per-staging`) is unused, with test rows only;
+        tell me if I should delete it.
+      - **A latent keeper bug** that the faster loop exposed: it committed a fresh table before anyone sat. The
+        program only takes an outsider's commit once the table has changed (`CommitTooSoon`, which first showed up
+        as an empty error, so failed actions now log the error's name, cause and program logs). The keeper now
+        checks `committed_ledger_seq` / `committed_hand_no` first.
+      - **Right after `open_log`,** the rollup sometimes needs a moment before the auditor's read sees the log. That
+        failed the action into the keeper's 30 s backoff, and the next hand began meanwhile. The read is now
+        retried for up to 4 s.
+
+      The last two fixes also apply to the Railway service's code (Poker/per/backend). I didn't change the Poker
+      repo.
+    - **Web client:** `?perprogram=nomad` (the default in the staging web build) uses this program and service.
+      The existing test and live options are unchanged.
 
 ## Questions for you
 
 (newest last)
 
 1. ~~**Phase 6 keys.**~~ Answered 9 Nov: yes. Key generated and funded (decision 19).
-2. **Where the PER service runs.** It is an Express + Postgres service with a forever keeper loop, Postgres advisory
-   locks and Anchor (needs Node's Buffer). Options:
-   - *A. Keep it a separate Node service* (a container: Cloudflare Containers, Fly or Railway under a new project).
-     Pros: little porting, keeps the MagicBlock SDK as is. Cons: a third service and a second database.
-   - *B. Port it into Workers* (keeper loop → a Durable Object alarm, Postgres → D1, `nodejs_compat` for Anchor).
-     Pros: one platform, one database. Cons: the largest port in the plan; the TEE session and keeper timing need care.
-   - *C. Hybrid*: routes and data (tables list, SOL strategies, payouts records) in the API on D1; the keeper alone as a
-     small container. Pros: most traffic on Workers. Cons: two places for PER logic.
-   I lean to C, but it needs PER secrets (`KEEPER_SECRET_KEY`, `AUDITOR_SECRET_KEY`, `ARCHIVE_KEY_HEX`). Which do you want?
+2. ~~**Where the PER service runs.**~~ Answered 9 Nov: hybrid, a new program instance, Cloudflare Containers
+   (decision 26).
 3. **Admins for production.** Which accounts should be admins / support on production? (Staging has one QA admin.)
    And do you want a small web admin page later? The command-line tool covers it for now; a page is about a day.
 4. **Alerts.** May I set up Cloudflare notifications (to your email) for Worker error spikes, and a Workers Logs alert
