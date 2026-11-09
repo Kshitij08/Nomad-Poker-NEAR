@@ -296,6 +296,26 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
       still gets through reads as plain words too.
     - **Escrow text** removed from `apps/web/docs/live-backends.md` (the web build has no escrow tables).
     - **On hold:** alerts, scheduled backups, native Google ids, the coach's key, JDK 21. **Alchemy only** for RPC.
+32. **Load test for 100 daily players: passes at 3× the worst-case peak, after one fix.** Worst case: all 100 at once,
+    so 3× = 300 players at the same time, 60 tables of 5 (plus filler bots), 10 minutes, at real speed.
+    - **Result** (`apps/game-server/results/load-1794238509007.json`): 300/300 seated, joins 1.3 s typical and 1.7 s
+      at p95, 896 hands, no client errors, no sequence errors, **drift 0 on all 60 tables**.
+    - **The bug the first real-speed run found** (one table of 60 off by 112): when a hand ends, the engine unlocks
+      the seats a moment before the table settles the hand. A Leave in that gap released the seat and cashed it out
+      at once; the settlement then read that stack as 0, logged "Chip conservation broken", halted the table's books and
+      skipped the hand's house result. The player's own balance was right; the house's books were short. Fixed by
+      keeping seats locked from the deal until the settlement ends (`pokerServerGame.ts`); `settleRace.test.ts` steps
+      into exactly that gap and fails without the fix.
+    - **The limit, measured:** the first run used staging's QA speed (20×), about 20 times real players' traffic.
+      There the single staging database refused writes ("D1 DB is overloaded"): over 1,000 stack checkpoints and 95
+      cash-outs failed, leaving 66 seat locks with stale stacks (paid back, stale, when those guests next joined).
+      Nothing near expected load does this, but cash-outs and checkpoints don't retry the way the table bookkeeping
+      does (decision 9), so a database hiccup in production could do the same to a few players. Worth fixing before
+      launch.
+    - QA rooms can now run at real speed: `-x1-` in the room name (`roomSpec.qaSpeed`);
+      `npx tsx scripts/load.ts 300 60 10 staging 1`.
+    - **Staging's reconciliation stays red for 30 days** on the 21 tables those two runs damaged (all load-test
+      guests: rooms `qa-load-mw9dfbp7-*` and `qa-load-mw9e5fff-41-x1-st100`). Nothing newer is affected.
 
 ## Questions for you
 
