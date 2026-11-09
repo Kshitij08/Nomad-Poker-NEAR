@@ -309,13 +309,38 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     - **The limit, measured:** the first run used staging's QA speed (20×), about 20 times real players' traffic.
       There the single staging database refused writes ("D1 DB is overloaded"): over 1,000 stack checkpoints and 95
       cash-outs failed, leaving 66 seat locks with stale stacks (paid back, stale, when those guests next joined).
-      Nothing near expected load does this, but cash-outs and checkpoints don't retry the way the table bookkeeping
-      does (decision 9), so a database hiccup in production could do the same to a few players. Worth fixing before
-      launch.
+      Nothing near expected load does this, but a database hiccup in production could do the same to a few players:
+      fixed in decision 33.
     - QA rooms can now run at real speed: `-x1-` in the room name (`roomSpec.qaSpeed`);
       `npx tsx scripts/load.ts 300 60 10 staging 1`.
-    - **Staging's reconciliation stays red for 30 days** on the 21 tables those two runs damaged (all load-test
-      guests: rooms `qa-load-mw9dfbp7-*` and `qa-load-mw9e5fff-41-x1-st100`). Nothing newer is affected.
+33. **The table's money writes ride out a busy database; three more problems the overload test found** (your go-ahead,
+    9 Nov).
+    - **Retries** (`apps/game-server/src/d1ChipLedger.ts`): cash-outs and recovering a stranded seat try for about
+      15 s, stack checkpoints for about 4 s (the next hand's checkpoint supersedes one), with backoff and jitter,
+      logging `GAVE UP` if they stop. A retry never pays twice: the credit is keyed to the seat lock, and a retry that
+      finds the lock gone after a lost answer counts as paid. Buy-ins are not retried (the player sees it and tries
+      again). `d1ChipLedger.test.ts` runs each case over a database that refuses work or loses answers.
+    - **A written buy-in reported as failed** (`seatLocks.buyIn`): six players were left unseated with their 500 in a
+      lock; each lock was written the same second as a "buy-in failed", because the balance read after the buy-in
+      was refused. A refused read now returns success with an unknown balance.
+    - **The reconciliation froze the database**: its table check read 94 million rows (16 s) with no index on
+      `ledger_entries.ref`, and every other query waited, then failed (a signed-in request: 14 s, then an error). The
+      hourly cron and the admin page's Ledger health tab both run it. Migration `0011_ledger_ref_index.sql`: 13 ms; the
+      whole reconciliation 1.7 s. Applied to staging; production's deploy scripts refuse to run until it is applied there.
+    - **The per-table audit could miscount**: it read the ledger and the seat locks one after the other, so a cash-out
+      landing in between was counted in neither (an exact table showed drift -1,473). One batch now.
+    - **Result, 300 players at 20× speed** (about 20 times real traffic, `results/load-1794243227728.json`): 300/300
+      seated, no client errors, no failed or given-up ledger writes, no stranded seats, drift 0 on all 60 tables. The
+      same test before the fixes: 95 failed cash-outs, 66 stale seats, drift on 22 tables.
+    - **Deploy lesson:** after the retry deploy, table Durable Objects kept running the previous version for over
+      10 minutes, even in new rooms, so one overload run tested old code. Check the version in Workers Logs before
+      trusting a test.
+    - **Staging's reconciliation stays red** until 9 Dec on the 46 tables damaged by the three runs on old code (rooms
+      `qa-load-mw9dfbp7-*`, `qa-load-mw9fslc0-*`, `qa-load-mw9e5fff-41-x1-st100`; load-test guests only).
+    - **The two stuck private tables:** the keeper couldn't close them because they were never opened ("expected this
+      account to be already initialized"). It now opens such a table first (`keeper.ts`); both were opened at 17:01 UTC.
+      Opening starts their idle clock, so the keeper closes them around 23:02 UTC and then takes the rent back. The
+      played table (`7fyD…`) closed and its rent came back at 16:53.
 
 ## Questions for you
 
