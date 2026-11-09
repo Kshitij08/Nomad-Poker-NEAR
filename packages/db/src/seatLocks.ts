@@ -55,7 +55,15 @@ export async function buyIn(
     }
     throw err;
   }
-  return { ok: true, balance: (await balances(db, p.playerId)).coins, lockId };
+  // The buy-in is written. A refused balance read must not turn it into a failure: the table would leave the player
+  // unseated with the chips in the lock (load test, 9 Nov). -1 = unknown; the table then skips the balance push.
+  let balance = -1;
+  try {
+    balance = (await balances(db, p.playerId)).coins;
+  } catch {
+    /* D1 busy: the buy-in stands */
+  }
+  return { ok: true, balance, lockId };
 }
 
 /** Records the stack in front of the player after a hand (a set, not a delta). False when no lock for this table. */

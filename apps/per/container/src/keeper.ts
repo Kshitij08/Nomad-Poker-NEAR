@@ -343,6 +343,22 @@ async function maybeCloseAbandoned(key: string, address: PublicKey, t: any, prog
   const cfg = await programConfig();
   if (now - Number(t.lastActivityTs) < cfg.idleSecs + 30) return false; // a margin for the rollup clock
   const acc = accountsOf(address);
+  // A table created and delegated but never opened (its ledger, deck, record and log were never made) can't be closed:
+  // close_table_keyed fails "expected this account to be already initialized". Two Quick Play tables were left so on
+  // staging (9 Nov: the L1 confirmation bug stopped the host flow after delegating). Open it first: open_table only
+  // creates the missing accounts and doesn't touch the idle clock, so the next pass closes it.
+  if (!(await (await keeperTee.get()).getAccountInfo(acc.record, "processed").catch(() => null))) {
+    let opened = false;
+    await attempt(key, "open_table (never opened; then close)", async () => {
+      const sig = await program.methods.openTable().accountsPartial({
+        payer: config.keeper.publicKey, table: address, ledger: acc.ledger, ledgerPermission: permissionPdaFromAccount(acc.ledger), deck: acc.deck,
+        deckPermission: permissionPdaFromAccount(acc.deck), record: acc.record, log: acc.log, logPermission: acc.logPermission, rollup: rollupPrograms,
+      } as any).rpc();
+      opened = true;
+      return sig;
+    });
+    return opened;
+  }
   // M10: the host's state on Solana says which game vault is current: its 8-byte seed (all zeros = the first
   // vault, the M9 address). A state that can't be read leaves the vault out (no leftover sweep).
   const walletState = PublicKey.findProgramAddressSync([Buffer.from("wallet"), t.creator.toBuffer()], PROGRAM_ID)[0];

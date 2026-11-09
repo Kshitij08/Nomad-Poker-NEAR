@@ -13,11 +13,15 @@ import { D1ChipLedger } from '../d1ChipLedger';
 
 const OVERLOADED = 'D1_ERROR: D1 DB is overloaded. Too many resources consumed within a 10 second window';
 
-/** A D1 that refuses the next `refuse` calls, or writes and then loses the answer for the next `loseAnswer` calls. */
+/**
+ * A D1 that refuses the next `refuse` calls (after letting `pass` through), or writes and then loses the answer for the
+ * next `loseAnswer` calls.
+ */
 function flaky(db: D1Database) {
-  const ctl = { refuse: 0, loseAnswer: 0 };
+  const ctl = { refuse: 0, loseAnswer: 0, pass: 0 };
   const gate = async <T>(run: () => Promise<T>): Promise<T> => {
-    if (ctl.refuse > 0) {
+    if (ctl.pass > 0) ctl.pass--;
+    else if (ctl.refuse > 0) {
       ctl.refuse--;
       throw new Error(OVERLOADED);
     }
@@ -117,6 +121,17 @@ describe('D1ChipLedger when D1 refuses work', () => {
     expect(r.success).toBe(true);
     expect(await coins()).toBe(before + 650);
     expect(await seatLock(raw, pid)).toBeNull();
+  });
+
+  it('a buy-in that was written stays a success when the balance read after it is refused', async () => {
+    const other = (await createPlayer(raw, { displayName: 'Ola' })).id;
+    await raw.prepare("INSERT INTO ledger_entries (player_id, currency, delta, reason, idempotency_key, created_at) VALUES (?1, 'coins', 1000, 'test', 'seed', 0)").bind(other).run();
+    f.ctl.pass = 1; // the buy-in batch goes through…
+    f.ctl.refuse = 1; // …and the balance read right after it is refused (staging, 9 Nov: six players left unseated)
+    const r = await ledger.debitBuyInAsync(other, TABLE, 3, 500);
+    expect(r.success).toBe(true);
+    expect(r.balance).toBe(-1); // unknown: the table skips the balance push
+    expect((await seatLock(raw, other))?.stack).toBe(500);
   });
 
   it("a refused buy-in is not retried: the player sees it and can try again", async () => {
