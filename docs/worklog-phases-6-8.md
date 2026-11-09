@@ -251,7 +251,18 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
         chosen.
     - **Noted, not changed:**
       - A deposit with too little SOL in the wallet says "sendTransaction failed: error 1".
-      - The table shows "TEE not attested (attestation ran)".
+      - The table showed "TEE not attested (attestation ran)": see decision 29.
+29. **"TEE not attested" had two causes.**
+    - **Fixed:** the site's security policy blocked `pccs.phala.network`, where the browser attestation fetches
+      Intel's TDX collateral, so the check failed before comparing anything ("attestation ran"). It is now allowed,
+      and staging is redeployed.
+    - **Not fixed:** with that unblocked, the check passes everything but two pins. The quote is genuine Intel TDX
+      and up to date (no advisories); `mrTd`, `rtMr0`, `rtMr3`, `mrConfigId` and `mrOwner` match; the enclave signed
+      a fresh challenge. But `rtMr1` and `rtMr2`, which measure the boot image and the software it runs, changed
+      since the 9 Oct record (`b4fe…` → `5a5e062f…`, `51c0…` → `b90b887d…`), along with the enclave's key. So
+      MagicBlock redeployed its devnet TEE. MagicBlock publishes no reference values, and its own SDK check only
+      verifies a genuine quote and a challenge. Both records are in `apps/per/results/tee-attestation-*.json`.
+      The Unity game uses the same pins (`PerPlatform.cs`), so its badge is red too. Question 14.
 
 ## Questions for you
 
@@ -287,3 +298,13 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
 13. ~~**A devnet RPC the Worker can reach.**~~ Answered 9 Nov: reuse the Alchemy devnet URL the Unity client ships
     (decision 24). It shares the live game's free-tier quota, so a key of the new stack's own is still worth getting
     before launch.
+14. **The TEE badge's pins (decision 29).** MagicBlock's devnet TEE changed `rtMr1` / `rtMr2`.
+    - *A. Re-pin to today's values.* Pros: the badge is green and still pins the exact software. Cons: it is
+      trust on first use (nothing official to compare with), and it turns red again at MagicBlock's next redeploy,
+      as it just did.
+    - *B. Pin only the values that stay put* (`mrTd`, `rtMr0`, `rtMr3`, `mrConfigId`, `mrOwner`) and relabel the badge
+      "TEE attested". Pros: survives MagicBlock's software updates, and still stricter than their own SDK check.
+      Cons: it no longer detects that the software inside the enclave changed.
+    - *C. Leave it red.* Pros: honest about an unexplained change. Cons: every player sees "not attested".
+    I lean to B, and to asking MagicBlock whether they will publish measurements.
+

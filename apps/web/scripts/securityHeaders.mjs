@@ -1,6 +1,7 @@
 // The web app's security headers (Phase 7), shared by the Vercel deploy (deploy-vercel.mjs) and the local check
 // (serve-dist.mjs). The Content-Security-Policy allows only what the build talks to: this origin, the stage's API,
-// game server (https and wss) and PER service (private tables), Solana devnet RPC and MagicBlock's devnet TEE. The old stack's Railway backends are not
+// game server (https and wss) and PER service (private tables), Solana devnet RPC, MagicBlock's devnet TEE, and the PCCS
+// the TEE attestation reads Intel's collateral from. The old stack's Railway backends are not
 // allowed (the web3 module already refuses them unless ?web3deployed=1; on a deployed build the policy blocks them too).
 
 /** @param {{ api: string, game: string, per?: string, extraConnect?: string[] }} stage */
@@ -18,6 +19,9 @@ export function securityHeaders(stage) {
     'wss://api.devnet.solana.com',
     'https://devnet-tee.magicblock.app',
     'wss://devnet-tee.magicblock.app',
+    // The private-table badge attests MagicBlock's TEE in the player's browser (assets/web3/per-attest.js): Intel's TDX
+    // collateral comes from Phala's PCCS. Blocked, the badge read "TEE not attested (attestation ran)" (9 Nov).
+    'https://pccs.phala.network',
     ...(stage.extraConnect ?? []),
   ];
   const csp = [
