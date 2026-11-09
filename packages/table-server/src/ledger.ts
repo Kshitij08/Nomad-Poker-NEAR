@@ -11,6 +11,8 @@ export interface LedgerResult {
   readonly error: string | null;
   /** -1 when the operation did not establish one. */
   readonly balance: number;
+  /** A buy-in the ledger sized itself (an escrow seat's on-chain chips): the seat sits with this, not the request. */
+  readonly stack?: number;
 }
 
 export const LedgerResult = {

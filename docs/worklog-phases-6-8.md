@@ -105,14 +105,51 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
 18. **Store rules check.** The client has no real-money purchase or external payment flow, so store builds only drop
     the SOL features.
 
+### After your go-ahead on Phase 6 (9 Nov, afternoon)
+
+19. **The game server's devnet key exists and is funded.** `infra/escrow-key.mjs staging create` generated
+    `5mGzv7csqZZ7zXGJvCF2fBPYFWvw8tjkawVNXdbzx5X1`; its secret is only in the git-ignored
+    `apps/game-server/.secrets.staging.json` and the Worker's secrets. The devnet RPC faucet is closed to scripts, so
+    (with your OK) I sent it 1.5 devnet SOL from your WSL CLI wallet `2vN2…hsfY`.
+20. **Heads-up: escrow money tables are already retired in Unity.** `PokerClientGame.IsMoneyTable` is `false` on main
+    and on `web/unity-port`, and commit `dd50a964` on the `magicblock-switch` branch deletes the escrow program, its
+    backend routes and the client code ("onchain play runs only on poker-game-v2"). Live SOL play is the PER private
+    tables. The plan doc still lists the escrow, so I built its server side (below); see question 12 before I build
+    the player-facing part.
+21. **SOL escrow tables on the game server (server side done).** `poker-money…` rooms open where `MONEY_TABLES=1`
+    (staging only) and the key is set. The room creates its own table on chain with the server's key, and the table
+    plays without bots or Agents. A player buys in with their own wallet (`buy_in`), and the server sits them with
+    their seat's on-chain chips. Each hand is a round: `begin_round` before the deal, then `settle_round` with every
+    chip change. The settle carries any mid-hand buy-ins along, as the program requires, and the server re-reads the
+    seats afterwards and halts if the chain holds less than the table shows. A leaver is paid at the hand boundary
+    (`cash_out`, plus their seat rent back in the same transaction). Closing the room pays every seat left, including
+    a buy-in that never sat, then runs `close_table`. The escrow is the ledger: D1 only records the table
+    (`escrow_tables`, migration 0009). No XP or missions on SOL tables (as in Unity). Code:
+    `apps/game-server/src/escrowTable.ts`, `packages/chain/src/escrowClient.ts`, and a hand gate in
+    `PokerServerGame`. Tests: a fake chain that enforces the program's rules (rounds, nonces, pending buy-ins, no
+    cash-out mid-round), and decoders checked against web3.js.
+22. **Blocker found: devnet's public RPC refuses Cloudflare Workers.** The deployed game server got
+    `403 "Your IP or provider is blocked from this endpoint"` from `api.devnet.solana.com` (the same call from this
+    machine answers 200). It's visible at `GET /v1/chain/config` (`rpcError`). The Worker needs another devnet RPC
+    (question 13). Until then `scripts/escrow-check.ts --local` runs the same tables in-process on this machine against
+    the real devnet program. It uses the same key and the real web client; only D1 is the local stand-in.
+23. **Phase 6 escrow gate passed on devnet** (local server, 9 Nov; `results/escrow-check-1794208765231.json`).
+    - Three throwaway wallets were each funded with 0.13 SOL from the server key and signed in by wallet.
+    - Each bought in with its own `buy_in` built by the web client's escrow coder. Carol's landed mid-hand, as
+      1,000 pending chips, which the next settlement moved into play.
+    - 20 rounds were settled. Bob cashed out after round 10 with 1,150 chips; Alice left with 700 and Carol with 1,150.
+    - The room idled out and `close_table` closed the table and the vault.
+    - Every lamport is accounted for: payouts total exactly 3 buy-ins (0.3 SOL), and each wallet's only cost was the
+      5% rake and one 5,000-lamport fee. Seat rent came back with each cash-out.
+    - What was left in the test wallets went back to the server key, which now holds 1.4847 SOL. A run costs about
+      0.015 SOL, almost all of it the rake on three buy-ins (paid to the escrow's dev wallet). Table rent comes back
+      on close.
+
 ## Questions for you
 
 (newest last)
 
-1. **Phase 6 keys.** To finish Phase 6 I need you to (a) let me generate a fresh devnet settlement keypair for the game
-   server (stored only as a Worker secret) and airdrop it devnet SOL, and (b) OK the game server sending devnet
-   transactions with it. Pros: no old secret leaves Railway; the live stack is untouched. Cons: tables created by the
-   new key are separate from any the old backend created (fine on devnet).
+1. ~~**Phase 6 keys.**~~ Answered 9 Nov: yes. Key generated and funded (decision 19).
 2. **Where the PER service runs.** It is an Express + Postgres service with a forever keeper loop, Postgres advisory
    locks and Anchor (needs Node's Buffer). Options:
    - *A. Keep it a separate Node service* (a container: Cloudflare Containers, Fly or Railway under a new project).
@@ -144,3 +181,18 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     the production allowed origins, the CSP, the deep-link app verification files and the launch step.
 11. **The coach's written note.** It uses Claude (default model `claude-haiku-5-5`) when the API has an
     `ANTHROPIC_API_KEY` secret; without it players get the computed report only. Do you want the note, and whose key?
+12. **Build the player side of escrow SOL tables, or drop the escrow?** Unity already turned escrow money tables off
+    (decision 20). The server side is built. The player side isn't: a buy-in button that signs `buy_in`, rebuy, the
+    cash-out panel, and the lobby entry.
+    - *A. Build it* (about a day). Pros: matches the plan doc; a simple SOL table with no MagicBlock dependency.
+      Cons: it revives a mode the Unity game deliberately retired, and it overlaps the PER private tables.
+    - *B. Keep the server side behind the staging switch and spend Phase 6 on PER* (question 2). Pros: effort goes to
+      the SOL mode players use today. Cons: the escrow work stays unused for now.
+    - *C. Remove the escrow from the new stack.* Pros: less code. Cons: throws away tested work, and the plan changes.
+    I lean to B.
+13. **A devnet RPC the Worker can reach.** `api.devnet.solana.com` blocks Cloudflare Workers (decision 22).
+    - *A. A free devnet key of the new stack's own* (Helius or Alchemy; you create the account, I store the URL as a
+      Worker secret). Pros: separate quota; nothing shared with the live game. Cons: one sign-up for you.
+    - *B. Reuse the Alchemy devnet URL the Unity client ships* (`PokerChainConfig.cs`). Pros: works today, and it's
+      already public. Cons: it shares the live game's quota, against "test infra only".
+    I recommend A. `SOLANA_RPC_URL` becomes a secret either way.

@@ -1,12 +1,17 @@
 # Phase 6 design: on-chain tables on the new stack (devnet)
 
-Status, 10 Nov 2026: design, plus the signing groundwork. `packages/chain` builds the escrow's authority instructions,
-compiles and signs transactions with WebCrypto Ed25519 and talks JSON-RPC; its tests match `@solana/web3.js` byte for
-byte, offline. Nothing sends a transaction yet; the rest needs the decisions at the end.
+Status, 9 Nov 2026 (afternoon): the escrow tables' server side is built and has run on devnet.
+- The game server has its own key: `5mGzv7cs…zx5X1` on staging, in Worker secrets only.
+- Each `poker-money…` room creates its table on chain and runs a round per hand (`HandGate` in `PokerServerGame`).
+  It seats players from their on-chain seats, pays leavers out, and closes the table when the room closes.
+  Code: `apps/game-server/src/escrowTable.ts` and `packages/chain/src/escrowClient.ts`.
+- Exit gate: `apps/game-server/scripts/escrow-check.ts`.
+- Two things are open:
+  - The Worker can't reach `api.devnet.solana.com`, which blocks Cloudflare, so it needs another devnet RPC.
+  - Whether to build the player side at all, since Unity retired escrow money tables.
 
-Next to build once keys are OK'd: a hand-start hook in `PokerServerGame` (await `begin_round` before the deal), a
-table-level settle step from `onHandSettled` (`settle_round` with every seat's delta), buy-in by reading the seat PDA
-the player's wallet funded, and cash-out / close through the same signer, then the two-wallet devnet harness.
+  Both are questions 12–13 in `worklog-phases-6-8.md`. PER is still question 2.
+
 Programs stay as they are (`poker-escrow` `GdduGz…ozo`, `poker-per` test `4A3DZW…MZ` / live `7q2vxh…pv`).
 
 ## What exists

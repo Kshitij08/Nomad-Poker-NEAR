@@ -1,0 +1,37 @@
+{
+  "at": "2026-11-09T07:19:25.229Z",
+  "stage": "staging key, local server",
+  "room": "poker-money-74",
+  "tableId": "t-aef349423ab34dfd9c10",
+  "hands": 20,
+  "buyInLamports": 100000000,
+  "rakeLamports": 5000000,
+  "start": {
+    "alice": 130000000,
+    "bob": 130000000,
+    "carol": 130000000
+  },
+  "end": {
+    "alice": 94995000,
+    "bob": 139995000,
+    "carol": 139995000
+  },
+  "fees": {
+    "alice": 5000,
+    "bob": 5000,
+    "carol": 5000
+  },
+  "payout": {
+    "alice": 70000000,
+    "bob": 115000000,
+    "carol": 115000000
+  },
+  "checks": {
+    "chipsConserved": true,
+    "payoutsWholeChips": true,
+    "tableClosed": true,
+    "vaultClosed": true,
+    "carolPendingTested": true
+  },
+  "pass": true
+}

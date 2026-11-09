@@ -17,7 +17,7 @@ export class SolanaRpc {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: ++this.id, method, params }),
     });
-    if (!res.ok) throw new Error(`${method}: HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`${method}: HTTP ${res.status} ${(await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300)}`);
     const body = (await res.json()) as { result?: T; error?: { code: number; message: string } };
     if (body.error) throw new Error(`${method}: ${body.error.message} (${body.error.code})`);
     return body.result as T;
@@ -47,9 +47,31 @@ export class SolanaRpc {
 
   /** An account's data, or null when it doesn't exist. */
   async accountData(addressBase58: string): Promise<Uint8Array | null> {
-    const r = await this.call<{ value: { data: [string, string] } | null }>('getAccountInfo', [addressBase58, { encoding: 'base64', commitment: 'confirmed' }]);
-    if (!r.value) return null;
-    const bin = atob(r.value.data[0]);
-    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return (await this.account(addressBase58))?.data ?? null;
   }
+
+  /** An account's data and lamports, or null when it doesn't exist. */
+  async account(addressBase58: string): Promise<{ data: Uint8Array; lamports: number } | null> {
+    const r = await this.call<{ value: { data: [string, string]; lamports: number } | null }>('getAccountInfo', [addressBase58, { encoding: 'base64', commitment: 'confirmed' }]);
+    if (!r.value) return null;
+    return { data: unbase64(r.value.data[0]), lamports: r.value.lamports };
+  }
+
+  /** A program's accounts of one size whose bytes at `offset` equal `bytesBase58` (getProgramAccounts + memcmp). */
+  async programAccounts(programBase58: string, dataSize: number, offset: number, bytesBase58: string): Promise<{ pubkey: string; data: Uint8Array; lamports: number }[]> {
+    const r = await this.call<{ pubkey: string; account: { data: [string, string]; lamports: number } }[]>('getProgramAccounts', [
+      programBase58,
+      { encoding: 'base64', commitment: 'confirmed', filters: [{ dataSize }, { memcmp: { offset, bytes: bytesBase58 } }] },
+    ]);
+    return r.map((a) => ({ pubkey: a.pubkey, data: unbase64(a.account.data[0]), lamports: a.account.lamports }));
+  }
+
+  async balance(addressBase58: string): Promise<number> {
+    return (await this.call<{ value: number }>('getBalance', [addressBase58, { commitment: 'confirmed' }])).value;
+  }
+}
+
+function unbase64(s: string): Uint8Array {
+  const bin = atob(s);
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }

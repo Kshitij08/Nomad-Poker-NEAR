@@ -9,6 +9,8 @@ export interface TableSlotDeps {
   /** Was this party room spawned? (persisted by the Durable Object) */
   isSpawned(): Promise<boolean>;
   qaRooms: boolean;
+  /** SOL rooms are switched on (an escrow key is configured). */
+  moneyTables?: boolean;
   /** Time scale for qa rooms. */
   qaSpeed: number;
   /** Builds what the room hosts: a cash table, or a tournament (which looks its record up first, hence async). */
@@ -123,7 +125,7 @@ export class TableSlot {
     if (live) return Promise.resolve(live);
     this.opening ??= (async () => {
       try {
-        const spec = roomSpecFor(this.deps.session, { spawned: await this.deps.isSpawned(), qaRooms: this.deps.qaRooms });
+        const spec = roomSpecFor(this.deps.session, { spawned: await this.deps.isSpawned(), qaRooms: this.deps.qaRooms, moneyTables: this.deps.moneyTables });
         if (!spec.ok) return { reason: spec.reason, message: spec.message };
         const speed = isQaRoom(this.deps.session) ? Math.max(1, this.deps.qaSpeed) : 1;
         try {

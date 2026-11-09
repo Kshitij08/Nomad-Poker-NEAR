@@ -127,3 +127,27 @@ describe('@nomad/chain', () => {
     expect(calls).toEqual(['getLatestBlockhash', 'sendTransaction', 'getSignatureStatuses', 'getBlockHeight', 'getSignatureStatuses']);
   });
 });
+
+describe('@nomad/chain accounts', () => {
+  it('decodes table and seat accounts (Anchor layout) and builds SystemProgram.transfer as web3.js does', async () => {
+    const { decodeSeat, decodeTable, systemTransfer, programErrorCode, rakeLamports, SEAT_ACCOUNT_SIZE } = await import('../accounts');
+    const { SystemProgram } = await import('@solana/web3.js');
+    const host = Keypair.generate().publicKey;
+    const auth = Keypair.generate().publicKey;
+    const le = (v: bigint, n: number) => Buffer.from(Array.from({ length: n }, (_, i) => Number((BigInt.asUintN(n * 8, v) >> BigInt(8 * i)) & 0xffn)));
+    const table = Buffer.concat([Buffer.alloc(8), host.toBuffer(), auth.toBuffer(), Buffer.from(tableIdBytes('t-1')), le(100_000_000n, 8), le(500n, 2), le(5n, 8), le(10n, 8), Buffer.of(6), Buffer.of(2), le(2000n, 8), le(7n, 8), Buffer.of(1), le(1_790_000_000n, 8), le(500n, 8), Buffer.of(254)]);
+    expect(decodeTable(table)).toEqual({ host: host.toBase58(), settlementAuthority: auth.toBase58(), buyInLamports: 100_000_000n, rakeBps: 500, smallBlindChips: 5n, bigBlindChips: 10n, maxSeats: 6, seatedCount: 2, chipsInPlay: 2000n, roundNonce: 7n, roundActive: true, lastSettlementTs: 1_790_000_000, pendingChipsInPlay: 500n });
+    const p = Keypair.generate().publicKey;
+    const seat = Buffer.concat([Buffer.alloc(8), host.toBuffer(), p.toBuffer(), le(1234n, 8), le(100_000_000n, 8), le(5_000_000n, 8), Buffer.of(1), le(-5n, 8), le(500n, 8), Buffer.of(255)]);
+    expect(seat.length).toBe(SEAT_ACCOUNT_SIZE);
+    expect(decodeSeat(seat)).toEqual({ table: host.toBase58(), player: p.toBase58(), chips: 1234n, depositedLamports: 100_000_000n, rakePaidLamports: 5_000_000n, leaving: true, lastActiveTs: -5, pendingChips: 500n });
+    const ix = systemTransfer(address(auth.toBase58()), address(p.toBase58()), 1_461_600n);
+    const theirs = SystemProgram.transfer({ fromPubkey: auth, toPubkey: p, lamports: 1_461_600 });
+    expect(Buffer.from(ix.data).equals(theirs.data)).toBe(true);
+    expect(ix.keys.map((k) => [toBase58(k.pubkey), k.isSigner, k.isWritable])).toEqual(theirs.keys.map((k) => [k.pubkey.toBase58(), k.isSigner, k.isWritable]));
+    expect(programErrorCode('Transaction simulation failed: Error processing Instruction 0: custom program error: 0x1773')).toBe(6003);
+    expect(programErrorCode('transaction failed: {"InstructionError":[0,{"Custom":6005}]}')).toBe(6005);
+    expect(programErrorCode('blockhash not found')).toBeNull();
+    expect(rakeLamports(100_000_000n, 500)).toBe(5_000_000n);
+  });
+});

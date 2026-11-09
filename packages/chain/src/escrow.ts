@@ -113,8 +113,12 @@ export class EscrowAuthority {
     ], new Writer().bytes(DISCRIMINATORS.begin_round).bytes(tableIdBytes(tableId)).done());
   }
 
-  /** A hand's chip changes (zero sum, ≤ MAX_DELTAS); each player's seat PDA rides as a writable remaining account. */
-  settleRound(tableId: string, nonce: bigint, deltas: ChipDelta[]): Instruction {
+  /**
+   * A hand's chip changes (zero sum, ≤ MAX_DELTAS); each player's seat PDA rides as a writable remaining account, in
+   * delta order. `pendingOnly` adds the seats of players with a mid-hand buy-in and no delta: the program moves every
+   * listed seat's pending chips into play and refuses to settle while any pending chips are left over.
+   */
+  settleRound(tableId: string, nonce: bigint, deltas: ChipDelta[], pendingOnly: Address[] = []): Instruction {
     if (deltas.length > MAX_DELTAS) throw new Error(`at most ${MAX_DELTAS} deltas`);
     if (deltas.reduce((s, d) => s + d.chipDelta, 0n) !== 0n) throw new Error('deltas must sum to zero');
     const w = new Writer().bytes(DISCRIMINATORS.settle_round).bytes(tableIdBytes(tableId)).u64(nonce).u32(deltas.length);
@@ -124,6 +128,7 @@ export class EscrowAuthority {
       { pubkey: this.table(tableId), isSigner: false, isWritable: true },
       { pubkey: this.vault(tableId), isSigner: false, isWritable: false },
       ...deltas.map((d) => ({ pubkey: this.seat(tableId, d.player), isSigner: false, isWritable: true })),
+      ...pendingOnly.map((p) => ({ pubkey: this.seat(tableId, p), isSigner: false, isWritable: true })),
     ], w.done());
   }
 

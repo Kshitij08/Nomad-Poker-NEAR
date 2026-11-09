@@ -5,7 +5,7 @@ import * as entrypoint from './src/index.ts' with { type: 'cf-worker' };
 /**
  * The game server Worker and its table Durable Object. Modes: `development` (cf dev, local D1/R2), `staging`,
  * `production`. Shares the API's D1 database (sessions, ledger) and R2 bucket (hand histories).
- * Secrets (DRAIN_TOKEN) come from .secrets.<mode>.json at deploy (git-ignored).
+ * Secrets (DRAIN_TOKEN, ESCROW_AUTHORITY_SECRET, SOLANA_RPC_URL) come from .secrets.<mode>.json at deploy (git-ignored).
  */
 
 const ACCOUNT_ID = 'a5e26389a89c0c84a7b4939e38574714';
@@ -62,6 +62,11 @@ export default defineConfig(({ mode }) => {
         QA_ROOMS: bindings.text(s.qa ? '1' : ''),
         QA_ROOM_SPEED: bindings.text('20'),
         DRAIN_TOKEN: bindings.secret(),
+        // SOL tables on the poker-escrow program, devnet only (Phase 6). Staging only until launch.
+        MONEY_TABLES: bindings.text(s.qa ? '1' : ''),
+        ESCROW_AUTHORITY_SECRET: bindings.secret(),
+        // A secret: keyed RPC URLs carry their key. api.devnet.solana.com refuses Workers (403), so set a provider's.
+        SOLANA_RPC_URL: bindings.secret(),
         // Room spawns, overflow lookups and Agent starts: 30 a minute per address.
         HTTP_LIMITER: bindings.rateLimit({ namespace: s.limiter, simple: { limit: 30, period: 60 } }),
       },

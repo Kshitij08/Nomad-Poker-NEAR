@@ -1,12 +1,16 @@
 import { recordHand as recordHandProgress } from '@nomad/db/progress';
 import { closeTableSession, openTableSession, recordHand, type SeatLockRow } from '@nomad/db/seatLocks';
 import type { ServerClock } from '@nomad/table-server/clock';
-import { PokerServerGame, type SettledHand } from '@nomad/table-server/pokerServerGame';
+import { PokerServerGame, SERVER_TABLE_SETTINGS, type SettledHand } from '@nomad/table-server/pokerServerGame';
 import { Room, type RoomSpec } from '@nomad/table-server/rooms';
 import { ChainTableMode } from '@nomad/table-server/sessions';
 import type { IPokerTableServer } from '@nomad/table-server/tableNet';
 import type { TableSettings } from '@nomad/engine/orchestration/tableSettings';
 import { BettingRound } from '@nomad/engine/state/state';
+import { StakeCatalog } from '@nomad/engine/stakes/stakes';
+import type { EscrowClient } from '@nomad/chain/escrowClient';
+import { StakeSessionNames } from '@nomad/table-server/sessions';
+import { EscrowTable } from './escrowTable';
 import type { AgentRow } from '@nomad/db/agents';
 import { recordDecisions, recordStyleHands } from '@nomad/db/strategies';
 import { AgentDesk } from './agentDesk';
@@ -30,6 +34,8 @@ export interface TableHostOptions {
   disconnectGrace?: number;
   /** How long a failing bookkeeping write is retried (default BOOKKEEPING_RETRY_MS). */
   bookkeepingRetryMs?: number;
+  /** SOL rooms (`poker-money…`): the game server's escrow client. Their chips live on chain, not in D1. */
+  escrow?: EscrowClient;
 }
 
 /** Ten minutes: long enough to ride out a D1 export or restart, short enough that a drain still finishes. */
@@ -64,11 +70,28 @@ export class TableHost extends RoomHost {
   /** D1 bookkeeping (table session row, house totals) runs in order, with retries, off the game loop. */
   private bookkeeping: Promise<void> = Promise.resolve();
   private readonly retryMs: number;
+  /** A SOL table's on-chain side (null for Coins tables). */
+  readonly escrow: EscrowTable | null = null;
 
   constructor(private readonly opts: TableHostOptions) {
     super(opts.spec);
     this.retryMs = opts.bookkeepingRetryMs ?? BOOKKEEPING_RETRY_MS;
     const room = opts.spec.name;
+    if (opts.escrow) {
+      if (!room.startsWith(StakeSessionNames.MoneyRoot)) throw new Error(`escrow client given to non-SOL room ${room}`);
+      const stake = StakeCatalog.get(StakeSessionNames.parseMinBuyIn(room));
+      this.escrow = new EscrowTable({
+        db: opts.db,
+        client: opts.escrow,
+        room,
+        tableId: 't-' + crypto.randomUUID().replace(/-/g, '').substring(0, 20),
+        buyInChips: stake.minBuyIn,
+        smallBlind: stake.smallBlind,
+        bigBlind: stake.bigBlind,
+        maxSeats: opts.tableSettings?.seatCount ?? SERVER_TABLE_SETTINGS.seatCount,
+        log: opts.log,
+      });
+    }
     const ledger = new D1ChipLedger(opts.db, room, (lock) => this.stillSeated(lock), opts.log);
     this.agents = new AgentDesk({
       db: opts.db,
@@ -93,7 +116,9 @@ export class TableHost extends RoomHost {
     this.game = new PokerServerGame({
       clock: opts.clock,
       log: opts.log,
-      economy: d1TableEconomy(ledger),
+      economy: this.escrow ? this.escrow.economy() : d1TableEconomy(ledger),
+      handGate: this.escrow ?? undefined,
+      tableId: this.escrow?.tableId,
       settings: opts.tableSettings,
       random: opts.random,
       disconnectGrace: opts.disconnectGrace,
@@ -105,7 +130,7 @@ export class TableHost extends RoomHost {
     this.room = new RecordingRoom(opts.spec, this.game, opts.clock, opts.log, opts.recorder);
     this.game.activate(this.room);
     const tableId = this.game.tableId;
-    if (tableId) {
+    if (tableId && !this.escrow) {
       const stake = Number(opts.spec.properties[ChainTableMode.StakeProperty]) || 0;
       this.queue(`open ${tableId}`, () => openTableSession(opts.db, { id: tableId, room, stake }));
     }
@@ -141,7 +166,7 @@ export class TableHost extends RoomHost {
   }
 
   override seatAgent(row: AgentRow): Promise<boolean> {
-    if (this.closed || this.draining || !this.game.isQuickPlay) return Promise.resolve(false);
+    if (this.closed || this.draining || !this.game.isQuickPlay || this.escrow) return Promise.resolve(false);
     return this.agents.seat(row);
   }
 
@@ -161,8 +186,8 @@ export class TableHost extends RoomHost {
     this.closed = true;
     const tableId = this.game.tableId;
     this.room.close(reason); // disposes the game: every seated player is cashed out
-    if (tableId) this.queue(`close ${tableId}`, () => closeTableSession(this.opts.db, tableId));
-    await Promise.all([this.bookkeeping, this.opts.recorder?.flush()]);
+    if (tableId && !this.escrow) this.queue(`close ${tableId}`, () => closeTableSession(this.opts.db, tableId));
+    await Promise.all([this.bookkeeping, this.opts.recorder?.flush(), this.escrow?.shutdown()]);
   }
 
   /** Resolves when the queued D1 bookkeeping has been written (tests, drain). */
@@ -180,20 +205,21 @@ export class TableHost extends RoomHost {
         if (styleHands.length) await recordStyleHands(this.opts.db, styleHands);
       });
     }
-    if (h.tableId) {
+    // Suspended accounts leave at the hand boundary (a ban ends sessions; this ends a seat already taken).
+    const humans = h.stacks.filter((s) => !s.bot && s.id.startsWith('p_')).map((s) => s.id);
+    if (humans.length) {
+      this.queue(`ban check hand ${h.handNumber}`, async () => {
+        const r = await this.opts.db
+          .prepare(`SELECT id FROM players WHERE banned_at IS NOT NULL AND id IN (${humans.map((_, i) => `?${i + 1}`).join(', ')})`)
+          .bind(...humans)
+          .all<{ id: string }>();
+        for (const b of r.results) this.game.removePlayer(b.id, 'account suspended');
+      });
+    }
+    // SOL tables keep their money on chain and earn no XP (as Unity's money tables); the rest is Coins bookkeeping.
+    if (h.tableId && !this.escrow) {
       const tableId = h.tableId;
       this.queue(`hand ${h.handNumber}`, () => recordHand(this.opts.db, tableId, h.botDelta, h.agentDelta));
-      // Suspended accounts leave at the hand boundary (a ban ends sessions; this ends a seat already taken).
-      const humans = h.stacks.filter((s) => !s.bot && s.id.startsWith('p_')).map((s) => s.id);
-      if (humans.length) {
-        this.queue(`ban check hand ${h.handNumber}`, async () => {
-          const r = await this.opts.db
-            .prepare(`SELECT id FROM players WHERE banned_at IS NOT NULL AND id IN (${humans.map((_, i) => `?${i + 1}`).join(', ')})`)
-            .bind(...humans)
-            .all<{ id: string }>();
-          for (const b of r.results) this.game.removePlayer(b.id, 'account suspended');
-        });
-      }
       // XP and missions for every Nomad player dealt in (the server counts; clients cannot claim hands).
       for (const s of h.stacks) {
         if (s.bot || !s.id.startsWith('p_')) continue;

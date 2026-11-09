@@ -12,3 +12,4 @@ obj/
 .secrets*.json
 .load-guests*.json
 infra/backups/
+.escrow-check-wallets*.json

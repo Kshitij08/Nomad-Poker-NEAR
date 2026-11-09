@@ -1,4 +1,5 @@
 import { StakeSessionNames, PartyCodes } from '@nomad/table-server/sessions';
+import { chainConfig } from './chain';
 import type { Env } from './env';
 import { auditTable } from '@nomad/db/seatLocks';
 import { canonicalSession } from './roomSpec';
@@ -13,6 +14,7 @@ export { TableRoom } from './tableRoom';
  * local server took over its one socket.
  *
  *   GET  /v1/health
+ *   GET  /v1/chain/config     SOL tables: { moneyTables, programId, settlementAuthority, rpcUrl } (devnet)
  *   GET  /v1/tables/ws?session=<name>   WebSocket to that table (then `join`, `hello`, …: the local server's protocol)
  *   POST /v1/tables/spawn     { code, money }               → { code } | { error }
  *   POST /v1/tables/overflow  { money, failed, minBuyIn }   → { session } | { error }
@@ -60,6 +62,14 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...h, 'access-control-max-age': '86400' } });
 
     if (url.pathname === '/v1/health') return json({ ok: true, stage: env.STAGE, version: VERSION }, 200, h);
+    if (url.pathname === '/v1/chain/config' && request.method === 'GET') {
+      try {
+        return json(await chainConfig(env), 200, h);
+      } catch (e) {
+        console.error(`chain config: ${(e as Error).message}`);
+        return json({ moneyTables: false, error: 'The SOL table key is misconfigured.' }, 503, h);
+      }
+    }
     if (await limited(request, env, url.pathname)) return json({ error: 'Too many requests; wait a minute.', code: 'rate_limited' }, 429, h);
 
     if (url.pathname === '/v1/tables/ws') {

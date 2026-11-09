@@ -80,6 +80,21 @@ export interface PokerServerGameOptions {
   onHandSettled?: (hand: SettledHand) => void;
   /** Every engine event as the server processes it, before anything is filtered for players (hosts' recorders). */
   onEngineEvent?: (e: EngineEvent) => void;
+  /**
+   * On-chain (escrow) tables: awaited around every hand, and the table plays without bots. The hand gate opens the
+   * chain's round before the deal and settles it after; a false from either halts the table.
+   */
+  handGate?: HandGate;
+  /** The ledger's table id (default: a fresh `t-…` id). Escrow tables pass the id they created on chain. */
+  tableId?: string;
+}
+
+/** What an on-chain table does around each hand (apps/game-server escrowTable.ts). */
+export interface HandGate {
+  /** Before each deal. False: the hand is not dealt and the table halts. */
+  beforeDeal(): Promise<boolean>;
+  /** After each hand passes the conservation check, with every seat's change. False: the table halts. */
+  afterSettle(hand: SettledHand): Promise<boolean>;
 }
 
 export interface SettledHand {
@@ -320,6 +335,7 @@ export class PokerServerGame implements IPokerTableServer {
       { id: 'st' + stake.minBuyIn, displayName: stake.displayName, buyInChips: stake.minBuyIn, smallBlind: stake.smallBlind, bigBlind: stake.bigBlind },
       this.clock,
       this.log,
+      this.opts.tableId,
     );
   }
 
@@ -536,7 +552,7 @@ export class PokerServerGame implements IPokerTableServer {
     }
 
     occ.funded = true;
-    occ.buyInChips = chips;
+    occ.buyInChips = result.stack ?? chips;
     // Only at a real boundary; otherwise ApplyPendingSeatChanges deals them in at the top of the next hand.
     if (!this.seatsLocked) this.seatHuman(seat, occ);
 
@@ -771,6 +787,10 @@ export class PokerServerGame implements IPokerTableServer {
 
   onAddBot(source: PlayerRef): void {
     if (!this.requireOwner(source, 'add a bot')) return;
+    if (this.opts.handGate) {
+      this.log('warn', '[PokerServer] Add bot ignored: on-chain tables seat players only.');
+      return;
+    }
     const seat = this.firstFreeSeat();
     if (seat < 0) {
       this.log('warn', '[PokerServer] Add bot ignored: no free seat.');
@@ -1074,7 +1094,7 @@ export class PokerServerGame implements IPokerTableServer {
   }
 
   private tuneQuickPlayBots(broadcast: boolean): boolean {
-    if (!this.isQuickPlay) return false;
+    if (!this.isQuickPlay || this.opts.handGate) return false;
     let changed = this.fillQuickPlayBotsIfLonely();
     changed = this.reserveEmptySeatForJoiner() || changed;
     if (changed && broadcast) {
@@ -1445,6 +1465,13 @@ export class PokerServerGame implements IPokerTableServer {
       if (this.tryHaltAgentsForOwners() && this.engine.countFundedPlayers() < 2) break;
       if (this.disposed) break;
 
+      const gate = this.opts.handGate;
+      if (gate && !(await this.safeGate(() => gate.beforeDeal(), 'beforeDeal'))) {
+        this.economy?.halt("the chain's round could not be opened");
+        break;
+      }
+      if (this.disposed) break;
+
       this.renderBudget = 0;
       this.engine.startHand();
       await this.processEventsUntilHandEnds();
@@ -1452,8 +1479,10 @@ export class PokerServerGame implements IPokerTableServer {
 
       // Settle even when the hand ended the game: chips moved.
       this.settleOpen = true;
-      await this.settleChipHand();
+      const settled = await this.settleChipHand();
+      if (gate && settled && !(await this.safeGate(() => gate.afterSettle(settled), 'afterSettle'))) this.economy?.halt("the hand could not be settled on chain");
       this.closeSettle();
+      if (this.economy?.isHalted) break;
 
       this.completeAgentHandTelemetry();
       this.evaluateAgentLimitsAfterHand();
@@ -1495,8 +1524,8 @@ export class PokerServerGame implements IPokerTableServer {
    * Closes out a finished hand: the conservation INVARIANT (asserted — halts the table), the HOUSE DELTA (logged), and
    * a checkpoint of every funded human's stack.
    */
-  private async settleChipHand(): Promise<void> {
-    if (this.stacksAtHandStart.size === 0) return;
+  private async settleChipHand(): Promise<SettledHand | null> {
+    if (this.stacksAtHandStart.size === 0) return null;
     let humanDelta = 0;
     let botDelta = 0;
     let agentDelta = 0;
@@ -1515,32 +1544,44 @@ export class PokerServerGame implements IPokerTableServer {
       this.stacksAtHandStart.clear();
       this.log('error', `[PokerServer] Chip conservation broken: off by ${off}. Humans ${humanDelta}, bots ${botDelta}, Agents ${agentDelta}, engine pot still holds ${residual}.${report.join('')}`);
       this.economy?.halt(`chips are not conserved (off by ${off}) — see the seat breakdown above`);
-      return;
+      return null;
     }
+    const settled: SettledHand = {
+      tableId: this.economy?.tableId ?? null,
+      handNumber: this.engine.table.handNumber,
+      botDelta,
+      humanDelta,
+      agentDelta,
+      stacks: [...this.stacksAtHandStart.keys()].map((id) => {
+        const seat = this.seatOfPlayer(id);
+        return { id, seat, startStack: this.stacksAtHandStart.get(id) ?? 0, stack: this.stackOfPlayer(id), bot: isBotId(id), won: this.handWinners.has(seat), showdownCategory: this.handShowdown.get(seat) ?? null };
+      }),
+    };
     try {
-      this.opts.onHandSettled?.({
-        tableId: this.economy?.tableId ?? null,
-        handNumber: this.engine.table.handNumber,
-        botDelta,
-        humanDelta,
-        agentDelta,
-        stacks: [...this.stacksAtHandStart.keys()].map((id) => {
-          const seat = this.seatOfPlayer(id);
-          return { id, seat, startStack: this.stacksAtHandStart.get(id) ?? 0, stack: this.stackOfPlayer(id), bot: isBotId(id), won: this.handWinners.has(seat), showdownCategory: this.handShowdown.get(seat) ?? null };
-        }),
-      });
+      this.opts.onHandSettled?.(settled);
     } catch (e) {
       this.log('error', `[PokerServer] onHandSettled failed: ${(e as Error)?.message ?? e}`);
     }
     if (botDelta !== 0)
       this.log('info', `[Economy] house delta ${-botDelta > 0 ? '+' : ''}${-botDelta} (table ${this.economy?.tableId ?? 'legacy-free'}, hand ${this.engine.table.handNumber})`);
     this.stacksAtHandStart.clear();
-    if (!this.economy) return;
+    if (!this.economy) return settled;
     for (const [seat, occ] of this.humans) {
       if (!occ.funded || !occ.playFabId) continue;
       const p = this.engine.table.seats[seat]!;
       if (!occ.dealtIn || !p.isOccupied) continue;
       await this.economy.checkpoint(occ.playFabId, seat, p.stack, this.engine.table.handNumber);
+    }
+    return settled;
+  }
+
+  /** A hand gate that throws counts as a refusal (logged): the table halts rather than play an unrecorded hand. */
+  private async safeGate(fn: () => Promise<boolean>, what: string): Promise<boolean> {
+    try {
+      return await fn();
+    } catch (e) {
+      this.log('error', `[PokerServer] hand gate ${what} threw: ${(e as Error)?.message ?? e}`);
+      return false;
     }
   }
 

@@ -11,7 +11,8 @@ import { isTournamentSessionName } from '@nomad/db/tournaments';
  * - `qa-…` rooms exist only where QA rooms are switched on (staging): Quick Play tables for test harnesses, at the
  *   default stake or at the one a `-st<stake>` suffix names (`qa-soak-1-st100`);
  * - hosted tournaments (`TRN` + 10) are one room each, holding every table of the tournament;
- * - money pools stay off until on-chain tables move over (Phase 6).
+ * - SOL pools (`poker-money`, `poker-money-st1000-2`) exist where the escrow is switched on: their chips live on the
+ *   poker-escrow program (devnet), funded from each player's wallet (Phase 6).
  * Every room here is a "child": it closes after idling empty, and the next join opens it again.
  */
 
@@ -19,11 +20,16 @@ export interface RoomSpecOptions {
   /** The party room was spawned (its Durable Object stored the flag). */
   spawned: boolean;
   qaRooms: boolean;
+  /** SOL tables on the escrow (the game server holds a settlement key and MONEY_TABLES is on). */
+  moneyTables?: boolean;
 }
 
 export type RoomSpecResult = { ok: true; spec: RoomSpec } | { ok: false; reason: JoinFailReason; message: string };
 
 const QA_ROOM = /^qa-[a-z0-9-]{1,40}$/;
+/** The room property the client's lobby probe reads (ChainTableMode.MODE_PROPERTY / MODE_CHAIN in apps/web). */
+const MODE_PROPERTY = 'mode';
+const MODE_CHAIN = 'chain';
 
 /** The canonical spelling of a session name (its Durable Object name), or null when it can never be a room. */
 export function canonicalSession(raw: string | null | undefined): string | null {
@@ -48,7 +54,11 @@ export function roomSpecFor(session: string, opts: RoomSpecOptions): RoomSpecRes
     properties: { [ChainTableMode.KindProperty]: ChainTableMode.KindQuick, [ChainTableMode.StakeProperty]: String(stake) },
   });
   if (StakeSessionNames.isPool(session)) {
-    if (session.startsWith(StakeSessionNames.MoneyRoot)) return { ok: false, reason: 'GameNotFound', message: 'Money tables are not available yet.' };
+    if (session.startsWith(StakeSessionNames.MoneyRoot)) {
+      if (!opts.moneyTables) return { ok: false, reason: 'GameNotFound', message: 'Money tables are not available yet.' };
+      const spec = quick(StakeSessionNames.parseMinBuyIn(session));
+      return { ok: true, spec: { ...spec, properties: { ...spec.properties, [MODE_PROPERTY]: MODE_CHAIN } } };
+    }
     return { ok: true, spec: quick(StakeSessionNames.parseMinBuyIn(session)) };
   }
   if (PartyCodes.isValid(session)) {
