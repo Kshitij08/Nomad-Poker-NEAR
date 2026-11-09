@@ -161,6 +161,7 @@ export class SplineCardDealer {
     const cv = new CardView(this.makeVisual(), this.cardOptions);
     this.dealtRoot.add(cv.transform);
     cv.setWorldPosition(spline.evaluatePosition(0)); // sit at the deck until it flies
+    cv.pathProgress = 0;
     this.spawned.push(cv);
     cv.show(card, false);
     const go = () => {

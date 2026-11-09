@@ -47,15 +47,20 @@ What C does:
   its own seat than any other, and no pair shares the board's row (a showdown must not read as one long row of cards).
   Side seats' cards sit on the avatar's inner side; the top corners' under their own status pill; the top seat's under
   its stack; the board crosses the middle with the pot above it.
-- **Deal splines**: each slot's two splines are the landscape splines of slot *i+2*, each with its own similarity
-  (turn + uniform scale) about its start, the deck, that lands that card on its spot: the pair side by side, card 0 on
-  the left. The UnitySpline *contents* are swapped in place, so every holder of the spline objects follows; the paths'
-  shape, `SplineAnimate` timing and easing are Unity's.
-- **Cards**: dealt cards turn upright in their own plane as they leave the deck and back as they return: a yaw on the
+- **Deal splines** (`portraitPath`): Unity deals as one stream — every card leaves the deck, swirls once round the
+  table with the others and peels off to its seat. The world's quarter turn already turns that swirl with the table, so
+  slot *i* keeps landscape slot *i+2*'s own path, squeezed to 0.75 about the table centre (the same for every path, so
+  the cards still travel together and stay on a phone screen) and with its last 45 % bent smoothly onto the card's
+  spot. Card 1 lands 0.03 higher than card 0 so it draws on top and both corner indices show. The rebuilt UnitySpline
+  *contents* are swapped in place, so every holder of the spline objects follows; `SplineAnimate` timing, easing and
+  banking are Unity's. (Until 10 Nov each seat got its own turn + scale of the swirl about the deck: the cards
+  scattered in every direction, 11–35 units long, some off screen — `__tests__/portraitPaths.test.ts` pins this.)
+- **Cards**: dealt cards fly aligned with the path like Unity's, and turn upright in their own plane over the last
+  quarter of the path (by path progress, `CardView.pathProgress`; the return unwinds it as they leave): a yaw on the
   card's deck node, solved each frame from the card's live pose so its long side stands up the screen, leaning 4° out
   from the pair's middle (5° for yours). It holds for every seat's path and through the showdown flip; it uses the
   resting camera's axes, so the river-slam camera roll still moves the cards with the table. Your own two grow to 1.7×
-  and fan 0.8 apart, so both are readable at phone size.
+  over the same stretch and fan 0.8 apart, so both are readable at phone size.
 - **Board**: the five Animator slots get anchors that put them in a left-to-right row (1.05×) and undo the quarter turn,
   so reveal, withdrawal, smoke and the river-slam bounces play exactly as in landscape.
 - **Pot**: the pill (0.85×) and the 3D chip piles move above the board.

@@ -18,7 +18,7 @@
  */
 import { Group, MathUtils, Matrix3, Matrix4, Object3D, Quaternion, Vector3 } from 'three';
 import type { TableStage } from '../table/tableStage';
-import type { UnitySpline } from '../anim/unitySpline';
+import { UnitySpline } from '../anim/unitySpline';
 import { worldCanvasSpace } from './canvasSpace';
 import { isPortrait, safeArea } from './orientation';
 import { PortraitSeats } from './portraitSeats';
@@ -40,6 +40,7 @@ const CLEAR = { top: PORTRAIT_TOP_ROW_Y + 40, bottom: PORTRAIT_ROW.y + PORTRAIT_
 interface CardViewLike {
   alive: boolean;
   transform: Object3D;
+  pathProgress: number;
   retargetSpline(s: UnitySpline | null): void;
 }
 type SplineFields = Record<string, unknown>;
@@ -119,38 +120,23 @@ export class PortraitTable {
   // ---------------------------------------------------------------- splines
 
   /**
-   * Slot i's portrait splines: landscape slot (i+SHIFT)'s pair, each with a similarity about its start (the deck) —
-   * a turn about Y and a uniform scale — that lands that card on its portrait spot (portraitLayout.ts: the pair side
-   * by side, card 0 on the left).
+   * Slot i's portrait splines. Unity's deal is one stream: every card leaves the deck, swirls once round the table with
+   * the others and peels off to its seat. The world's quarter turn already turns that swirl with the table, so slot i
+   * keeps landscape slot (i+SHIFT)'s own path, only
+   *  - squeezed about the table centre to fit a phone's width (`SWIRL`), the same for every path, so the cards still
+   *    travel together, and
+   *  - with its last stretch bent smoothly onto the card's portrait spot (portraitLayout.ts), knots weighted by how far
+   *    along the path they are.
+   * The paths are rebuilt in Unity world space (identity container) from the landscape knots.
    */
   private buildPortraitSplines(slot: number): SplineFields[] {
     const n = this.stage.table.seatSplines.length;
     const src = this.stage.table.seatSplines[(slot + PORTRAIT_SLOT_SHIFT) % n];
+    // Card 1 (right) lands a little higher than card 0, so it draws on top and both corner indices show.
+    const low = Math.min(LANDED_MAX_Y, ...src.map((s) => s.evaluatePosition(1).y));
     return src.map((s, card) => {
-      const start = s.evaluatePosition(0);
-      const end = s.evaluatePosition(1);
       const spot = portraitCardSpot(slot, card);
-      const target = unityOf(spot[0], spot[1], end.y);
-      const v0x = end.x - start.x;
-      const v0z = end.z - start.z;
-      const v1x = target[0] - start.x;
-      const v1z = target[2] - start.z;
-      // three's makeRotationY(θ) maps (x, z) → (x cosθ + z sinθ, −x sinθ + z cosθ): a turn of −θ in atan2(z, x) terms.
-      const theta = -(Math.atan2(v1z, v1x) - Math.atan2(v0z, v0x));
-      const k = Math.hypot(v1x, v1z) / Math.max(1e-6, Math.hypot(v0x, v0z));
-      const sim = new Matrix4()
-        .makeTranslation(start.x, start.y, start.z)
-        .multiply(new Matrix4().makeRotationY(theta))
-        .multiply(new Matrix4().makeScale(k, k, k))
-        .multiply(new Matrix4().makeTranslation(-start.x, -start.y, -start.z));
-      const fields = { ...(s as unknown as SplineFields) };
-      const world = sim.clone().multiply(s.world);
-      const rot = new Quaternion();
-      world.decompose(new Vector3(), rot, new Vector3());
-      fields.world = world;
-      fields.world3 = new Matrix3().setFromMatrix4(world);
-      fields.worldRotation = rot;
-      return fields;
+      return { ...(portraitPath(s, spot, low + card * 0.03) as unknown as SplineFields) };
     });
   }
 
@@ -294,12 +280,14 @@ export class PortraitTable {
    */
   private adjustCards(): void {
     const which = new Map<Object3D, { seat: number; card: number }>();
+    const progress = new Map<Object3D, number>();
     if (this.portrait) {
       const index = new Map<unknown, { seat: number; card: number }>();
       this.stage.table.seatSplines.forEach((pair, seat) => pair.forEach((s, card) => index.set(s, { seat, card })));
       for (const cv of this.spawned()) {
         const at = index.get((cv as unknown as { spline: unknown }).spline);
         if (at) which.set(cv.transform, at);
+        progress.set(cv.transform, cv.pathProgress);
       }
     }
     const live = new Set<Object3D>();
@@ -315,20 +303,19 @@ export class PortraitTable {
       let angle = 0;
       let grow = 1;
       if (this.portrait) {
-        const out = Math.hypot(card.position.x - DECK.x, card.position.z - DECK.z);
         const at = which.get(card);
-        // 0 at the deck, 1 from about half way to the card's spot. Measured against that seat's own distance: the
-        // side seats' spots are only ~1 unit from the deck, the top seat's ~7.
-        const spot = at ? portraitCardSpot(at.seat, at.card) : null;
-        const far = spot ? Math.max(0.5, Math.hypot(spot[1] - DECK.x, -spot[0] - DECK.z)) : 3.6;
-        const wgt = MathUtils.smoothstep(out / far, 0.1, 0.6);
+        // By progress along the path, not distance from the deck: the swirl passes back near the deck, and a card
+        // must not twist mid-air. The card flies like Unity's (aligned with the path) and turns upright as it comes
+        // in to its seat; on the way back it unwinds as it leaves.
+        const t = progress.get(card) ?? 1;
+        const wgt = MathUtils.smoothstep(t, TURN_FROM, 0.97);
         const own = at?.seat === 0;
         const lean = MathUtils.degToRad(own ? P.ownLean : P.lean) * (at?.card === 1 ? -1 : 1);
         const solved = this.uprightYaw(card, home, Math.PI / 2 + lean);
         // Same orientation, nearest turn to last frame's: no full spins when the solution crosses ±180°.
         if (solved !== null) home.angle += wrapAngle(solved - home.angle);
         angle = home.angle * wgt;
-        if (own) grow = 1 + (P.ownCardScale - 1) * MathUtils.smoothstep(out, 1, 3.2);
+        if (own) grow = 1 + (P.ownCardScale - 1) * wgt;
       }
       _yaw.setFromAxisAngle(Y_AXIS, angle);
       deck.quaternion.copy(_yaw).multiply(home.q);
@@ -395,5 +382,76 @@ const _yaw = new Quaternion();
 const _dir = new Vector3();
 const _right = new Vector3(1, 0, 0);
 const _screenUp = new Vector3(0, 0, -1);
-/** Spline start (the deck), Unity world x/z — every seat's splines start within ~0.1 of it. */
-const DECK = { x: -0.33, z: 2.46 };
+
+/**
+ * The deal swirl's squeeze in portrait (screen x and y, about the table centre). Unturned it spans x −5.8…4.5 and
+ * y −5.2…8.0; the fitted portrait table is ±4.8 wide with the top seat at 7.
+ */
+const SWIRL = { x: 0.75, y: 0.75 };
+/** Path progress from which a card turns upright (and yours grows), reaching it just before the seat. */
+const TURN_FROM = 0.72;
+/** Landed hole cards stay under the seat canvases' plane (y 0.92), as Unity's do, so the HUD sorts over them. */
+const LANDED_MAX_Y = 0.85;
+/** Fraction of the path (by length) after which it starts bending onto the portrait card spot. */
+const TAIL_FROM = 0.55;
+
+/**
+ * A landscape deal path re-drawn for the portrait table: squeezed by `SWIRL` and bent over its tail so it ends on
+ * `spot` (portrait coords). Built in Unity world space; knot rotations (the banking up-vectors) are kept.
+ */
+export function portraitPath(s: UnitySpline, spot: [number, number], endY?: number): UnitySpline {
+  const W = s.world;
+  const W3 = new Matrix3().setFromMatrix4(W);
+  const wRot = new Quaternion();
+  W.decompose(new Vector3(), wRot, new Vector3());
+  // Portrait x = −Unity z, portrait y = Unity x.
+  const S = new Matrix4().makeScale(SWIRL.y, 1, SWIRL.x);
+  const S3 = new Matrix3().setFromMatrix4(S);
+  const knots = s.knots.map((k) => {
+    const rotation = wRot.clone().multiply(k.rotation);
+    const inv = rotation.clone().invert();
+    const tangent = (t: Vector3) => t.clone().applyQuaternion(k.rotation).applyMatrix3(W3).applyMatrix3(S3).applyQuaternion(inv);
+    return { position: k.position.clone().applyMatrix4(W).applyMatrix4(S), tangentIn: tangent(k.tangentIn), tangentOut: tangent(k.tangentOut), rotation };
+  });
+  // Each knot's fraction of the squeezed path's length.
+  const squeezed = new UnitySpline({ name: s.name, closed: s.closed, knots, worldMatrix: IDENTITY });
+  const lengths = squeezed.curves.map(bezierLength);
+  const total = lengths.reduce((a, b) => a + b, 0) || 1;
+  let run = 0;
+  const frac = knots.map((_, i) => {
+    if (i > 0) run += lengths[i - 1] ?? 0;
+    return run / total;
+  });
+  const end = knots[knots.length - 1].position;
+  const [tx, , tz] = unityOf(spot[0], spot[1], end.y);
+  const dx = tx - end.x;
+  const dy = endY === undefined ? 0 : endY - end.y;
+  const dz = tz - end.z;
+  knots.forEach((k, i) => {
+    const w = s.closed ? 0 : MathUtils.smoothstep(frac[i], TAIL_FROM, 1);
+    k.position.x += dx * w;
+    k.position.y += dy * w;
+    k.position.z += dz * w;
+  });
+  return new UnitySpline({ name: s.name, closed: s.closed, knots, worldMatrix: IDENTITY });
+}
+
+const IDENTITY = new Matrix4().toArray();
+
+function bezierLength(c: { p0: Vector3; p1: Vector3; p2: Vector3; p3: Vector3 }): number {
+  let len = 0;
+  let prev = c.p0.clone();
+  const p = new Vector3();
+  for (let i = 1; i <= 24; i++) {
+    const t = i / 24;
+    const u = 1 - t;
+    p.set(0, 0, 0)
+      .addScaledVector(c.p0, u * u * u)
+      .addScaledVector(c.p1, 3 * u * u * t)
+      .addScaledVector(c.p2, 3 * u * t * t)
+      .addScaledVector(c.p3, t * t * t);
+    len += p.distanceTo(prev);
+    prev.copy(p);
+  }
+  return len;
+}

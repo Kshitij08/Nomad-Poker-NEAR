@@ -52,6 +52,11 @@ export class CardView implements Linkable {
   private animNormalized = 0;
   private animTween: Tween | null = null;
   private flipTween: Tween | null = null;
+  /**
+   * Where the card is along its spline: 0 at the deck, 1 at the seat (the deal and the return both write it; a card
+   * placed without a flight is at 1). Web-port only: the portrait table turns cards upright near the seat.
+   */
+  pathProgress = 1;
 
   constructor(
     readonly visual: CardVisual,
@@ -240,6 +245,7 @@ export class CardView implements Linkable {
   private applySplinePose(t: number): void {
     const spline = this.spline;
     if (!spline) return;
+    this.pathProgress = t;
     this.setWorldPosition(spline.evaluatePosition(t));
     let forward = spline.evaluateTangent(t);
     if (forward.length() <= Number.EPSILON) forward = spline.evaluateTangent(t < 1 ? Math.min(1, t + 0.01) : t - 0.01);
@@ -290,6 +296,7 @@ export class CardView implements Linkable {
           duration,
           (e) => {
             const t = 1 - e; // DOVirtual.Float(1, 0, ...)
+            this.pathProgress = t;
             this.setWorldPosition(spline.evaluatePosition(t));
             const tangent = spline.evaluateTangent(t);
             if (tangent.lengthSq() > 0.0001) this.setWorldRotation(lookRotation(tangent, spline.evaluateUpVector(t)));
