@@ -66,6 +66,27 @@ export class SolanaRpc {
     return r.map((a) => ({ pubkey: a.pubkey, data: unbase64(a.account.data[0]), lamports: a.account.lamports }));
   }
 
+  /** Several accounts in one call (null where one doesn't exist); at most 100 per call. */
+  async accounts(addressesBase58: string[]): Promise<({ data: Uint8Array; lamports: number } | null)[]> {
+    const out: ({ data: Uint8Array; lamports: number } | null)[] = [];
+    for (let i = 0; i < addressesBase58.length; i += 100) {
+      const r = await this.call<{ value: ({ data: [string, string]; lamports: number } | null)[] }>('getMultipleAccounts', [addressesBase58.slice(i, i + 100), { encoding: 'base64', commitment: 'confirmed' }]);
+      for (const v of r.value) out.push(v ? { data: unbase64(v.data[0]), lamports: v.lamports } : null);
+    }
+    return out;
+  }
+
+  /** Signatures of transactions that touched an address, newest first (getSignaturesForAddress). */
+  async signatures(addressBase58: string, limit = 100, before?: string): Promise<{ signature: string; err: unknown }[]> {
+    return this.call<{ signature: string; err: unknown }[]>('getSignaturesForAddress', [addressBase58, { limit, commitment: 'confirmed', ...(before ? { before } : {}) }]);
+  }
+
+  /** A confirmed transaction's fee payer (its first account), or null when the RPC doesn't have it. */
+  async feePayer(signature: string): Promise<string | null> {
+    const r = await this.call<{ transaction: { message: { accountKeys: string[] } } } | null>('getTransaction', [signature, { encoding: 'json', commitment: 'confirmed', maxSupportedTransactionVersion: 0 }]);
+    return r?.transaction.message.accountKeys[0] ?? null;
+  }
+
   async balance(addressBase58: string): Promise<number> {
     return (await this.call<{ value: number }>('getBalance', [addressBase58, { commitment: 'confirmed' }])).value;
   }

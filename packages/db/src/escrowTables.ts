@@ -29,9 +29,18 @@ export async function countEscrowHand(db: D1Database, tableId: string, now = Dat
   await db.prepare(`UPDATE escrow_tables SET hands = hands + 1, updated_at = ?2 WHERE table_id = ?1`).bind(tableId, now).run();
 }
 
-/** Tables not closed yet (open, or stuck creating/closing), oldest update first. */
+/**
+ * Takes a table for one sweep: bumps its update time only if nobody touched the row since `seenUpdatedAt`. Another
+ * sweep (the next cron minute, or the admin route) then leaves it alone until it is stale again.
+ */
+export async function claimEscrowTable(db: D1Database, tableId: string, seenUpdatedAt: number, now = Date.now()): Promise<boolean> {
+  const r = await db.prepare(`UPDATE escrow_tables SET updated_at = ?3 WHERE table_id = ?1 AND updated_at = ?2`).bind(tableId, seenUpdatedAt, now).run();
+  return (r.meta.changes ?? 0) === 1;
+}
+
+/** Tables not closed yet (open, stuck creating/closing, or a create that failed and may have landed), oldest first. */
 export async function unclosedEscrowTables(db: D1Database, limit = 50): Promise<EscrowTableRow[]> {
-  return (await db.prepare(`SELECT * FROM escrow_tables WHERE state IN ('creating', 'open', 'closing') ORDER BY updated_at LIMIT ?1`).bind(limit).all<EscrowTableRow>()).results;
+  return (await db.prepare(`SELECT * FROM escrow_tables WHERE state IN ('creating', 'open', 'closing', 'failed') ORDER BY updated_at LIMIT ?1`).bind(limit).all<EscrowTableRow>()).results;
 }
 
 /** The wallet a player signed in with, or null (a guest, or a Google / email account). */

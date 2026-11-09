@@ -1,5 +1,5 @@
 import { sessionPlayer } from '@nomad/db/accounts';
-import { countEscrowHand, recordEscrowTable, setEscrowTableState, walletOf } from '@nomad/db/escrowTables';
+import { claimEscrowTable, countEscrowHand, recordEscrowTable, setEscrowTableState, unclosedEscrowTables, walletOf } from '@nomad/db/escrowTables';
 import { LAMPORTS_PER_CHIP } from '@nomad/chain/accounts';
 import type { EscrowClient } from '@nomad/chain/escrowClient';
 import type { TableEconomy } from '@nomad/table-server/chipTableSession';
@@ -204,7 +204,7 @@ export class EscrowTable implements ChipLedger, HandGate {
     const expected = this.roundNonce ?? undefined;
     for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
       try {
-        await this.o.client.settleRound(this.o.tableId, deltas, expected);
+        await this.o.client.settleRound(this.o.tableId, deltas, expected, [...this.wallets.values()]);
         return true;
       } catch (e) {
         this.o.log('warn', `[Escrow] settle_round attempt ${attempt + 1} failed: ${(e as Error).message}`);
@@ -220,7 +220,8 @@ export class EscrowTable implements ChipLedger, HandGate {
   /** After a settle: every player dealt in must hold, on chain, at least the stack the table shows. */
   private async verify(hand: SettledHand): Promise<boolean> {
     try {
-      const seats = new Map((await this.o.client.seatsOf(this.o.tableId)).map((s) => [s.player, s]));
+      const wallets = hand.stacks.flatMap((s) => (this.wallets.has(s.id) ? [this.wallets.get(s.id)!] : []));
+      const seats = new Map((await this.o.client.seatsFor(this.o.tableId, wallets)).map((s) => [s.player, s]));
       for (const s of hand.stacks) {
         const wallet = this.wallets.get(s.id);
         if (!wallet || s.seat < 0) continue;
@@ -255,7 +256,7 @@ export class EscrowTable implements ChipLedger, HandGate {
       try {
         await setEscrowTableState(db, tableId, 'closing');
         await this.abortRoundIfOpen();
-        for (const seat of await client.seatsOf(tableId)) await this.payOut(seat.player);
+        for (const seat of await client.seatsOf(tableId, [...this.wallets.values()])) await this.payOut(seat.player);
         await client.closeTable(tableId);
         await setEscrowTableState(db, tableId, 'closed');
         log('info', `[Escrow] table ${tableId} closed on chain`);
@@ -301,4 +302,50 @@ export class EscrowTable implements ChipLedger, HandGate {
     this.chain = run.catch(() => {});
     return run;
   }
+}
+
+/**
+ * The cron's clean-up for SOL tables a room left behind: 'closing' (the room closed but couldn't finish), 'failed'
+ * (a create that may have landed), or 'open' / 'creating' when the room no longer runs that table (evicted, or closed
+ * without getting as far as 'closing'). It ends a round left open, pays every seat to its wallet, and closes the
+ * table. No hand is running on any of these. Returns how many tables it closed.
+ */
+export async function sweepEscrowTables(
+  db: D1Database,
+  client: EscrowClient,
+  log: LogFn,
+  /** Does the room still run this table? (asks its Durable Object) */
+  roomHosts: (room: string, tableId: string) => Promise<boolean>,
+  olderThanMs = 2 * 60_000,
+  now = Date.now(),
+): Promise<number> {
+  const rows = (await unclosedEscrowTables(db)).filter((r) => now - r.updated_at >= olderThanMs && r.authority === client.authority);
+  let closed = 0;
+  for (const r of rows) {
+    // 'open' or 'creating': only once the room no longer runs it (it closed without finishing, or was evicted).
+    if (r.state === 'open' || r.state === 'creating') {
+      const hosted = await roomHosts(r.room, r.table_id).catch(() => true);
+      if (hosted) continue;
+    }
+    if (!(await claimEscrowTable(db, r.table_id, r.updated_at, now))) continue; // another sweep has it
+    try {
+      const t = await client.table(r.table_id);
+      if (t) {
+        if (t.roundActive) await client.settleRound(r.table_id, [], t.roundNonce);
+        for (const seat of await client.seatsOf(r.table_id)) {
+          const paid = await client.cashOut(r.table_id, seat.player);
+          if (paid) log('info', `[Escrow] sweep paid ${paid.chips} chips to ${seat.player} from ${r.table_id}`);
+        }
+        await client.closeTable(r.table_id);
+      }
+      await setEscrowTableState(db, r.table_id, 'closed');
+      log('info', `[Escrow] sweep closed ${r.table_id} (${r.room})`);
+      closed++;
+    } catch (e) {
+      const msg = (e as Error).message;
+      log('warn', `[Escrow] sweep could not close ${r.table_id}: ${msg}`);
+      await setEscrowTableState(db, r.table_id, r.state, msg.slice(0, 500)).catch(() => {});
+    }
+  }
+  return closed;
 }

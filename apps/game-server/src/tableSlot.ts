@@ -43,6 +43,11 @@ export class TableSlot {
     return { open: !!h, players: h?.playerCount ?? 0, full: h?.isFull ?? false };
   }
 
+  /** Is the live table session `tableId` (an escrow table's id)? False once the room closed or reopened. */
+  hostsTable(tableId: string): boolean {
+    return (this.live as { game?: { tableId?: string | null } } | null)?.game?.tableId === tableId;
+  }
+
   holds(playerId: string, tableId: string): boolean {
     return this.live?.holds(playerId, tableId) ?? false;
   }

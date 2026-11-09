@@ -18,6 +18,7 @@ import { escrowClient, moneyTablesOn } from './chain';
  *   POST /spawn?session=        mark a party room as created (PokerDedicatedPartySpawner)
  *   GET  /occupancy             { open, players, full } for overflow placement
  *   GET  /holds?player=&table=  does this table still hold that seat? (before paying a stranded stack back)
+ *   GET  /hosts?table=          is that table session (a SOL table) still running here? (the escrow sweep)
  *   POST /drain                 finish the hand, pay everyone out, close (before a deploy)
  *   POST /open?session=         open the room now (the cron, a few minutes before a tournament starts)
  *   POST /agents/seat?session=  body: an agent_deployments row → { seated } (opens the table if needed)
@@ -44,6 +45,8 @@ export class TableRoom extends DurableObject<Env> {
         return Response.json({ ok: true });
       case '/occupancy':
         return Response.json(slot?.occupancy() ?? { open: false, players: 0, full: false });
+      case '/hosts':
+        return Response.json({ hosts: slot?.hostsTable(url.searchParams.get('table') ?? '') ?? false });
       case '/holds':
         return Response.json({ holds: slot?.holds(url.searchParams.get('player') ?? '', url.searchParams.get('table') ?? '') ?? false });
       case '/drain':

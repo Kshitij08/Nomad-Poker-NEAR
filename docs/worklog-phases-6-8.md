@@ -144,6 +144,28 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     - What was left in the test wallets went back to the server key, which now holds 1.4847 SOL. A run costs about
       0.015 SOL, almost all of it the rake on three buy-ins (paid to the escrow's dev wallet). Table rent comes back
       on close.
+24. **The Worker now uses the Unity client's Alchemy devnet URL** (your choice, 9 Nov). It is stored as the
+    `SOLANA_RPC_URL` Worker secret, in the git-ignored secrets file and nowhere in the repo; `/v1/chain/config`
+    reports the public devnet URL to clients, never the secret one. The first staging run then failed, and that showed
+    two more problems, both fixed:
+    - **Alchemy's free tier refuses `getProgramAccounts`.** The server used it to find seats with a mid-hand
+      buy-in, so the settle after Carol's buy-in failed and the table halted (safely: seats stayed on chain).
+      Now the server reads the seats of the wallets it knows in one `getMultipleAccounts` call. Only when the table's
+      counts show a seat it doesn't know (a buy-in that never sat) does it try `getProgramAccounts`, and then the
+      fee payers of the table's own transactions, which works on any tier. Tested with an RPC that refuses
+      `getProgramAccounts`.
+    - **A deploy never drained SOL rooms.** The drain listed rooms from `table_sessions`, which SOL tables don't
+      write, so the halted table was left "open" with no room. The drain now includes `escrow_tables`, and a
+      minute cron sweep (also `POST /v1/admin/escrow-sweep`) pays out and closes any SOL table its room left
+      behind. Each sweep claims a table first, so two sweeps can't work the same one; my first manual sweep did
+      race the cron's and lost harmlessly. The sweep paid the halted table's three seats (1,000 + 850 + 1,150
+      chips, exactly the buy-ins) and closed it, and it also cleaned up the earlier failed create.
+25. **Phase 6 escrow gate passed on deployed staging** (`results/escrow-check-1794211836397.json`). Same run as
+    decision 23, with the Worker doing all the signing:
+    - 20 rounds settled, including Carol's mid-hand buy-in (1,000 pending chips), and Bob cashed out at round 10.
+    - Payouts were Alice 1,100, Bob 1,000 and Carol 900 chips: exactly three buy-ins.
+    - The room idled out and closed the table and the vault.
+    - The test wallets went back to the server key.
 
 ## Questions for you
 
@@ -190,9 +212,6 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
       the SOL mode players use today. Cons: the escrow work stays unused for now.
     - *C. Remove the escrow from the new stack.* Pros: less code. Cons: throws away tested work, and the plan changes.
     I lean to B.
-13. **A devnet RPC the Worker can reach.** `api.devnet.solana.com` blocks Cloudflare Workers (decision 22).
-    - *A. A free devnet key of the new stack's own* (Helius or Alchemy; you create the account, I store the URL as a
-      Worker secret). Pros: separate quota; nothing shared with the live game. Cons: one sign-up for you.
-    - *B. Reuse the Alchemy devnet URL the Unity client ships* (`PokerChainConfig.cs`). Pros: works today, and it's
-      already public. Cons: it shares the live game's quota, against "test infra only".
-    I recommend A. `SOLANA_RPC_URL` becomes a secret either way.
+13. ~~**A devnet RPC the Worker can reach.**~~ Answered 9 Nov: reuse the Alchemy devnet URL the Unity client ships
+    (decision 24). It shares the live game's free-tier quota, so a key of the new stack's own is still worth getting
+    before launch.

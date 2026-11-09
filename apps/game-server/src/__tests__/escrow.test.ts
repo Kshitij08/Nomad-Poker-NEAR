@@ -18,6 +18,8 @@ import { headlessClient, until, type Headless } from '../../../web/server/__test
 import { canonicalSession, roomSpecFor } from '../roomSpec';
 import { TableHost, type HostSocket } from '../tableHost';
 import { TableSlot } from '../tableSlot';
+import { sweepEscrowTables } from '../escrowTable';
+import { recordEscrowTable, setEscrowTableState } from '@nomad/db/escrowTables';
 
 const SPEED = 25;
 const logs: string[] = [];
@@ -87,6 +89,9 @@ class FakeChain {
   async seat(id: string, wallet: string) {
     const s = this.tables.get(id)?.seats.get(wallet);
     return s ? { player: wallet, chips: BigInt(s.chips), pendingChips: BigInt(s.pending) } : null;
+  }
+  async seatsFor(id: string, wallets: string[]) {
+    return (await this.seatsOf(id)).filter((s) => wallets.includes(s.player));
   }
   async seatsOf(id: string) {
     return [...(this.tables.get(id)?.seats ?? new Map<string, FakeSeat>())].map(([player, s]) => ({ player, chips: BigInt(s.chips), pendingChips: BigInt(s.pending) }));
@@ -306,4 +311,28 @@ describe('SOL tables on the escrow', () => {
       h.conn.close();
     }
   }, 60_000);
+
+  it('the cron sweep pays out and closes a table its room left behind, and leaves a running one alone', async () => {
+    const left = 't-left-behind';
+    const running = 't-still-running';
+    for (const id of [left, running]) {
+      await recordEscrowTable(db, { tableId: id, room: `poker-money-${id}`, authority: chain.authority, buyInLamports: 100_000_000 });
+      await setEscrowTableState(db, id, 'open', null, Date.now() - 10 * 60_000);
+      await chain.createTable(id, 100_000_000n);
+    }
+    chain.buyIn(left, 'DanWallet'.padEnd(44, '1'), 1000);
+    chain.buyIn(left, 'EveWallet'.padEnd(44, '1'), 1000);
+    await chain.beginRound(left); // a hand was running when the room went away
+    chain.buyIn(left, 'FayWallet'.padEnd(44, '1'), 300); // pending, never sat
+    const hosts = async (_room: string, id: string) => id === running;
+    // Two sweeps at once (the cron minute and the admin route): only one takes the table.
+    const [x, y] = await Promise.all([sweepEscrowTables(db, chain as unknown as EscrowClient, log, hosts), sweepEscrowTables(db, chain as unknown as EscrowClient, log, hosts)]);
+    expect(x + y).toBe(1);
+    expect(chain.tables.get(left)!.closed).toBe(true);
+    expect(chain.paid.get('DanWallet'.padEnd(44, '1'))).toBe(1000);
+    expect(chain.paid.get('FayWallet'.padEnd(44, '1'))).toBe(300);
+    expect(chain.tables.get(running)!.closed).toBe(false);
+    const states = (await db.prepare('SELECT table_id, state FROM escrow_tables WHERE table_id IN (?1, ?2) ORDER BY table_id').bind(left, running).all<{ table_id: string; state: string }>()).results;
+    expect(states).toEqual([{ table_id: left, state: 'closed' }, { table_id: running, state: 'open' }]);
+  });
 });

@@ -1,5 +1,6 @@
 import { StakeSessionNames, PartyCodes } from '@nomad/table-server/sessions';
-import { chainConfig } from './chain';
+import { chainConfig, escrowClient } from './chain';
+import { sweepEscrowTables } from './escrowTable';
 import type { Env } from './env';
 import { auditTable } from '@nomad/db/seatLocks';
 import { canonicalSession } from './roomSpec';
@@ -19,6 +20,7 @@ export { TableRoom } from './tableRoom';
  *   POST /v1/tables/spawn     { code, money }               → { code } | { error }
  *   POST /v1/tables/overflow  { money, failed, minBuyIn }   → { session } | { error }
  *   POST /v1/admin/drain      (Bearer DRAIN_TOKEN)          finish hands, pay out, close every open table
+ *   POST /v1/admin/escrow-sweep (Bearer DRAIN_TOKEN)        pay out and close SOL tables their rooms left behind (the cron runs it too)
  *   GET  /v1/admin/audit?room= (Bearer DRAIN_TOKEN)         where every chip of that room's tables went (drift)
  *   /v1/agents/*              the owner's Agent sessions (agentRoutes.ts)
  *
@@ -107,10 +109,23 @@ export default {
       return (await agentRoute(request, env, url, (body, status = 200) => json(body, status, h)))!;
     }
 
+    if (url.pathname === '/v1/admin/escrow-sweep' && request.method === 'POST') {
+      if (!env.DRAIN_TOKEN || request.headers.get('authorization') !== `Bearer ${env.DRAIN_TOKEN}`) return json({ error: 'unauthorized' }, 401);
+      const logs: string[] = [];
+      try {
+        const closed = await runEscrowSweep(env, (level, m) => logs.push(`${level} ${m}`));
+        return json({ closed, logs }, 200);
+      } catch (e) {
+        return json({ error: (e as Error).message, logs }, 500);
+      }
+    }
+
     if (url.pathname === '/v1/admin/drain' && request.method === 'POST') {
       if (!env.DRAIN_TOKEN || request.headers.get('authorization') !== `Bearer ${env.DRAIN_TOKEN}`) return json({ error: 'unauthorized' }, 401);
       const open = await env.DB.prepare('SELECT DISTINCT room FROM table_sessions WHERE closed_at IS NULL').all<{ room: string }>();
-      const rooms = open.results.map((r) => r.room);
+      // SOL tables keep no table_sessions row: their rooms come from escrow_tables (draining pays every seat out).
+      const sol = await env.DB.prepare("SELECT DISTINCT room FROM escrow_tables WHERE state IN ('creating', 'open')").all<{ room: string }>();
+      const rooms = [...new Set([...open.results, ...sol.results].map((r) => r.room))];
       const startedAt = Date.now();
       await Promise.all(rooms.map((room) => table(env, room).fetch(`https://table/drain?session=${encodeURIComponent(room)}`, { method: 'POST' })));
       // A drained room has no live table. Rows still open for it belong to tables that died without closing (an
@@ -148,6 +163,15 @@ export default {
         ),
       );
     }
+    // SOL tables a room left behind (closed mid-way, or a failed create): pay every seat out and close them.
+    ctx.waitUntil(
+      runEscrowSweep(env, (level, m) => console[level === 'info' ? 'log' : level](m)).then(
+        (n) => {
+          if (n) console.log(`[cron] escrow tables closed: ${n}`);
+        },
+        (e) => console.error('[cron] escrow sweep failed', e),
+      ),
+    );
     ctx.waitUntil(
       sweepAgents(env).then(
         (r) => {
@@ -168,3 +192,13 @@ export default {
     );
   },
 } satisfies ExportedHandler<Env>;
+
+/** Pays out and closes SOL tables their rooms left behind (sweepEscrowTables), asking each room whether it still runs its table. */
+async function runEscrowSweep(env: Env, log: (level: 'info' | 'warn' | 'error', m: string) => void): Promise<number> {
+  const client = escrowClient(env, log);
+  if (!client) return 0;
+  return sweepEscrowTables(env.DB, await client, log, async (room, tableId) => {
+    const res = await table(env, room).fetch(`https://table/hosts?session=${encodeURIComponent(room)}&table=${encodeURIComponent(tableId)}`);
+    return ((await res.json()) as { hosts: boolean }).hosts;
+  });
+}

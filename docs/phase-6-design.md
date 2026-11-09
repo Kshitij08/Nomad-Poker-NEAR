@@ -1,16 +1,16 @@
 # Phase 6 design: on-chain tables on the new stack (devnet)
 
-Status, 9 Nov 2026 (afternoon): the escrow tables' server side is built and has run on devnet.
+Status, 9 Nov 2026 (evening): the escrow tables' server side is built and passed its exit gate on deployed staging.
 - The game server has its own key: `5mGzv7cs…zx5X1` on staging, in Worker secrets only.
+- It reaches devnet through the Alchemy devnet URL the Unity client ships, held as a Worker secret. The public devnet
+  RPC blocks Cloudflare, and Alchemy's free tier has no `getProgramAccounts`, so the code avoids it.
 - Each `poker-money…` room creates its table on chain and runs a round per hand (`HandGate` in `PokerServerGame`).
   It seats players from their on-chain seats, pays leavers out, and closes the table when the room closes.
-  Code: `apps/game-server/src/escrowTable.ts` and `packages/chain/src/escrowClient.ts`.
+- A cron sweep pays out and closes any table a room left behind.
+- Code: `apps/game-server/src/escrowTable.ts` and `packages/chain/src/escrowClient.ts`.
 - Exit gate: `apps/game-server/scripts/escrow-check.ts`.
-- Two things are open:
-  - The Worker can't reach `api.devnet.solana.com`, which blocks Cloudflare, so it needs another devnet RPC.
-  - Whether to build the player side at all, since Unity retired escrow money tables.
-
-  Both are questions 12–13 in `worklog-phases-6-8.md`. PER is still question 2.
+- Open: whether to build the player side, since Unity retired escrow money tables (question 12 in
+  `worklog-phases-6-8.md`), and PER (question 2).
 
 Programs stay as they are (`poker-escrow` `GdduGz…ozo`, `poker-per` test `4A3DZW…MZ` / live `7q2vxh…pv`).
 

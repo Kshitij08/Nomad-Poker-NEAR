@@ -52,10 +52,48 @@ export class EscrowClient {
     return d ? decodeSeat(d) : null;
   }
 
-  /** Every seat account of a table (getProgramAccounts on the seat's `table` field). */
-  async seatsOf(tableId: string): Promise<SeatAccount[]> {
-    const rows = await this.rpc.programAccounts(this.programId, SEAT_ACCOUNT_SIZE, 8, toBase58(this.program.table(tableId)));
-    return rows.map((r) => decodeSeat(r.data));
+  /** These wallets' seats at the table (one getMultipleAccounts call); wallets without a seat are left out. */
+  async seatsFor(tableId: string, wallets: string[]): Promise<SeatAccount[]> {
+    const unique = [...new Set(wallets)];
+    if (unique.length === 0) return [];
+    const accts = await this.rpc.accounts(unique.map((w) => toBase58(this.program.seat(tableId, address(w)))));
+    return accts.flatMap((a) => (a ? [decodeSeat(a.data)] : []));
+  }
+
+  /**
+   * Every seat at the table. Starts from the wallets the caller knows (the players it seated). When those don't account
+   * for every seat and pending chip the table records (someone bought in without sitting), it looks further:
+   * getProgramAccounts where the RPC allows it (free tiers often don't), else the fee payers of the table's own
+   * transactions, which is where every buy-in shows up.
+   */
+  async seatsOf(tableId: string, known: string[] = []): Promise<SeatAccount[]> {
+    const table = await this.table(tableId);
+    if (!table) return [];
+    const complete = (seats: SeatAccount[]) => seats.length >= table.seatedCount && seats.reduce((s, x) => s + x.pendingChips, 0n) >= table.pendingChipsInPlay;
+    let seats = await this.seatsFor(tableId, known);
+    if (complete(seats)) return seats;
+    try {
+      const rows = await this.rpc.programAccounts(this.programId, SEAT_ACCOUNT_SIZE, 8, toBase58(this.program.table(tableId)));
+      return rows.map((r) => decodeSeat(r.data));
+    } catch (e) {
+      this.log('info', `[Escrow] ${tableId}: getProgramAccounts unavailable (${(e as Error).message.slice(0, 80)}); reading the table's history`);
+    }
+    const tablePda = toBase58(this.program.table(tableId));
+    const tried = new Set([...known, this.authority]);
+    let before: string | undefined;
+    for (let page = 0; page < 20 && !complete(seats); page++) {
+      const sigs = await this.rpc.signatures(tablePda, 100, before);
+      if (sigs.length === 0) break;
+      before = sigs[sigs.length - 1]!.signature;
+      const payers: string[] = [];
+      for (let i = 0; i < sigs.length; i += 10) {
+        const batch = sigs.slice(i, i + 10).filter((s) => !s.err);
+        for (const p of await Promise.all(batch.map((s) => this.rpc.feePayer(s.signature).catch(() => null)))) if (p && !tried.has(p)) payers.push(p);
+      }
+      for (const p of payers) tried.add(p);
+      if (payers.length) seats = [...seats, ...(await this.seatsFor(tableId, payers))];
+    }
+    return seats;
   }
 
   async vaultLamports(tableId: string): Promise<number> {
@@ -85,7 +123,7 @@ export class EscrowClient {
    * pending chips move into play. Returns the nonce settled, or null when the round was already settled (a resend
    * after a lost response: the table's nonce moved on and no round is open).
    */
-  async settleRound(tableId: string, deltas: { player: string; chipDelta: number }[], expectedNonce?: bigint): Promise<bigint | null> {
+  async settleRound(tableId: string, deltas: { player: string; chipDelta: number }[], expectedNonce?: bigint, knownWallets: string[] = []): Promise<bigint | null> {
     const table = await this.table(tableId);
     if (!table) throw new EscrowTxError(`table ${tableId} is not on chain`, null);
     if (expectedNonce !== undefined && table.roundNonce !== expectedNonce) {
@@ -99,7 +137,7 @@ export class EscrowClient {
     let pendingOnly: Address[] = [];
     if (table.pendingChipsInPlay > 0n) {
       const inDeltas = new Set(moved.map((d) => d.player));
-      pendingOnly = (await this.seatsOf(tableId)).filter((s) => s.pendingChips > 0n && !inDeltas.has(s.player)).map((s) => address(s.player));
+      pendingOnly = (await this.seatsOf(tableId, [...knownWallets, ...moved.map((d) => d.player)])).filter((s) => s.pendingChips > 0n && !inDeltas.has(s.player)).map((s) => address(s.player));
       if (moved.length + pendingOnly.length > 30) this.log('warn', `[Escrow] ${tableId}: ${pendingOnly.length} pending seats ride the settlement`);
     }
     const chips: ChipDelta[] = moved.map((d) => ({ player: address(d.player), chipDelta: BigInt(d.chipDelta) }));

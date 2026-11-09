@@ -151,3 +151,48 @@ describe('@nomad/chain accounts', () => {
     expect(rakeLamports(100_000_000n, 500)).toBe(5_000_000n);
   });
 });
+
+describe('EscrowClient.seatsOf', () => {
+  it("finds a seat it wasn't told about from the table's history when getProgramAccounts is refused", async () => {
+    const { EscrowClient } = await import('../escrowClient');
+    const le = (v: bigint, n: number) => Buffer.from(Array.from({ length: n }, (_, i) => Number((BigInt.asUintN(n * 8, v) >> BigInt(8 * i)) & 0xffn)));
+    const kp = Keypair.generate();
+    const signer = await signerFromSecret(kp.secretKey);
+    const known = Keypair.generate().publicKey;
+    const stranger = Keypair.generate().publicKey;
+    const esc = new EscrowAuthority(ESCROW_PROGRAM_ID, signer.publicKey);
+    const tablePda = toBase58(esc.table('t-x'));
+    const tableData = Buffer.concat([Buffer.alloc(8), kp.publicKey.toBuffer(), kp.publicKey.toBuffer(), Buffer.from(tableIdBytes('t-x')), le(100_000_000n, 8), le(500n, 2), le(25n, 8), le(50n, 8), Buffer.of(8), Buffer.of(2), le(1000n, 8), le(4n, 8), Buffer.of(1), le(0n, 8), le(1000n, 8), Buffer.of(254)]);
+    const seatData = (p: PublicKey, chips: bigint, pending: bigint) => Buffer.concat([Buffer.alloc(8), Buffer.from(esc.table('t-x')), p.toBuffer(), le(chips, 8), le(0n, 8), le(0n, 8), Buffer.of(0), le(0n, 8), le(pending, 8), Buffer.of(255)]);
+    const accounts = new Map<string, Buffer>([
+      [tablePda, tableData],
+      [toBase58(esc.seat('t-x', address(known.toBase58()))), seatData(known, 1000n, 0n)],
+      [toBase58(esc.seat('t-x', address(stranger.toBase58()))), seatData(stranger, 0n, 1000n)],
+    ]);
+    const calls: string[] = [];
+    const rpc = {
+      url: 'https://api.devnet.solana.com',
+      accountData: async (a: string) => accounts.get(a) ?? null,
+      account: async (a: string) => (accounts.has(a) ? { data: accounts.get(a)!, lamports: 1 } : null),
+      accounts: async (as: string[]) => as.map((a) => (accounts.has(a) ? { data: accounts.get(a)!, lamports: 1 } : null)),
+      programAccounts: async () => {
+        calls.push('gpa');
+        throw new Error('getProgramAccounts is not available on the Free tier');
+      },
+      signatures: async (a: string, _l: number, before?: string) => {
+        calls.push('sigs');
+        expect(a).toBe(tablePda);
+        return before ? [] : [{ signature: 's-settle', err: null }, { signature: 's-buyin', err: null }, { signature: 's-failed', err: { x: 1 } }];
+      },
+      feePayer: async (sig: string) => (calls.push(`tx ${sig}`), sig === 's-buyin' ? stranger.toBase58() : kp.publicKey.toBase58()),
+    };
+    const client = new EscrowClient(rpc as never, signer);
+    const seats = await client.seatsOf('t-x', [known.toBase58()]);
+    expect(seats.map((s) => [s.player, s.pendingChips]).sort()).toEqual([[known.toBase58(), 0n], [stranger.toBase58(), 1000n]].sort());
+    expect(calls).toEqual(['gpa', 'sigs', 'tx s-settle', 'tx s-buyin']); // failed transactions are skipped
+    // When the known wallets already account for every seat and pending chip, nothing else is asked.
+    calls.length = 0;
+    expect(await client.seatsOf('t-x', [known.toBase58(), stranger.toBase58()])).toHaveLength(2);
+    expect(calls).toEqual([]);
+  });
+});
