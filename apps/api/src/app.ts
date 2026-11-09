@@ -401,6 +401,7 @@ export function createApp(): Hono<AppEnv> {
   };
   const me = (c: Context<AppEnv>) => ({ player_id: c.get('player').id, role: c.get('adminRole')! });
   app.use('/v1/admin/*', requireAdmin);
+  app.get(AdminRoutes.me, (c) => c.json(me(c)));
   app.get(AdminRoutes.players, async (c) => c.json({ players: await admin.searchPlayers(c.env.DB, c.req.query('q') ?? '') }));
   app.get(`${AdminRoutes.player}/:id`, async (c) => c.json(await admin.playerDetail(c.env.DB, c.get('player').id, c.req.param('id'))));
   app.post(`${AdminRoutes.player}/:id/adjust`, async (c) => c.json({ balances: await admin.adjustBalance(c.env.DB, me(c), c.req.param('id'), await readJson<Record<string, unknown>>(c.req.raw)) }));

@@ -308,6 +308,8 @@ export const StrategyRoutes = {
  * D1). `support` may look up, read and ban; `admin` may also adjust balances. Every action lands in the audit log.
  */
 export const AdminRoutes = {
+  /** GET — the signed-in admin: `{ player_id, role }` (404 for anyone else, like every admin route). */
+  me: '/v1/admin/me',
   /** GET `?q=` — players by internal id, Friend ID or name prefix. */
   players: '/v1/admin/players',
   /** GET `/v1/admin/players/<id>`; POST `/v1/admin/players/<id>/adjust` `{ currency, delta, reason, requestId }`, `/ban` `{ reason }`, `/unban`. */

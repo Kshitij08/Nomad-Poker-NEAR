@@ -9,6 +9,8 @@ export default defineConfig({
     // The largest data chunk (menu-ui.json, ~1.3 MB raw / ~80 KB gzip) sets the warning limit.
     chunkSizeWarningLimit: 1400,
     rollupOptions: {
+      // Two pages: the game, and the support page (admin.html, src/admin/), which shares none of the game's chunks.
+      input: { main: 'index.html', admin: 'admin.html' },
       output: {
         manualChunks(id: string) {
           const p = id.split('\\').join('/');

@@ -3,7 +3,9 @@
  * real client) spread over ROOMS QA tables (run 20× faster on staging), playing for MINUTES, then leaving. Reports
  * join times, hands, client errors and reconnects, and the ledger: every room's drift and the API's reconciliation.
  *
- *   npx tsx scripts/load.ts [players=40] [rooms=8] [minutes=5] [stage=staging]
+ *   npx tsx scripts/load.ts [players=40] [rooms=8] [minutes=5] [stage=staging] [speed=20]
+ *
+ * speed 1 runs the tables in real time (room names carry `-x1-`, roomSpec.qaSpeed): real players' traffic, for sizing.
  *
  * Guests are created once and reused (sign-in is limited to 30 a minute per address); their tokens are kept in
  * .load-guests.<stage>.json (git-ignored). Reads DRAIN_TOKEN from .secrets.<stage>.json for the audit route and, when
@@ -21,7 +23,7 @@ const MINUTES = Number(process.argv[4] ?? 5);
 const stage = process.argv[5] ?? 'staging';
 const API = { staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev' }[stage]!;
 const GAME = { staging: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev' }[stage]!;
-const SPEED = 20;
+const SPEED = Number(process.argv[6] ?? 20);
 const STAKE = 100;
 const BUY_IN = 500;
 const { DRAIN_TOKEN } = JSON.parse(readFileSync(new URL(`../.secrets.${stage}.json`, import.meta.url), 'utf8')) as { DRAIN_TOKEN: string };
@@ -91,9 +93,9 @@ async function sit(s: Seat): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  log(`${PLAYERS} players in ${ROOMS} rooms for ${MINUTES} min against ${GAME}`);
+  log(`${PLAYERS} players in ${ROOMS} rooms for ${MINUTES} min at ${SPEED}x against ${GAME}`);
   const gs = await guests(PLAYERS);
-  const seats: Seat[] = gs.map((g, i) => ({ g, room: `qa-load-${run}-${i % ROOMS}-st${STAKE}`, client: null, joinMs: [], hands: 0, rejoins: 0, errors: [] }));
+  const seats: Seat[] = gs.map((g, i) => ({ g, room: `qa-load-${run}-${i % ROOMS}${SPEED === 20 ? '' : `-x${SPEED}`}-st${STAKE}`, client: null, joinMs: [], hands: 0, rejoins: 0, errors: [] }));
   // Everyone joins at once (in waves of 10), the hard part for a cold Durable Object.
   for (let i = 0; i < seats.length; i += 10) {
     await Promise.all(seats.slice(i, i + 10).map((s) => sit(s).catch((e) => s.errors.push(String((e as Error).message)))));
@@ -136,7 +138,11 @@ async function main(): Promise<void> {
   for (const room of rooms) {
     let a: { tables: Audit[] } = { tables: [] };
     for (let i = 0; i < 30; i++) {
-      a = (await (await fetch(`${GAME}/v1/admin/audit?room=${room}`, { headers: { authorization: `Bearer ${DRAIN_TOKEN}` } })).json()) as { tables: Audit[] };
+      // An overloaded stage can answer with an error page: try again rather than lose the run's report.
+      const res = await fetch(`${GAME}/v1/admin/audit?room=${room}`, { headers: { authorization: `Bearer ${DRAIN_TOKEN}` } }).catch(() => null);
+      const got = res ? ((await res.json().catch(() => null)) as { tables: Audit[] } | null) : null;
+      if (got?.tables) a = got;
+      else log(`audit of ${room}: ${res ? `HTTP ${res.status}` : 'no answer'}, retrying`);
       if (a.tables.length && a.tables.every((t) => t.seatedPlayers === 0)) break;
       await sleep(2000);
     }

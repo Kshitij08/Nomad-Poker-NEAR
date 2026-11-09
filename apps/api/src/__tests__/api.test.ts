@@ -431,9 +431,12 @@ describe('support tools over HTTP', () => {
     const boss = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Boss' });
     const pat = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Pat' });
     expect((await call('GET', '/v1/admin/audit', undefined, pat.body.token)).status).toBe(404);
+    expect((await call('GET', '/v1/admin/me', undefined, pat.body.token)).status).toBe(404);
     expect((await call('GET', '/v1/admin/audit')).status).toBe(401);
     await env.DB.prepare(`INSERT INTO admin_users (player_id, role, added_at) VALUES (?1, 'admin', 0)`).bind(boss.body.player.id).run();
 
+    const who = await call<{ player_id: string; role: string }>('GET', '/v1/admin/me', undefined, boss.body.token);
+    expect(who.body).toEqual({ player_id: boss.body.player.id, role: 'admin' });
     const found = await call<{ players: { id: string }[] }>('GET', `/v1/admin/players?q=${pat.body.player.friendCode}`, undefined, boss.body.token);
     expect(found.body.players.map((p) => p.id)).toEqual([pat.body.player.id]);
     const adj = await call<{ balances: { coins: number } }>('POST', `/v1/admin/players/${pat.body.player.id}/adjust`, { delta: 250, reason: 'refund for a crash', requestId: 'crash-0001' }, boss.body.token);

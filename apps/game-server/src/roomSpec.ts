@@ -66,6 +66,16 @@ export function roomSpecFor(session: string, opts: RoomSpecOptions): RoomSpecRes
   return { ok: false, reason: 'InvalidArguments', message: 'Bad session name.' };
 }
 
+/**
+ * A QA room's clock speed: the stage's QA speed, unless the name carries `-x<n>-` (1–20), so a harness can run real
+ * time on a stage whose QA rooms are fast (`qa-load-1-x1-st100`: the 9 Nov load test at real speed).
+ */
+export function qaSpeed(session: string, stageSpeed: number): number {
+  const m = /-x(\d{1,2})-/.exec(session + '-');
+  const n = m ? Number(m[1]) : NaN;
+  return n >= 1 && n <= 20 ? n : Math.max(1, stageSpeed);
+}
+
 /** A QA room's stake: its `-st<stake>` suffix when that is a known tier, else the default. */
 export function qaStake(session: string): number {
   const m = /-st(\d+)$/.exec(session);

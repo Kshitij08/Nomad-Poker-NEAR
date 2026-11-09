@@ -271,6 +271,31 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
       tools under `onchain/per` (`client-web/per-attest.ts`, `scripts/probe-tee-attestation.ts`) for checking the
       enclave by hand.
     - The Unity game is untouched and still shows its (red) badge.
+31. **Your answers of 9 Nov, and what followed.**
+    - **Domain:** `nomadpoker.fun` will be the main site; the Vercel and `workers.dev` addresses stay until you say.
+    - **Admins:** you are the only admin. Admins are still added by an operator, now with one command,
+      `node infra/add-admin.mjs <stage> <player id | wallet | Friend ID> [admin|support]` (`--remove`, `--list`); it
+      refuses guest accounts and writes a `grant` / `revoke` audit row. You have no account on staging yet, and
+      staging's email sign-in hands the link to whoever asks (no mail provider), so an email address can't prove it's
+      you there: sign in with your wallet, open `/admin.html`, and run the command it shows (or send me the player id).
+    - **Web admin page** (`/admin.html`, `apps/web/src/admin/`): find a player; see their balances, sign-ins, seat,
+      Agents, tournaments, recent ledger and admin history; adjust a balance (admin only, confirmed, retry-safe); ban
+      or lift a ban; the ledger reconciliation; integrity leads; the audit log. It uses the game's sign-in in the same
+      browser, and the API checks the role on every call (new `GET /v1/admin/me` tells the page which role you have).
+      Player-typed text is always shown as text. Checked in the browser with stubbed admin answers (search, adjust,
+      ban, all tabs, phone width); against staging, a signed-in non-admin gets the "not an admin" page. The auto-mode
+      permission check refused granting admin to a QA account, so the admin role itself is covered by the API tests.
+    - **Asia PER database deleted** (`99fe2920…`); nothing used it.
+    - **The two stuck Quick Play tables** (`hCxu…`, `AFLA…`) and the played one (`7fyD…`) are empty and idle; the
+      keeper closes empty tables after 6 hours idle and takes its rent back, so they go by themselves around
+      16:30–17:00 UTC on 9 Nov.
+    - **Empty-wallet deposits** now say "Your wallet has 0.12 SOL. Depositing 0.5 SOL needs a little more…" before the
+      wallet is asked to sign (and before the one-time game-balance rent is spent). Proved first: a devnet simulation
+      of an over-balance transfer fails with the System Program's code 1 and the log "Transfer: insufficient
+      lamports"; the game looked code 1 up in the poker program's errors and printed "error 1". Any such failure that
+      still gets through reads as plain words too.
+    - **Escrow text** removed from `apps/web/docs/live-backends.md` (the web build has no escrow tables).
+    - **On hold:** alerts, scheduled backups, native Google ids, the coach's key, JDK 21. **Alchemy only** for RPC.
 
 ## Questions for you
 
@@ -279,32 +304,28 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
 1. ~~**Phase 6 keys.**~~ Answered 9 Nov: yes. Key generated and funded (decision 19).
 2. ~~**Where the PER service runs.**~~ Answered 9 Nov: hybrid, a new program instance, Cloudflare Containers
    (decision 26).
-3. **Admins for production.** Which accounts should be admins / support on production? (Staging has one QA admin.)
-   And do you want a small web admin page later? The command-line tool covers it for now; a page is about a day.
-4. **Alerts.** May I set up Cloudflare notifications (to your email) for Worker error spikes, and a Workers Logs alert
-   on `[reconcile] PROBLEMS`? That changes account settings, so I didn't.
-5. **Scheduled backups.** Running `infra/backup-d1.mjs` daily needs a Cloudflare API token somewhere that runs on a
-   schedule. The workflow is ready (`.github/workflows/backup.yml`, daily 04:30 UTC) and does nothing until you add a
-   `CLOUDFLARE_API_TOKEN` repository secret (D1 export + R2 write). Want me to walk you through making that token?
-6. **Expected peak for the load test.** The plan's gate is "3× expected peak". What peak should I assume (players at
-   once)? I ran 40 players over 8 tables at 20× speed (≈ 800 players' worth of hand traffic at normal speed); tell me
-   the number and I'll size a run to 3× it.
-7. **App identity for the stores.** The Unity project's app ids and icon are template placeholders
-   (`com.moremountains.topdownengine`, TopDownEngine's icon). What bundle id do you want (I used `com.nomadpoker.app`
-   provisionally; it can't change after the first store upload), and is there a real app icon / splash art?
-8. **Android builds (mostly answered).** Capacitor 8 needs JDK 21 and this machine only has Unity's JDK 17, so the
-   debug APK is built in CI instead (`.github/workflows/android.yml`, first run green, the APK is a workflow artifact).
-   Still open: may I install JDK 21 locally for quicker device testing? Release builds and Play uploads need a signing
-   key and Play credentials as repository secrets; iOS needs a Mac (or a macOS CI runner) and an Apple developer account.
-9. **Native Google sign-in** needs OAuth client ids (Android SHA-1 + iOS) from your Google Cloud project.
-10. **The production domain.** What domain will the web app and the APIs live on (e.g. `play.<domain>`)? It sets
-    the production allowed origins, the CSP, the deep-link app verification files and the launch step.
-11. **The coach's written note.** It uses Claude (default model `claude-haiku-5-5`) when the API has an
-    `ANTHROPIC_API_KEY` secret; without it players get the computed report only. Do you want the note, and whose key?
+3. ~~**Admins for production.**~~ Answered 9 Nov: you are the only admin, and yes to a web admin page (decision 31).
+4. **Alerts.** *On hold (9 Nov).* May I set up Cloudflare notifications (to your email) for Worker error spikes, and a
+   Workers Logs alert on `[reconcile] PROBLEMS`? That changes account settings, so I didn't.
+5. **Scheduled backups.** *On hold (9 Nov).* Running `infra/backup-d1.mjs` daily needs a Cloudflare API token
+   somewhere that runs on a schedule. The workflow is ready (`.github/workflows/backup.yml`, daily 04:30 UTC) and does
+   nothing until you add a `CLOUDFLARE_API_TOKEN` repository secret (D1 export + R2 write).
+6. ~~**Expected peak for the load test.**~~ Answered 9 Nov: 100 daily players for now (decision 31).
+7. **App identity for the stores.** Bundle id answered 9 Nov: `com.nomadpoker.app` is final. Still open: a real app
+   icon and splash art (the Unity ones are TopDownEngine's placeholders).
+8. **Android builds (mostly answered).** *JDK 21 on hold (9 Nov).* Capacitor 8 needs JDK 21 and this machine only has
+   Unity's JDK 17, so the debug APK is built in CI instead (`.github/workflows/android.yml`). Release builds and Play
+   uploads need a signing key and Play credentials as repository secrets; iOS needs a Mac (or a macOS CI runner) and an
+   Apple developer account.
+9. **Native Google sign-in** needs OAuth client ids (Android SHA-1 + iOS) from your Google Cloud project. *On hold
+   (9 Nov).*
+10. ~~**The production domain.**~~ Answered 9 Nov: `nomadpoker.fun` will be the main site; until then the current
+    Vercel and `workers.dev` addresses stay (decision 31).
+11. **The coach's written note.** *On hold (9 Nov).* It uses Claude (default model `claude-haiku-5-5`) when the API
+    has an `ANTHROPIC_API_KEY` secret; without it players get the computed report only.
 12. ~~**Build the player side of escrow SOL tables, or drop the escrow?**~~ Answered 9 Nov: removed; PER only
     (decision 27).
 13. ~~**A devnet RPC the Worker can reach.**~~ Answered 9 Nov: reuse the Alchemy devnet URL the Unity client ships
-    (decision 24). It shares the live game's free-tier quota, so a key of the new stack's own is still worth getting
-    before launch.
+    (decision 24). Confirmed 9 Nov: Alchemy only, its limits are enough; no second provider.
 14. ~~**The TEE badge's pins (decision 29).**~~ Answered 9 Nov: remove the badge from the web game (decision 30).
 

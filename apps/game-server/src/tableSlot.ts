@@ -1,6 +1,6 @@
 import type { AgentRow } from '@nomad/db/agents';
 import type { RoomSpec } from '@nomad/table-server/rooms';
-import { isQaRoom, roomSpecFor } from './roomSpec';
+import { isQaRoom, qaSpeed, roomSpecFor } from './roomSpec';
 import type { HostSocket, LogFn, RoomHost } from './roomHost';
 
 export interface TableSlotDeps {
@@ -125,7 +125,7 @@ export class TableSlot {
       try {
         const spec = roomSpecFor(this.deps.session, { spawned: await this.deps.isSpawned(), qaRooms: this.deps.qaRooms });
         if (!spec.ok) return { reason: spec.reason, message: spec.message };
-        const speed = isQaRoom(this.deps.session) ? Math.max(1, this.deps.qaSpeed) : 1;
+        const speed = isQaRoom(this.deps.session) ? qaSpeed(this.deps.session, this.deps.qaSpeed) : 1;
         try {
           this.host = await this.deps.createHost(spec.spec, speed);
         } catch (e) {

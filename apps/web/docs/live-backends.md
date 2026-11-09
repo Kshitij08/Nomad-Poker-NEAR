@@ -25,7 +25,7 @@ live call to sit behind a flag that is off by default. Today the switches are:
 |---|---|---|
 | `ALLOW_LIVE_PLAYFAB` (a compile-time `const`, `false`) **and** `?online=1` | `web/src/economy/config.ts` `backendMode()` | Real PlayFab title `6A5AE` over HTTPS, client API only. `?online=local` runs the same code against a title emulated in localStorage (`economy/playfab/localTitle.ts`). The default is offline: `LocalVirtualWallet` and a local guest. |
 | `?web3deployed=1` | `web/src/web3/config.ts` `makeConfig()` / `assertAllowedUrl()` | Lets web3 reach the Railway services listed in `DEPLOYED` (game backend `poker-production-5326`, PER backends). Without it, those URLs are refused. |
-| `?web3backend=<url>` | same | Game backend: SIWS wallet sign-in, `/api/config`, `/host/*` escrow tables. |
+| `?web3backend=<url>` | same | Game backend: SIWS wallet sign-in and `/api/config`. (Its `/host/*` escrow tables are not used: the web build removed them on 9 Nov 2026.) |
 | `?perbackend=<url>` | same | Private-tables (PER) backend: lobby `/tables`, `/quickplay/onchain`, `/agents/*`, `/tournaments`, withdrawals. |
 | `?perprogram=live` | same | Uses the live poker-per program `7q2vxh2…`. The default is the internal test program `4A3DZW…`. |
 | `?web3rpc=<url>` | same | Solana RPC. The default is public devnet. Anything containing "mainnet" is refused outright. |
@@ -116,7 +116,8 @@ What it serves, and which web features use it:
 | Route group | Web feature | How to turn it on in the web |
 |---|---|---|
 | `POST /api/auth/nonce`, `/api/auth/verify`, `GET /api/me`, `PUT /api/me/email` (SIWS → JWT) | Wallet sign-in and email capture (`web3/solana/auth.ts`, `web3/ui/walletLogin.ts`) | `?web3backend=<url>` or `?web3deployed=1` |
-| `GET /api/config`, `/api/auth/introspect`, `/host/tables…` (escrow money tables, requires a player JWT) | On-chain escrow tables (`web3/chain/service.ts`) | same, plus a connected wallet |
+| `GET /api/config`, `/api/auth/introspect` | Wallet session checks | same |
+| `/host/tables…` (escrow money tables, requires a player JWT) | None: the web build has no escrow tables (removed 9 Nov 2026; SOL play is private tables only) | — |
 | `POST /api/auth/playfab` (PlayFab ticket → 1-hour JWT), `/api/tournaments…`, `/api/me/tournaments` | Live tournaments (`tournaments/api/apiClient.ts`) | `?tournaments=live&tournamentBackend=<url>` plus `?online=1` |
 | `/internal/tournaments/*` (internal API key) | Tournament table runner in `web/server/tournament` (`POKER_TOURNAMENT_BACKEND_URL`, `POKER_INTERNAL_API_KEY`) | server-side environment only |
 | `/api/agent/start, stop, progress, result, active, history, hands` | Coins Agents (`agents/agentBackend.ts`) | `?agentBackend=<url>` |
@@ -170,12 +171,12 @@ What it serves, and which web features use it:
 
 #### 4. Solana and MagicBlock PER/TEE (`per/README.md`)
 
-- **Web features:** wallet connect (Wallet Standard plus injected Phantom), escrow tables, PER deposit/withdraw,
+- **Web features:** wallet connect (Wallet Standard plus injected Phantom), PER deposit/withdraw,
   play keys (an AES key in IndexedDB), table play over `https://devnet-tee.magicblock.app`. Unlike Unity, the web
   build has no TEE attestation badge (removed 9 Nov 2026).
 - **Devnet only.** Mainnet is blocked in code (`Cluster = 'devnet'`, `assertAllowedUrl` refuses "mainnet"). Going
   to mainnet is a deliberate code change, not a flag:
-  - cluster type, program ids and escrow authority;
+  - cluster type and program ids;
   - a mainnet RPC behind a small proxy, so no RPC API key ships in the bundle (`config.ts` already avoids the keyed
     devnet RPC for that reason);
   - the mainnet TEE URL;

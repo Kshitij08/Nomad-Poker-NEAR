@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalSession, qaStake, roomSpecFor } from '../roomSpec';
+import { canonicalSession, qaSpeed, qaStake, roomSpecFor } from '../roomSpec';
 
 describe('room names', () => {
   it('canonicalises pools, party codes and qa rooms', () => {
@@ -23,6 +23,15 @@ describe('room names', () => {
     expect(qaStake('qa-soak-1-st100')).toBe(100);
     expect(qaStake('qa-soak-1-st123')).toBe(1000);
     expect(qaStake('qa-soak-1')).toBe(1000);
+    expect(qaStake('qa-load-a-0-x1-st100')).toBe(100);
+  });
+
+  it("a QA room's speed: the stage's, or the room's own -x<n>- (1 to 20)", () => {
+    expect(qaSpeed('qa-soak-1-st100', 20)).toBe(20);
+    expect(qaSpeed('qa-load-a-0-x1-st100', 20)).toBe(1);
+    expect(qaSpeed('qa-load-a-0-x5', 20)).toBe(5);
+    expect(qaSpeed('qa-load-a-0-x50-st100', 20)).toBe(20);
+    expect(qaSpeed('qa-soak-1', 0)).toBe(1);
     expect(roomSpecFor('qa-soak-1-st50', { spawned: false, qaRooms: true })).toMatchObject({ ok: true, spec: { properties: { stake: '50' } } });
   });
 });

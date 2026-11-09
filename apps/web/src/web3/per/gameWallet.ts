@@ -10,7 +10,7 @@ import { PlayerPrefs } from '../../app/services';
 import type { PerHttp } from '../lib/http';
 import { findPda, permissionOf, PerIds } from './addresses';
 import { keypairFromStored, keypairToStored, PerSecrets } from './keys';
-import { sol } from './money';
+import { sol, solExact } from './money';
 import { LocalSigner, PerRpc, PerTxException, PerUnauthorized, TeeAuth, type PerTransactionSigner } from './rpc';
 import { decodeWalletState, eataOf, newVaultSeed, PerVault, PLAY_KEY_DAYS, playKeyMessage, PlayKey, setWalletState, vaultOf, vaultTokenOf, walletStateCached, walletStateOf } from './vault';
 import { utf8 } from '../lib/bytes';
@@ -25,6 +25,9 @@ export interface PerWalletPort {
 }
 
 export type Status = (s: string) => void;
+
+/** Room for a deposit's fees: a signature (5,000 lamports) and the wSOL account's rent the first time (~0.002 SOL). */
+const DEPOSIT_FEE_ROOM = 2_100_000n;
 
 export class PerGameWallet {
   readonly l1: PerRpc;
@@ -247,8 +250,20 @@ export class PerGameWallet {
   }
 
   /** Opens the vault if needed (one wallet transaction), then deposits (another). */
+  /**
+   * Throws a plain message when the wallet can't cover a deposit, before the wallet is asked to sign anything
+   * (a failed transfer used to say "sendTransaction failed: error 1"; staging, 9 Nov).
+   */
+  async assertCanDeposit(lamports: bigint): Promise<void> {
+    const wallet = this.requireAddress();
+    const have = BigInt((await this.l1.call('getBalance', wallet.toBase58(), { commitment: 'confirmed' }))?.value ?? 0);
+    if (have < lamports + DEPOSIT_FEE_ROOM)
+      throw new Error(`Your wallet has ${solExact(have)}. Depositing ${solExact(lamports)} needs a little more than that, for the network fee. Add devnet SOL to your wallet and try again.`);
+  }
+
   async deposit(lamports: bigint, status: Status): Promise<string> {
     const wallet = this.requireAddress();
+    await this.assertCanDeposit(lamports);
     await this.ensureVault(status, 'nothing was deposited');
     status(`Approve the deposit of ${sol(lamports)} in your wallet…`);
     const sig = await this.l1.sendWithWallet(PerVault.deposit(wallet, lamports, PerVault.newShuttleId()), this.signer);

@@ -151,9 +151,15 @@ export class PerRpc {
   }
 }
 
+export const NOT_ENOUGH_SOL = "Your wallet doesn't have enough devnet SOL for this (the amount plus a small network fee). Add some and try again.";
+
 /** Finds a custom program error code in an RPC error or a transaction's err (PerRpc.ToTxError). */
 export function toTxError(what: string, err: unknown): PerTxException {
   const text = JSON.stringify(err);
+  // The wallet can't pay: the System Program's "Transfer: insufficient lamports" (its error 1, which the poker
+  // program's error list would show as a bare "error 1"), or no SOL at all for the fee.
+  if (/insufficient lamports|no record of a prior credit|insufficient funds for (fee|rent)/i.test(text))
+    return new PerTxException(NOT_ENOUGH_SOL, null, null);
   let code: number | null = null;
   const custom = findKey(err, 'Custom');
   if (typeof custom === 'number') code = custom;

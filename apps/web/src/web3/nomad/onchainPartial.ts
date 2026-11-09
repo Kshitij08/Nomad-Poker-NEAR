@@ -371,6 +371,7 @@ class OnchainPartial {
     const host = this.host;
     try {
       const per = await this.loadPer();
+      await per.gameWallet.assertCanDeposit(DEPOSIT_LAMPORTS); // before opening the game balance costs rent
       await per.gameWallet.ensureVault((s) => host.busy('Deposit', s), 'nothing was deposited');
       await per.deposit(DEPOSIT_LAMPORTS, (s) => host.busy('Deposit 0.5 SOL', s));
       // The deposit reaches the game balance after a moment: read it again until it moves (a few tries).

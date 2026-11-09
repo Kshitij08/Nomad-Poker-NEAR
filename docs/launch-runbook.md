@@ -12,7 +12,8 @@ The Unity stack is never touched by any step here until "Switch off Unity", whic
    `apps/game-server/.secrets.production.json` with `DRAIN_TOKEN`. Fresh random values, not staging's.
 3. **Database:** `(cd apps/api && npm run db:migrate:production)` applies every migration to the empty production D1.
 4. **Deploy:** `npm run deploy:production` in `apps/api`, then in `apps/game-server` (each checks migrations first).
-5. **Admins:** add the support accounts to `admin_users` (operator D1 query; see `apps/api/scripts/admin.mjs`).
+5. **Admins:** Kshitij is the only admin. Sign in to production with your wallet (or Google, once it is set up), open
+   `/admin.html`, and run the command it shows: `node infra/add-admin.mjs production <your player id>`.
 6. **Web:** `node apps/web/scripts/deploy-vercel.mjs production` (Vercel project), or a Cloudflare Pages move if decided.
 7. **Smoke:** `node apps/api/scripts/smoke.mjs <api> <web>`; one Quick Play hand from the web; `GET /v1/admin/reconcile`.
 8. **Watch:** alerts (once set up), `node infra/logs.mjs <worker> "GAVE UP"` and `"[reconcile] PROBLEMS"`.

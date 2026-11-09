@@ -53,6 +53,14 @@ is listed in `VITE_ALLOWED_ENDPOINTS` (comma-separated) or the build sets `VITE_
 `VITE_NET_SERVER`) and deploys it to the Vercel project `nomad-poker-web` (https://nomad-poker-web.vercel.app) as a
 prebuilt output; `--preview` gives a preview URL instead. Needs `apps/web/.vercel/project.json` (`npx vercel@latest link`).
 
+### Support page
+
+`/admin.html` (`src/admin/`) is a second page in the same build: find a player, adjust a balance, ban or unban, and read
+the ledger reconciliation, integrity leads and audit log. It uses the game's sign-in in the same browser and the API's
+`/v1/admin/*` routes, which check the role on every call. A signed-in account that isn't an admin is shown its player id
+and the operator command that makes it one (`node infra/add-admin.mjs <stage> <player id>`). On the dev server,
+`/admin.html?api=local` points it at a local API.
+
 ### Orientation, assets, parity
 
 - **Portrait:** phones held upright get a portrait layout (tall table with you at the bottom, one-column menus),
