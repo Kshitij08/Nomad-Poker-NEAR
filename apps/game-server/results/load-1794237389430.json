@@ -1,0 +1,1266 @@
+{
+  "stage": "staging",
+  "at": "2026-11-09T15:16:29.429Z",
+  "players": 300,
+  "rooms": 60,
+  "minutes": 10,
+  "speed": 1,
+  "joinMs": {
+    "p50": 1356,
+    "p95": 1987,
+    "max": 2910,
+    "count": 306
+  },
+  "tableHands": 899,
+  "handsPerMinute": 90,
+  "clientHandsSeen": 4410,
+  "rejoins": 6,
+  "sequenceErrors": 0,
+  "errors": [],
+  "drift": 112,
+  "audits": [
+    {
+      "room": "qa-load-mw9e5fff-0-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-4d6896413c424399b845",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 2273,
+          "botNet": 227,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-1-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-e0272cbf9a2f4dc8a26a",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1783,
+          "botNet": 717,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-2-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-f73b2e40fd114fa68435",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 3330,
+          "botNet": -830,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-3-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-261c7b7f33db4f1997f6",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1838,
+          "botNet": 662,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-4-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-d4b5087517ee469a96cd",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2284,
+          "botNet": 216,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-5-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-698fe15e315b4cd1888d",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 2002,
+          "botNet": 498,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-6-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-8e4cfb42dd264ab2b347",
+          "hands": 16,
+          "buyIns": 3000,
+          "cashOuts": 1551,
+          "botNet": 1449,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-7-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-0ac54f154b60405da67b",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 3114,
+          "botNet": -614,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-8-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-760b3bd3203740bd8cf4",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1190,
+          "botNet": 1310,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-9-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-8f1fd64cd29a45d58880",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2375,
+          "botNet": 125,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-10-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-e4b1bb61757443fca33a",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 1773,
+          "botNet": 727,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-11-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-2cb1190b8cad4f01ac9e",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 2060,
+          "botNet": 440,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-12-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-faa371e66711474d9ba1",
+          "hands": 16,
+          "buyIns": 3000,
+          "cashOuts": 1105,
+          "botNet": 1895,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-13-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-8d961444ad98457aa50d",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2246,
+          "botNet": 254,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-14-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-f728c0d76e6646c4902f",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 2775,
+          "botNet": -275,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-15-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-e7e7d653d3f14552ae13",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2489,
+          "botNet": 11,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-16-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-ca3bb5c981a74a70b3d7",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 1948,
+          "botNet": 552,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-17-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-835c0ea70b5245879c7e",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 2300,
+          "botNet": 200,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-18-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-23c4220632d84b7498e8",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 1964,
+          "botNet": 536,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-19-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-49dffcae153c46ad8122",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1576,
+          "botNet": 924,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-20-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-a6d5f554c0044c40b3fd",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2510,
+          "botNet": -10,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-21-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-6f180b3224f24fc8b664",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 1735,
+          "botNet": 765,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-22-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-4594389419d64a1492dd",
+          "hands": 15,
+          "buyIns": 3000,
+          "cashOuts": 2429,
+          "botNet": 571,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-23-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-078288e2080a435d8fc8",
+          "hands": 17,
+          "buyIns": 2500,
+          "cashOuts": 2160,
+          "botNet": 340,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-24-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-6a7fae51e5244b1db7cd",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2510,
+          "botNet": -10,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-25-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-4cb551b1bffb47b884c5",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2499,
+          "botNet": 1,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-26-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-461b3f1b6e3d40a38cc2",
+          "hands": 15,
+          "buyIns": 3000,
+          "cashOuts": 2408,
+          "botNet": 592,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-27-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-c1e3181c5fee4e7f81dd",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2278,
+          "botNet": 222,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-28-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-285bb915d1c9454dbfcf",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2178,
+          "botNet": 322,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-29-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-2da6a62f9d124ec4adc2",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 1971,
+          "botNet": 529,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-30-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-87df7953bbd04a95bfae",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2320,
+          "botNet": 180,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-31-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-e3601af6ba354f808239",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2757,
+          "botNet": -257,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-32-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-7072d08d6ea945369f65",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1850,
+          "botNet": 650,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-33-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-53f8a4a46edf4bf2b2d0",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2405,
+          "botNet": 95,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-34-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-07e49107fc984602928d",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 2600,
+          "botNet": -100,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-35-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-e1189881211944699970",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1385,
+          "botNet": 1115,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-36-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-4593ccb5d67b483f8233",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 2105,
+          "botNet": 395,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-37-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-09f47fcc83b34fa48870",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1582,
+          "botNet": 918,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-38-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-9ab2132fd10d46488404",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1875,
+          "botNet": 625,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-39-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-13cf4d11bb3c47d291ea",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2143,
+          "botNet": 357,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-40-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-aa8dea5cc3d840d58d92",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 1987,
+          "botNet": 513,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-41-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-43dc450b9188423a91ed",
+          "hands": 13,
+          "buyIns": 2500,
+          "cashOuts": 2196,
+          "botNet": 192,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": -112
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-42-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-e23247082fb9486586ec",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1583,
+          "botNet": 917,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-43-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-21fe562a7b954d01a4f4",
+          "hands": 14,
+          "buyIns": 3000,
+          "cashOuts": 1670,
+          "botNet": 1330,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-44-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-1b308f6eaba447e68235",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 1565,
+          "botNet": 935,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-45-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-e36720ed230f4d678069",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 2308,
+          "botNet": 192,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-46-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-35f555e3efe243b4b57d",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 2094,
+          "botNet": 406,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-47-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-193b4f8888d643c88d39",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2165,
+          "botNet": 335,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-48-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-03b1b17b4b48437f97ec",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2169,
+          "botNet": 331,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-49-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-095a5622f2334f5688d5",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 2850,
+          "botNet": -350,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-50-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-a25e78d81d1a4d7c99bc",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 2197,
+          "botNet": 303,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-51-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-f8133a1f9cf0411995e1",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1998,
+          "botNet": 502,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-52-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-52053480caee4d6c9951",
+          "hands": 16,
+          "buyIns": 2500,
+          "cashOuts": 2231,
+          "botNet": 269,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-53-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-2f75b19edbf84131ac65",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2345,
+          "botNet": 155,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-54-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-2be9ad640f544683bf80",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 1900,
+          "botNet": 600,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-55-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-4cebd39af8df43ccb487",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 2150,
+          "botNet": 350,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-56-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-aa858a9378404188ab35",
+          "hands": 14,
+          "buyIns": 2500,
+          "cashOuts": 2005,
+          "botNet": 495,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-57-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-3cc3886cecfd45beb6b6",
+          "hands": 16,
+          "buyIns": 3000,
+          "cashOuts": 2366,
+          "botNet": 634,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-58-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-ca81ad2904cc48928c89",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1070,
+          "botNet": 1430,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    },
+    {
+      "room": "qa-load-mw9e5fff-59-x1-st100",
+      "tables": [
+        {
+          "tableId": "t-6bfb44100a2b4c3ea1c2",
+          "hands": 15,
+          "buyIns": 2500,
+          "cashOuts": 1983,
+          "botNet": 517,
+          "agentNet": 0,
+          "seatedStacks": 0,
+          "seatedPlayers": 0,
+          "drift": 0
+        }
+      ]
+    }
+  ],
+  "reconcile": {
+    "ok": false,
+    "at": "2026-11-09T15:16:26.528Z",
+    "checks": [
+      {
+        "name": "balances match the ledger",
+        "ok": true,
+        "checked": 901,
+        "problems": [],
+        "note": "balance = sum of ledger entries, per player and currency"
+      },
+      {
+        "name": "no ledger entries without a balance",
+        "ok": true,
+        "checked": 0,
+        "problems": [],
+        "note": "entries whose balance row is missing"
+      },
+      {
+        "name": "tables have zero drift",
+        "ok": false,
+        "checked": 151,
+        "problems": [
+          {
+            "id": "t-3675bcea579b403c88ca",
+            "room": "qa-load-mw9dfbp7-8-st100",
+            "closed_at": 1794236163738,
+            "bot_net": 1789,
+            "agent_net": 0,
+            "buy_ins": 3000,
+            "cash_outs": 1213,
+            "seated": 0,
+            "drift": 2
+          },
+          {
+            "id": "t-f74fe359ccb54c6fabe5",
+            "room": "qa-load-mw9dfbp7-1-st100",
+            "closed_at": 1794236163852,
+            "bot_net": 3886,
+            "agent_net": 0,
+            "buy_ins": 4500,
+            "cash_outs": 829,
+            "seated": 0,
+            "drift": 215
+          },
+          {
+            "id": "t-59acb3d25b9b48e2a307",
+            "room": "qa-load-mw9dfbp7-2-st100",
+            "closed_at": 1794236164005,
+            "bot_net": 2122,
+            "agent_net": 0,
+            "buy_ins": 3500,
+            "cash_outs": 1383,
+            "seated": 0,
+            "drift": 5
+          },
+          {
+            "id": "t-21812d7c1c7140d784b1",
+            "room": "qa-load-mw9dfbp7-3-st100",
+            "closed_at": 1794236164049,
+            "bot_net": 3051,
+            "agent_net": 0,
+            "buy_ins": 4000,
+            "cash_outs": 951,
+            "seated": 0,
+            "drift": 2
+          },
+          {
+            "id": "t-579295dccae44d45b967",
+            "room": "qa-load-mw9dfbp7-11-st100",
+            "closed_at": 1794236161270,
+            "bot_net": 1827,
+            "agent_net": 0,
+            "buy_ins": 3000,
+            "cash_outs": 1180,
+            "seated": 0,
+            "drift": 7
+          },
+          {
+            "id": "t-c5f9c0dd13274814913c",
+            "room": "qa-load-mw9dfbp7-12-st100",
+            "closed_at": 1794236161365,
+            "bot_net": 2320,
+            "agent_net": 0,
+            "buy_ins": 3500,
+            "cash_outs": 1165,
+            "seated": 0,
+            "drift": -15
+          },
+          {
+            "id": "t-54122f6516584ab89083",
+            "room": "qa-load-mw9dfbp7-15-st100",
+            "closed_at": 1794236161368,
+            "bot_net": 1915,
+            "agent_net": 0,
+            "buy_ins": 4000,
+            "cash_outs": 2134,
+            "seated": 0,
+            "drift": 49
+          },
+          {
+            "id": "t-98bbc2280b024e228eb8",
+            "room": "qa-load-mw9dfbp7-18-st100",
+            "closed_at": 1794236161393,
+            "bot_net": 3022,
+            "agent_net": 0,
+            "buy_ins": 4500,
+            "cash_outs": 1483,
+            "seated": 0,
+            "drift": 5
+          },
+          {
+            "id": "t-73608f7e4b624630abeb",
+            "room": "qa-load-mw9dfbp7-17-st100",
+            "closed_at": 1794236161501,
+            "bot_net": 2168,
+            "agent_net": 0,
+            "buy_ins": 4500,
+            "cash_outs": 2292,
+            "seated": 0,
+            "drift": -40
+          },
+          {
+            "id": "t-9df8dd24fc894bf690cd",
+            "room": "qa-load-mw9dfbp7-29-st100",
+            "closed_at": 1794236162681,
+            "bot_net": 2728,
+            "agent_net": 0,
+            "buy_ins": 3500,
+            "cash_outs": 777,
+            "seated": 0,
+            "drift": 5
+          },
+          {
+            "id": "t-22a827a06b114dc58be3",
+            "room": "qa-load-mw9dfbp7-21-st100",
+            "closed_at": 1794236162743,
+            "bot_net": 3183,
+            "agent_net": 0,
+            "buy_ins": 4500,
+            "cash_outs": 1327,
+            "seated": 0,
+            "drift": 10
+          },
+          {
+            "id": "t-d1923208055f411790f6",
+            "room": "qa-load-mw9dfbp7-27-st100",
+            "closed_at": 1794236162903,
+            "bot_net": 1537,
+            "agent_net": 0,
+            "buy_ins": 3000,
+            "cash_outs": 1473,
+            "seated": 0,
+            "drift": 10
+          },
+          {
+            "id": "t-4b9cc4da4bc44b31a204",
+            "room": "qa-load-mw9dfbp7-24-st100",
+            "closed_at": 1794236163151,
+            "bot_net": 943,
+            "agent_net": 0,
+            "buy_ins": 2500,
+            "cash_outs": 1532,
+            "seated": 0,
+            "drift": -25
+          },
+          {
+            "id": "t-d72081947b00413480c3",
+            "room": "qa-load-mw9dfbp7-32-st100",
+            "closed_at": 1794236164682,
+            "bot_net": 1612,
+            "agent_net": 0,
+            "buy_ins": 2500,
+            "cash_outs": 903,
+            "seated": 0,
+            "drift": 15
+          },
+          {
+            "id": "t-87871c5533cc4aa6bdce",
+            "room": "qa-load-mw9dfbp7-33-st100",
+            "closed_at": 1794236164710,
+            "bot_net": 1956,
+            "agent_net": 0,
+            "buy_ins": 3000,
+            "cash_outs": 1019,
+            "seated": 0,
+            "drift": -25
+          },
+          {
+            "id": "t-7f63eaffd7f94d54aff0",
+            "room": "qa-load-mw9dfbp7-36-st100",
+            "closed_at": 1794236164797,
+            "bot_net": 2081,
+            "agent_net": 0,
+            "buy_ins": 3500,
+            "cash_outs": 1429,
+            "seated": 0,
+            "drift": 10
+          },
+          {
+            "id": "t-73d9a9c90a8c487ab7d5",
+            "room": "qa-load-mw9dfbp7-45-st100",
+            "closed_at": 1794236162863,
+            "bot_net": 718,
+            "agent_net": 0,
+            "buy_ins": 4000,
+            "cash_outs": 3295,
+            "seated": 0,
+            "drift": 13
+          },
+          {
+            "id": "t-b853cd2d716447d5bd49",
+            "room": "qa-load-mw9dfbp7-41-st100",
+            "closed_at": 1794236161315,
+            "bot_net": 2001,
+            "agent_net": 0,
+            "buy_ins": 3500,
+            "cash_outs": 1589,
+            "seated": 0,
+            "drift": 90
+          },
+          {
+            "id": "t-6852f3e071bf45a9890e",
+            "room": "qa-load-mw9dfbp7-46-st100",
+            "closed_at": 1794236161363,
+            "bot_net": 2924,
+            "agent_net": 0,
+            "buy_ins": 5000,
+            "cash_outs": 2138,
+            "seated": 0,
+            "drift": 62
+          },
+          {
+            "id": "t-adca0915518a4b75b546",
+            "room": "qa-load-mw9dfbp7-49-st100",
+            "closed_at": 1794236161536,
+            "bot_net": 3042,
+            "agent_net": 0,
+            "buy_ins": 4500,
+            "cash_outs": 1503,
+            "seated": 0,
+            "drift": 45
+          }
+        ],
+        "note": "per table session: cash-outs + seated stacks − buy-ins + bot net + Agent net"
+      },
+      {
+        "name": "no seat held by a quiet table",
+        "ok": true,
+        "checked": 0,
+        "problems": [],
+        "note": "seat locks not checkpointed for an hour (stranded stacks waiting for recovery)"
+      },
+      {
+        "name": "Agents paid exactly",
+        "ok": true,
+        "checked": 8,
+        "problems": [],
+        "note": "bankroll debited once; the return credited equals the recorded return"
+      },
+      {
+        "name": "no Agent stuck on a lost table",
+        "ok": true,
+        "checked": 0,
+        "problems": [],
+        "note": "playing Agents not checkpointed for 10 minutes (the cron's sweep should have paid them back)"
+      },
+      {
+        "name": "ended tournaments net to zero",
+        "ok": true,
+        "checked": 3,
+        "problems": [],
+        "note": "per ended tournament: sum of its ledger entries = 0"
+      },
+      {
+        "name": "no tournament stuck",
+        "ok": true,
+        "checked": 0,
+        "problems": [],
+        "note": "locked or running six hours after the start"
+      }
+    ]
+  }
+}

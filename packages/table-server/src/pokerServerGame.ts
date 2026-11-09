@@ -188,6 +188,11 @@ export class PokerServerGame implements IPokerTableServer {
   private readonly pendingBots = new Set<number>();
   private readonly pendingBotNames = new Map<number, string>();
   private readonly pendingVacate = new Set<number>();
+  /**
+   * Seats stay locked from the deal until the hand is settled (seatsLocked). The engine's own "hand in progress" ends a
+   * moment before the settlement starts, and a Leave in that gap released the seat at once: the settlement then read
+   * the stack as 0 and halted the table's books (load test, 9 Nov).
+   */
   private settleOpen = false;
   /** Players who pressed Leave: their client credits its stack itself (ApplyOptimisticCashOutCredit). */
   private readonly leftOnPurpose = new Set<string>();
@@ -1446,12 +1451,12 @@ export class PokerServerGame implements IPokerTableServer {
       if (this.disposed) break;
 
       this.renderBudget = 0;
+      this.settleOpen = true; // seats stay locked until the hand is settled (see settleOpen)
       this.engine.startHand();
       await this.processEventsUntilHandEnds();
       if (this.disposed) break;
 
       // Settle even when the hand ended the game: chips moved.
-      this.settleOpen = true;
       await this.settleChipHand();
       this.closeSettle();
 
