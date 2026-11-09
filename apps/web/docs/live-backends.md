@@ -171,14 +171,14 @@ What it serves, and which web features use it:
 #### 4. Solana and MagicBlock PER/TEE (`per/README.md`)
 
 - **Web features:** wallet connect (Wallet Standard plus injected Phantom), escrow tables, PER deposit/withdraw,
-  play keys (an AES key in IndexedDB), TEE attestation (`assets/web3/per-attest.js`, pinned measurements in
-  `config.ts`), table play over `https://devnet-tee.magicblock.app`.
+  play keys (an AES key in IndexedDB), table play over `https://devnet-tee.magicblock.app`. Unlike Unity, the web
+  build has no TEE attestation badge (removed 9 Nov 2026).
 - **Devnet only.** Mainnet is blocked in code (`Cluster = 'devnet'`, `assertAllowedUrl` refuses "mainnet"). Going
   to mainnet is a deliberate code change, not a flag:
   - cluster type, program ids and escrow authority;
   - a mainnet RPC behind a small proxy, so no RPC API key ships in the bundle (`config.ts` already avoids the keyed
     devnet RPC for that reason);
-  - the mainnet TEE URL and new attestation pins;
+  - the mainnet TEE URL;
   - `explorerTx`.
 - **Production:** keep the client-side rule that nothing is signed without a click. Watch the open devnet issues
   first: the TEE reload pitfall and the keeper (see the per handover).
@@ -215,7 +215,7 @@ Local only. Unity Analytics is not ported. For production, add a sink: our own `
 
 ```
 default-src 'self';
-script-src 'self' https://accounts.google.com/gsi/client 'wasm-unsafe-eval';
+script-src 'self' https://accounts.google.com/gsi/client;
 frame-src https://accounts.google.com;
 connect-src 'self'
   https://<TITLE>.playfabapi.com
@@ -230,8 +230,7 @@ media-src 'self' blob:; worker-src 'self' blob:;
 frame-ancestors 'none'; base-uri 'self'; form-action 'self';
 ```
 
-Wallet extensions inject their own scripts, which CSP does not block. Check `wasm-unsafe-eval` against what
-`per-attest.js` really needs, and remove it if it is not used.
+Wallet extensions inject their own scripts, which CSP does not block.
 
 ### B.4 Security concerns of a browser client
 
@@ -290,7 +289,7 @@ Ordered by dependency. Each step lists what it needs before it starts and the ch
 | 4 | **Web3 on test infrastructure:** default test program `4A3D…`, the internal test PER backend, devnet RPC (or a proxy). Ask before using any existing Railway service, even the test one. | Devnet / test services — **ask first** | PER lobby, deposit, play, withdraw and verify pass with a test wallet |
 | 5 | **Staging web host:** static `web/dist` on Vercel or Cloudflare Pages with CSP and HSTS, origin `staging.<domain>`. Run the full regression on phone and desktop browsers. | No | Sign-off on staging |
 | 6 | **Production, after an explicit OK from the user:** add the production web origin to the Google OAuth client and to the CORS lists of the production backend and PER backend; set `AUTH_DOMAIN`; deploy `web/server` production with title `6A5AE`; flip the production build to `VITE_BACKEND_MODE=live`. | **Yes** | A canary to a small player group, then full rollout |
-| 7 | Mainnet (separate project): code change for cluster and program ids, RPC proxy, attestation pins, audit | Yes | — |
+| 7 | Mainnet (separate project): code change for cluster and program ids, RPC proxy, audit | Yes | — |
 
 **Choices to make along the way**
 

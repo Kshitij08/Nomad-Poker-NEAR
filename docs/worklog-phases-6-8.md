@@ -263,6 +263,14 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
       MagicBlock redeployed its devnet TEE. MagicBlock publishes no reference values, and its own SDK check only
       verifies a genuine quote and a challenge. Both records are in `apps/per/results/tee-attestation-*.json`.
       The Unity game uses the same pins (`PerPlatform.cs`), so its badge is red too. Question 14.
+30. **The TEE badge is removed from the web game** (your call, 9 Nov, answering question 14). It was a trust signal
+    only; the game plays the same without it, and keeping it meant re-pinning after every MagicBlock enclave update.
+    - Gone: the badge on both table HUDs (the status now spans the strip), `web3/per/attestation.ts`, the 360 KB
+      `assets/web3/per-attest.js`, the pins in `config.ts`, and `pccs.phala.network` in the CSP.
+    - Kept: **Verify hand** (proves a finished hand was dealt fairly from the players' seeds), and the attestation
+      tools under `onchain/per` (`client-web/per-attest.ts`, `scripts/probe-tee-attestation.ts`) for checking the
+      enclave by hand.
+    - The Unity game is untouched and still shows its (red) badge.
 
 ## Questions for you
 
@@ -298,13 +306,5 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
 13. ~~**A devnet RPC the Worker can reach.**~~ Answered 9 Nov: reuse the Alchemy devnet URL the Unity client ships
     (decision 24). It shares the live game's free-tier quota, so a key of the new stack's own is still worth getting
     before launch.
-14. **The TEE badge's pins (decision 29).** MagicBlock's devnet TEE changed `rtMr1` / `rtMr2`.
-    - *A. Re-pin to today's values.* Pros: the badge is green and still pins the exact software. Cons: it is
-      trust on first use (nothing official to compare with), and it turns red again at MagicBlock's next redeploy,
-      as it just did.
-    - *B. Pin only the values that stay put* (`mrTd`, `rtMr0`, `rtMr3`, `mrConfigId`, `mrOwner`) and relabel the badge
-      "TEE attested". Pros: survives MagicBlock's software updates, and still stricter than their own SDK check.
-      Cons: it no longer detects that the software inside the enclave changed.
-    - *C. Leave it red.* Pros: honest about an unexplained change. Cons: every player sees "not attested".
-    I lean to B, and to asking MagicBlock whether they will publish measurements.
+14. ~~**The TEE badge's pins (decision 29).**~~ Answered 9 Nov: remove the badge from the web game (decision 30).
 

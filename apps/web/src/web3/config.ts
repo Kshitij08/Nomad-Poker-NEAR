@@ -67,16 +67,10 @@ export interface Web3Config {
   readonly web2Only: boolean;
   /** Seconds before an auth request gives up (WalletAuthService.RequestTimeoutSeconds). */
   readonly requestTimeoutSeconds: number;
-  /** Where the TEE attestation bundle is served (Unity: StreamingAssets/per-attest.js). */
-  readonly attestScriptUrl: string;
-  /** The enclave measurements observed on devnet (PerSettings.AttestationPinsJson). */
-  readonly attestationPins: Readonly<Record<'mrTd' | 'rtMr0' | 'rtMr1' | 'rtMr2' | 'rtMr3' | 'mrConfigId' | 'mrOwner', string>>;
   /** The game's floor for a private-table buy-in, lamports (PerSettings.MinBuyIn). */
   readonly perMinBuyIn: bigint;
   readonly explorerTx: (sig: string) => string;
 }
-
-const ZERO96 = '0'.repeat(96);
 
 /** Builds the config from the page's query string (and nothing else: no network). */
 export function makeConfig(params: URLSearchParams = new URLSearchParams()): Web3Config {
@@ -97,7 +91,6 @@ export function makeConfig(params: URLSearchParams = new URLSearchParams()): Web
           ? DEPLOYED.perAgentsV2Backend
           : DEPLOYED.perTestBackend
         : '');
-  const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
   return Object.freeze({
     cluster: 'devnet',
     solanaRpcUrl: clean(endpointParam(params, 'web3rpc')) ?? 'https://api.devnet.solana.com',
@@ -111,16 +104,6 @@ export function makeConfig(params: URLSearchParams = new URLSearchParams()): Web
     // tables (store rules: virtual coins only; plan Phase 8).
     web2Only: params.get('web2only') === '1' || (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_STORE_BUILD === '1',
     requestTimeoutSeconds: 20,
-    attestScriptUrl: base + 'assets/web3/per-attest.js',
-    attestationPins: Object.freeze({
-      mrTd: 'c1ee9c16e3afc506cfe042c5b846a368528f3b37618eafb27469bc114cf914e9222c91618470e7f2b28ac360968270a5',
-      rtMr0: 'c1f1f2bff33b16d1469134987fcdf0ea3bd9707350cc70e73f086c635a5fc4e96e0d214a7f775608e64d251382f20564',
-      rtMr1: 'b4fe8751e5d96b726a0dabb86ba821783626d80638caf6ca0045f31f5e4c4e90e20aee96fca711421db5bdc60e5c91ed',
-      rtMr2: '51c09b72276c8bcd0e274865a7e0a408ee956a6ccfae8b4edd43467d7585ff352bb89e28f5cb62105114cad7225e11ef',
-      rtMr3: ZERO96,
-      mrConfigId: ZERO96,
-      mrOwner: '44eeaee2768dd9b3a52b41747367e5751b18f7653f087febd7de11bffabbd1d75d4ff353a68154541215863ee7fc2903',
-    }),
     perMinBuyIn: 2_000_000n,
     explorerTx: (sig: string) => `https://explorer.solana.com/tx/${sig}?cluster=devnet`,
   });

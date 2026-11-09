@@ -7,7 +7,7 @@
  *    sit back in after a missed seed window, Start round (host), the between-hands countdown, prepare the next hand.
  *  - Pump: plays the session's PokerEvents through the presenter with the C# pacing (DealDelay 0.12, settle 0.9,
  *    action 0.4, showdown 2.0) on the shared ticker, and prompts the betting panel on our turn.
- *  - HUD (PerTableController.BuildHud): the status strip with the TEE badge, Verify hand, Start round.
+ *  - HUD (PerTableController.BuildHud): the status strip (without Unity's TEE badge), Verify hand, Start round.
  *  - Leave (RequestLeave + Leave): waits for the table to be idle, then cashes the seat out to the game balance (the
  *    table key signs; fallbacks as in the C#), forgets the table key and returns to the menu.
  *
@@ -23,7 +23,6 @@ import { tickerWait } from '../../table/tableView';
 import type { Web3Config } from '../config';
 import { bytesEq } from '../lib/bytes';
 import type { PerHttp } from '../lib/http';
-import { PerAttestation, type AttestReport } from './attestation';
 import type { PerEntry, PerSeat } from './entry';
 import { PerIx } from './ix';
 import { PerSessionKeys } from './keys';
@@ -195,8 +194,6 @@ export class PerTableController implements TableSession {
     const nomad = this.host.ctx.services.nomad;
     const layer = document.querySelector<HTMLElement>('[data-screen="table"]');
     this.hud = nomad && layer ? new NomadPerTableHud(nomad, layer, handlers) : new PerTableHud(this.host, handlers);
-    const c = this.deps.config;
-    PerAttestation.run(c.attestScriptUrl, c.teeUrl, c.attestationPins, (r) => this.hud?.setAttestation(r));
     void this.loop();
     void this.pump();
   }
@@ -497,13 +494,12 @@ function rosterText(e: TableRosterEvent): string {
 
 /**
  * PerTableController.BuildHud in DOM: the slim status strip at the top centre (anchors 0.24–0.76 × 0.86–0.935 of the
- * 1920×1080 reference, colour (0.03, 0.05, 0.18, 0.82), rounded) with the TEE badge on its left; Verify hand and
+ * 1920×1080 reference, colour (0.03, 0.05, 0.18, 0.82), rounded) with the status (Unity's TEE badge left out); Verify hand and
  * Start round pinned to the top-right corner at (−150, −250) / (−150, −345); the Verify panel at anchors
  * 0.55–0.98 × 0.12–0.78 in PerUi.Panel. The second wave reskins the buttons with the menu's NomadDialogs pieces.
  */
 class PerTableHud implements PerHud {
   private readonly root = document.createElement('div');
-  private readonly badge = document.createElement('span');
   private readonly statusEl = document.createElement('span');
   private readonly startBtn: HTMLButtonElement;
   private readonly verifyPanel = document.createElement('div');
@@ -511,10 +507,8 @@ class PerTableHud implements PerHud {
   constructor(host: TableSessionHost, private readonly h: { onVerify: () => string; onStart: () => void; onBackToLobby: (() => void) | null }) {
     this.root.className = 'per-hud';
     const strip = div('per-hud-strip');
-    this.badge.className = 'per-hud-badge';
-    this.badge.textContent = 'TEE: checking…';
     this.statusEl.className = 'per-hud-status';
-    strip.append(this.badge, this.statusEl);
+    strip.append(this.statusEl);
     const verify = button('Verify hand', 'per-hud-btn per-hud-verify', () => this.toggleVerify());
     this.startBtn = button('Start round', 'per-hud-btn per-hud-start', () => h.onStart());
     this.startBtn.hidden = true;
@@ -530,15 +524,6 @@ class PerTableHud implements PerHud {
 
   setStatus(s: string): void {
     this.statusEl.textContent = s;
-  }
-
-  setAttestation(r: AttestReport): void {
-    // What it proves: a genuine, up-to-date Intel TDX enclave running the pinned image with the pinned key.
-    this.badge.textContent = r.ok ? 'TEE image attested' : 'TEE not attested';
-    this.badge.classList.toggle('ok', r.ok);
-    this.badge.classList.toggle('bad', !r.ok);
-    const failed = r.checks.find((c) => !c.ok);
-    if (!r.ok && failed) this.badge.title = failed.name;
   }
 
   showStart(on: boolean): void {
@@ -581,8 +566,6 @@ function injectStyle(): void {
 .per-hud{position:absolute;inset:0;pointer-events:none;z-index:40;font-family:inherit;container-type:size}
 .per-hud>*{pointer-events:auto}
 .per-hud-strip{position:absolute;left:24%;right:24%;top:6.5%;height:7.5%;background:rgba(8,13,46,.82);border-radius:1.2cqh;display:flex;align-items:center;gap:1.2cqw;padding:0 0.85cqw;color:#fff;font-size:min(2cqh,1.15cqw);overflow:hidden}
-.per-hud-badge{flex:0 0 27%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
-.per-hud-badge.ok{color:#5ed39b}.per-hud-badge.bad{color:#e0915f}
 .per-hud-status{flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .per-hud-btn{position:absolute;right:calc(150/1920*100cqw - 125/1920*100cqw);width:calc(250/1920*100cqw);height:calc(80/1080*100cqh);border:0;border-radius:1cqh;font:inherit;font-weight:700;font-size:min(2.2cqh,1.3cqw);cursor:pointer}
 .per-hud-verify{top:calc(210/1080*100cqh);background:#2b6fd6;color:#fff}
