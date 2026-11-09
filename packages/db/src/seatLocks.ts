@@ -147,24 +147,24 @@ export interface TableAudit {
 
 /** Where every chip that entered this table went. */
 export async function auditTable(db: D1Database, tableId: string): Promise<TableAudit | null> {
-  const t = await db
-    .prepare('SELECT hands, bot_net, agent_net FROM table_sessions WHERE id = ?1')
-    .bind(tableId)
-    .first<{ hands: number; bot_net: number; agent_net: number }>();
+  // One batch, so one consistent view: read one by one, a cash-out landing between the ledger sum and the seat locks
+  // was counted in neither (a load test's audit showed drift -1,473 on a table whose books were exact, 9 Nov).
+  const [ts, ls, ss] = await db.batch([
+    db.prepare('SELECT hands, bot_net, agent_net FROM table_sessions WHERE id = ?1').bind(tableId),
+    db
+      .prepare(
+        `SELECT
+           COALESCE(SUM(CASE WHEN delta < 0 THEN -delta END), 0) AS buy_ins,
+           COALESCE(SUM(CASE WHEN delta > 0 THEN delta END), 0) AS cash_outs
+         FROM ledger_entries WHERE ref = ?1 AND currency = 'coins' AND reason LIKE 'table:%'`,
+      )
+      .bind(tableId),
+    db.prepare('SELECT COALESCE(SUM(stack), 0) AS stacks, COUNT(*) AS n FROM seat_locks WHERE table_id = ?1').bind(tableId),
+  ]);
+  const t = ts!.results[0] as { hands: number; bot_net: number; agent_net: number } | undefined;
   if (!t) return null;
-  const sums = await db
-    .prepare(
-      `SELECT
-         COALESCE(SUM(CASE WHEN delta < 0 THEN -delta END), 0) AS buy_ins,
-         COALESCE(SUM(CASE WHEN delta > 0 THEN delta END), 0) AS cash_outs
-       FROM ledger_entries WHERE ref = ?1 AND currency = 'coins' AND reason LIKE 'table:%'`,
-    )
-    .bind(tableId)
-    .first<{ buy_ins: number; cash_outs: number }>();
-  const seated = await db
-    .prepare('SELECT COALESCE(SUM(stack), 0) AS stacks, COUNT(*) AS n FROM seat_locks WHERE table_id = ?1')
-    .bind(tableId)
-    .first<{ stacks: number; n: number }>();
+  const sums = ls!.results[0] as { buy_ins: number; cash_outs: number } | undefined;
+  const seated = ss!.results[0] as { stacks: number; n: number } | undefined;
   const buyIns = sums?.buy_ins ?? 0;
   const cashOuts = sums?.cash_outs ?? 0;
   const seatedStacks = seated?.stacks ?? 0;
