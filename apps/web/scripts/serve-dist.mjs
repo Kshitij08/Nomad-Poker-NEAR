@@ -13,7 +13,7 @@ const stage = STAGES[process.argv[2] ?? 'staging'];
 if (!stage) throw new Error(`unknown stage ${process.argv[2]}`);
 const port = Number(process.env.PORT ?? process.argv[3] ?? 5180);
 const root = fileURLToPath(new URL('../dist/', import.meta.url));
-const headers = securityHeaders({ api: stage.VITE_API_URL, game: stage.VITE_NET_SERVER });
+const headers = securityHeaders({ api: stage.VITE_API_URL, game: stage.VITE_NET_SERVER, per: stage.VITE_PER_BACKEND });
 headers['Strict-Transport-Security'] = undefined; // plain http locally
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wasm': 'application/wasm', '.glb': 'model/gltf-binary', '.woff2': 'font/woff2' };
 

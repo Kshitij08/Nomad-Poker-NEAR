@@ -153,10 +153,10 @@ class OnchainPartial {
 
   private async connectWallet(): Promise<boolean> {
     if (this.solana.isConnected) return true;
-    this.host.busy('Connect wallet', 'Approve the connection in your wallet…');
     let ok = false;
     try {
-      ok = await this.solana.connect();
+      // The message waits until a wallet is chosen: shown before, it sat on top of the wallet picker.
+      ok = await this.solana.connect(undefined, { onPicked: () => this.host.busy('Connect wallet', 'Approve the connection in your wallet…') });
     } catch (e) {
       console.error(e);
       this.host.closeMessage();

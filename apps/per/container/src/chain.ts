@@ -1,6 +1,6 @@
 // Solana and TEE rollup access: connections, the program, PDAs and the rollup login.
 import * as anchor from "@coral-xyz/anchor";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, TransactionExpiredBlockheightExceededError } from "@solana/web3.js";
 import { DELEGATION_PROGRAM_ID, MAGIC_CONTEXT_ID, MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID, getAuthToken, permissionPdaFromAccount } from "@magicblock-labs/ephemeral-rollups-sdk";
 import nacl from "tweetnacl";
 import idl from "./shared/poker_per.json";
@@ -11,6 +11,30 @@ export const PROGRAM_ID = new PublicKey((idl as any).address);
 const fetchWithTimeout: typeof fetch = (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(20_000) });
 export const CONFIG_PDA = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID)[0];
 export const l1 = new Connection(config.l1Url, { commitment: "confirmed", fetch: fetchWithTimeout as any });
+
+/**
+ * Solana confirmations by polling. web3.js (and Anchor's providers, built on `l1`) wait for a confirmation over the
+ * RPC's WebSocket (`signatureSubscribe`), which the new stack's devnet provider doesn't offer ("Method
+ * 'signatureSubscribe' not found", 9 Nov). Every L1 send then reported "expired: block height exceeded" even when it
+ * landed: the keeper created and delegated a Quick Play table, then never opened it. Polling getSignatureStatuses
+ * works on any RPC.
+ */
+l1.confirmTransaction = (async (strategy: any, commitment?: any) => {
+  const signature: string = typeof strategy === "string" ? strategy : strategy.signature;
+  const lastValid: number | undefined = typeof strategy === "object" ? strategy.lastValidBlockHeight : undefined;
+  const level = (typeof commitment === "string" ? commitment : commitment?.commitment) ?? "confirmed";
+  const done = (s: string | null | undefined) => s === "finalized" || (level !== "finalized" && s === "confirmed");
+  const started = Date.now();
+  for (let expiredChecks = 0; ; ) {
+    const st = (await l1.getSignatureStatuses([signature], { searchTransactionHistory: false })).value[0];
+    if (st?.err) return { context: { slot: st.slot }, value: { err: st.err } };
+    if (st && done(st.confirmationStatus)) return { context: { slot: st.slot }, value: { err: null } };
+    const expired = lastValid !== undefined ? (await l1.getBlockHeight("confirmed")) > lastValid : Date.now() - started > 90_000;
+    // Past the blockhash's last valid height, look twice more (a status can lag a moment) before giving up.
+    if (expired && ++expiredChecks > 2) throw new TransactionExpiredBlockheightExceededError(signature);
+    await new Promise((r) => setTimeout(r, 800));
+  }
+}) as Connection["confirmTransaction"];
 // Anchor's Program converts the IDL's names to camelCase ("table", "handLog", "lastRecord"); the
 // coder is taken from a Program (with a read-only provider) so names match the scripts and tests.
 const readOnly = new anchor.Program(idl as anchor.Idl, new anchor.AnchorProvider(l1, new anchor.Wallet(Keypair.generate()), {}));

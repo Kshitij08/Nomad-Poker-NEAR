@@ -113,14 +113,18 @@ export class SolanaService {
    * PerWallet.ConnectAsync / WalletAdapterPopup.ConnectAsync: shows the picker (unless `walletName` answers it) and
    * connects the chosen wallet. Resolves false when the player closes the picker or the wallet declines.
    */
-  connect(walletName?: string): Promise<boolean> {
+  /**
+   * `onPicked` runs once the player has chosen a wallet, just before that wallet's own prompt: the moment for a
+   * "approve it in your wallet" message (shown earlier, it covered the wallet picker; staging, 9 Nov).
+   */
+  connect(walletName?: string, opts: { onPicked?: () => void } = {}): Promise<boolean> {
     if (this.isConnected) return Promise.resolve(true);
     if (this.connecting) return this.connecting;
-    this.connecting = this.connectOnce(walletName).finally(() => (this.connecting = null));
+    this.connecting = this.connectOnce(walletName, opts.onPicked).finally(() => (this.connecting = null));
     return this.connecting;
   }
 
-  private async connectOnce(walletName?: string): Promise<boolean> {
+  private async connectOnce(walletName?: string, onPicked?: () => void): Promise<boolean> {
     // Private tables ask without ONCHAIN (Web3Capability.PrivateTables + Wake).
     this.capability.privateTables = true;
     this.capability.wake();
@@ -131,6 +135,7 @@ export class SolanaService {
       pick = this.picker ? await this.picker(list) : list.length === 1 ? list[0]! : null;
       if (!pick) return false; // closed by the player: a cancel, not a failure
     }
+    onPicked?.();
     const address = await pick.connect(false); // a rejected connect surfaces as an exception for the caller
     if (!address) return false;
     this.wallet = pick;

@@ -1,12 +1,15 @@
 // The web app's security headers (Phase 7), shared by the Vercel deploy (deploy-vercel.mjs) and the local check
-// (serve-dist.mjs). The Content-Security-Policy allows only what the build talks to: this origin, the stage's API and
-// game server (https and wss), Solana devnet RPC and MagicBlock's devnet TEE. The old stack's Railway backends are not
+// (serve-dist.mjs). The Content-Security-Policy allows only what the build talks to: this origin, the stage's API,
+// game server (https and wss) and PER service (private tables), Solana devnet RPC and MagicBlock's devnet TEE. The old stack's Railway backends are not
 // allowed (the web3 module already refuses them unless ?web3deployed=1; on a deployed build the policy blocks them too).
 
-/** @param {{ api: string, game: string, extraConnect?: string[] }} stage */
+/** @param {{ api: string, game: string, per?: string, extraConnect?: string[] }} stage */
 export function securityHeaders(stage) {
   const origins = [stage.api, stage.game].filter(Boolean).map((u) => new URL(u).origin);
   const ws = origins.map((o) => o.replace(/^http/, 'ws'));
+  // The PER service is plain HTTPS (no sockets). Without it the private tables' lobby, Quick Play and Agents fail
+  // with "HTTP 0" (found on staging, 9 Nov: deposits worked, they go to devnet and the rollup directly).
+  if (stage.per) origins.push(new URL(stage.per).origin);
   const connect = [
     "'self'",
     ...origins,

@@ -227,6 +227,31 @@ Phase 5 (Agents, tournaments, market) finished first: both exit gates passed on 
     - **Staging redeployed.** One ordering slip: I applied the drop migration before deploying the code that stopped
       using the table, so the old code's pre-deploy drain failed. No table was open and nobody was seated, so I
       deployed directly, and the drain works again.
+28. **Private tables played end to end in the game's own screens** (staging build on `localhost`, 9 Nov). Two
+    throwaway devnet wallets were exposed to the page as test wallets, funded from the retired escrow key, and their
+    SOL returned afterwards.
+    - **What worked:**
+      - connecting the wallet and switching to ONCHAIN;
+      - depositing 0.5 SOL;
+      - Quick Play, where the keeper hosted a table in 9 s and the second wallet was matched to it in 0.5 s;
+      - three hands, begun and timed out by the keeper, archived, with logs opened;
+      - leaving with the chips back in the game balance, and Withdraw all, paid by the service.
+
+      Both wallets got their SOL back on chain.
+    - **Three bugs, each proved before fixing:**
+      - **The site's security policy blocked the PER service.** Lobby, Quick Play and Agents failed with
+        "HTTP 0" (`connect-src blocked …/flags`), while deposits worked because they go to devnet and the rollup
+        directly. The policy now includes the stage's PER URL, and staging is redeployed.
+      - **Alchemy's devnet has no `signatureSubscribe`.** web3.js confirms over that WebSocket, so every Solana
+        send from the container reported "expired" even when it landed. The keeper created and delegated two
+        Quick Play tables but never opened them, and Quick Play timed out. The container now confirms by
+        polling, checked with `apps/per/container/test/l1-confirm.devnet.ts`. Those two orphaned tables hold
+        about 0.03 SOL of the keeper's rent and nobody's chips.
+      - **"Approve the connection in your wallet" covered the wallet picker.** It now appears only once a wallet is
+        chosen.
+    - **Noted, not changed:**
+      - A deposit with too little SOL in the wallet says "sendTransaction failed: error 1".
+      - The table shows "TEE not attested (attestation ran)".
 
 ## Questions for you
 

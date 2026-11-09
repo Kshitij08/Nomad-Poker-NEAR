@@ -34,7 +34,7 @@ writeFileSync(
     {
       version: 3,
       routes: [
-        { src: '^/(.*)$', headers: securityHeaders({ api: env.VITE_API_URL, game: env.VITE_NET_SERVER }), continue: true },
+        { src: '^/(.*)$', headers: securityHeaders({ api: env.VITE_API_URL, game: env.VITE_NET_SERVER, per: env.VITE_PER_BACKEND }), continue: true },
         { src: '^/assets/([^/]+)\\.(js|css)$', headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }, continue: true },
         { src: '^/assets/([^/]+)/(.*)$', headers: { 'Cache-Control': 'public, max-age=3600, stale-while-revalidate=604800' }, continue: true },
         { handle: 'filesystem' },

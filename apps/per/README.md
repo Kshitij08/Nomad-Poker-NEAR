@@ -38,6 +38,9 @@ npm run deploy:staging        # D1 migrations, Worker build, deploy (cf builds a
 npx tsx scripts/local.ts      # the container's code on this machine with a local D1 (real devnet + rollup), port 8091
 ```
 
+The stage's devnet RPC (Alchemy) has no `signatureSubscribe`, so `src/chain.ts` makes the Solana connection confirm by
+polling. Check it with `node --import tsx container/test/l1-confirm.devnet.ts`.
+
 `.secrets.staging.json` (git-ignored) holds `KEEPER_SECRET_KEY` and `AUDITOR_SECRET_KEY` as JSON byte arrays, plus
 `ARCHIVE_KEY_HEX`, `ADMIN_TOKEN` and `SOLANA_RPC_URL` (a provider's devnet URL: public devnet refuses Cloudflare). The
 Worker hands them to the container when it starts it.
