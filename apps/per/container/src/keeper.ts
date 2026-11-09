@@ -345,8 +345,8 @@ async function maybeCloseAbandoned(key: string, address: PublicKey, t: any, prog
   const acc = accountsOf(address);
   // A table created and delegated but never opened (its ledger, deck, record and log were never made) can't be closed:
   // close_table_keyed fails "expected this account to be already initialized". Two Quick Play tables were left so on
-  // staging (9 Nov: the L1 confirmation bug stopped the host flow after delegating). Open it first: open_table only
-  // creates the missing accounts and doesn't touch the idle clock, so the next pass closes it.
+  // staging (9 Nov: the L1 confirmation bug stopped the host flow after delegating). Open it first: open_table creates
+  // the missing accounts and, on a first open, starts the idle clock, so the table closes one abandon delay later.
   if (!(await (await keeperTee.get()).getAccountInfo(acc.record, "processed").catch(() => null))) {
     let opened = false;
     await attempt(key, "open_table (never opened; then close)", async () => {
