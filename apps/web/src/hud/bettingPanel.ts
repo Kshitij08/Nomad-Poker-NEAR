@@ -210,6 +210,7 @@ export class BettingPanelView implements BettingPanelPort {
   constructor(parent: HTMLElement) {
     const canvas = HUD_DATA.canvases.find((c) => c.role === 'screen-hud')!;
     this.root.el.classList.add('u-screen-canvas');
+    this.root.el.dataset.hud = 'betting'; // ui2/table.css hides the row during the pre-game (html.v2t-pregame)
     for (const c of canvas.root.children ?? []) if (ROW.includes(c.name)) this.root.add(buildNode(c, { skip: (n) => n.name === 'dot' }));
     parent.append(this.root.el);
 

@@ -27,6 +27,7 @@ import { VoiceLinkState } from '../voice/tableVoice';
 import { applyLayoutGroups, pairNodes } from './uguiLayout';
 import './net.css';
 import { isPortrait } from '../../layout/orientation';
+import '../../ui2/table.css'; // v2 pre-game row rule (html.v2t-pregame)
 import { overlayScale } from '../../layout/portraitRects';
 import { portraitNetChromeRects } from '../../layout/portraitHud';
 
@@ -80,6 +81,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       root.renderScale = s;
       root.el.style.transform = `scale(${s})`;
       portrait.apply();
+      lobby.placeAddBot();
       root.layout();
       chat.relayout();
       if (!isPortrait()) reactions.dockTo(chat, s);
@@ -452,6 +454,11 @@ class ReactionPanelView {
 
 // ---------------------------------------------------------------------------------------------------- join / lobby
 
+/** html.v2t-pregame: hides the betting action row in landscape while the pre-game buttons are up (ui2/table.css). */
+function setPregame(on: boolean): void {
+  if (typeof document !== 'undefined') document.documentElement.classList.toggle('v2t-pregame', on);
+}
+
 /** SeatActionButtons (Join_Table) + PokerLobbyView (Start Game, AddBotButton, InviteButton room code). */
 class LobbyButtonsView {
   private readonly join: UNode;
@@ -463,6 +470,9 @@ class LobbyButtonsView {
   private readonly inviteLabel: UNode | null;
   private game: ClientGame | null = null;
   private copiedUntil = 0;
+  private readonly addBotHome: { anchorMin: [number, number]; anchorMax: [number, number]; pivot: [number, number]; pos: [number, number]; size: [number, number]; scale: [number, number] };
+  private readonly addBotBar: { pos: [number, number]; scale: [number, number] };
+  private pregame = false;
 
   constructor(parent: UNode, audio: { play(s: PokerSound): void }) {
     const add = (name: string) => parent.add(buildNode({ ...child(name)!, active: false }, { skip: (n) => n.name === 'dot' }));
@@ -473,12 +483,48 @@ class LobbyButtonsView {
     this.addBot = add('AddBotButton');
     this.invite = add('InviteButton');
     this.inviteLabel = this.invite.find('Text');
+    // Redesign v2 (landscape): the pre-game buttons share the action row's bottom-centre line instead of the middle
+    // of the screen (Join table / Start game in the middle slot, + Add Bot left of it). Portrait keeps its own spots
+    // (layout/portraitHud.ts portraitNetChromeRects).
+    for (const n of [this.join, this.start]) {
+      n.anchorMin = n.anchorMax = [0.5, 0];
+      n.pivot = [0.5, 0.5];
+      n.anchoredPosition = [0, 97];
+    }
+    // + Add Bot: during the pre-game it takes the action row's left slot at the bar buttons' size (the action row is
+    // hidden then, see render); once a hand runs it goes back to Unity's own spot so it never covers CALL.
+    this.addBotHome = { anchorMin: [...this.addBot.anchorMin] as [number, number], anchorMax: [...this.addBot.anchorMax] as [number, number], pivot: [...this.addBot.pivot] as [number, number], pos: [...this.addBot.anchoredPosition] as [number, number], size: [...this.addBot.sizeDelta] as [number, number], scale: [...this.addBot.scale] as [number, number] };
+    // Scaled up uniformly (its label and icon grow with it) to the bar buttons' height, in the slot left of centre.
+    const w = this.join.sizeDelta[0];
+    const k = this.addBotHome.size[1] > 0 ? this.join.sizeDelta[1] / this.addBotHome.size[1] : 1;
+    this.addBotBar = { pos: [-(w * 236) / 219, 97], scale: [k, k] };
     // Rebuy / Cashout are SeatActionButtons' too, but CanCashOut is false and there is no escrow seat to top up on a
     // Coins table, so Unity never shows them; they are not built.
     button(this.join, () => this.game?.requestJoinTable(), true, audio);
     button(this.start, () => this.game?.requestStartGame(), true, audio);
     button(this.addBot, () => this.game?.requestAddBot(), true, audio);
     button(this.invite, () => this.copyCode(), true, audio);
+  }
+
+  /** Landscape only (portrait's PortraitRects own the rect there); called on render and after each layout. */
+  placeAddBot(): void {
+    if (isPortrait()) return;
+    const n = this.addBot;
+    if (this.pregame) {
+      n.anchorMin = n.anchorMax = [0.5, 0];
+      n.pivot = [0.5, 0.5];
+      n.anchoredPosition = [...this.addBotBar.pos];
+      n.sizeDelta = [...this.addBotHome.size];
+      n.scale = [...this.addBotBar.scale];
+    } else {
+      n.anchorMin = [...this.addBotHome.anchorMin];
+      n.anchorMax = [...this.addBotHome.anchorMax];
+      n.pivot = [...this.addBotHome.pivot];
+      n.anchoredPosition = [...this.addBotHome.pos];
+      n.sizeDelta = [...this.addBotHome.size];
+      n.scale = [...this.addBotHome.scale];
+    }
+    n.layout();
   }
 
   private copyCode(): void {
@@ -494,6 +540,7 @@ class LobbyButtonsView {
     const lobby = game?.lobby ?? null;
     if (!game || !lobby) {
       for (const n of [this.join, this.start, this.addBot, this.invite]) n.setActive(false);
+      setPregame(false);
       return;
     }
     // SeatActionButtons.Refresh
@@ -512,6 +559,12 @@ class LobbyButtonsView {
     this.start.setActive(owner && !playing && !lobby.autoStart && !joining && !seatOffered);
     setInteractable(this.start, !lobby.autoStart && lobby.seatedCount >= lobby.minToStart && lobby.readyCount >= lobby.minToStart);
     this.startLabel?.setText(lobby.phase === TablePhase.GameOver ? 'Play again' : 'Start game');
+
+    // Redesign v2 pre-game row (landscape): [+ Add Bot][Join table | Start game] at the bottom centre, alone — the
+    // action row (inactive until a hand is dealt to you) hides while Join or Start is up, so they don't stack.
+    this.pregame = this.join.activeSelf || this.start.activeSelf;
+    setPregame(this.pregame);
+    this.placeAddBot();
 
     // SetRoomCode: "Quick Play" on a shared pool table, else the party code (tap to copy).
     const code = game.roomCode;

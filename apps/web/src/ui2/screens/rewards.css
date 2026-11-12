@@ -1,0 +1,73 @@
+/* Weekly rewards + Level & missions (atlas: Redesign v2 › Rewards). */
+
+/* ---------------------------------------------------------------- weekly */
+.v2-wk-sub { display: flex; align-items: center; justify-content: center; gap: 1.4em; font-size: 1.05em; flex-wrap: wrap; flex: 0 0 auto; }
+.v2-wk-sub .v2-ico { vertical-align: -0.25em; }
+.v2-body.v2-wk { flex-direction: row; gap: 1.2em; }
+.v2-wk-grid { flex: 1 1 50em; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr; gap: 1em; min-width: 0; }
+.v2-day { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.4em; padding: 0.8em; }
+.v2-day.today, .v2-grand.today { border-color: #ffd54a; box-shadow: 0 0 1.2em rgba(255, 213, 74, 0.4); }
+.v2-day-t { font-size: 1.15em; }
+.v2-day-art { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5em; }
+.v2-day-art > b { font-size: 1.3em; }
+.v2-day .v2-pill .v2-ico, .v2-grand .v2-pill .v2-ico { vertical-align: -0.15em; }
+.v2-grand {
+  flex: 0 0 25em; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.6em;
+  background: radial-gradient(circle at 50% 45%, rgba(255, 194, 31, 0.35), transparent 60%),
+    repeating-conic-gradient(from 0deg at 50% 45%, rgba(255, 255, 255, 0.07) 0 8deg, transparent 8deg 16deg), rgba(28, 20, 80, 0.92);
+  border-color: #ffc21f;
+}
+.v2-grand-art { flex: 1; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0.5em 0.8em rgba(0, 0, 0, 0.4)); }
+
+/* ---------------------------------------------------------------- level & missions */
+.v2-body.v2-lv { flex-direction: row; gap: 1.2em; }
+.v2-lv-hero { flex: 0 0 21em; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5em; }
+.v2-lv-badge { position: relative; width: 8.5em; height: 8.5em; flex: 0 0 auto; }
+.v2-lv-badge > b { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--v2-display); font-weight: 400; font-size: 3.6em; text-shadow: 0 0.06em 0 #3b1c8c; }
+.v2-lv-track { flex: 0 0 15em; display: flex; flex-direction: column; padding: 0.8em; }
+.v2-vtrack { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 0.6em; padding: 0.4em 0 0 0.2em; }
+.v2-vtrack::before { content: ''; position: absolute; left: 1.55em; top: 1.6em; bottom: 1.4em; width: 0.3em; background: linear-gradient(to top, #ffc21f 0 var(--done, 0%), #4b3fa6 var(--done, 0%)); border-radius: 1em; }
+.v2-vnode { display: flex; align-items: center; gap: 0.6em; position: relative; text-align: left; min-width: 0; }
+.v2-vnode small { display: block; font-size: 0.78em; color: var(--v2-mut); }
+.v2-vdot { width: 2.8em; height: 2.8em; border-radius: 50%; background: #271c6b; border: 0.15em solid #4b3fa6; display: flex; align-items: center; justify-content: center; font-weight: 900; flex: 0 0 auto; position: relative; }
+.v2-vnode.done .v2-vdot { border-color: #22c468; background: #123d2e; }
+.v2-vnode.now .v2-vdot { background: linear-gradient(#ffe36b, #f5b316); color: #2a1a00; border-color: #fff; box-shadow: 0 0 1em rgba(255, 213, 74, 0.6); }
+.v2-lv-miss { flex: 1; gap: 0.55em; }
+.v2-lv-tabs { width: 15em; }
+.v2-lv-list { flex: 1; min-height: 0; gap: 0.55em; }
+.v2-mis { gap: 0.8em; padding: 0.6em 0.8em; flex: 0 0 auto; }
+.v2-mis-t { font-size: 1.05em; }
+
+/* ---------------------------------------------------------------- portrait */
+html[data-orient='portrait'] .v2-wk-sub { gap: 0.5em; font-size: 0.9em; }
+html[data-orient='portrait'] .v2-wk-sub > .v2-mut { flex: 1 1 100%; text-align: center; }
+html[data-orient='portrait'] .v2-body.v2-wk { flex-direction: column; gap: 0.7em; }
+html[data-orient='portrait'] .v2-wk-grid { flex: 0 0 auto; grid-template-columns: repeat(2, 1fr); grid-template-rows: none; gap: 0.6em; }
+html[data-orient='portrait'] .v2-day { padding: 0.6em; }
+html[data-orient='portrait'] .v2-day-art .v2-coins, html[data-orient='portrait'] .v2-day-art > .v2-ico { font-size: 0.7em; }
+html[data-orient='portrait'] .v2-day-art > b { font-size: 1.05em; }
+html[data-orient='portrait'] .v2-grand { flex: 0 0 auto; }
+html[data-orient='portrait'] .v2-grand-art { font-size: 0.6em; }
+html[data-orient='portrait'] .v2-body.v2-lv { flex-direction: column; overflow-y: auto; gap: 0.7em; }
+html[data-orient='portrait'] .v2-lv-hero { flex: 0 0 auto; display: grid; grid-template-columns: auto 1fr; grid-template-areas: 'badge title' 'badge bar' 'badge xp' 'badge next' 'card card' 'mile mile'; column-gap: 0.8em; row-gap: 0.25em; text-align: left; align-items: center; }
+html[data-orient='portrait'] .v2-lv-badge { grid-area: badge; font-size: 0.6em; }
+html[data-orient='portrait'] .v2-lv-hero > .v2-h { grid-area: title; font-size: 1.4em !important; }
+html[data-orient='portrait'] .v2-lv-hero > .v2-bar { grid-area: bar; }
+html[data-orient='portrait'] .v2-lv-hero > b.v2-num { grid-area: xp; }
+html[data-orient='portrait'] .v2-lv-hero > .v2-sm { grid-area: next; }
+html[data-orient='portrait'] .v2-lv-hero > .v2-card { grid-area: card; flex-direction: row; justify-content: center; gap: 0.6em; }
+html[data-orient='portrait'] .v2-lv-hero > .v2-card .v2-coins { font-size: 0.6em; }
+html[data-orient='portrait'] .v2-lv-hero > .v2-grow, html[data-orient='portrait'] .v2-lv-hero > .v2-xs { display: none; }
+html[data-orient='portrait'] .v2-lv-track { flex: 0 0 auto; }
+html[data-orient='portrait'] .v2-vtrack { flex-direction: row-reverse; justify-content: space-between; overflow-x: auto; padding: 0.4em 0; }
+html[data-orient='portrait'] .v2-vtrack::before { left: 1.4em; right: 1.4em; top: 1.8em; bottom: auto; height: 0.3em; width: auto; background: linear-gradient(90deg, #ffc21f 0 var(--done, 0%), #4b3fa6 var(--done, 0%)); }
+html[data-orient='portrait'] .v2-vnode { flex-direction: column; text-align: center; gap: 0.2em; width: 4.4em; }
+html[data-orient='portrait'] .v2-vnode small { white-space: normal; font-size: 0.66em; }
+html[data-orient='portrait'] .v2-lv-miss { flex: 0 0 auto; }
+html[data-orient='portrait'] .v2-lv-tabs { width: 12em; }
+html[data-orient='portrait'] .v2-lv-list { overflow: visible; }
+
+.v2-lv-mile { width: 100%; text-align: left; gap: 0.8em; }
+html[data-orient='portrait'] .v2-lv-hero > .v2-lv-mile { grid-area: mile; justify-content: flex-start; }
+html[data-orient='portrait'] .v2-lv-miss .v2-b { min-height: 40px; }
+html[data-orient='portrait'] .v2-lv-tabs .v2-tab { min-height: 40px; }

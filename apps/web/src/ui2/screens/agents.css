@@ -1,0 +1,101 @@
+/* Agents (atlas: Redesign v2 › Agents). Desktop: main tabs, then My Agents list | agent panel with sub-tabs.
+   Portrait: the list becomes a strip, panels stack and the page body scrolls, the history table becomes cards. */
+.v2-ag-main { flex: 0 0 auto; }
+.v2-ag-shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 19.5em minmax(0, 1fr); gap: 1em; }
+.v2-ag-list { display: flex; flex-direction: column; gap: 0.5em; padding: 0.8em; overflow-y: auto; }
+.v2-ag-card { text-align: left; width: 100%; background: rgba(255, 255, 255, 0.05); border: 0.12em solid rgba(124, 107, 255, 0.4); border-radius: 0.9em; padding: 0.55em 0.7em; }
+.v2-ag-card.on { border-color: var(--v2-gold); box-shadow: 0 0 0.8em rgba(255, 213, 74, 0.3); }
+.v2-ag-cardf { justify-content: space-between; margin-top: 0.3em; }
+.v2-ag-new { display: flex; align-items: center; justify-content: center; gap: 0.4em; border-style: dashed; font-weight: 900; color: #d8d3ff; }
+.v2-ag-badge { width: 2.6em; height: 2.6em; border-radius: 0.8em; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.v2-ag-badge.big { width: 3.2em; height: 3.2em; border-radius: 1em; }
+.v2-ag-right { display: flex; flex-direction: column; gap: 0.8em; padding: 0.9em 1.2em; }
+.v2-ag-head { gap: 0.8em; flex: 0 0 auto; }
+.v2-ag-sub { width: 33em; flex: 0 0 auto; font-size: 0.92em; }
+.v2-ag-inner { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.6em; }
+
+/* overview */
+.v2-ag-ov { display: flex; gap: 1em; align-items: stretch; flex: 1; min-height: 0; }
+.v2-ag-ovl { flex: 1; gap: 0.8em; }
+.v2-ag-strat { text-align: left; width: 100%; }
+.v2-ag-stats { justify-content: space-between; margin: 0.5em 0; }
+.v2-ag-setup { flex: 1.1; gap: 0.5em; }
+.v2-ag-field { gap: 0.6em; }
+.v2-ag-field .v2-field { width: 7em; text-align: right; }
+
+/* strategy */
+.v2-ag-pres { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.7em; }
+.v2-ag-pre { text-align: left; gap: 0.6em; }
+.v2-ag-pre.on { border-color: var(--v2-gold); background: rgba(255, 213, 74, 0.12); }
+.v2-ag-stc { padding: 0.8em 1em; }
+.v2-ag-dial { gap: 1em; margin: 0.35em 0; }
+.v2-ag-dn { width: 8.5em; flex: 0 0 auto; }
+.v2-ag-tag { width: 12em; text-align: center; flex: 0 0 auto; white-space: normal; line-height: 1.2; }
+.v2-ag-tag.wide { width: 14em; }
+
+/* history */
+.v2-ag-tiles { gap: 0.8em; align-items: stretch; }
+.v2-ag-gt { display: grid; grid-template-columns: 6em 1fr 1fr 6em 7em 8em 10em; gap: 0.6em; align-items: center; padding: 0.55em 1em; font-size: 1.05em; width: 100%; text-align: left; }
+.v2-ag-hdr { padding: 0.3em 1em; border-bottom: 0.1em solid rgba(124, 107, 255, 0.35); }
+.v2-ag-hdr > span { font-size: 0.78em; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-mut2); }
+.v2-ag-row { background: rgba(255, 255, 255, 0.05); border: 0.1em solid rgba(124, 107, 255, 0.35); border-radius: 0.8em; }
+.v2-ag-row:hover { border-color: #a98bff; }
+.v2-ag-k { display: none; }
+
+/* twin */
+.v2-ag-two { flex: 1; min-height: 0; display: grid; grid-template-columns: 26em minmax(0, 1fr); gap: 1em; }
+.v2-ag-twinl { align-items: center; text-align: center; gap: 0.6em; }
+.v2-ag-twinr { gap: 0.9em; }
+.v2-ag-trait { gap: 1em; }
+
+/* marketplace */
+.v2-ag-mbar { gap: 0.6em; flex: 0 0 auto; }
+.v2-ag-mtabs { width: 22em; }
+.v2-ag-mgrid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1em; align-content: start; }
+.v2-ag-mcard { gap: 0.4em; }
+.v2-ag-mstats { justify-content: space-between; gap: 0.4em; }
+.v2-ag-mstats > div { min-width: 0; white-space: nowrap; }
+.v2-ag-mgrid { overflow-x: hidden; }
+
+/* coach */
+.v2-ag-cstats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1em; flex: 0 0 auto; }
+.v2-ag-cstat { text-align: center; padding: 0.7em; }
+.v2-ag-ccols { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1em; }
+
+/* ---------------------------------------------------------------- portrait */
+html[data-orient='portrait'] .v2-page[data-screen^='ag-'] { overflow-y: auto; }
+html[data-orient='portrait'] .v2-ag-shell { display: flex; flex-direction: column; flex: 0 0 auto; }
+html[data-orient='portrait'] .v2-ag-list { flex-direction: row; overflow-x: auto; overflow-y: visible; padding: 0.5em; align-items: center; }
+html[data-orient='portrait'] .v2-ag-list > .v2-h { display: none; }
+html[data-orient='portrait'] .v2-ag-card { width: auto; flex: 0 0 auto; min-width: 12em; }
+html[data-orient='portrait'] .v2-ag-new { min-width: 9em; align-self: stretch; }
+html[data-orient='portrait'] .v2-ag-head { flex-wrap: wrap; }
+html[data-orient='portrait'] .v2-ag-sub { width: 100%; }
+html[data-orient='portrait'] .v2-ag-inner { overflow: visible; }
+html[data-orient='portrait'] .v2-ag-ov { flex-direction: column; }
+html[data-orient='portrait'] .v2-ag-pres { grid-template-columns: repeat(2, 1fr); }
+html[data-orient='portrait'] .v2-ag-dial { flex-wrap: wrap; gap: 0.3em 0.6em; }
+html[data-orient='portrait'] .v2-ag-dial > .v2-grow { flex: 1 1 100%; order: 5; }
+html[data-orient='portrait'] .v2-ag-dial > .v2-mut { display: none; }
+html[data-orient='portrait'] .v2-ag-dn { width: auto; flex: 1; }
+html[data-orient='portrait'] .v2-ag-tag, html[data-orient='portrait'] .v2-ag-tag.wide { width: auto; max-width: 60%; }
+html[data-orient='portrait'] .v2-ag-hdr { display: none; }
+html[data-orient='portrait'] .v2-ag-gt.v2-ag-row { grid-template-columns: 1fr 1fr; gap: 0.25em 0.8em; font-size: 0.95em; }
+html[data-orient='portrait'] .v2-ag-row > :nth-child(6) { justify-self: end; }
+html[data-orient='portrait'] .v2-ag-row > :last-child { grid-column: 1 / -1; justify-self: start; }
+html[data-orient='portrait'] .v2-ag-row > :first-child { grid-column: 1; }
+html[data-orient='portrait'] .v2-ag-k { display: inline; color: var(--v2-mut); font-weight: 700; font-size: 0.85em; }
+html[data-orient='portrait'] .v2-ag-two { display: flex; flex-direction: column; flex: 0 0 auto; }
+html[data-orient='portrait'] .v2-ag-trait { flex-wrap: wrap; gap: 0.3em 0.6em; }
+html[data-orient='portrait'] .v2-ag-trait > .v2-bar { flex: 1 1 100%; order: 5; }
+html[data-orient='portrait'] .v2-ag-mtabs { width: 100%; order: -1; }
+html[data-orient='portrait'] .v2-ag-mgrid { grid-template-columns: 1fr; flex: 0 0 auto; overflow: visible; }
+html[data-orient='portrait'] .v2-ag-cstats { grid-template-columns: repeat(3, 1fr); gap: 0.5em; }
+html[data-orient='portrait'] .v2-ag-cstat { padding: 0.5em; font-size: 0.85em; }
+html[data-orient='portrait'] .v2-ag-ccols { display: flex; flex-direction: column; flex: 0 0 auto; }
+html[data-orient='portrait'] .v2-page[data-screen^='ag-'] .v2-body { flex: 0 0 auto; min-height: 12em; }
+html[data-orient='portrait'] .v2-ag-stbar { flex-wrap: wrap; }
+html[data-orient='portrait'] .v2-ag-stbar > .v2-grow { display: none; }
+html[data-orient='portrait'] .v2-ag-inuse { order: 9; flex: 1 1 100%; }
+html[data-orient='portrait'] .v2-ag-stbar > .v2-b { flex: 1; font-size: 0.9em; }
+html[data-orient='portrait'] .v2-ag-stbar > .v2-chip { flex: 1 1 100%; justify-content: center; }

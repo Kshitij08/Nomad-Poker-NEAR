@@ -1,0 +1,92 @@
+/* Play (atlas: Redesign v2 › Choose your table, Party, Host a SOL table). */
+
+/* ---- room / stake cards (shared by Tables and Host a SOL table) */
+.v2-stc {
+  flex: 1; min-width: 0; background: rgba(28, 20, 80, 0.9); border: 0.12em solid var(--v2-line); border-radius: 0.9em; padding: 0.4em;
+  text-align: center; display: flex; flex-direction: column; gap: 0.15em; transition: transform 0.12s, box-shadow 0.12s;
+}
+.v2-stc.on { border-color: var(--v2-gold); box-shadow: 0 0 1em rgba(255, 213, 74, 0.35); transform: translateY(-0.3em); }
+.v2-stc.locked { opacity: 0.55; }
+.v2-stc > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-stc > small { color: var(--v2-mut); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-stc-art { height: 4.2em; border-radius: 0.6em; position: relative; flex: 0 0 auto; }
+.v2-stc-lock { position: absolute; right: 0.3em; top: 0.3em; }
+
+/* ---- Choose your table */
+.v2-ts-tabs { width: 20em; max-width: 100%; flex: 0 0 auto; }
+.v2-ts { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 27.5em; gap: 1.2em; }
+.v2-ts-left { display: flex; flex-direction: column; gap: 1em; min-width: 0; min-height: 0; }
+.v2-ts-preview { flex: 1; min-height: 8em; border-radius: 1.2em; border: 0.12em solid var(--v2-line); position: relative; overflow: hidden; }
+.v2-ts-felt {
+  position: absolute; left: 50%; top: 44%; width: 50%; max-width: 24em; aspect-ratio: 2.4; transform: translate(-50%, -50%); border-radius: 6em;
+  background: radial-gradient(#4a2db8, #2a1a6e); border: 0.6em solid #0e0830; box-shadow: 0 0 0 0.25em #9b6bff, 0 1em 2em rgba(0, 0, 0, 0.45);
+}
+.v2-ts-cap { position: absolute; left: 1.2em; bottom: 1em; text-shadow: 0 0.1em 0.4em rgba(0, 0, 0, 0.6); }
+.v2-ts-cap b { font-size: 1.5em; }
+.v2-ts-cards { display: flex; gap: 0.8em; flex: 0 0 auto; padding-top: 0.3em; }
+.v2-ts-sel { gap: 0.55em; }
+.v2-ts-sel .v2-ts-name { font-size: 2.2em; }
+.v2-ts-buy { text-align: center; font-size: 1.3em; font-weight: 900; }
+
+/* private SOL tables */
+.v2-priv { gap: 0.6em; }
+.v2-priv-code { width: 14em; }
+.v2-ptgrid { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1.2fr 1.2fr 9em; gap: 0.6em; align-items: center; padding: 0.55em 1em; font-size: 1.05em; }
+.v2-pthdr { padding: 0.3em 1em; border-bottom: 0.1em solid rgba(124, 107, 255, 0.35); }
+.v2-pthdr > span { font-size: 0.78em; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-mut2); }
+.v2-ptrow { background: rgba(255, 255, 255, 0.05); border: 0.1em solid rgba(124, 107, 255, 0.35); border-radius: 0.8em; }
+
+/* ---- Party */
+.v2-party-sub { text-align: center; font-size: 1.1em; flex: 0 0 auto; }
+.v2-party { flex: 1; min-height: 0; display: flex; gap: 2em; padding: 0 9.6em 1.8em; align-items: stretch; }
+.v2-party-card { flex: 1; align-items: center; text-align: center; padding: 2em; gap: 0.9em; }
+.v2-party-card .v2-h { font-size: 1.7em; }
+.v2-party-card .v2-mut { font-size: 1.05em; }
+.v2-party-code { width: 100%; font-size: 1.1em; text-align: center; text-transform: uppercase; }
+.v2-party-code::placeholder { text-transform: none; }
+
+/* ---- Host a SOL table */
+.v2-sh { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 47fr) minmax(0, 28fr); gap: 1.2em; }
+.v2-sh-form { gap: 0.7em; }
+.v2-sh-blinds { display: flex; gap: 0.6em; padding-top: 0.3em; }
+.v2-sh-blinds .v2-stc-art { height: 3.6em; }
+.v2-sh-sum { gap: 0.45em; }
+.v2-sh-felt { height: 7em; flex: 0 0 auto; border-radius: 1em; background: radial-gradient(#4a2db8, #2a1a6e); border: 0.4em solid #0e0830; box-shadow: 0 0 0 0.2em #9b6bff; }
+
+/* ---------------------------------------------------------------- portrait */
+html[data-orient='portrait'] .v2-ts-tabs { width: 100%; }
+html[data-orient='portrait'] .v2-ts { display: flex; flex-direction: column; gap: 0.7em; overflow-y: auto; overscroll-behavior: contain; }
+html[data-orient='portrait'] .v2-ts-left { flex: 0 0 auto; gap: 0.6em; }
+html[data-orient='portrait'] .v2-ts-preview { flex: 0 0 12em; min-height: 9em; max-height: 16em; }
+html[data-orient='portrait'] .v2-ts-cap b { font-size: 1.2em; }
+html[data-orient='portrait'] .v2-ts-cards { overflow-x: auto; gap: 0.5em; padding: 0.4em 0.1em 0.2em; scrollbar-width: none; }
+html[data-orient='portrait'] .v2-ts-cards .v2-stc { flex: 0 0 6.6em; font-size: 0.9em; }
+html[data-orient='portrait'] .v2-stc.on { transform: none; }
+html[data-orient='portrait'] .v2-stc-art { height: 3em; }
+html[data-orient='portrait'] .v2-ts-sel { flex: 0 0 auto; gap: 0.45em; }
+html[data-orient='portrait'] .v2-ts-sel .v2-ts-name { font-size: 1.6em; }
+html[data-orient='portrait'] .v2-kv { font-size: 0.95em; }
+
+html[data-orient='portrait'] .v2-priv-top .v2-h { flex: 1 1 100%; }
+html[data-orient='portrait'] .v2-priv-code { flex: 1 1 100%; width: auto; }
+html[data-orient='portrait'] .v2-priv-top .v2-b { flex: 1; }
+html[data-orient='portrait'] .v2-ptgrid { grid-template-columns: 1fr auto; grid-template-areas: 'blinds btn' 'meta btn'; padding: 0.55em 0.8em; font-size: 0.95em; gap: 0.15em 0.6em; }
+html[data-orient='portrait'] .v2-pthdr { display: none; }
+html[data-orient='portrait'] .v2-ptrow > b:first-child { grid-area: blinds; }
+html[data-orient='portrait'] .v2-ptrow > :nth-child(2), html[data-orient='portrait'] .v2-ptrow > :nth-child(3), html[data-orient='portrait'] .v2-ptrow > :nth-child(4) { display: none; }
+html[data-orient='portrait'] .v2-ptrow > b:nth-child(5) { grid-area: meta; color: var(--v2-mut); font-size: 0.85em; }
+html[data-orient='portrait'] .v2-ptrow > .v2-b { grid-area: btn; }
+
+html[data-orient='portrait'] .v2-party { flex-direction: column; padding: 0; gap: 0.8em; }
+html[data-orient='portrait'] .v2-party-card { padding: 1em; gap: 0.6em; justify-content: center; }
+html[data-orient='portrait'] .v2-party-card .v2-ico { width: 4em !important; height: 4em !important; }
+html[data-orient='portrait'] .v2-party-card .v2-h { font-size: 1.4em; }
+html[data-orient='portrait'] .v2-party-card .v2-grow { display: none; }
+
+html[data-orient='portrait'] .v2-sh { display: flex; flex-direction: column; gap: 0.7em; overflow-y: auto; overscroll-behavior: contain; }
+html[data-orient='portrait'] .v2-sh-form { overflow: visible; flex: 0 0 auto; }
+html[data-orient='portrait'] .v2-sh-sum { flex: 0 0 auto; }
+html[data-orient='portrait'] .v2-sh-blinds { display: grid; grid-template-columns: repeat(3, 1fr); }
+html[data-orient='portrait'] .v2-sh-blinds .v2-stc-art { height: 2.6em; }
+html[data-orient='portrait'] .v2-sh-felt { height: 4.5em; }
+html[data-orient='portrait'] .v2-page[data-screen='tables'] .v2-b, html[data-orient='portrait'] .v2-page[data-screen='sol-host'] .v2-b, html[data-orient='portrait'] .v2-page[data-screen='sol-host'] .v2-chip, html[data-orient='portrait'] .v2-page[data-screen='party'] .v2-b { min-height: 40px; }

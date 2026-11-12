@@ -24,11 +24,11 @@ import type { TournamentsService } from '../service';
 type MineTab = 'Joined' | 'Hosting' | 'Past';
 
 /** The server rejects a start sooner than 10 minutes. 15 is the shortest option so a slow request still lands. */
-const HOST_STARTS = [15, 30, 60, 180, 1440];
-const HOST_FEES = [0, 100, 500, 1000, 5000];
-const HOST_MAX = [8, 16, 24, 30];
-const HOST_PRIZES = [0, 1000, 5000, 10000];
-const HOST_SPEEDS = ['regular', 'turbo', 'slow'];
+export const HOST_STARTS = [15, 30, 60, 180, 1440];
+export const HOST_FEES = [0, 100, 500, 1000, 5000];
+export const HOST_MAX = [8, 16, 24, 30];
+export const HOST_PRIZES = [0, 1000, 5000, 10000];
+export const HOST_SPEEDS = ['regular', 'turbo', 'slow'];
 
 const BOARD_TABS: readonly [string, LeaderboardKind][] = [
   ['Frame/Tab_Weekly', LeaderboardKind.WeeklyEarnings], ['Frame/Tab_Monthly', LeaderboardKind.SeasonEarnings],

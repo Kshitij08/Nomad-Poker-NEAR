@@ -14,6 +14,7 @@ import { install as tournaments } from './tournaments/install';
 import { install as net } from './net/install';
 import { install as menu } from './menu/install';
 import { install as native } from './native/install';
+import { install as ui2 } from './ui2/install';
 
-// native (store apps only) last: its deep links use net and tournaments, and it hides the splash on the first screen.
-export const MODULES: readonly AppModule[] = [theming, account, economy, web3, retention, agents, tournaments, net, menu, native];
+// ui2 (Redesign v2) right after the menu it takes over. native (store apps only) last: its deep links use net and tournaments, and it hides the splash on the first screen.
+export const MODULES: readonly AppModule[] = [theming, account, economy, web3, retention, agents, tournaments, net, menu, ui2, native];
