@@ -81,6 +81,9 @@ export function portraitNetChromeRects(root: UNode): PortraitRects {
       InviteButton: { anchor: [0, 1], pivot: [0, 0.5], pos: [224, row], size: [236, 64] },
       'InviteButton/Text': { scale: [0.8, 0.8] },
       AddBotButton: { anchor: [0, 1], pivot: [0, 0.5], pos: [226, row - 62], size: [150, 50] },
+      // Landscape moves these to the bottom row (Redesign v2); portrait keeps Unity's centre spot.
+      Join_Table: { anchor: [0.5, 0.5], pivot: [0.5, 0.5], pos: [0, 0] },
+      'Start Game': { anchor: [0.5, 0.5], pivot: [0.5, 0.5], pos: [0, 0] },
     };
   });
 }

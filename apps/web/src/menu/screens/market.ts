@@ -24,8 +24,8 @@ const GOOD = { r: 0.4, g: 0.9, b: 0.5, a: 1 };
 const BAD = { r: 0.95, g: 0.45, b: 0.45, a: 1 };
 const SOFT = { r: 0.66, g: 0.72, b: 0.88, a: 1 };
 const WHITE = { r: 1, g: 1, b: 1, a: 1 };
-const TWIN_MIN_DECISIONS = 30;
-const COACH_MIN_HANDS = 20;
+export const TWIN_MIN_DECISIONS = 30;
+export const COACH_MIN_HANDS = 20;
 /** AgentStrategyWords.Names (agents module owns the wording; these are its five parameter names). */
 const PARAM_NAMES = ['Folds below', 'Raises above', 'Aggression', 'Bluffs', 'Bet size'];
 
@@ -197,6 +197,11 @@ function same(a: number[] | null, b: number[] | null): boolean {
   return true;
 }
 
+/** The Agent backend (`backendApi`), or undefined offline. Also used by the Redesign v2 Agents pages (src/ui2). */
+export function marketApi(ctx: AppContext): BackendApiLike | undefined {
+  return api(ctx);
+}
+
 function api(ctx: AppContext): BackendApiLike | undefined {
   return (ctx.services as unknown as Record<string, unknown>).backendApi as BackendApiLike | undefined;
 }
@@ -252,7 +257,7 @@ export function applyProfileTo(s: AgentStrategyLike, p: J): void {
   s.applyAll(3, valuesOf(p), pw, brain, streets);
 }
 
-function rememberCopy(host: NomadHost): void {
+export function rememberCopy(host: NomadHost): void {
   const s = (host.ctx.services as unknown as Record<string, unknown>).agentStrategy as AgentStrategyLike | undefined;
   marketState.copiedValues = s ? [...s.values] : null;
   marketState.copiedStreets = s ? s.streets.map((r) => (r ? [...r] : null)) : null;

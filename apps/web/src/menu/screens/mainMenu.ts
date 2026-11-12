@@ -204,7 +204,7 @@ function addTournamentsRow(host: NomadHost, root: UNode): void {
 }
 
 /** Quick Play: DEMO is the Coins Quick Play at the selected stake. Offline: the single-player table at that stake. */
-function quickPlay(host: NomadHost): void {
+export function quickPlay(host: NomadHost): void {
   if (!host.signedIn) {
     host.show('Login');
     return;

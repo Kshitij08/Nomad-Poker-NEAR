@@ -1,0 +1,148 @@
+<title>Nomad Poker Redesign v2 Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@500;700;800;900&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one column tracker — summary strip, architecture notes, then one table per screen group */
+:root{
+  --bg:#f4f2fb; --panel:#ffffff; --ink:#1e1840; --ink2:#5d5780; --line:#dfdbef;
+  --accent:#6a35e0; --accent-soft:#ece5ff; --gold:#b07a00; --gold-soft:#fff3cc;
+  --ok:#137a45; --ok-soft:#dcf5e7; --todo:#7a7598; --todo-soft:#eeedf4; --wip:#1f5fd6; --wip-soft:#dceaff; --bad:#b8263c; --bad-soft:#ffe0e5;
+  --display:"Lilita One","Arial Rounded MT Bold",system-ui,sans-serif;
+  --ui:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#110d26; --panel:#1a1540; --ink:#ece9ff; --ink2:#a39dcb; --line:#2e2860;
+  --accent:#b08fff; --accent-soft:#2b2266; --gold:#ffd54a; --gold-soft:#3a2f10;
+  --ok:#6af0a0; --ok-soft:#12392a; --todo:#a39dcb; --todo-soft:#241e4c; --wip:#7fb8ff; --wip-soft:#172d5a; --bad:#ff8a9a; --bad-soft:#40141e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#110d26; --panel:#1a1540; --ink:#ece9ff; --ink2:#a39dcb; --line:#2e2860;
+  --accent:#b08fff; --accent-soft:#2b2266; --gold:#ffd54a; --gold-soft:#3a2f10;
+  --ok:#6af0a0; --ok-soft:#12392a; --todo:#a39dcb; --todo-soft:#241e4c; --wip:#7fb8ff; --wip-soft:#172d5a; --bad:#ff8a9a; --bad-soft:#40141e; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--display);font-weight:400;font-size:32px;margin:0;letter-spacing:.3px;text-wrap:balance}
+h2{font-family:var(--display);font-weight:400;font-size:22px;margin:0 0 10px;text-wrap:balance}
+.sub{color:var(--ink2);margin:4px 0 0;max-width:70ch}
+.sub a{color:var(--accent)}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.stat b{display:block;font-family:var(--display);font-weight:400;font-size:30px;font-variant-numeric:tabular-nums}
+.stat span{color:var(--ink2);font-size:13px;font-weight:700}
+.bar{height:8px;border-radius:8px;background:var(--todo-soft);overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:var(--accent)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;min-width:0}
+.card ul{margin:0;padding-left:20px}
+.card li{margin:3px 0}
+code{font-family:var(--mono);font-size:12.5px;background:var(--todo-soft);padding:1px 5px;border-radius:5px}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:13.5px}
+th{text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);padding:8px;border-bottom:2px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+td:first-child{font-weight:800;width:200px}
+td.n{color:var(--ink2);font-size:12.5px}
+.p{display:inline-block;font-size:11px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.p.todo{background:var(--todo-soft);color:var(--todo)}
+.p.wip{background:var(--wip-soft);color:var(--wip)}
+.p.done{background:var(--accent-soft);color:var(--accent)}
+.p.ok{background:var(--ok-soft);color:var(--ok)}
+.p.bad{background:var(--bad-soft);color:var(--bad)}
+.p.na{background:transparent;color:var(--ink2);border:1px dashed var(--line)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px;color:var(--ink2)}
+.upd{font-family:var(--mono);font-size:12px;color:var(--ink2)}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Nomad Poker Redesign v2 Tracker</h1>
+    <p class="sub">Applying the Redesign v2 skin from the <a href="https://claude.ai/artifact/WV2up5hgYGzAM4D66vHzni#main-menu">Screen Atlas</a> to the web game in <code>apps/web</code>, on desktop (16:9) and phones (portrait only). Each screen is built, then checked by an independent agent against the atlas at both sizes.</p>
+    <p class="upd" id="upd">Updated 13 Nov 2026 · all screens built and checked by three independent agents; their findings fixed · typecheck clean · 219 tests pass · not committed</p>
+  </header>
+
+  <section class="strip" id="strip"></section>
+
+  <section class="card">
+    <h2>How it is built</h2>
+    <ul>
+      <li><b>New module <code>src/ui2/</code></b>: hand-built DOM screens with the v2 tokens (galaxy purple, Lilita One + Nunito, gold/blue/violet buttons). Layouts use flex and grid, not absolute positions, so one markup serves both orientations.</li>
+      <li><b>Hooked into the existing menu host</b>: when the game asks the Unity menu to show a screen that v2 replaces, the v2 layer shows its own screen instead. Screens the atlas marks "Unchanged" (login, lucky slot, profile, wallet flows, chat…) keep today's look.</li>
+      <li><b>Same data and actions</b>: every v2 screen calls the services the current screens use (account, wallet, retention, friends, tournaments, agents, web3, net). No new backend calls; the Shop is local only until a store backend exists.</li>
+      <li><b>Desktop</b>: content scales with the window on an 80 × 45 em grid, like the atlas stage.</li>
+      <li><b>Phones</b>: portrait layouts derived from v2 (stacked play tiles, the dock as a bottom tab bar, single-column panels, bottom sheets for dialogs). The store apps are locked to portrait, and a phone browser held sideways shows a "turn your phone" card.</li>
+      <li><b>Known gaps</b>: the Shop has no purchase backend (buying says it opens soon); one agent per account, so New agent explains that; on-chain leaderboard shows "coming soon"; recently played friends and public tournament links need data that doesn't exist yet; the private SOL table was checked by rendering its parts, not live on devnet.</li>
+      <li><b>Checks</b>: <code>tsc --noEmit</code> and <code>vitest run</code> stay green; each group is reviewed by a separate agent at 1280×720 and 390×844.</li>
+    </ul>
+  </section>
+
+  <div class="legend">Status:
+    <span class="p todo">To do</span><span class="p wip">Building</span><span class="p done">Built</span><span class="p ok">Verified</span><span class="p bad">Issues found</span><span class="p na">Not needed</span>
+  </div>
+
+  <div id="groups"></div>
+</div>
+
+<script>
+// status: todo | wip | done | ok | bad | na
+const G = [
+ ['Foundation', [
+  ['v2 kit: tokens, buttons, panels, icons','done','done','ok','Shared styles and SVG icons from the atlas'],
+  ['Screen host + routing','done','done','ok','Intercepts the menu host; back button and Escape'],
+  ['Portrait lock','na','done','ok','Android manifest, iOS plist, rotate card on phone browsers'],
+ ]],
+ ['Lobby', [
+  ['Main menu','done','done','ok','Player card, coins + Demo/On-chain + settings, three tiles, bottom dock'],
+  ['Settings','done','done','ok','Music / SFX sliders, Discord + X, account row'],
+  ['Profile dropdown','done','done','ok','Opens under the player card; rebuilt in v2 style (was Unity)'],
+ ]],
+ ['Play', [
+  ['Choose your table','done','done','ok','Room preview, room cards, selected table panel; on-chain Public / Private'],
+  ['Party','done','done','ok','Create / Join cards'],
+  ['Host a SOL table','done','done','ok','Blinds, seats, access, summary'],
+ ]],
+ ['Rewards', [
+  ['Weekly rewards','done','done','ok','Days 1–6 grid + Day 7 grand prize'],
+  ['Level & missions','done','done','ok','Level hero, level track, missions with CLAIM'],
+ ]],
+ ['Social', [
+  ['Friends','done','done','ok','Profile panel, stats, tabs, rows; picture editor in panel'],
+  ['Leaderboard','done','done','ok','Crowns for top 3, Your rank row, wallet gate'],
+ ]],
+ ['Shop (new)', [
+  ['Shop','done','done','ok','Full catalogue UI; buying shows "opens soon" (no purchase backend yet)'],
+  ['Purchase confirm','done','done','ok','Confirm → wallet → purchased'],
+ ]],
+ ['Tournaments', [
+  ['Browse','done','done','ok','Compact rows, filters, expand, share'],
+  ['My Tournaments','done','done','ok','Joined / Hosting / Past'],
+  ['Host','done','done','ok','Option chips + summary'],
+  ['Join by code','done','done','ok','6-box code, found row'],
+  ['Share / Register dialogs','done','done','ok',''],
+ ]],
+ ['Agents', [
+  ['Agents: Overview','done','done','ok','My Agents list, selected agent, session setup, deploy'],
+  ['Agents: Strategy','done','done','ok','Presets, dials, fine-tune sliders'],
+  ['Agents: Session History','done','done','ok','Summary tiles, aligned table'],
+  ['New agent','done','done','ok','One agent per account today: card explains it instead of a create page'],
+  ['My Twin','done','done','ok','Page instead of pop-up'],
+  ['Marketplace','done','done','ok','Page instead of pop-up'],
+  ['Coach','done','done','ok','Page instead of pop-up'],
+  ['Deploy / Rename / Publish dialogs','done','done','ok',''],
+ ]],
+ ['Table', [
+  ['Action bar bottom centre','done','na','ok','Fold/Call/Raise were already centred; pre-game buttons moved to the bottom centre'],
+  ['Tournament table title dropdown','done','done','ok','Replaces the floating banner'],
+  ['Private SOL table pills + verify panel','done','done','ok','Needs a wallet + devnet: checked by rendering the parts only'],
+ ]],
+];
+const L={todo:'To do',wip:'Building',done:'Built',ok:'Verified',bad:'Issues found',na:'Not needed'};
+const pill=s=>`<span class="p ${s}">${L[s]}</span>`;
+let total=0,doneN=0,okN=0;
+document.getElementById('groups').innerHTML=G.map(([g,rows])=>`<section class="card" style="margin-bottom:16px"><h2>${g}</h2><div class="tw"><table><thead><tr><th>Screen</th><th>Desktop</th><th>Portrait</th><th>Agent check</th><th>Notes</th></tr></thead><tbody>${rows.map(([n,d,p,v,note])=>{[d,p].forEach(s=>{if(s!=='na'){total++;if(s==='done'||s==='ok')doneN++;}});if(v==='ok')okN++;return `<tr><td>${n}</td><td>${pill(d)}</td><td>${pill(p)}</td><td>${pill(v)}</td><td class="n">${note}</td></tr>`}).join('')}</tbody></table></div></section>`).join('');
+const screens=G.reduce((a,[,r])=>a+r.length,0);
+document.getElementById('strip').innerHTML=[
+ [screens,'screens and parts'],
+ [doneN+' / '+total,'layouts built',doneN/total],
+ [okN+' / '+screens,'checked by an agent',okN/screens],
+].map(([v,l,f])=>`<div class="stat"><b>${v}</b><span>${l}</span>${f!==undefined?`<div class="bar"><i style="width:${Math.round(f*100)}%"></i></div>`:''}</div>`).join('');
+</script>

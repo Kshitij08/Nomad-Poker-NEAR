@@ -1,0 +1,93 @@
+/* Redesign v2 pieces on the live table (tournament title dropdown, results, PER pills / verify panel).
+   Same colours and fonts as ui2.css, scoped under .v2t because the table is not inside the .v2 menu layer.
+   Sizes are CSS px (the table chrome is laid out in screen space), scaled down on narrow screens. */
+.v2t {
+  --v2t-line: #4b3fa6;
+  --v2t-mut: #b9b3e6;
+  font-family: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.25;
+  font-size: clamp(11px, min(1.05vw, 1.9vh), 16px);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+html[data-orient='portrait'] .v2t { font-size: clamp(11px, 3.3vw, 15px); }
+.v2t *, .v2t *::before, .v2t *::after { box-sizing: border-box; }
+.v2t [hidden] { display: none !important; }
+.v2t :where(button) { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+.v2t .v2t-hit { pointer-events: auto; }
+.v2t svg { flex: 0 0 auto; }
+
+.v2t-b {
+  pointer-events: auto; border-radius: 2em; padding: 0.55em 1.3em; font-weight: 800; color: #fff; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4em; font-size: 1.05em;
+}
+.v2t-b:hover { filter: brightness(1.08); }
+.v2t-b.w { width: 100%; }
+.v2t-b.gold { background: linear-gradient(#ffe36b, #f5a915); color: #3a2200; box-shadow: inset 0 -0.22em 0 rgba(150, 80, 0, 0.45), 0 0 0.8em rgba(255, 200, 60, 0.35); }
+.v2t-b.blue { background: linear-gradient(#58b6ff, #2266e0); box-shadow: inset 0 -0.22em 0 rgba(10, 40, 120, 0.5), 0 0 0.8em rgba(70, 170, 255, 0.35); }
+.v2t-b.ghost { background: rgba(255, 255, 255, 0.08); border: 0.1em solid #5a7cc8; }
+.v2t-b.sm { font-size: 0.85em; padding: 0.4em 0.9em; }
+.v2t-b.dis { opacity: 0.5; cursor: default; }
+
+.v2t-panel { background: #1c1450; border: 0.12em solid var(--v2t-line); border-radius: 1.2em; padding: 1em 1.2em; box-shadow: 0 1em 2em rgba(0, 0, 0, 0.5); pointer-events: auto; }
+.v2t-h { font-family: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif; font-weight: 400; font-size: 1.35em; letter-spacing: 0.02em; }
+.v2t-mut { color: var(--v2t-mut); }
+.v2t-kv { display: flex; justify-content: space-between; gap: 1em; padding: 0.35em 0; border-bottom: 0.08em solid rgba(124, 107, 255, 0.25); }
+.v2t-kv > span { color: var(--v2t-mut); }
+.v2t-kv > b { text-align: right; font-variant-numeric: tabular-nums; }
+.v2t-card { background: rgba(255, 255, 255, 0.05); border: 0.1em solid rgba(124, 107, 255, 0.45); border-radius: 0.9em; padding: 0.6em 0.8em; display: flex; align-items: center; gap: 0.6em; }
+.v2t-pill { display: inline-flex; align-items: center; gap: 0.3em; padding: 0.3em 0.8em; border-radius: 1em; background: rgba(14, 10, 48, 0.88); border: 0.1em solid var(--v2t-line); font-weight: 800; font-size: 0.92em; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.v2t-pill.ok { background: rgba(18, 61, 46, 0.92); color: #6af0a0; border-color: rgba(46, 227, 138, 0.5); }
+.v2t-pill.sol { background: linear-gradient(90deg, #9945ff, #14f195); border: 0; }
+.v2t-pill.gold { background: rgba(255, 194, 31, 0.2); color: #ffd54a; border-color: rgba(255, 194, 31, 0.55); }
+.v2t-dim { position: absolute; inset: 0; background: rgba(4, 2, 20, 0.62); pointer-events: auto; display: flex; align-items: center; justify-content: center; padding: 1em; }
+.v2t-dlg { width: min(34em, 100%); background: #1c1450; border: 0.15em solid #7c6bff; border-radius: 1.3em; padding: 1.3em 1.5em; box-shadow: 0 1em 3em rgba(0, 0, 0, 0.5); font-size: 1.05em; }
+.v2t-dlg .v2t-h { font-size: 1.6em; margin-bottom: 0.5em; }
+.v2t-dlg-b { line-height: 1.45; margin-bottom: 1.2em; white-space: pre-line; }
+.v2t-df { display: flex; justify-content: flex-end; gap: 0.8em; flex-wrap: wrap; }
+
+/* ---------------------------------------------------------------- tournament title + dropdown */
+.v2t-ttitle {
+  position: absolute; left: calc(1.2em + env(safe-area-inset-left, 0px)); top: calc(1em + env(safe-area-inset-top, 0px));
+  display: flex; flex-direction: column; align-items: flex-start; text-align: left; max-width: min(28em, 46vw);
+  background: rgba(12, 10, 48, 0.9); border: 0.12em solid #7c6bff; border-radius: 0.8em; padding: 0.35em 2.4em 0.35em 0.9em; pointer-events: auto;
+}
+.v2t-ttitle b { font-size: 1.1em; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2t-ttitle small { font-size: 0.78em; color: var(--v2t-mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.v2t-ttitle svg { position: absolute; right: 0.6em; top: 50%; transform: translateY(-50%); width: 1.1em; height: 1.1em; color: #d8d3ff; }
+.v2t-ttitle .v2t-fast { color: #f27350; font-weight: 900; }
+.v2t-tinfo { position: absolute; left: calc(1.2em + env(safe-area-inset-left, 0px)); top: calc(4.6em + env(safe-area-inset-top, 0px)); width: 27em; max-width: calc(100% - 2.4em); display: flex; flex-direction: column; gap: 0.35em; }
+.v2t-tinfo .v2t-b { margin-top: 0.5em; }
+.v2t-tables { width: min(36em, 100%); max-height: 80%; display: flex; flex-direction: column; gap: 0.6em; }
+.v2t-tables-list { display: flex; flex-direction: column; gap: 0.5em; overflow-y: auto; min-height: 0; flex: 0 1 auto; }
+.v2t-tables-list .v2t-card span { flex: 1; min-width: 0; }
+.v2t-row { display: flex; gap: 0.6em; }
+.v2t-row > .v2t-b { flex: 1; }
+/* Portrait: the top row is [LEAVE] … [⚙]; the title sits between them. */
+html[data-orient='portrait'] .v2t-ttitle { left: 32vw; top: calc(9px + env(safe-area-inset-top, 0px)); max-width: 53vw; padding-top: 0.25em; padding-bottom: 0.25em; }
+html[data-orient='portrait'] .v2t-tinfo { left: 0.6em; right: 0.6em; width: auto; max-width: none; top: calc(60px + env(safe-area-inset-top, 0px)); }
+html[data-orient='portrait'] .v2t-dim { align-items: flex-end; padding: 0; }
+html[data-orient='portrait'] .v2t-dlg, html[data-orient='portrait'] .v2t-tables { width: 100%; border-radius: 1.4em 1.4em 0 0; padding-bottom: calc(1.2em + env(safe-area-inset-bottom, 0px)); }
+
+/* ---------------------------------------------------------------- private SOL table (PER)
+   Landscape: the corner buttons start under the table HUD's settings gear (top-right). */
+.v2t-perbar { position: absolute; left: 22%; right: 22%; top: calc(1em + env(safe-area-inset-top, 0px)); display: flex; justify-content: center; gap: 0.5em; flex-wrap: wrap; }
+.v2t-perbar .v2t-status { min-width: 0; flex: 0 1 auto; }
+.v2t-perbtns { position: absolute; right: calc(1.2em + env(safe-area-inset-right, 0px)); top: calc(10.5em + env(safe-area-inset-top, 0px)); width: 11em; display: flex; flex-direction: column; gap: 0.5em; }
+.v2t-verify { position: absolute; right: calc(13.5em + env(safe-area-inset-right, 0px)); top: calc(10.5em + env(safe-area-inset-top, 0px)); width: 30em; max-width: calc(100% - 15em); max-height: 70%; display: flex; flex-direction: column; gap: 0.4em; }
+.v2t-verify-body { overflow-y: auto; white-space: pre-wrap; line-height: 1.35; font-size: 0.95em; min-height: 0; }
+.v2t-verify-body .ok { color: #6af0a0; }
+.v2t-verify-body .bad { color: #ff9a6a; }
+.v2t-verify-body .ft { font-size: 80%; color: var(--v2t-mut); }
+html[data-orient='portrait'] .v2t-perbar { left: 0.6em; right: 0.6em; top: calc(3.6em + env(safe-area-inset-top, 0px)); }
+html[data-orient='portrait'] .v2t-perbtns { top: calc(8.8em + env(safe-area-inset-top, 0px)); right: 0.6em; width: 9.5em; }
+html[data-orient='portrait'] .v2t-verify { left: 0.6em; right: 0.6em; width: auto; max-width: none; top: auto; bottom: calc(9em + env(safe-area-inset-bottom, 0px)); max-height: 55%; }
+
+/* Pre-game (landscape): the betting action row hides while Join table / Start game are up (net/chrome/netChrome.ts). */
+html.v2t-pregame:not([data-orient='portrait']) [data-hud='betting'] { visibility: hidden; }
+.v2t-card > .v2t-pill { flex: 0 0 auto; }

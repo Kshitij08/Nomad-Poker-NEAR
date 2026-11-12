@@ -50,6 +50,28 @@ export function friendly(e: unknown): string {
   return m;
 }
 
+/** ONCHAIN actions for screens outside the Unity tree (Redesign v2, src/ui2). Filled when the partial binds. */
+export interface OnchainApi {
+  toggleMode(): Promise<void>;
+  connectWallet(): Promise<boolean>;
+  refreshSol(): Promise<void>;
+  deposit(): Promise<void>;
+  withdraw(): Promise<void>;
+  copyWallet(): void;
+  /** "◎0.5 ($50.00)", "Not connected", plus a withdrawal note. */
+  balanceText(): string;
+  walletAddress(): string | null;
+  quickPlay(level: number, buyIn?: bigint): Promise<void>;
+  partyCreate(): Promise<void>;
+  partyJoin(code: string): Promise<void>;
+  openPrivateTables(): void;
+  tableStakes(level: number): { blinds: string; minBuyIn: string; buyIn: string; label: string };
+  stepBuyIn(level: number, dir: number): unknown;
+  setBuyInEnd(level: number, end: 'min' | 'max' | 'double'): unknown;
+  joinTable(level: number): unknown;
+}
+export const onchainApi: Partial<OnchainApi> = {};
+
 export function registerOnchainPartial(): void {
   registerNomadPartial((host, ctx) => new OnchainPartial(host, ctx).bind());
 }
@@ -117,6 +139,35 @@ class OnchainPartial {
       return true;
     });
     solTablesHandlers.push(() => this.openPrivateTables());
+    // Redesign v2 screens (src/ui2) call the same ONCHAIN actions without the Unity nodes.
+    Object.assign(onchainApi, {
+      toggleMode: () => this.toggleMode(),
+      connectWallet: () => this.connectWallet(),
+      refreshSol: () => this.refreshSol(),
+      deposit: () => this.depositHalfSol(),
+      withdraw: () => this.withdrawAll(),
+      copyWallet: () => this.copyWalletAddress(),
+      balanceText: () => {
+        const addr = this.solana.address;
+        const w = this.per?.withdrawal;
+        const withdrawing = this.phase === Phase.Ready ? ` · ${sol(w!.arrived)} ready to receive` : this.phase === Phase.OnTheWay ? ` · withdrawing ${sol(w!.amount)}` : '';
+        this.loadSolSoon();
+        return (!addr ? 'Not connected' : this.solBalance !== null ? `${sol(this.solBalance)} (${solExact(this.solBalance)})` : 'Tap to load balance') + withdrawing;
+      },
+      walletAddress: () => this.solana.address ?? null,
+      quickPlay: (level: number, buyIn?: bigint) => this.quickPlay(level, buyIn ?? 0n),
+      partyCreate: () => this.partyCreate(),
+      partyJoin: (code: string) => this.partyJoin(code),
+      openPrivateTables: () => this.openPrivateTables(),
+      tableStakes: (level: number) => {
+        const l = Math.min(Math.max(level, 0), STAKES.length - 1);
+        const st = STAKES[l]!;
+        return { blinds: `${sol(st.small)} / ${sol(st.big)}`, minBuyIn: sol(stakeMinBuyIn(l)), buyIn: sol(this.solBuyInFor(l)), label: st.label };
+      },
+      stepBuyIn: (level: number, dir: number) => tableSelectOnchain.step?.(host, level, dir),
+      setBuyInEnd: (level: number, end: 'min' | 'max' | 'double') => tableSelectOnchain.setEnd?.(host, level, end),
+      joinTable: (level: number) => tableSelectOnchain.join?.(host, level),
+    } satisfies OnchainApi);
     settingsAccountExtras.push((_h, rows) => {
       if (this.solana.isConnected)
         rows.push(['Disconnect wallet', () => {

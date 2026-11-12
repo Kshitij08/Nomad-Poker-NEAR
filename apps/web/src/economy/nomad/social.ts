@@ -221,36 +221,37 @@ function bindParty(host: NomadHost, ctx: AppContext): void {
     input.placeholder = 'Enter session code';
     input.maxLength = 12;
   }
-  host.bind(party, 'Center/Card_Create/Btn_Create', () => startParty(true));
-  host.bind(party, 'Center/Card_Join/Btn_Join', () => startParty(false));
+  host.bind(party, 'Center/Card_Create/Btn_Create', () => startParty(host, ctx, true, ''));
+  host.bind(party, 'Center/Card_Join/Btn_Join', () => startParty(host, ctx, false, input?.value ?? ''));
   // The pedestal above the cards belongs to an illustration that isn't drawn yet (a placeholder): hidden.
   host.setActive(party, 'Center/Pedestal', false);
+}
 
-  function startParty(create: boolean): void {
-    if (!signedIn(ctx)) {
-      host.show('Login');
-      return;
-    }
-    const n = net(ctx);
-    if (!n?.createParty || !n.joinParty) {
-      host.message('Party', 'Open the game from the menu scene to play.');
-      return;
-    }
-    const code = (input?.value ?? '').replace(/​/g, '').trim();
-    if (!create && code.length === 0) {
-      host.message('Join a party', 'Enter the session code your friend shared.');
-      return;
-    }
-    if (!host.onchain && !VirtualEconomy.wallet.canAfford(PrivateMinBuyIn)) {
-      host.message('Not enough Coins', `Private tables buy in for ${formatN0(PrivateMinBuyIn)}–${formatN0(PrivateMaxBuyIn)} Coins. You have ${formatN0(VirtualEconomy.wallet.coins)}.`);
-      return;
-    }
-    if (host.onchain && nomadSocialHooks.onchainParty) {
-      nomadSocialHooks.onchainParty(create, code);
-      return;
-    }
-    void connect(host, () => (create ? n.createParty!() : n.joinParty!(code.toUpperCase())), n);
+/** Party Create / Join (also the Redesign v2 Party screen). */
+export function startParty(host: NomadHost, ctx: AppContext, create: boolean, rawCode: string): void {
+  if (!signedIn(ctx)) {
+    host.show('Login');
+    return;
   }
+  const n = net(ctx);
+  if (!n?.createParty || !n.joinParty) {
+    host.message('Party', 'Open the game from the menu scene to play.');
+    return;
+  }
+  const code = rawCode.replace(/​/g, '').trim();
+  if (!create && code.length === 0) {
+    host.message('Join a party', 'Enter the session code your friend shared.');
+    return;
+  }
+  if (!host.onchain && !VirtualEconomy.wallet.canAfford(PrivateMinBuyIn)) {
+    host.message('Not enough Coins', `Private tables buy in for ${formatN0(PrivateMinBuyIn)}–${formatN0(PrivateMaxBuyIn)} Coins. You have ${formatN0(VirtualEconomy.wallet.coins)}.`);
+    return;
+  }
+  if (host.onchain && nomadSocialHooks.onchainParty) {
+    nomadSocialHooks.onchainParty(create, code);
+    return;
+  }
+  void connect(host, () => (create ? n.createParty!() : n.joinParty!(code.toUpperCase())), n);
 }
 
 // ------------------------------------------------------------------------------ Leaderboard (NomadUiHost.Tournaments.cs)
