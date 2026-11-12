@@ -194,10 +194,17 @@ export class V2 {
     }
     if (force || html !== this.lastHtml) {
       const scrolls = [...this.pageEl.querySelectorAll<HTMLElement>('.v2-scroll')].map((x) => x.scrollTop);
+      // Keyboard focus survives a re-render: re-focus the control with the same action (and value, else class).
+      const fa = document.activeElement as HTMLElement | null;
+      const focusSel = fa && this.pageEl.contains(fa) && fa.dataset.a ? `[data-a="${CSS.escape(fa.dataset.a)}"]${fa.dataset.v !== undefined ? `[data-v="${CSS.escape(fa.dataset.v)}"]` : ''}${fa.classList[0] ? `.${CSS.escape(fa.classList[0])}` : ''}` : null;
       this.pageEl.className = s.bare ? 'v2-bare' : 'v2-page';
       this.pageEl.dataset.screen = s.id;
       this.pageEl.innerHTML = html;
       this.pageEl.querySelectorAll<HTMLElement>('.v2-scroll').forEach((x, i) => (x.scrollTop = scrolls[i] ?? 0));
+      if (focusSel) {
+        const again = this.pageEl.querySelector<HTMLElement>(focusSel);
+        if (again && !(again as HTMLButtonElement).disabled) again.focus({ preventScroll: true });
+      }
       this.lastHtml = html;
     }
     const dlg = this.dialog ? this.dialogHtml(this.dialog) : '';

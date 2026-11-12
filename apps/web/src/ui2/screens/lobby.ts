@@ -1,13 +1,14 @@
 /** Lobby: Main menu (with the profile popover) and Settings. Atlas: Redesign v2 › Lobby. */
-import { quickPlay, openDailySpin, settingsAccountExtras } from '../../menu/screens/mainMenu';
+import { openDailySpin, settingsAccountExtras } from '../../menu/screens/mainMenu';
 import { PokerAudio } from '../../menu/audio';
 import { btn, esc, fmt, slider, out, act } from '../core';
-import { ico, card, chipArt } from '../icons';
+import { ico } from '../icons';
 import {
   ui, host, app, S, onchain, onchainApi, avatar, level, coinCap, modeSeg, setMode, playerName, accountExtras,
-  canSpin, prompt, run, openUrl, signedIn, needCoins,
+  canSpin, prompt, run, openUrl, signedIn,
 } from '../ctx';
 import type { ScreenDef } from '../install';
+import { roomStage, roomActions, syncRoom, installRoomGestures } from './rooms';
 import './lobby.css';
 
 const DISCORD_URL = 'https://discord.gg/vzsnDU5zyM';
@@ -64,6 +65,7 @@ const main: ScreenDef & { profile: boolean } = {
   profile: false,
   open() {
     this.profile = false;
+    syncRoom();
   },
   backFirst() {
     if (!this.profile) return false;
@@ -73,13 +75,9 @@ const main: ScreenDef & { profile: boolean } = {
   render() {
     const chain = onchain();
     const lv = level();
-    const tier = host().stakes.resolve();
-    const st0 = chain ? onchainApi.tableStakes?.(0) : null;
     const [wSub, wDot] = weeklySub();
     const miss = claimableMissions();
     const dot = '<i class="v2-dot"></i>';
-    const tile = (a: string, v: string, cls: string, title: string, sub: string, art: string) =>
-      `<button class="v2-mtile ${cls}"${act(a, v)}><div class="v2-mart">${art}</div><div class="v2-mlbl"><b>${title}</b><span>${esc(sub)}</span></div></button>`;
     const addr = onchainApi.walletAddress?.();
     return `
 <div class="v2-mm-top">
@@ -90,11 +88,7 @@ const main: ScreenDef & { profile: boolean } = {
   <div class="v2-rlogo" aria-label="Nomad Poker">NOMAD<br><span>POKER</span></div>
   <div class="v2-row v2-mm-right">${coinCap()}${modeSeg()}<button class="v2-ib"${act('settings')} aria-label="Settings">${ico('gear', 2.1)}</button></div>
 </div>
-<div class="v2-mtiles">
-  ${tile('unity', 'TableSelect_TownLobby', 't-gold', 'TABLES', chain ? 'SOL public & private tables' : 'Pick your stakes', `<div class="v2-mfelt"></div><div class="v2-mcards">${card('A♠') + card('K♥') + card('Q♦')}</div>${chipArt('#2f6bff', 1.4, 1.4)}${chipArt('#ff4f7a', 14.5, 10.5, 2.6, 30)}`)}
-  ${tile('quick', '', 't-blue', 'QUICK PLAY', chain ? `SOL ${(st0?.label ?? 'Micro').split(' ')[0]} · ${st0?.blinds ?? ''}` : `${tier.displayName} · ${tier.smallBlind} / ${tier.bigBlind} · instant seat`, `<div class="v2-mart-c">${ico('bolt', 9)}</div>${chipArt('#ffc21f', 2, 9.5, 2.8, -20)}${chipArt('#8048f5', 14, 1.6, 3)}`)}
-  ${tile('unity', 'PartyMenu', 't-violet', 'PARTY', chain ? 'Host a private SOL table' : 'Private table with friends', `<div class="v2-mart-c">${ico('friends', 8.5)}</div><div class="v2-mjack">${card('J♣')}</div>${chipArt('#22c468', 1.6, 2, 2.8)}`)}
-</div>
+${roomStage()}
 <div class="v2-rdock">
   <div class="v2-dg"><span class="v2-dgl">REWARDS</span>
     ${dockItem('spin', 'Daily Spin', canSpin(app()) ? 'Ready' : 'Tomorrow', 'spin', '', canSpin(app()) ? dot : '')}
@@ -113,11 +107,7 @@ ${this.profile ? profilePanel() : ''}`;
   },
   actions: {
     unity: (v) => unity(v),
-    quick: () => {
-      const h = host();
-      if (signedIn() && !onchain() && needCoins(h.stakes.resolve().minBuyIn, 'Quick Play')) return;
-      quickPlay(h);
-    },
+    ...roomActions,
     spin: () => openDailySpin(host()),
     weekly: () => host().actions.openWeeklyRewards?.(),
     settings: () => openSettings(),
@@ -224,6 +214,7 @@ export function settingsSlide(key: string, v: number): boolean {
 main.slide = (k, v) => void settingsSlide(k, v);
 
 export function lobbyScreens(): ScreenDef[] {
+  installRoomGestures();
   // The SOL capsule on any top bar opens the profile popover (wallet, balance, Deposit / Withdraw).
   ui().globalActions['profile-open'] = () => {
     if (ui().currentId !== 'main') ui().show('main');

@@ -1,0 +1,73 @@
+/* Main menu rooms: the rooms either side peek in, the current room is a big card whose bottom bar carries the room's
+   info and its two actions (Sit down, With friends); dots under the card. The carousel wraps round. */
+.v2-rooms { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 0.6em; }
+.v2-rm-stage { flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; gap: 1.4em; touch-action: pan-y; }
+.v2-rm-card {
+  position: relative; flex: 0 1 56em; height: 100%; max-height: 30em; border-radius: 1.6em; overflow: hidden;
+  border: 0.18em solid rgba(255, 255, 255, 0.4); box-shadow: 0 0.6em 1.6em rgba(0, 0, 0, 0.4), inset 0 0.2em 0 rgba(255, 255, 255, 0.25);
+  display: flex; align-items: flex-end;
+}
+/* Entrance only when the room changes (class set for one render). */
+.v2-rm-card.in { animation: v2-rm-in 0.22s ease-out; }
+@keyframes v2-rm-in { from { opacity: 0.4; transform: scale(0.97); } }
+@media (prefers-reduced-motion: reduce) { .v2-rm-card.in { animation: none; } }
+.v2-rm-card.locked { filter: saturate(0.7) brightness(0.85); }
+
+/* Bottom bar: info left, actions right. */
+.v2-rm-bar {
+  position: relative; width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 1.2em;
+  padding: 3.5em 1.4em 1.2em; background: linear-gradient(180deg, rgba(10, 6, 40, 0), rgba(10, 6, 40, 0.8) 45%);
+}
+.v2-rm-info { display: flex; flex-direction: column; gap: 0.15em; min-width: 0; }
+.v2-rm-name { font-family: var(--v2-display); font-weight: 400; font-size: 2.8em; letter-spacing: 0.03em; line-height: 1; text-shadow: 0 0.08em 0 rgba(0, 0, 0, 0.4); }
+.v2-rm-stake { font-size: 1.2em; font-weight: 900; }
+.v2-rm-buy { font-size: 0.95em; color: #d8d3ff; }
+.v2-rm-actions { display: flex; align-items: center; gap: 0.7em; flex: 0 0 auto; }
+.v2-rm-sit { min-width: 11em; }
+.v2-rm-friends { padding: 0.75em 1.2em; }
+.v2-rm-arr { font-size: 1.2em; line-height: 0; }
+
+.v2-rm-lock { position: absolute; top: 1em; left: 1em; display: inline-flex; align-items: center; gap: 0.3em; background: rgba(10, 6, 40, 0.8); border: 0.1em solid #4b3fa6; border-radius: 1em; padding: 0.25em 0.8em; font-weight: 900; }
+/* Arrows centred on the card's height. */
+.v2-rm-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 1; width: 3em; height: 3em; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 6, 40, 0.7); border: 0.12em solid rgba(255, 255, 255, 0.45);
+}
+.v2-rm-arrow:hover { background: rgba(10, 6, 40, 0.9); }
+.v2-rm-arrow.prev { left: 0.9em; }
+.v2-rm-arrow.next { right: 0.9em; }
+
+.v2-rm-peek {
+  flex: 0 1 14em; min-width: 6em; height: 78%; max-height: 22em; border-radius: 1.3em; overflow: hidden; opacity: 0.5; filter: saturate(0.6);
+  border: 0.12em solid rgba(255, 255, 255, 0.25); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 0.8em; transition: opacity 0.15s;
+}
+.v2-rm-peek:hover { opacity: 0.8; }
+.v2-rm-peek b { font-family: var(--v2-display); font-weight: 400; font-size: 1.4em; text-shadow: 0 0.08em 0 rgba(0, 0, 0, 0.5); }
+
+.v2-rm-dots { display: flex; }
+/* The dot is a larger transparent hit box; the pip is drawn inside it. */
+.v2-rm-dot { width: 1.8em; height: 1.8em; display: flex; align-items: center; justify-content: center; }
+.v2-rm-dot::before { content: ''; width: 0.8em; height: 0.8em; border-radius: 1em; background: rgba(255, 255, 255, 0.3); transition: width 0.15s; }
+.v2-rm-dot.on::before { background: var(--v2-gold); width: 2em; }
+.v2-rm-dot.on { width: 2.8em; }
+
+/* ---------------------------------------------------------------- portrait */
+html[data-orient='portrait'] .v2-rm-stage { gap: 0; }
+html[data-orient='portrait'] .v2-rm-peek { display: none; }
+html[data-orient='portrait'] .v2-rm-card { flex: 1 1 auto; max-height: none; border-radius: 1.3em; }
+html[data-orient='portrait'] .v2-rm-bar { flex-direction: column; align-items: stretch; gap: 0.8em; padding: 4em 1em 1em; }
+html[data-orient='portrait'] .v2-rm-name { font-size: 2.3em; }
+html[data-orient='portrait'] .v2-rm-actions { display: grid; grid-template-columns: 1fr auto; gap: 0.5em; }
+html[data-orient='portrait'] .v2-rm-sit { min-width: 0; }
+html[data-orient='portrait'] .v2-rm-friends { align-self: stretch; }
+html[data-orient='portrait'] .v2-rm-arrow { width: 3.4em; height: 3.4em; top: 38%; }
+html[data-orient='portrait'] .v2-rm-dot { width: 3.1em; height: 3.1em; }
+html[data-orient='portrait'] .v2-rm-dot.on { width: 3.6em; }
+html[data-orient='portrait'] .v2-rm-dot::before { width: 1em; height: 1em; }
+html[data-orient='portrait'] .v2-rm-dot.on::before { width: 2.2em; }
+
+/* Touch tablets (e.g. iPad landscape) get the larger targets too. */
+@media (pointer: coarse) {
+  .v2-rm-arrow { width: 3.4em; height: 3.4em; }
+  .v2-rm-dot { width: 2.6em; height: 2.6em; }
+}

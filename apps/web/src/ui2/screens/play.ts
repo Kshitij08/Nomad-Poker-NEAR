@@ -14,7 +14,7 @@ import type { ScreenDef } from '../install';
 import './play.css';
 
 /** The five rooms (Unity TableSelect cards), cheapest first; index = SOL stake level. */
-const ROOMS: { theme: Theme; name: string; color: string }[] = [
+export const ROOMS: { theme: Theme; name: string; color: string }[] = [
   { theme: 'Default', name: 'Solana', color: '#9945ff' },
   { theme: 'Forest', name: 'Forest', color: '#2e8b57' },
   { theme: 'Town', name: 'Town', color: '#d08a3a' },
@@ -33,7 +33,7 @@ function roomArt(theme: Theme): string | null {
   }
 }
 
-const bgArt = (theme: Theme, color: string): string => {
+export const bgArt = (theme: Theme, color: string): string => {
   const url = roomArt(theme);
   return `background:${url ? `linear-gradient(180deg,rgba(26,15,74,0) 40%,rgba(26,15,74,.85)),url('${esc(url)}') center/cover no-repeat,` : ''}linear-gradient(160deg,${color},#1a0f4a)`;
 };
@@ -160,10 +160,10 @@ const tables: ScreenDef & {
   },
 };
 
-const levelOf = (theme: Theme): number => Math.max(0, ROOMS.findIndex((r) => r.theme === theme));
+export const levelOf = (theme: Theme): number => Math.max(0, ROOMS.findIndex((r) => r.theme === theme));
 
 /** The chosen stake if it plays in this room, else the room's entry stake (NomadUiHost SelectedTableTier). */
-function selectedTier(theme: Theme): StakeTier {
+export function selectedTier(theme: Theme): StakeTier {
   const stakes = host().stakes;
   const chosen = stakes.selectedMinBuyIn;
   const tier = chosen > 0 ? StakeCatalog.get(chosen) : stakes.resolve();
