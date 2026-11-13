@@ -131,7 +131,15 @@ export class SolanaService {
     const list = await this.waitForWallets();
     let pick: BrowserWallet | null = walletName ? (list.find((w) => w.name === walletName) ?? null) : null;
     if (!pick) {
-      if (list.length === 0) throw new Error('No Solana wallet found in this browser. Install Phantom (or another Solana wallet) and reload.');
+      if (list.length === 0) {
+        // The picker shows the empty state (install links); the error is then marked as already shown.
+        const err = new Error('No Solana wallet found in this browser. Install Phantom or Solflare, then reload.') as Error & { shown?: boolean };
+        if (this.picker) {
+          await this.picker([]);
+          err.shown = true;
+        }
+        throw err;
+      }
       pick = this.picker ? await this.picker(list) : list.length === 1 ? list[0]! : null;
       if (!pick) return false; // closed by the player: a cancel, not a failure
     }

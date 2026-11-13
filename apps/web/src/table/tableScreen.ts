@@ -1,5 +1,5 @@
 import type { AppContext, Screen } from '../app/app';
-import { PokerGameController, TEST_SCENE_TABLE_SETTINGS, type AudioPort, type TableSettings } from '@nomad/engine';
+import { HUMAN_SEAT, PokerGameController, TEST_SCENE_TABLE_SETTINGS, type AudioPort, type TableSettings } from '@nomad/engine';
 import type { TableStage } from './tableStage';
 import { tickerWait, type TableView } from './tableView';
 
@@ -25,6 +25,15 @@ export interface TableSessionHost {
   readonly ctx: AppContext;
   /** Ends the session and returns to `to` (default: the screen registered as 'menu', else stays). */
   leave(to?: string): void;
+  /** Starts the same table again (same params): the offline Rebuy / Play again. */
+  again(): void;
+}
+
+/** The message box the menu installs (host.dialogs, rendered as a v2 dialog), if any. */
+type MessageBox = (title: string, body: string, ok: string | null, onOk?: () => void, cancel?: string | null, onCancel?: () => void) => void;
+function messageBox(ctx: AppContext): MessageBox | null {
+  const nomad = (ctx.services as unknown as { nomad?: { message?: MessageBox } }).nomad;
+  return nomad?.message ? nomad.message.bind(nomad) : null;
 }
 
 export type TableSessionFactory = (host: TableSessionHost) => TableSession;
@@ -43,9 +52,50 @@ export function offlineSession(settings?: Partial<TableSettings>): TableSessionF
   return (host) => {
     const controller = new PokerGameController({ ...TEST_SCENE_TABLE_SETTINGS, ...settings }, host.view, host.audio, { wait: tickerWait });
     (window as unknown as Record<string, unknown>).__controller = controller;
+    // Redesign v2: when the hand that busts you (or wins you the table) has been shown, say so and offer what's next,
+    // instead of leaving the action row up with nothing to act on. The offline table is free: Rebuy starts it again.
+    let told = false;
+    let timer = 0;
+    const tell = (won: boolean): void => {
+      if (told || controller.stopped) return;
+      told = true;
+      host.view.betting?.hide();
+      const box = messageBox(host.ctx);
+      timer = window.setTimeout(() => {
+        if (controller.stopped) return;
+        host.view.betting?.hide(); // the last hand's presenter may have re-shown it
+        document.documentElement.classList.add('v2t-tableover');
+        if (!box) return host.leave();
+        if (won) box('You won the table!', 'Every bot is out of chips. Play another table, or head back to the lobby.', 'Play again', () => host.again(), 'Back to lobby', () => host.leave());
+        else box("You're out", 'Your stack is gone. Rebuy to keep playing at this table, or head back to the lobby.', 'Rebuy', () => host.again(), 'Back to lobby', () => host.leave());
+      }, 1800);
+    };
+    const human = () => controller.engine.table.seats[HUMAN_SEAT];
+    const p = controller.presenter as unknown as { onHandEnded(e: unknown): void; onGameOver(e: unknown): void };
+    const handEnded = p.onHandEnded.bind(p);
+    p.onHandEnded = (e) => {
+      handEnded(e);
+      const me = human();
+      if (me && me.stack <= 0) tell(false);
+    };
+    const gameOver = p.onGameOver.bind(p);
+    p.onGameOver = (e) => {
+      gameOver(e);
+      const me = human();
+      tell(!(me && me.stack <= 0));
+    };
     return {
-      start: () => void controller.start(),
-      stop: () => controller.stop(),
+      start: () =>
+        void controller.start().then(() => {
+          // The loop ends without a GameOver when only you are left funded.
+          const me = human();
+          if (!controller.stopped && me && me.stack > 0 && controller.engine.countFundedPlayers() < 2) tell(true);
+        }),
+      stop: () => {
+        window.clearTimeout(timer);
+        document.documentElement.classList.remove('v2t-tableover');
+        controller.stop();
+      },
     };
   };
 }
@@ -77,6 +127,7 @@ export class TableScreen implements Screen {
       stage: this.stage,
       ctx: this.ctx,
       leave: (to) => void this.leave(to),
+      again: () => void this.ctx.router.navigate('table', this.params),
     };
     for (const c of chrome) this.disposers.push(c(host, root));
     const factory = this.params.session ?? offlineSession(this.params.settings);

@@ -7,7 +7,7 @@
 .v2-sh-side { flex: 1; gap: 1.2em; }
 
 .v2-scard {
-  position: relative; overflow: hidden; border-radius: 1.2em; background: linear-gradient(170deg, #3a2490, #1c1450); border: 0.15em solid #7c6bff;
+  position: relative; overflow: hidden; border-radius: var(--v2-r-lg); background: linear-gradient(170deg, #3a2490, var(--v2-dlg)); border: 0.15em solid var(--v2-accent);
   padding: 1em; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.35em; box-shadow: 0 0.5em 1.2em rgba(0, 0, 0, 0.35); min-width: 0;
 }
 .v2-scard > * { position: relative; }
@@ -27,10 +27,10 @@
 
 .v2-sh-rel { position: relative; display: inline-flex; }
 .v2-sh-bolt { position: absolute; right: -1em; top: -0.6em; }
-.v2-sh-theme { width: 12em; height: 7.5em; border-radius: 0.9em; background: linear-gradient(160deg, var(--c), #1a0f4a); position: relative; box-shadow: 0 0.4em 1em rgba(0, 0, 0, 0.4); }
-.v2-sh-theme > i { position: absolute; left: 2em; top: 2.4em; width: 8em; height: 3.8em; border-radius: 2em; background: radial-gradient(#4a2db8, #2a1a6e); border: 0.3em solid #0e0830; }
+.v2-sh-theme { width: 12em; height: 7.5em; border-radius: var(--v2-r-md); background: linear-gradient(160deg, var(--c), #1a0f4a); position: relative; box-shadow: 0 0.4em 1em rgba(0, 0, 0, 0.4); }
+.v2-sh-theme > i { position: absolute; left: 2em; top: 2.4em; width: 8em; height: 3.8em; border-radius: var(--v2-r-pill); background: radial-gradient(#4a2db8, #2a1a6e); border: 0.3em solid #0e0830; }
 .v2-sh-skins { position: relative; width: 9em; height: 8em; }
-.v2-sh-skins > i { position: absolute; top: 0.5em; width: 4.4em; height: 6.2em; border-radius: 0.5em; background: repeating-linear-gradient(45deg, var(--c) 0 0.4em, #1a0f4a 0.4em 0.8em); border: 0.25em solid #fff; box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.4); }
+.v2-sh-skins > i { position: absolute; top: 0.5em; width: 4.4em; height: 6.2em; border-radius: var(--v2-r-sm); background: repeating-linear-gradient(45deg, var(--c) 0 0.4em, #1a0f4a 0.4em 0.8em); border: 0.25em solid #fff; box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.4); }
 .v2-sh-mini { font-size: 0.8em; display: flex; flex: 0 0 auto; }
 
 /* ---------------------------------------------------------------- portrait */
@@ -42,7 +42,7 @@ html[data-orient='portrait'] .v2-sh-grid { flex: 0 0 auto; grid-template-columns
 html[data-orient='portrait'] .v2-scard { padding: 0.8em 0.6em; }
 html[data-orient='portrait'] .v2-sart { min-height: 6.5em; font-size: 0.7em; }
 html[data-orient='portrait'] .v2-sname { font-size: 1em; }
-html[data-orient='portrait'] .v2-scard small { font-size: 0.8em; }
+html[data-orient='portrait'] .v2-scard small { font-size: max(0.8em, 11px); }
 html[data-orient='portrait'] .v2-scard .v2-b { font-size: 0.9em; padding: 0.5em 0.6em; }
 html[data-orient='portrait'] .v2-sh-feat { flex-direction: column; flex: 0 0 auto; gap: 0.7em; }
 html[data-orient='portrait'] .v2-sfeat-in { flex-direction: column; gap: 0.8em; }

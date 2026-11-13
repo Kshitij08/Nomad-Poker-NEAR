@@ -32,6 +32,25 @@ const lerpColor = (a: RGBA, b: RGBA, t: number): RGBA => ({
   a: a.a + (b.a - a.a) * t,
 });
 
+/** Redesign v2 fonts (docs/ui-style-guide.md): Nunito for labels, Lilita One for money. */
+const V2_UI = "'Nunito', system-ui, sans-serif";
+const V2_DISPLAY = "'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif";
+
+/** Status chip kind from SeatView's action text ("Fold", "Call 300", "Raise 1,200", "Busted"…). */
+export function statusKind(text: string, stack: number): '' | 'fold' | 'call' | 'raise' | 'allin' | 'info' {
+  const t = (text ?? '').trim();
+  if (!t) return '';
+  if (/^fold/i.test(t)) return 'fold';
+  if (/all.?in/i.test(t)) return 'allin';
+  if (/^(bet|raise|call|check)/i.test(t) && stack <= 0) return 'allin';
+  if (/^(check|call)/i.test(t)) return 'call';
+  if (/^(bet|raise)/i.test(t)) return 'raise';
+  return 'info';
+}
+
+const HAND_SCALE = 1.35;
+const sentenceCase = (s: string) => (s ? s[0] + s.slice(1).toLowerCase() : s);
+
 /** Nodes SeatView never shows at the offline table (voice mic, seat number, remove-player overlay). */
 const SKIP = new Set(['Mic', 'Circle_Num', 'Remove_Player']);
 
@@ -59,20 +78,22 @@ export class SeatHudView implements SeatHud {
   private readonly bottomBar: UNode;
   private readonly nameBar: UNode;
 
-  private readonly foldedBrightness: number;
   private folded = false;
   private timerTween: Tween | null = null;
   private highlightTween: Tween | null = null;
   private strengthActive = false;
+  private stack = 0;
+  private statusRaw = '';
+  private prevStack = 0;
   private strengthHole: [Card, Card] | null = null;
 
   constructor(data: CanvasData, parent: HTMLElement) {
     const sv = HUD_DATA.tableView.seatViews.find((s) => s.canvas === data.name);
     this.mirrored = !!sv?.mirrored;
-    this.foldedBrightness = Number((sv?.fields as Record<string, string> | undefined)?.foldedBrightness ?? 0.6);
+    // SeatView.foldedBrightness (Unity dims folded seats) is replaced by the v2 .v2-fold opacity.
 
     this.root = buildNode(data.root, { skip: (n) => SKIP.has(n.name) });
-    this.root.el.classList.add('u-seat');
+    this.root.el.classList.add('u-seat', 'v2-seat');
     parent.append(this.root.el);
     const req = (p: string) => {
       const n = this.root.find(p);
@@ -105,6 +126,9 @@ export class SeatHudView implements SeatHud {
     this.graphics.add(this.highlight, bgIndex);
     this.highlight.setActive(false);
 
+    this.applyV2Type();
+    this.timer.el.classList.add('v2-timer');
+
     // Animators that play on enable.
     animatorOnEnable(this.root, uiClip(this.mirrored ? 'Name_Graphics_In_Right' : 'Name_Graphics_In'));
     animatorOnEnable(this.bottomBar, uiClip('Botton_name_Bar'));
@@ -134,20 +158,35 @@ export class SeatHudView implements SeatHud {
   }
 
   setStack(stack: number): void {
+    this.prevStack = this.stack;
+    this.stack = stack;
     this.stackText.setText(TableMoney.chips(stack));
+    this.paintStatus();
   }
 
   /** betText is not wired in Test.unity. */
   setBet(): void {}
 
   setStatus(text: string): void {
-    this.statusText.setText(text ?? '');
+    this.statusRaw = text ?? '';
+    this.paintStatus();
+  }
+
+  /** v2 status chip: hidden when empty; fold grey, check/call blue, bet/raise gold, all-in hot (named "All-in"). */
+  private paintStatus(): void {
+    const kind = statusKind(this.statusRaw, this.stack);
+    this.bottomBar.el.dataset.st = kind;
+    const shown = kind === 'allin' && !/all.?in/i.test(this.statusRaw) ? `All-in ${this.statusRaw.replace(/^\D+/, '')}`.trim() : this.statusRaw;
+    this.statusText.setText(shown);
   }
 
   setRole(role: SeatRole): void {
     this.dealerBadge.setActive(role !== SeatRole.None);
     if (role === SeatRole.None) return;
-    this.dealerLabel.setText(seatRoleLabel(role));
+    // v2: a white "D" disc, violet "SB" / "BB" pills (seatRoleLabel's "S" / "B" read as letters, not blinds).
+    const label = role === SeatRole.SmallBlind ? 'SB' : role === SeatRole.BigBlind ? 'BB' : seatRoleLabel(role);
+    this.dealerBadge.el.dataset.role = label;
+    this.dealerLabel.setText(label);
     this.dealerLabel.setTextColor(ROLE_INK);
   }
 
@@ -158,12 +197,27 @@ export class SeatHudView implements SeatHud {
   setFolded(folded: boolean): void {
     if (folded === this.folded) return;
     this.folded = folded;
-    this.root.foldBrightness = folded ? this.foldedBrightness : null;
+    // v2: one dim (v2hud.css .v2-fold opacity); the Unity fold brightness on top made avatars nearly black.
+    this.root.el.classList.toggle('v2-fold', folded);
     this.root.layout();
   }
 
   setWinner(winner: boolean): void {
-    this.winner.setActive(winner);
+    // v2: the gold plate glow and the "+amount" float are the winner feedback (no Unity Win_Medal ring / crown).
+    this.winner.setActive(false);
+    this.root.el.classList.toggle('v2-win', winner);
+    // TableView.showPotAward sets the new stack, then the winner: the difference is what this pot paid.
+    if (winner && this.stack > this.prevStack) this.floatWin(this.stack - this.prevStack);
+    this.prevStack = this.stack;
+  }
+
+  /** "+20,250" rising from the plate (v2 winner feedback). */
+  private floatWin(amount: number): void {
+    const el = document.createElement('div');
+    el.className = 'v2-winfloat';
+    el.textContent = `+${TableMoney.chips(amount)}`;
+    this.nameBar.el.append(el);
+    window.setTimeout(() => el.remove(), 2200);
   }
 
   resetForNewHand(): void {
@@ -198,7 +252,8 @@ export class SeatHudView implements SeatHud {
   }
 
   setActiveTurn(active: boolean): void {
-    this.highlight.setActive(active);
+    // v2: the plate glows gold instead of the particle-ring stand-in (VFX_Turn_Highlight stays built, unused).
+    this.root.el.classList.toggle('v2-turn', active);
   }
 
   /**
@@ -214,12 +269,20 @@ export class SeatHudView implements SeatHud {
     const left = Math.max(0.01, remaining);
     const img = this.timer.image!;
     img.fillAmount = left / total;
+    // v2: a ring round the avatar (hud/v2hud.css), green → gold → red, pulsing for the last 5 s; the face stays clear.
+    const paint = (fill: number, secondsLeft: number) => {
+      const el = this.timer.el;
+      el.style.setProperty('--p', fill.toFixed(4));
+      el.dataset.tone = fill > 0.5 ? 'ok' : fill > 0.2 ? 'warn' : 'late';
+      el.classList.toggle('v2-pulse', secondsLeft <= 5);
+    };
+    paint(left / total, left);
     this.timer.setActive(true);
     this.timerTween = ticker.to(
       left,
       (p) => {
         img.fillAmount = (left * (1 - p)) / total;
-        this.timer.render();
+        paint(img.fillAmount, left * (1 - p));
       },
       Ease.Linear,
     );
@@ -244,6 +307,33 @@ export class SeatHudView implements SeatHud {
     this.canvas.shaker.start(durationSeconds, amplitudeDegrees, frequency, axis);
   }
 
+  // ---------------------------------------------------------------- v2 type
+
+  /** Fonts and sizes of the v2 seat plate (positions stay Unity's). Colours are in hud/v2hud.css. */
+  private applyV2Type(): void {
+    const set = (n: UNode, family: string, size: number, bold = true, minRatio = 0.6) => {
+      const t = n.text;
+      if (!t) return;
+      t.family = family;
+      t.bold = bold;
+      t.fontSize = size;
+      t.max = Math.max(t.max, size);
+      // Auto-size may shrink a long name, but never below minRatio of the v2 size (≥ 11 px on a phone).
+      t.min = size * minRatio;
+      n.render();
+    };
+    // Canvas units: ≈0.136 px/unit at 1280×720, ≈0.123 on a 390 phone → names ≈12.3 px, money ≥17 px there.
+    set(this.nameText, V2_UI, 104, true, 0.9);
+    set(this.stackText, V2_DISPLAY, 140, false);
+    set(this.statusText, V2_UI, 96);
+    set(this.dealerLabel, V2_DISPLAY, 96, false);
+    const bot = this.botIndicator.find('Text (TMP) (1)');
+    if (bot) set(bot, V2_UI, 96);
+    set(this.handCategory, V2_UI, 76);
+    set(this.handPercent, V2_UI, 76);
+    if (this.handCategory.text) this.handCategory.text.upper = false;
+  }
+
   // ---------------------------------------------------------------- hand strength (SeatView.ApplyHandStrength)
 
   private applyHandStrength(community: Card[]): void {
@@ -253,16 +343,17 @@ export class SeatHudView implements SeatHud {
     const strength = HandStrength.estimate(hole, board);
     const percent = Math.min(100, Math.max(0, roundHalfEven(Math.fround(strength * 100))));
 
-    this.hand.scale = [1, 1];
+    // v2: the meter draws 1.35× so its label stays ≥ 11 px on a phone (its text box can't grow inside the art).
+    this.hand.scale = [HAND_SCALE, HAND_SCALE];
     this.hand.setAsLastSibling();
     // ParkStrengthBesideNameplate: under the name plate / status chip cluster, aligned with the status chip.
     const nameH = this.nameBar.h > 1 ? this.nameBar.h : this.nameBar.sizeDelta[1];
     const barH = this.bottomBar.h > 1 ? this.bottomBar.h : this.bottomBar.sizeDelta[1];
-    const handH = this.hand.sizeDelta[1] > 1 ? this.hand.sizeDelta[1] : 148;
+    const handH = (this.hand.sizeDelta[1] > 1 ? this.hand.sizeDelta[1] : 148) * HAND_SCALE;
     const clusterBottom = Math.min(this.nameBar.anchoredPosition[1] - nameH * 0.5, this.bottomBar.anchoredPosition[1] - barH * 0.5);
     this.hand.anchoredPosition = [this.bottomBar.anchoredPosition[0], clusterBottom - handH * 0.5 - 8];
     this.handPercent.setText(`${percent}%`);
-    this.handCategory.setText(strengthCategory(hole, board));
+    this.handCategory.setText(sentenceCase(strengthCategory(hole, board)));
 
     // LayoutStrengthFill: width max(12, track·s) grown from the left; colour red → orange → green.
     const trackW = this.handTrack.sizeDelta[0];

@@ -84,8 +84,8 @@ export class TournamentTableOverlay {
     this.tablesBody = v2tEl('span', 'v2t-mut', tables);
     this.tablesList = v2tEl('div', 'v2t-tables-list', tables);
     const tRow = v2tEl('div', 'v2t-row', tables);
-    v2tButton(tRow, 'Close', 'ghost', () => this.dismissTables());
-    v2tButton(tRow, 'Back to lobby', 'blue', () => this.leave());
+    v2tButton(tRow, 'Back to lobby', 'ghost', () => this.leave());
+    v2tButton(tRow, 'Close', 'gold', () => this.dismissTables());
     this.tablesDim.addEventListener('click', (e) => {
       if (e.target === this.tablesDim) this.dismissTables();
     });

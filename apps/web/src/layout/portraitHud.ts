@@ -25,14 +25,19 @@ const safeTopUnits = (root: UNode) => safeArea().top / Math.max(0.05, root.rende
 export function portraitBettingRects(root: UNode): PortraitRects {
   return new PortraitRects(root, () => {
     const y = PORTRAIT_ROW.y + safeBottomUnits(root);
-    const step = PORTRAIT_ROW.w + PORTRAIT_ROW.gap;
-    const btn = (x: number): RectRule => ({ anchor: [0.5, 0], pivot: [0.5, 0.5], pos: [x, y], size: [PORTRAIT_ROW.w, PORTRAIT_ROW.h] });
+    // v2: a side gutter (plus the side safe areas) so the row doesn't touch the screen edges.
+    const ins = safeArea();
+    const side = 14 + Math.max(ins.left, ins.right) / Math.max(0.05, root.renderScale);
+    const w = Math.min(PORTRAIT_ROW.w, (root.sizeDelta[0] - 2 * side - 2 * PORTRAIT_ROW.gap) / 3);
+    const step = w + PORTRAIT_ROW.gap;
+    const btn = (x: number): RectRule => ({ anchor: [0.5, 0], pivot: [0.5, 0.5], pos: [x, y], size: [w, PORTRAIT_ROW.h] });
     const panelH = 316;
     const panelY = y - PORTRAIT_ROW.h / 2 + panelH / 2 - 6;
     const preset = (i: number): RectRule => ({ pos: [(i - 2) * 132, 100], size: [122, 54] });
     return {
-      Call: btn(-step),
-      'Check/fold': btn(0),
+      // Redesign v2 order: Fold · Check/Call · Bet/Raise (Fold no longer in the middle under the thumb).
+      'Check/fold': btn(-step),
+      Call: btn(0),
       'Callany or raise': btn(step),
       Confirm_Panel: { anchor: [0.5, 0], pivot: [0.5, 0.5], pos: [0, panelY], size: [700, panelH] },
       'Confirm_Panel/close': { pos: [322, 130], size: [52, 52] },

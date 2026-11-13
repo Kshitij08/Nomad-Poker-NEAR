@@ -8,8 +8,10 @@ import type { AppContext } from '../app/app';
 // Base v2 styles first: the screens' own stylesheets (imported by the screen modules below) override them.
 import './ui2.css';
 import type { NomadHost } from '../menu/host';
+import { weeklyAutoPrompt } from '../menu/screens/mainMenu';
 import { V2, type V2Screen } from './core';
 import { installPortraitLock } from './portraitLock';
+import { takeOverDialogs } from './globalDialogs';
 import { setUi } from './ctx';
 import { lobbyScreens } from './screens/lobby';
 import { playScreens } from './screens/play';
@@ -18,6 +20,8 @@ import { socialScreens } from './screens/social';
 import { shopScreens } from './screens/shop';
 import { tournamentScreens } from './screens/tournaments';
 import { agentScreens } from './screens/agents';
+import { entryScreens, installEntryOverlays } from './screens/entry';
+import { solScreens, installSolOverlays } from './screens/sol';
 
 declare module '../app/app' {
   interface Services {
@@ -38,6 +42,8 @@ export function install(ctx: AppContext): void {
   // ?ui=unity keeps the old menus (comparison and fallback).
   if (typeof location !== 'undefined' && /[?&]ui=unity\b/.test(location.search)) return;
 
+  // Every host dialog (errors, confirms, busy notes, table Settings / Leave) renders as a v2 dialog.
+  takeOverDialogs(host.dialogs);
   const ui = new V2();
   ctx.services.ui2 = ui;
   setUi(ui, ctx, host);
@@ -51,6 +57,8 @@ export function install(ctx: AppContext): void {
     ...shopScreens(),
     ...tournamentScreens(),
     ...agentScreens(),
+    ...entryScreens(),
+    ...solScreens(),
   ];
   const byUnity = new Map<string, string>();
   for (const d of defs) {
@@ -58,6 +66,8 @@ export function install(ctx: AppContext): void {
     for (const u of d.replaces ?? []) byUnity.set(u, d.id);
   }
   wire(ctx, host, ui, byUnity);
+  installEntryOverlays(ctx, host, ui);
+  installSolOverlays(ctx, host, ui);
 }
 
 function wire(ctx: AppContext, host: NomadHost, ui: V2, byUnity: Map<string, string>): void {
@@ -112,6 +122,8 @@ function wire(ctx: AppContext, host: NomadHost, ui: V2, byUnity: Map<string, str
     ui.el.remove();
     origDetach();
   };
+  // No pop-ups before the first hand: the weekly reward waits behind the dock's dot.
+  weeklyAutoPrompt.enabled = false;
   // Weekly rewards and missions open as v2 pages.
   host.actions.openWeeklyRewards = () => host.show('__v2:weekly');
   byUnity.set('__v2:weekly', 'weekly');

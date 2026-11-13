@@ -110,7 +110,7 @@ export class ReplayDialogs {
     const p = this.open(`Session ${this.sessionLabel} · hands`, 1700, 940);
     const net = AgentHandReplayText.signed(s.NetPnl);
     line(p, `${AgentHandReplayText.coins(s.HandsPlayed)} hands · ${duration(s.RuntimeSeconds)} · ${AgentHandReplayText.coins(s.StartingBankroll)} to ${AgentHandReplayText.coins(s.EndingStack)} Coins · ` +
-      `<span style="color:${s.NetPnl >= 0 ? '#66E67F' : '#F27373'}">${net}</span>  <small>· tap a hand to watch it</small>`, 26, 0, 335, 1560, 44, COLORS.soft, 'center');
+      `<span style="color:${s.NetPnl >= 0 ? 'var(--v2-good)' : 'var(--v2-bad)'}">${net}</span>  <small>· tap a hand to watch it</small>`, 26, 0, 335, 1560, 44, COLORS.soft, 'center');
 
     // Column titles over the list (x positions match the rows).
     const titles = ['Hand', "Agent's cards", 'Board', 'Showdown', 'Result'];
@@ -139,8 +139,8 @@ export class ReplayDialogs {
     const box = { body: row, w: W, h: H };
     const replay = h.HasReplay || !!h.ReplayJson;
     line(box, `#${h.HandNumber}`, 28, -700, 0, 150, 50);
-    line(box, !h.HoleCards?.trim() ? '<span style="color:#7F8AB0">-</span>' : cardsRich(h.HoleCards), 30, -480, 0, 260, 50);
-    line(box, !h.BoardCards?.trim() ? '<span style="color:#7F8AB0">no flop</span>' : cardsRich(h.BoardCards), 28, -90, 0, 420, 50);
+    line(box, !h.HoleCards?.trim() ? '<span style="color:var(--v2-mut2)">-</span>' : cardsRich(h.HoleCards), 30, -480, 0, 260, 50);
+    line(box, !h.BoardCards?.trim() ? '<span style="color:var(--v2-mut2)">no flop</span>' : cardsRich(h.BoardCards), 28, -90, 0, 420, 50);
     line(box, h.Showdown ? 'Showdown' : '-', 24, 255, 0, 170, 50, h.Showdown ? COLORS.white : COLORS.soft);
     line(box, AgentHandReplayText.signed(h.NetPnl), 30, 445, 0, 190, 50, h.NetPnl > 0 ? COLORS.good : h.NetPnl < 0 ? COLORS.bad : COLORS.soft, 'right');
     const b = button(replay ? 'Watch' : 'Details', replay, () => this.openHand(h));
@@ -159,11 +159,11 @@ export class ReplayDialogs {
     wrap.style.height = '96px';
     const b = button(`Load more (${AgentHandReplayText.coins(left)} left)`, false, async () => {
       if (this.loading) return;
-      b.textContent = 'LOADING…';
+      b.textContent = 'Loading…';
       const added = await this.loadMore(true);
       if (!list.isConnected) return; // the list was closed meanwhile; the hands stay cached
       if (!added) {
-        b.textContent = 'TRY AGAIN';
+        b.textContent = 'Try again';
         return;
       }
       wrap.remove();
@@ -187,8 +187,8 @@ export class ReplayDialogs {
   private showHandWithoutReplay(h: AgentHandRecord): void {
     const p = this.open(`Hand #${h.HandNumber}`, 1400, 860);
     line(p, 'Replay not available for this hand.', 28, 0, 320, 1250, 44, COLORS.gold, 'center');
-    const result = h.NetPnl > 0 ? `<span style="color:#66E67F">won ${AgentHandReplayText.signed(h.NetPnl)}</span>`
-      : h.NetPnl < 0 ? `<span style="color:#F27373">lost ${AgentHandReplayText.coins(-h.NetPnl)}</span>` : 'broke even';
+    const result = h.NetPnl > 0 ? `<span style="color:var(--v2-good)">won ${AgentHandReplayText.signed(h.NetPnl)}</span>`
+      : h.NetPnl < 0 ? `<span style="color:var(--v2-bad)">lost ${AgentHandReplayText.coins(-h.NetPnl)}</span>` : 'broke even';
     line(p, `Agent's cards ${!h.HoleCards?.trim() ? '-' : cardsRich(h.HoleCards)}    ·    Board ${!h.BoardCards?.trim() ? 'no flop' : cardsRich(h.BoardCards)}`,
       32, 0, 255, 1250, 54, COLORS.white, 'center');
     line(p, `Your Agent ${result} · stack ${AgentHandReplayText.coins(h.StartingStack)} to ${AgentHandReplayText.coins(h.EndingStack)} · ${h.Showdown ? 'went to showdown' : 'no showdown'}`,
@@ -363,9 +363,9 @@ function seatBox(p: RefPanel, r: AgentHandReplay, seat: ReplaySeat, x: number, y
   const boxColor: [number, number, number, number] = seat.isAgent ? [77, 56, 10, 0.97] : [15, 23, 66, 0.97];
   const textW = width - 104;
   const textX = -width / 2 + 10 + textW / 2;
-  const tag = seat.isAgent ? ' <small style="color:#FFD34D;font-size:70%">AGENT</small>'
-    : seat.isOtherAgent ? ' <small style="color:#E8C46A;font-size:70%">agent</small>'
-    : seat.isBot ? ' <small style="color:#A9B4D8;font-size:70%">bot</small>' : '';
+  const tag = seat.isAgent ? ' <small style="color:var(--v2-gold);font-size:70%">Agent</small>'
+    : seat.isOtherAgent ? ' <small style="color:var(--v2-gold);font-size:70%">agent</small>'
+    : seat.isBot ? ' <small style="color:var(--v2-mut);font-size:70%">bot</small>' : '';
   line(inner, escapeHtml(shortText(r.nameOf(seat.seat), 14)) + tag, 22, textX, 34, textW, 30);
   const stack = line(inner, '', 22, textX, 2, textW, 30, COLORS.soft);
   const label = line(inner, '', 20, textX, -32, textW, 30);
@@ -439,7 +439,7 @@ class ReplayView {
   }
 
   updateControls(): void {
-    if (this.playLabel) this.playLabel.textContent = this.playing ? 'PAUSE' : this.step >= this.replay.steps.length ? 'REPLAY' : 'PLAY';
+    if (this.playLabel) this.playLabel.textContent = this.playing ? 'Pause' : this.step >= this.replay.steps.length ? 'Replay' : 'Play';
     if (this.speedLabel) this.speedLabel.textContent = `SPEED ${this.speed}X`;
   }
 
@@ -458,7 +458,7 @@ class ReplayView {
 
     for (const [seat, sv] of this.seats) {
       const s = f.seats.get(seat) ?? new ReplaySeatFrame();
-      sv.stack.innerHTML = AgentHandReplayText.coins(s.stack) + (s.allIn && !s.folded && s.stack === 0 ? '  <span style="color:#FFD34D">ALL-IN</span>' : '');
+      sv.stack.innerHTML = AgentHandReplayText.coins(s.stack) + (s.allIn && !s.folded && s.stack === 0 ? '  <span style="color:var(--v2-gold)">All-in</span>' : '');
       sv.label.textContent = s.label;
       sv.label.style.color = s.folded ? COLORS.soft : s.won > 0 ? COLORS.good : COLORS.white;
       if (sv.bet) sv.bet.textContent = s.bet > 0 && !s.folded ? AgentHandReplayText.coins(s.bet) : '';

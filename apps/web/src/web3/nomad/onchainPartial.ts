@@ -29,7 +29,7 @@ import type { PlayKey } from '../per/vault';
 import type { Stakes } from '../per/entry';
 import { NomadPlayMode } from '../solana/identity';
 import { w3 } from '../services';
-import { copyText } from '../ui/perUi';
+import { copyText, friendlyError } from '../ui/perUi';
 import { marketOnchain, marketState, solProfile, type AgentStrategyLike } from '../../menu/screens/market';
 import { copyTerms, deployBusyText, deployedText, withCopiedStrategy } from './solAgentCopy';
 
@@ -47,7 +47,7 @@ export function friendly(e: unknown): string {
   const m = (e as Error)?.message ?? String(e ?? '');
   if (/Timeout or cancelled|declined|rejected|cancel/i.test(m))
     return 'Your wallet didn\'t sign. If it said "Network mismatch", switch the wallet\'s network to Devnet (in the wallet\'s settings) and try again.';
-  return m;
+  return friendlyError(m);
 }
 
 /** ONCHAIN actions for screens outside the Unity tree (Redesign v2, src/ui2). Filled when the partial binds. */
@@ -71,6 +71,9 @@ export interface OnchainApi {
   joinTable(level: number): unknown;
 }
 export const onchainApi: Partial<OnchainApi> = {};
+
+/** The one-time "Connect a wallet?" offer after the first guest sign-in (off in Redesign v2: offered on On-chain). */
+export const walletOfferAfterGuest = { enabled: false };
 
 export function registerOnchainPartial(): void {
   registerNomadPartial((host, ctx) => new OnchainPartial(host, ctx).bind());
@@ -177,7 +180,9 @@ class OnchainPartial {
           host.refreshSoon();
         }]);
     });
-    host.afterGuest.push(() => this.offerWalletAfterGuest());
+    // Redesign v2: no wallet offer right after the first guest sign-in (nothing interrupts the first hand). The wallet
+    // is offered when the player picks On-chain (toggleMode connects first). Re-enable with walletOfferAfterGuest.
+    if (walletOfferAfterGuest.enabled) host.afterGuest.push(() => this.offerWalletAfterGuest());
     this.ctx.events.on('web3:wallet-changed', () => host.refreshSoon());
     host.onRefresh(() => this.refresh());
     // M9c: opened from an invite link: go straight to the private tables (PerMenuButton). Only a page whose address
@@ -209,13 +214,15 @@ class OnchainPartial {
       // The message waits until a wallet is chosen: shown before, it sat on top of the wallet picker.
       ok = await this.solana.connect(undefined, { onPicked: () => this.host.busy('Connect wallet', 'Approve the connection in your wallet…') });
     } catch (e) {
-      console.error(e);
+      // A missing wallet is an expected case the wallet sheet already showed: no error in the console for it.
+      if (!(e as { shown?: boolean }).shown) console.error(e);
       this.host.closeMessage();
-      this.host.message('Wallet', (e as Error).message || 'No wallet connected. ONCHAIN play needs a Solana wallet (devnet).');
+      // The wallet sheet already told the player (no wallet installed): don't repeat it in a second dialog.
+      if (!(e as { shown?: boolean }).shown) this.host.message('Wallet', (e as Error).message || 'No wallet connected. On-chain play needs a Solana wallet.');
       return false;
     }
     this.host.closeMessage();
-    if (!ok) this.host.message('Wallet', 'No wallet connected. ONCHAIN play needs a Solana wallet (devnet).');
+    if (!ok) this.host.message('Wallet', 'No wallet connected. On-chain play needs a Solana wallet.');
     return ok;
   }
 
@@ -1038,12 +1045,12 @@ class OnchainPartial {
     } catch {
       /* ignore */
     }
-    host.message('Connect a wallet?', 'Connect a Solana wallet to play ONCHAIN: SOL tables and SOL Agents (devnet). You can also do it later from your profile.', 'Connect Wallet', () => {
+    host.message('Connect a wallet?', 'Connect a Solana wallet to play On-chain: SOL tables and SOL Agents. You can also do it later from your profile.', 'Connect Wallet', () => {
       void (async () => {
         if (!(await this.connectWallet())) return;
         this.onchain = true;
         this.paintMode();
-        host.message("You're in ONCHAIN mode", 'Tables and Agents now use SOL (devnet). Switch back to Coins any time with the DEMO / ONCHAIN toggle at the top.');
+        host.message("You're playing On-chain", 'Tables and Agents now use SOL. Switch back to Coins any time with the Demo / On-chain switch at the top.');
       })();
     }, 'Not now');
   }

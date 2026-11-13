@@ -103,7 +103,7 @@ class AgentPanel implements PanelImpl {
 
   private paint(): void {
     const picked = [this.strategy, this.stake, this.buyIn, this.hands, this.minutes, this.loss, this.profit];
-    this.groups.forEach((g, gi) => g.forEach((b, i) => (b.color = i === picked[gi] ? PerColor.Accent : PerColor.Muted)));
+    this.groups.forEach((g, gi) => g.forEach((b, i) => (b.color = i === picked[gi] ? PerColor.Selected : PerColor.Muted)));
     this.customTexts.forEach((t, i) => (t.text = `${CUSTOM_NAMES[i]} ${this.custom[i]!.toFixed(2)}`));
   }
 

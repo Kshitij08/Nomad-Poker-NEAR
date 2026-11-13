@@ -1,0 +1,96 @@
+/* Entry surfaces (docs/ui-style-guide.md): Login / Account, Daily Spin, level-up, connecting cover, invite toast,
+   tournament-ready banner. Tokens only (--v2-*). */
+
+/* ---------------------------------------------------------------- Login / Account */
+.v2-bare[data-screen='login'] { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: calc(var(--v2-s3) + env(safe-area-inset-top, 0px)) var(--v2-s4) calc(var(--v2-s3) + env(safe-area-inset-bottom, 0px)); }
+.v2-login { font-size: 1.25em; width: min(26em, 100%); display: flex; flex-direction: column; align-items: stretch; gap: var(--v2-s3); }
+.v2-login-logo { text-align: center; font-family: var(--v2-display); font-size: 3.4em; line-height: 0.88; letter-spacing: 0.02em; text-shadow: 0 0.06em 0 #2a5fe0, 0 0.12em 0 #1a3a9a, 0 0 0.5em rgba(90, 160, 255, 0.6); }
+.v2-login-logo span { display: block; font-size: 0.62em; }
+.v2-login-tag { text-align: center; color: var(--v2-mut); margin-top: calc(-1 * var(--v2-s2)); }
+.v2-login-card { background: var(--v2-panel); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-lg); padding: var(--v2-s4); display: flex; flex-direction: column; gap: var(--v2-s2); }
+.v2-login-card .v2-b { width: 100%; }
+.v2-login-or { display: flex; align-items: center; gap: var(--v2-s2); color: var(--v2-mut2); font-size: 0.8em; font-weight: 800; }
+.v2-login-or::before, .v2-login-or::after { content: ''; flex: 1; height: 0.08em; background: var(--v2-line2); }
+.v2-login-status { text-align: center; font-size: 0.9em; min-height: 1.3em; color: var(--v2-mut); }
+.v2-login-status.err { color: var(--v2-bad); }
+.v2-g { width: 1.4em; height: 1.4em; border-radius: 50%; background: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 1em; }
+.v2-g svg { width: 0.95em; height: 0.95em; }
+
+/* v2 switch */
+.v2-switch { display: flex; align-items: center; gap: var(--v2-s2); font-weight: 800; color: var(--v2-mut); min-height: 3.1em; }
+.v2-switch i { position: relative; flex: 0 0 auto; width: 2.6em; height: 1.4em; border-radius: var(--v2-r-pill); background: rgba(255, 255, 255, 0.18); transition: background 0.15s; }
+.v2-switch i::after { content: ''; position: absolute; top: 0.15em; left: 0.15em; width: 1.1em; height: 1.1em; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.v2-switch.on i { background: var(--v2-gold); }
+.v2-switch.on i::after { background: var(--v2-on-gold); }
+.v2-switch.on i::after { transform: translateX(1.2em); }
+
+/* ---------------------------------------------------------------- Daily Spin */
+.v2-spin-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.v2-spin-card { width: min(44em, 100%); display: flex; flex-direction: column; align-items: center; gap: var(--v2-s3); text-align: center; }
+.v2-spin-machine {
+  width: 100%; background: var(--v2-panel); border: 0.15em solid var(--v2-gold); border-radius: var(--v2-r-lg);
+  padding: var(--v2-s4); box-shadow: 0 0 1.6em rgba(255, 194, 31, 0.25); display: flex; flex-direction: column; gap: var(--v2-s3); align-items: center;
+}
+.v2-spin-reels { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--v2-s2); width: 100%; }
+.v2-reel { position: relative; height: 8em; overflow: hidden; border-radius: var(--v2-r-md); background: var(--v2-deep); border: 0.12em solid var(--v2-line); }
+.v2-reel::before, .v2-reel::after { content: ''; position: absolute; left: 0; right: 0; height: 1.8em; z-index: 1; pointer-events: none; }
+.v2-reel::before { top: 0; background: linear-gradient(var(--v2-deep), transparent); }
+.v2-reel::after { bottom: 0; background: linear-gradient(transparent, var(--v2-deep)); }
+.v2-reel-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.v2-reel-face.land { animation: v2-land 0.35s ease-out both; }
+.v2-reel-strip { position: absolute; left: 0; right: 0; top: 0; display: flex; flex-direction: column; align-items: center; animation: v2-reel 0.45s linear infinite; }
+.v2-reel-strip > span { height: 8em; display: flex; align-items: center; justify-content: center; filter: blur(0.06em); }
+.v2-reel:nth-child(2) .v2-reel-strip { animation-duration: 0.38s; }
+.v2-reel:nth-child(3) .v2-reel-strip { animation-duration: 0.52s; }
+@keyframes v2-reel { from { transform: translateY(0); } to { transform: translateY(-32em); } }
+@keyframes v2-land { from { transform: translateY(-30%); opacity: 0.3; } 60% { transform: translateY(6%); } to { transform: none; opacity: 1; } }
+.v2-spin-result { font-family: var(--v2-display); font-size: 2em; color: var(--v2-gold); min-height: 1.2em; }
+.v2-spin-result.miss { color: var(--v2-mut); font-family: var(--v2-ui); font-weight: 800; font-size: 1.1em; }
+.v2-spin-note { color: var(--v2-mut); }
+.v2-spin-card .v2-b.lg { min-width: 12em; }
+@media (prefers-reduced-motion: reduce) { .v2-reel-strip { animation-duration: 1.6s; } .v2-reel-face.land { animation: none; } }
+
+/* ---------------------------------------------------------------- level-up overlay */
+.v2.v2-lvup { position: absolute; inset: 0; z-index: 1; background: rgba(4, 2, 20, 0.7); display: flex; align-items: center; justify-content: center; padding: var(--v2-s3); }
+.v2-lvup-card {
+  width: min(32em, 100%); background: var(--v2-dlg); border: 0.15em solid var(--v2-gold); border-radius: var(--v2-r-lg); padding: var(--v2-s4);
+  display: flex; flex-direction: column; align-items: center; gap: var(--v2-s3); text-align: center; box-shadow: 0 0 2.4em rgba(255, 194, 31, 0.3);
+  animation: v2-pop 0.25s ease-out;
+}
+.v2-lvup-badge { position: relative; width: 8em; height: 8em; animation: v2-lvup-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.v2-lvup-badge b { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--v2-display); font-weight: 400; font-size: 3.4em; text-shadow: 0 0.06em 0 #3b1c8c; }
+@keyframes v2-lvup-pop { from { transform: scale(0.3) rotate(-20deg); opacity: 0; } }
+.v2-lvup-title { font-family: var(--v2-display); font-size: 2.4em; color: var(--v2-gold); line-height: 1; }
+.v2-lvup-rewards { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--v2-s2); width: 100%; }
+.v2-lvup-tile { flex: 1 1 8em; max-width: 11em; background: var(--v2-deep); border: 0.1em solid var(--v2-line2); border-radius: var(--v2-r-md); padding: var(--v2-s2); display: flex; flex-direction: column; align-items: center; gap: var(--v2-s1); }
+.v2-lvup-tile b { font-size: 1.05em; }
+.v2-lvup-card .v2-b.lg { min-width: 10em; }
+@media (prefers-reduced-motion: reduce) { .v2-lvup-badge, .v2-lvup-card { animation: none; } }
+html[data-orient='portrait'] .v2.v2-lvup { align-items: flex-end; padding: 0; }
+html[data-orient='portrait'] .v2-lvup-card { width: 100%; border-radius: 1.4em 1.4em 0 0; border-bottom: 0; padding-bottom: calc(var(--v2-s4) + env(safe-area-inset-bottom, 0px)); }
+html[data-orient='portrait'] .v2-lvup-card .v2-b.lg { width: 100%; }
+
+/* ---------------------------------------------------------------- connecting cover */
+.v2.v2-cover { position: fixed; z-index: 1400; display: flex; align-items: center; justify-content: center; }
+.v2-cover-card { position: relative; z-index: 1; width: min(28em, 90%); background: var(--v2-dlg); border: 0.15em solid var(--v2-accent); border-radius: var(--v2-r-lg); padding: var(--v2-s4); display: flex; flex-direction: column; align-items: center; gap: var(--v2-s3); text-align: center; }
+.v2-cover-card .v2-spin { width: 3em; height: 3em; border-width: 0.3em; }
+.v2-cover-card .v2-dh { margin: 0; }
+
+/* ---------------------------------------------------------------- toasts / banners (fixed) */
+.v2.v2-notes { position: fixed; z-index: 1300; inset: auto 0 auto 0; top: calc(0.8em + env(safe-area-inset-top, 0px)); height: 0; overflow: visible; pointer-events: none; display: flex; justify-content: center; }
+.v2-note {
+  pointer-events: auto; width: min(32em, calc(100vw - 2em)); background: var(--v2-dlg); border: 0.15em solid var(--v2-accent); border-radius: var(--v2-r-lg);
+  padding: var(--v2-s2) var(--v2-s3); display: flex; align-items: center; gap: var(--v2-s2); box-shadow: 0 0.6em 1.6em rgba(0, 0, 0, 0.45); animation: v2-tin 0.2s ease-out;
+}
+.v2-note.gold { border-color: var(--v2-gold); }
+.v2-note-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.v2-note-txt small { color: var(--v2-mut); font-size: 0.82em; }
+html[data-orient='portrait'] .v2.v2-notes { font-size: min(calc(100vw / 30), calc(100dvh / 58)); }
+html[data-orient='portrait'] .v2-note { flex-wrap: wrap; }
+html[data-orient='portrait'] .v2-note .v2-b { flex: 1; }
+html[data-orient='portrait'] .v2-login { font-size: 1.05em; }
+
+/* Phones: every control of these surfaces at least ~40 px, text at least 11 px. */
+html[data-orient='portrait'] .v2-login-card .v2-b, html[data-orient='portrait'] .v2-cover-card .v2-b, html[data-orient='portrait'] .v2-note .v2-b, html[data-orient='portrait'] .v2-lvup-card .v2-b { min-height: 3.1em; }
+html[data-orient='portrait'] .v2-login-or, html[data-orient='portrait'] .v2-note-txt small { font-size: 0.86em; }
+.v2-note .v2-b.sm { min-height: 2.6em; }

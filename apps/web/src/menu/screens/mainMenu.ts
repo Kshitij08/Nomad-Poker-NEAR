@@ -96,7 +96,11 @@ const coins = (host: NomadHost) => host.stakes.coins;
 
 let weeklyPrompted = false;
 /** Once a session, the weekly rewards screen comes up by itself when today's reward can be claimed. */
+/** The once-per-run weekly rewards pop-up (Redesign v2 turns it off: the dock's Weekly dot says it's ready). */
+export const weeklyAutoPrompt = { enabled: true };
+
 function weeklyPrompt(host: NomadHost): void {
+  if (!weeklyAutoPrompt.enabled) return;
   if (weeklyPrompted || !host.signedIn || !host.isShowing('MainMenu') || host.dialogs.isOpen) return;
   if (!canClaimLogin(host.ctx)) return;
   weeklyPrompted = true;

@@ -8,8 +8,8 @@
 .v2-fr-toggle { display: none; }
 .v2-fr-av { position: relative; margin-top: 0.4em; }
 .v2-fr-av .v2-editb {
-  position: absolute; right: -0.2em; top: -0.2em; width: 2em; height: 2em; border-radius: 50%; background: linear-gradient(#ffe36b, #f5b316);
-  color: #2a1a00; display: flex; align-items: center; justify-content: center; font-weight: 900; border: 0.12em solid #fff;
+  position: absolute; right: -0.2em; top: -0.2em; width: 2em; height: 2em; border-radius: 50%; background: var(--v2-grad-gold);
+  color: var(--v2-on-gold); display: flex; align-items: center; justify-content: center; font-weight: 900; border: 0.12em solid #fff;
 }
 .v2-fr-lv { position: absolute; left: 50%; bottom: -0.6em; transform: translateX(-50%); }
 .v2-fr-name { margin-top: 0.6em; justify-content: center; max-width: 100%; }
@@ -32,7 +32,7 @@
 .v2-lb-panel { gap: 0.22em; padding: 0.6em 1em; }
 .v2-lb-list { gap: 0.22em; }
 .v2-lbr {
-  display: grid; grid-template-columns: 5em 1fr 10em; align-items: center; gap: 0.6em; padding: 0.42em 1em; border-radius: 0.7em;
+  display: grid; grid-template-columns: 5em 1fr 10em; align-items: center; gap: 0.6em; padding: 0.42em 1em; border-radius: var(--v2-r-md);
   background: rgba(255, 255, 255, 0.04); font-size: 1.12em; font-weight: 700; border: 0.1em solid transparent; flex: 0 0 auto;
 }
 .v2-lbr.hdr { background: none; font-size: 0.9em; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-mut2); padding: 0.2em 1em; }
@@ -41,9 +41,11 @@
 .v2-lbr.g3 { background: linear-gradient(90deg, rgba(224, 154, 90, 0.36), rgba(224, 154, 90, 0.07)); border-color: rgba(224, 154, 90, 0.6); }
 .v2-lbr.you { background: rgba(124, 107, 255, 0.28); border: 0.12em solid #a98bff; }
 .v2-lb-rank { display: flex; align-items: center; }
-.v2-lbdiv { display: flex; align-items: center; gap: 0.8em; margin: 0.15em 0; font-weight: 900; font-size: 0.85em; letter-spacing: 0.12em; color: var(--v2-mut2); flex: 0 0 auto; }
+.v2-lbdiv { display: flex; align-items: center; gap: 0.8em; margin: 0.15em 0; font-weight: 900; font-size: 0.85em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--v2-mut2); flex: 0 0 auto; }
 .v2-lbdiv::before, .v2-lbdiv::after { content: ''; flex: 1; height: 0.1em; background: rgba(124, 107, 255, 0.4); }
-.v2-lbdiv small { letter-spacing: 0; font-weight: 700; color: #8e86c9; order: 3; }
+.v2-lbdiv:empty { gap: 0; }
+/* The period note sits centred under the divider. */
+.v2-lbnote { text-align: center; font-size: max(0.8em, 11px); font-weight: 700; color: var(--v2-mut2); margin: -0.2em 0 0.2em; flex: 0 0 auto; }
 .v2-lb .v2-empty b { font-weight: 400; }
 
 /* ---------------------------------------------------------------- portrait */
@@ -65,5 +67,4 @@ html[data-orient='portrait'] .v2-fr-row .v2-b.sm { font-size: 0.78em; }
 html[data-orient='portrait'] .v2-fr-grid { grid-template-columns: repeat(5, 1fr); }
 html[data-orient='portrait'] .v2-body.v2-lb { padding: 0; }
 html[data-orient='portrait'] .v2-lbr { grid-template-columns: 3.8em 1fr auto; font-size: 0.95em; padding: 0.4em 0.6em; gap: 0.4em; }
-html[data-orient='portrait'] .v2-lbr.hdr { font-size: 0.75em; }
-html[data-orient='portrait'] .v2-lbdiv small { display: none; }
+html[data-orient='portrait'] .v2-lbr.hdr { font-size: max(0.75em, 11px); }

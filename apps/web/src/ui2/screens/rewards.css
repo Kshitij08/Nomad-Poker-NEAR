@@ -6,7 +6,7 @@
 .v2-body.v2-wk { flex-direction: row; gap: 1.2em; }
 .v2-wk-grid { flex: 1 1 50em; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr; gap: 1em; min-width: 0; }
 .v2-day { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.4em; padding: 0.8em; }
-.v2-day.today, .v2-grand.today { border-color: #ffd54a; box-shadow: 0 0 1.2em rgba(255, 213, 74, 0.4); }
+.v2-day.today, .v2-grand.today { border-color: var(--v2-gold); box-shadow: 0 0 1.2em rgba(255, 213, 74, 0.4); }
 .v2-day-t { font-size: 1.15em; }
 .v2-day-art { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5em; }
 .v2-day-art > b { font-size: 1.3em; }
@@ -26,12 +26,12 @@
 .v2-lv-badge > b { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--v2-display); font-weight: 400; font-size: 3.6em; text-shadow: 0 0.06em 0 #3b1c8c; }
 .v2-lv-track { flex: 0 0 15em; display: flex; flex-direction: column; padding: 0.8em; }
 .v2-vtrack { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 0.6em; padding: 0.4em 0 0 0.2em; }
-.v2-vtrack::before { content: ''; position: absolute; left: 1.55em; top: 1.6em; bottom: 1.4em; width: 0.3em; background: linear-gradient(to top, #ffc21f 0 var(--done, 0%), #4b3fa6 var(--done, 0%)); border-radius: 1em; }
+.v2-vtrack::before { content: ''; position: absolute; left: 1.55em; top: 1.6em; bottom: 1.4em; width: 0.3em; background: linear-gradient(to top, var(--v2-gold) 0 var(--done, 0%), var(--v2-line) var(--done, 0%)); border-radius: var(--v2-r-pill); }
 .v2-vnode { display: flex; align-items: center; gap: 0.6em; position: relative; text-align: left; min-width: 0; }
 .v2-vnode small { display: block; font-size: 0.78em; color: var(--v2-mut); }
-.v2-vdot { width: 2.8em; height: 2.8em; border-radius: 50%; background: #271c6b; border: 0.15em solid #4b3fa6; display: flex; align-items: center; justify-content: center; font-weight: 900; flex: 0 0 auto; position: relative; }
-.v2-vnode.done .v2-vdot { border-color: #22c468; background: #123d2e; }
-.v2-vnode.now .v2-vdot { background: linear-gradient(#ffe36b, #f5b316); color: #2a1a00; border-color: #fff; box-shadow: 0 0 1em rgba(255, 213, 74, 0.6); }
+.v2-vdot { width: 2.8em; height: 2.8em; border-radius: 50%; background: var(--v2-deep); border: 0.15em solid var(--v2-line); display: flex; align-items: center; justify-content: center; font-weight: 900; flex: 0 0 auto; position: relative; }
+.v2-vnode.done .v2-vdot { border-color: var(--v2-good); background: rgba(46, 227, 138, 0.15); }
+.v2-vnode.now .v2-vdot { background: var(--v2-grad-gold); color: var(--v2-on-gold); border-color: var(--v2-ink); box-shadow: 0 0 1em rgba(255, 213, 74, 0.6); }
 .v2-lv-miss { flex: 1; gap: 0.55em; }
 .v2-lv-tabs { width: 15em; }
 .v2-lv-list { flex: 1; min-height: 0; gap: 0.55em; }
@@ -60,9 +60,9 @@ html[data-orient='portrait'] .v2-lv-hero > .v2-card .v2-coins { font-size: 0.6em
 html[data-orient='portrait'] .v2-lv-hero > .v2-grow, html[data-orient='portrait'] .v2-lv-hero > .v2-xs { display: none; }
 html[data-orient='portrait'] .v2-lv-track { flex: 0 0 auto; }
 html[data-orient='portrait'] .v2-vtrack { flex-direction: row-reverse; justify-content: space-between; overflow-x: auto; padding: 0.4em 0; }
-html[data-orient='portrait'] .v2-vtrack::before { left: 1.4em; right: 1.4em; top: 1.8em; bottom: auto; height: 0.3em; width: auto; background: linear-gradient(90deg, #ffc21f 0 var(--done, 0%), #4b3fa6 var(--done, 0%)); }
+html[data-orient='portrait'] .v2-vtrack::before { left: 1.4em; right: 1.4em; top: 1.8em; bottom: auto; height: 0.3em; width: auto; background: linear-gradient(90deg, #ffc21f 0 var(--done, 0%), var(--v2-line) var(--done, 0%)); }
 html[data-orient='portrait'] .v2-vnode { flex-direction: column; text-align: center; gap: 0.2em; width: 4.4em; }
-html[data-orient='portrait'] .v2-vnode small { white-space: normal; font-size: 0.66em; }
+html[data-orient='portrait'] .v2-vnode small { white-space: normal; font-size: max(0.85em, 11px); }
 html[data-orient='portrait'] .v2-lv-miss { flex: 0 0 auto; }
 html[data-orient='portrait'] .v2-lv-tabs { width: 12em; }
 html[data-orient='portrait'] .v2-lv-list { overflow: visible; }

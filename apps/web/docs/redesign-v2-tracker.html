@@ -57,7 +57,7 @@ td.n{color:var(--ink2);font-size:12.5px}
   <header>
     <h1>Nomad Poker Redesign v2 Tracker</h1>
     <p class="sub">Applying the Redesign v2 skin from the <a href="https://claude.ai/artifact/WV2up5hgYGzAM4D66vHzni#main-menu">Screen Atlas</a> to the web game in <code>apps/web</code>, on desktop (16:9) and phones (portrait only). Each screen is built, then checked by an independent agent against the atlas at both sizes.</p>
-    <p class="upd" id="upd">Updated 13 Nov 2026 · all screens built and checked by three independent agents; their findings fixed · typecheck clean · 219 tests pass · not committed</p>
+    <p class="upd" id="upd">Updated 13 Nov 2026 · phase 2 done: old UI replaced, one style, table HUD in v2 · checked by independent agents · typecheck, 219 tests and build pass · not committed</p>
   </header>
 
   <section class="strip" id="strip"></section>
@@ -133,6 +133,30 @@ const G = [
   ['Action bar bottom centre','done','na','ok','Fold/Call/Raise were already centred; pre-game buttons moved to the bottom centre'],
   ['Tournament table title dropdown','done','done','ok','Replaces the floating banner'],
   ['Private SOL table pills + verify panel','done','done','ok','Needs a wallet + devnet: checked by rendering the parts only'],
+ ]],
+ ['Phase 2 · Foundation', [
+  ['UI/UX review (menus + table)','na','na','ok','Two independent reviewers: menus/overlays and in-game table'],
+  ['Style guide + shared tokens','done','done','ok','docs/ui-style-guide.md; tokens on :root'],
+  ['One dialog system','done','done','ok','All host dialogs (errors, confirms, busy, table Settings/Leave) render as v2'],
+  ['First-run fixes','done','done','ok','No locked start room; no weekly auto pop-up'],
+ ]],
+ ['Phase 2 · Old UI replaced', [
+  ['Login / email sign-in','done','done','ok',''],
+  ['Daily Spin (Lucky Slot)','done','done','ok',''],
+  ['Level-up, connecting, toasts','done','done','ok',''],
+  ['SOL lobby, host, tourneys, agent','done','done','ok','Re-skinned in place; checked up to error states (no PER backend locally)'],
+  ['Wallet picker / login, buy-in','done','done','ok',''],
+  ['Avatar picker, replay dialogs','done','done','ok','One picker; replays in v2 purple'],
+ ]],
+ ['Phase 2 · Table HUD', [
+  ['Seats, timer, tokens, status chips','done','done','ok','One purple skin on every room'],
+  ['Pot, bets, winner feedback','done','done','ok','Per-seat bet chips not possible yet (no seat position for bets)'],
+  ['Action bar + raise sheet','done','done','ok','Fold · Call · Raise; all-in named'],
+  ['LEAVE, settings, chat, reactions, lobby buttons','done','done','ok',''],
+  ['Bust / rebuy prompt','done','done','ok','Offline bust used to leave you stuck'],
+ ]],
+ ['Phase 2 · Coherence', [
+  ['Button casing, titles, tabs, icons, sizes','done','done','ok','Per style guide'],
  ]],
 ];
 const L={todo:'To do',wip:'Building',done:'Built',ok:'Verified',bad:'Issues found',na:'Not needed'};

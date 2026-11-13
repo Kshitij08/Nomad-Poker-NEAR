@@ -73,17 +73,17 @@ class HostPanel implements PanelImpl {
   }
 
   private paint(): void {
-    this.stakeButtons.forEach((b, i) => (b.color = i === this.stake ? PerColor.Accent : PerColor.Muted));
-    this.seatButtons.forEach((b, i) => (b.color = this.per.host.MIN_SEATS + i === this.seats ? PerColor.Accent : PerColor.Muted));
-    this.inviteButton.color = this.inviteOnly ? PerColor.Accent : PerColor.Muted;
+    this.stakeButtons.forEach((b, i) => (b.color = i === this.stake ? PerColor.Selected : PerColor.Muted));
+    this.seatButtons.forEach((b, i) => (b.color = this.per.host.MIN_SEATS + i === this.seats ? PerColor.Selected : PerColor.Muted));
+    this.inviteButton.color = this.inviteOnly ? PerColor.Selected : PerColor.Muted;
     this.invitesText.text = !this.inviteOnly ? 'Anyone can join' : this.invitees.length === 0 ? 'You + whoever has the link' : `You + ${this.invitees.length} wallets + the link`;
   }
 
   /** Invitees' addresses from the browser's prompt (comma / space / newline separated); invalid ones are reported. */
-  private editInvitees(): void {
+  private async editInvitees(): Promise<void> {
     const current = this.invitees.map((k) => k.toBase58()).join(', ');
     const maxInvites = this.per.host.MAX_INVITES;
-    const input = ask(`Wallet addresses to invite (up to ${maxInvites - 1} besides you), separated by commas or spaces. Players can copy theirs from the Private tables screen.`, current);
+    const input = await ask(`Wallet addresses to invite (up to ${maxInvites - 1} besides you), separated by commas or spaces. Players can copy theirs from the Private tables screen.`, current);
     if (input === null || input === '\u0001') return; // cancelled: keep the list
     this.invitees.length = 0;
     let bad = 0;
@@ -161,7 +161,7 @@ export async function hostSolTable(ctx: AppContext, per: PerRuntime, o: HostTabl
   st(`Approve creating the table (${label}, ${o.seats} seats) in your wallet…`);
   await per.gameWallet.l1.sendWithWallet(H.createAndDelegate(wallet, id, p), per.gameWallet.signer);
   per.hostedTables.add(wallet, table, id);
-  st('Opening the table in the private rollup (no wallet prompt)…');
+  st('Opening the table (no wallet prompt)…');
   const t = new PerTableAddresses(table);
   let last: unknown = null;
   for (let i = 0; i < 10; i++) {

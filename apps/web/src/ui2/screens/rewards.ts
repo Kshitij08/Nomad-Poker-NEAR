@@ -59,7 +59,7 @@ const weekly: ScreenDef & { busy: boolean } = {
     const { states, streak, shields, note } = dayStates();
     const days = LoginRewardCatalog.Days;
     const statePill = (s: DayState) =>
-      s === 'claimed' ? `<span class="v2-pill ok">${ico('check', 1)} Claimed</span>` : s === 'claim' ? btn('CLAIM', 'claim', { h: 'green', c: 'w', dis: this.busy }) : `<span class="v2-pill">${ico('lock', 1)} Locked</span>`;
+      s === 'claimed' ? `<span class="v2-pill ok">${ico('check', 1)} Claimed</span>` : s === 'claim' ? btn('Claim', 'claim', { h: 'green', c: 'w', dis: this.busy }) : `<span class="v2-pill">${ico('lock', 1)} Locked</span>`;
     const left = days.slice(0, 6).map((d, i) => `
       <div class="v2-panel v2-day${states[i] === 'claim' ? ' today' : ''}">
         <b class="v2-day-t">${esc(d.title)}</b>
@@ -70,8 +70,8 @@ const weekly: ScreenDef & { busy: boolean } = {
     const s7 = states[6]!;
     const until = states.findIndex((s) => s === 'claim' || s === 'locked');
     const daysLeft = s7 === 'locked' && until >= 0 ? (states[until] === 'claim' ? 6 - until : 7 - until) : 0;
-    return `${topBar('WEEKLY REWARDS', { toggle: false })}
-<div class="v2-wk-sub"><span class="v2-mut">${esc(note)}</span><span class="v2-pill">🔥 Streak ${streak} day${streak === 1 ? '' : 's'}</span><span class="v2-pill">${ico('shield', 1.2)} Shield ×${shields}</span></div>
+    return `${topBar('Weekly')}
+<div class="v2-wk-sub"><span class="v2-mut">${esc(note)}</span><span class="v2-pill">${ico('flame', 1.1)} Streak ${streak} day${streak === 1 ? '' : 's'}</span><span class="v2-pill">${ico('shield', 1.2)} Shield ×${shields}</span></div>
 <div class="v2-body v2-scroll v2-wk">
   <div class="v2-wk-grid">${left}</div>
   <div class="v2-panel v2-grand${s7 === 'claim' ? ' today' : ''}">
@@ -79,7 +79,7 @@ const weekly: ScreenDef & { busy: boolean } = {
     <div class="v2-grand-art">${ico('chest', 10)}</div>
     <b style="font-size:1.4em">${esc(loginRewardSummary(d7).split(' + ')[0] ?? '')}</b>
     ${d7.secondary ? `<b style="font-size:1.1em;color:#d38cff">+ ${esc(loginRewardSummary(d7).split(' + ').slice(1).join(' + '))}</b>` : ''}
-    ${s7 === 'claim' ? btn('CLAIM', 'claim', { h: 'green', c: 'w', dis: this.busy }) : s7 === 'claimed' ? `<span class="v2-pill ok">${ico('check', 1)} Claimed</span>` : `<span class="v2-pill">${ico('lock', 1)} ${daysLeft > 0 ? `Unlocks in ${daysLeft} day${daysLeft === 1 ? '' : 's'}` : 'Locked'}</span>`}
+    ${s7 === 'claim' ? btn('Claim', 'claim', { h: 'green', c: 'w', dis: this.busy }) : s7 === 'claimed' ? `<span class="v2-pill ok">${ico('check', 1)} Claimed</span>` : `<span class="v2-pill">${ico('lock', 1)} ${daysLeft > 0 ? `Unlocks in ${daysLeft} day${daysLeft === 1 ? '' : 's'}` : 'Locked'}</span>`}
   </div>
 </div>`;
   },
@@ -93,7 +93,7 @@ const weekly: ScreenDef & { busy: boolean } = {
         const res = await r.engagement.claimLogin();
         if (res?.canClaim) {
           const d = LoginRewardCatalog.Days[(res.day ?? 1) - 1];
-          ui().message('Reward claimed!', `<div class="v2-row" style="gap:1em">${ico('check', 3)}<b style="font-size:1.15em">${esc(d ? loginRewardSummary(d) : 'Your reward')} added.</b></div>`, 'Nice');
+          ui().toast(`Reward claimed · ${d ? loginRewardSummary(d) : 'your reward'} added`, 2600);
         } else if (res?.error) ui().message('Weekly rewards', esc(res.error));
       } catch (e) {
         ui().message('Weekly rewards', esc(e instanceof Error ? e.message : String(e)));
@@ -171,9 +171,9 @@ const level: ScreenDef & { tab: string; busy: boolean } = {
         <div class="v2-grow"><b class="v2-mis-t">${esc(x.def.title)}</b>
           <div class="v2-row v2-sm"><div class="v2-bar"><i style="width:${x.target > 0 ? Math.min(100, (x.progress / x.target) * 100) : 0}%"></i></div><b class="v2-num">${fmt(x.progress)}/${fmt(x.target)}</b></div>
           <div class="v2-xs v2-goldc">${esc(x.reward)}</div></div>
-        ${x.claimed ? '<span class="v2-pill ok">Claimed</span>' : x.canClaim ? btn('CLAIM', 'claim', { h: 'green', c: 'sm', v: x.def.id, dis: this.busy }) : '<span class="v2-pill">In progress</span>'}
+        ${x.claimed ? '<span class="v2-pill ok">Claimed</span>' : x.canClaim ? btn('Claim', 'claim', { h: 'green', c: 'sm', v: x.def.id, dis: this.busy }) : '<span class="v2-pill">In progress</span>'}
       </div>`;
-    return `${topBar('LEVEL &amp; MISSIONS', { toggle: false })}
+    return `${topBar('Missions')}
 <div class="v2-body v2-lv">
   <div class="v2-panel v2-lv-hero">
     <div class="v2-lv-badge">${ico('hex', 8.5)}<b>${m.level}</b></div>
@@ -187,7 +187,7 @@ const level: ScreenDef & { tab: string; busy: boolean } = {
   <div class="v2-panel v2-lv-track"><b class="v2-h" style="text-align:center">Level track</b><div class="v2-vtrack" style="--done:${trackDone}%">${track}</div></div>
   <div class="v2-panel v2-col v2-lv-miss">
     <div class="v2-row v2-wrap"><b class="v2-h v2-grow">Missions</b><div class="v2-lv-tabs">${tabs([['daily', 'Daily'], ['weekly', 'Weekly']], this.tab, 'tab')}</div></div>
-    <div class="v2-row"><span class="v2-sm v2-mut v2-grow">Resets in <span class="v2-num">${resetIn(this.tab === 'weekly')}</span></span>${btn('CLAIM ALL', 'claim-all', { h: 'green', c: 'sm', dis: !claimable || this.busy })}</div>
+    <div class="v2-row"><span class="v2-sm v2-mut v2-grow">Resets in <span class="v2-num">${resetIn(this.tab === 'weekly')}</span></span>${btn('Claim all', 'claim-all', { h: 'green', c: 'sm', dis: !claimable || this.busy })}</div>
     <div class="v2-col v2-scroll v2-lv-list">${rows.length ? rows.map(mission).join('') : '<div class="v2-empty">No missions right now.</div>'}</div>
   </div>
 </div>`;
