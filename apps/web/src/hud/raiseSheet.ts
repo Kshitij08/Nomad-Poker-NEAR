@@ -57,7 +57,7 @@ export class RaiseSheet {
       <div class="v2hud-raise-presets"></div>
       <div class="v2hud-raise-amt">
         <button type="button" class="v2hud-rnd" data-r="minus" aria-label="Less">${ico('minus', 1)}</button>
-        <div class="v2hud-raise-mid"><b class="v2hud-raise-val"></b><input type="range" class="v2hud-range" aria-label="Amount" step="1"></div>
+        <div class="v2hud-raise-mid"><b class="v2hud-raise-val"></b><input type="range" class="v2hud-range" aria-label="Amount" step="any"></div>
         <button type="button" class="v2hud-rnd" data-r="plus" aria-label="More">${ico('plus', 1)}</button>
       </div>
       <div class="v2hud-raise-foot">
@@ -116,16 +116,18 @@ export class RaiseSheet {
     this.go.classList.toggle('hot', allIn);
     this.go.classList.toggle('gold', !allIn);
     this.el.hidden = false;
+    const opening = !this.open;
     this.open = true;
-    this.place();
+    // Place on open only (resizes go through placeSoon): re-placing on every slider move made the sheet jump.
+    if (opening) this.place();
   }
 
   /**
    * Where the sheet goes (every show and every resize):
    * - phone (portrait): a compact two-row sheet over the action row, under your seat, so your cards and stack stay
    *   visible above it;
-   * - landscape: a compact sheet beside your seat (right of it), just above the action row; centred above the row
-   *   when there's no room beside the seat.
+   * - landscape: centred just above the action row (whole-pixel position, so the text stays crisp). It used to sit
+   *   beside your seat, where it covered the next seat's stack and cards.
    */
   /** After a resize: the seats re-project after the action row lays out, so measure a moment later. */
   placeSoon(): void {
@@ -152,34 +154,17 @@ export class RaiseSheet {
     const bottom = Math.max(8, pr.height - this.act.anchor() + 10);
     st.bottom = `${bottom}px`;
     st.right = '';
-    const hero = document.querySelector<HTMLElement>('.u-seat[data-name="Name_Canvas_Player"]');
-    const hr = hero && hero.style.display !== 'none' ? seatRight(hero) : null;
-    const want = Math.min(28 * parseFloat(getComputedStyle(this.el).fontSize || '14'), pr.width - 32);
-    const left = hr !== null ? hr - pr.left + 20 : -1;
-    if (left > 0 && pr.width - left - 16 >= Math.min(want, 300)) {
-      st.left = `${left}px`;
-      st.width = `${Math.min(want, pr.width - left - 16)}px`;
-      st.transform = 'none';
-    } else {
-      st.left = '50%';
-      st.width = `${want}px`;
-      st.transform = 'translateX(-50%)';
-    }
+    const want = Math.round(Math.min(28 * parseFloat(getComputedStyle(this.el).fontSize || '14'), pr.width - 32));
+    st.left = `${Math.round((pr.width - want) / 2)}px`;
+    st.width = `${want}px`;
+    st.transform = 'none';
   }
 
   hide(): void {
     this.open = false;
+    // A focused control inside the hidden sheet (the slider after a drag) would keep the keyboard: the panel ignores
+    // shortcuts while an input has focus, so F / C / R went dead after a timeout closed the sheet.
+    if (this.el.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     this.el.hidden = true;
   }
-}
-
-/** Right edge (viewport px) of everything drawn for a seat: avatar, plate, D token, status chip, hand meter. */
-function seatRight(seat: HTMLElement): number | null {
-  let right = -Infinity;
-  for (const n of seat.querySelectorAll<HTMLElement>('.u-node')) {
-    if (n.offsetParent === null && getComputedStyle(n).display === 'none') continue;
-    const r = n.getBoundingClientRect();
-    if (r.width > 0 && r.height > 0) right = Math.max(right, r.right);
-  }
-  return Number.isFinite(right) ? right : null;
 }

@@ -317,7 +317,9 @@ class OnchainPartial {
 
   private openPrivateTables(): void {
     if (!this.host.signedIn) return this.host.show('Login');
-    void this.ctx.router.push('private-tables');
+    // Redesign v2: Tables › Private tables (src/ui2/screens/play.ts) is the private SOL tables lobby.
+    this.host.show('TableSelect_TownLobby');
+    this.ctx.services.ui2?.show('tables', 'priv');
   }
 
   private refresh(): void {
@@ -460,6 +462,8 @@ class OnchainPartial {
     if (this.phase === Phase.OnTheWay) return this.showWithdrawalOnTheWay();
     if (!(await this.connectWallet())) return;
     const host = this.host;
+    // A balance already read as 0: say so now instead of asking to confirm a withdrawal of nothing.
+    if (this.solBalance === 0n) return host.message('Withdraw', 'Your game balance is empty. Deposit or win at a SOL table first.');
     host.message('Withdraw', 'Send your whole game balance back to your wallet?', 'Withdraw all', () => {
       if (this.isMoneyMoving('Withdraw')) return;
       this.moneyMoving = true;
@@ -694,24 +698,24 @@ class OnchainPartial {
   private async partyJoin(rawCode: string): Promise<void> {
     const host = this.host;
     try {
-      host.busy('Party', 'Finding the table…');
+      host.busy('Join a table', 'Finding the table…');
       const per = await this.loadPer();
       const tables = await per.listTables();
       // Addresses are base58, so case matters. Two tables sharing the code (one made to look like it) are refused.
       const code = (rawCode ?? '').trim();
       const found = tables.filter((t) => code.length > 0 && String(t.address ?? '').startsWith(code));
-      if (found.length === 0) return host.message('Party', 'No open table has that code (codes are case-sensitive).');
-      if (found.length > 1) return host.message('Party', "More than one table has that code. Ask your friend for the table's full address.");
+      if (found.length === 0) return host.message('Join a table', 'No open table has that code (codes are case-sensitive).');
+      if (found.length > 1) return host.message('Join a table', "More than one table has that code. Ask your friend for the table's full address.");
       const f = found[0]!;
       const min = BigInt(String(f.minBuyIn));
       const max = BigInt(String(f.maxBuyIn));
       const big = BigInt(String(f.bigBlind));
       const small = BigInt(String(f.smallBlind));
-      const ready = await this.readyForOnchain(min, 'Party');
+      const ready = await this.readyForOnchain(min, 'Join a table');
       if (!ready) return;
       const bal = (await per.balance(() => {})) ?? 0n;
       const want = PerBuyIn.for(min, max, big);
-      await this.joinOnchainTable(per, 'Party', String(f.address), want < bal ? want : bal, { smallBlind: small, bigBlind: big, minBuyIn: min, maxBuyIn: max });
+      await this.joinOnchainTable(per, 'Join a table', String(f.address), want < bal ? want : bal, { smallBlind: small, bigBlind: big, minBuyIn: min, maxBuyIn: max });
     } catch (e) {
       host.message("Couldn't join", friendly(e));
       console.error(e);

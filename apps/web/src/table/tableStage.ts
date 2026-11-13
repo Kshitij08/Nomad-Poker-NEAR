@@ -1,4 +1,4 @@
-import { SRGBColorSpace, WebGLRenderer, type Object3D } from 'three';
+import { Box3, SRGBColorSpace, Vector3, WebGLRenderer, type Object3D } from 'three';
 import { ticker } from '../anim/tween';
 import { buildTableScene, type TableScene } from '../three/tableScene';
 import { CardModelVisual, preloadCardTextures } from '../three/cardModel';
@@ -12,6 +12,7 @@ import { TableView, type PotHud } from './tableView';
 import { createTableHud, type DomTableHud } from '../hud/tableHud';
 import sceneData from '../data/unity-scene.json';
 import { PortraitTable } from '../layout/portraitTable';
+import { onOrientation } from '../layout/orientation';
 
 /**
  * The persistent 3D table (Test.unity): renderer, scene, card dealer, pot tokens, river slam and the HUD.
@@ -45,11 +46,28 @@ export class TableStage {
     // pass still clears to the opaque scene background.
     this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.outputColorSpace = SRGBColorSpace;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Phones (small viewports, 3× screens) render at up to 3× so card faces stay as crisp as the HUD; bigger screens cap
+    // at 2× for performance.
+    const small = Math.min(window.innerWidth, window.innerHeight) <= 500;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, small ? 3 : 2));
     this.table = buildTableScene();
     preloadCardTextures();
     this.lens = new LensDistortionRenderer(this.renderer);
     this.hud = createTableHud(hudRoot, this.table.camera);
+    // Where each slot's hole cards land on screen: the midpoint of its two deal splines' ends (landscape seats are
+    // nudged so every seat shows its cards by the same margin, hud/tableHud.ts).
+    const anchorTmp = new Vector3();
+    this.hud.cardAnchor = (slot, w, h) => {
+      const pair = this.table.seatSplines[slot];
+      if (!pair) return null;
+      const a = pair[0].evaluatePosition(1);
+      const b = pair[1].evaluatePosition(1);
+      anchorTmp.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+      this.table.world.localToWorld(anchorTmp);
+      this.table.camera.updateMatrixWorld();
+      anchorTmp.project(this.table.camera);
+      return [((anchorTmp.x + 1) / 2) * w, ((1 - anchorTmp.y) / 2) * h];
+    };
     this.hudDepth = new HudDepthCompositor(this.renderer, () => [
       { canvas: this.hud.pot.canvas, visible: true },
       ...this.hud.seats.map((s) => ({ canvas: s.canvas, visible: s.visible })),
@@ -83,12 +101,49 @@ export class TableStage {
     if (smokeNode) watchActivationSmoke(smokeNode);
 
     this.potTokens = new PotTokens(this.table.world);
+    // Hidden: the pot is drawn as a chip stack in the HUD (hud/betChips.ts); the piles stay built for the portrait code.
+    this.potTokens.root.visible = false;
     this.seatWorld = sceneData.splines.map((s) => s.seatRootWorldPosition);
     this.portrait = new PortraitTable(this);
+
+    // Bet chips keep clear of the dealt cards and the shoe (besides the seats and the pot pill): their screen boxes.
+    const box = new Box3();
+    const corner = new Vector3();
+    const screenRect = (obj: Object3D, origin: DOMRect): DOMRect | null => {
+      box.setFromObject(obj);
+      if (box.isEmpty()) return null;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let k = 0; k < 8; k++) {
+        corner.set(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z).project(this.table.camera);
+        const px = ((corner.x + 1) / 2) * origin.width;
+        const py = ((1 - corner.y) / 2) * origin.height;
+        x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+      }
+      return new DOMRect(origin.left + x0, origin.top + y0, x1 - x0, y1 - y0);
+    };
+    const shoe = this.table.world.getObjectByName('DealerSlot') ?? null;
+    this.hud.chipObstacles = () => {
+      const origin = canvas.getBoundingClientRect();
+      const out: DOMRect[] = [];
+      for (const card of this.dealer.dealtRoot.children) {
+        if (!card.visible) continue;
+        const r = screenRect(card, origin);
+        if (r) out.push(r);
+      }
+      if (shoe?.visible) {
+        const r = screenRect(shoe, origin);
+        if (r) out.push(r);
+      }
+      return out;
+    };
 
     ticker.timeScale = opts.speed ?? 1;
     this.paused = !!opts.paused;
     window.addEventListener('resize', () => this.resize());
+    // iOS reports the new size late after a rotation (layout/orientation.ts re-checks at 120 / 400 ms), and the visual
+    // viewport can change without a window resize: refit on both so the table never stays sized for the old way up.
+    onOrientation(() => this.resize());
+    window.visualViewport?.addEventListener('resize', () => this.resize());
     this.resize();
 
     // One clock for both drivers: animation frames while the tab is visible, and a timer fallback when the
@@ -121,23 +176,29 @@ export class TableStage {
   newView(): TableView {
     this.slam.stop();
     this.dealer.clear();
-    const potTokens = this.potTokens;
+    const chips = this.hud.chips;
     const hudPot = this.hud.pot;
-    const seatWorld = this.seatWorld;
+    // The pot's chips are a grouped stack beside the pot pill (betChips.ts), not the 3D token piles.
     const pot: PotHud = {
       setPot(value) {
         hudPot.setPot(value);
-        potTokens.setPot(value);
+        chips.setPot(value);
       },
       setMessage(message) {
         hudPot.setMessage(message);
       },
       awardTokensTo(seat) {
         hudPot.awardTokensTo(seat);
-        if (seatWorld[seat]) potTokens.awardTokensTo(seatWorld[seat]);
+        chips.awardTo(seat);
       },
     };
-    return new TableView({ seats: this.hud.seats, betting: this.hud.betting, pot }, this.dealer, this.table.seatSplines);
+    // Single player: seats spread evenly round the table, you (seat 0) at the bottom.
+    this.portrait.setRing([]);
+    return new TableView({ seats: this.hud.seats, betting: this.hud.betting, pot }, this.dealer, this.table.seatSplines, {
+      spread: true,
+      anchorSeat: 0,
+      onRing: (ring) => this.portrait.setRing(ring),
+    });
   }
 
   setVisible(v: boolean): void {

@@ -1,0 +1,47 @@
+/* Per-seat bets (betChips.ts): each seat's current-street bet as a small physical chip stack on the felt, between the
+   seat and the pot, with a small amount label beside it. The stack slides into the pot when the street ends.
+   Tokens only (docs/ui-style-guide.md) besides the chip art. */
+.v2-betchips { position: absolute; inset: 0; pointer-events: none; }
+.v2-betchip {
+  position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 0.3em;
+  font-size: clamp(11px, 0.95vw, 16px); line-height: 1.1;
+  transition: opacity 0.18s ease-out;
+}
+.v2-betchip[hidden] { display: none; }
+/* The stack: chip discs seen at the table's angle (squashed), each one a little higher than the one below. */
+.v2-chipstack { position: relative; width: 2.1em; height: 2.1em; flex: 0 0 auto; filter: drop-shadow(0 0.2em 0.25em rgba(0, 0, 0, 0.5)); }
+.v2-chipstack > i {
+  position: absolute; left: 0; bottom: calc(var(--i) * 0.22em); width: 2.1em; height: 1.25em;
+  background: center / 100% 100% no-repeat; border-radius: 50%;
+  box-shadow: 0 0.12em 0 rgba(0, 0, 0, 0.35);
+}
+/* The amount: the plate style (dark fill, line border), small. */
+.v2-chipamt {
+  padding: 0.08em 0.5em; border-radius: var(--v2-r-pill);
+  background: color-mix(in srgb, var(--v2-shade) 90%, transparent); border: 0.1em solid var(--v2-line);
+  color: var(--v2-gold); font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 0.85em;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.v2-betchip.v2-allin .v2-chipamt { border-color: #ff4fa3; color: #ff8ad8; }
+html[data-orient='portrait'] .v2-betchip { font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .v2-betchip { transition: none; } }
+/* Grouped chips: one column per colour, side by side (betChips.ts), instead of one mixed stack. */
+.v2-chipstack { display: flex; align-items: flex-end; gap: 0.12em; width: auto; min-width: 2.1em; }
+.v2-chipcol { position: relative; width: 1.7em; height: 2.1em; flex: 0 0 auto; }
+.v2-chipcol > i {
+  position: absolute; left: 0; bottom: calc(var(--i) * 0.22em); width: 1.7em; height: 1.02em;
+  background: center / 100% 100% no-repeat; border-radius: 50%; box-shadow: 0 0.12em 0 rgba(0, 0, 0, 0.35);
+}
+
+/* New chip art (assets/ui2/chips, 160 × 135, seen from slightly above): each chip sits a little higher than the one
+   below so a column reads as a real stack; column height follows its chip count (--n). */
+.v2-chipcol { position: relative; width: 1.7em; height: calc(1.43em + (var(--n, 1) - 1) * 0.3em); flex: 0 0 auto; }
+.v2-chipcol > i { left: 0; bottom: calc(var(--i) * 0.3em); width: 1.7em; height: 1.43em; border-radius: 0; box-shadow: none; background: center / contain no-repeat; }
+.v2-chipstack { height: auto; filter: drop-shadow(0 0.18em 0.2em rgba(10, 4, 40, 0.45)); }
+/* The pot: the same grouped stack, bigger, beside the pot pill (betChips.ts setPot / awardTo). */
+.v2-potchips {
+  position: absolute; left: 0; top: 0; display: flex; align-items: flex-end; gap: 0.12em; pointer-events: none;
+  font-size: clamp(13px, 1.15vw, 19px); filter: drop-shadow(0 0.25em 0.3em rgba(10, 4, 40, 0.5));
+}
+.v2-potchips[hidden] { display: none; }
+html[data-orient='portrait'] .v2-potchips { font-size: 13px; }

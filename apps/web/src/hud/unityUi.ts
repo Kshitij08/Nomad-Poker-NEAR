@@ -681,8 +681,13 @@ export class UNode {
   /** TMP auto-size: the largest size in [min, max] whose wrapped lines fit the rect (0.05 precision). */
   private fit(text: string, w: number, h: number): number {
     const t = this.text!;
+    // Measure with the face actually drawn: the v2 skin overrides some labels' weight / family in CSS (seat names 800,
+    // stacks in the display face), and measuring the Unity values made names ellipsize when they'd fit.
+    const cs = this.textBox?.isConnected ? getComputedStyle(this.textBox) : null;
+    const weight = cs?.fontWeight || (t.bold ? '700' : '400');
+    const family = cs?.fontFamily || t.family;
     const fits = (s: number) => {
-      const font = `${t.bold ? '700' : '400'} ${s}px ${t.family}`;
+      const font = `${weight} ${s}px ${family}`;
       const lines = wrapLines(text, w, font, t.wrap);
       return lines !== Infinity && lines * t.lineRatio * s <= h + 0.01;
     };
@@ -809,11 +814,15 @@ export function buildNode(d: NodeData, opts: BuildOptions = {}): UNode {
 
 /** Waits for the TMP fonts, then re-fits every label under `roots` (auto-size measures with the real glyphs). */
 export function whenFontsReady(roots: UNode[]): void {
-  const fams = ["16px 'UnityNotoSansBold'", "16px 'UnityLiberationSans'"];
-  void Promise.all(fams.map((f) => document.fonts.load(f))).then(() => {
+  // The v2 skin's faces too (seat names Nunito 800, stacks / pot Fredoka): fitted with a fallback font, they kept
+  // the wrong size until the text changed.
+  const fams = ["16px 'UnityNotoSansBold'", "16px 'UnityLiberationSans'", "800 16px 'Nunito'", "900 16px 'Nunito'", "700 16px 'Fredoka'"];
+  const refit = () => {
     for (const r of roots) {
       r.invalidateText();
       r.layout();
     }
-  });
+  };
+  void Promise.all(fams.map((f) => document.fonts.load(f).catch(() => []))).then(refit);
+  void document.fonts.ready.then(refit);
 }

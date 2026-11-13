@@ -32,9 +32,9 @@ const lerpColor = (a: RGBA, b: RGBA, t: number): RGBA => ({
   a: a.a + (b.a - a.a) * t,
 });
 
-/** Redesign v2 fonts (docs/ui-style-guide.md): Nunito for labels, Lilita One for money. */
+/** Redesign v2 fonts (docs/ui-style-guide.md): Nunito for labels, Fredoka for money. */
 const V2_UI = "'Nunito', system-ui, sans-serif";
-const V2_DISPLAY = "'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif";
+const V2_DISPLAY = "'Fredoka', 'Arial Rounded MT Bold', system-ui, sans-serif";
 
 /** Status chip kind from SeatView's action text ("Fold", "Call 300", "Raise 1,200", "Busted"…). */
 export function statusKind(text: string, stack: number): '' | 'fold' | 'call' | 'raise' | 'allin' | 'info' {
@@ -79,6 +79,8 @@ export class SeatHudView implements SeatHud {
   private readonly nameBar: UNode;
 
   private folded = false;
+  private readonly handAnchorX: number;
+  private readonly handClusterBottom: number;
   private timerTween: Tween | null = null;
   private highlightTween: Tween | null = null;
   private strengthActive = false;
@@ -90,10 +92,12 @@ export class SeatHudView implements SeatHud {
   constructor(data: CanvasData, parent: HTMLElement) {
     const sv = HUD_DATA.tableView.seatViews.find((s) => s.canvas === data.name);
     this.mirrored = !!sv?.mirrored;
-    // SeatView.foldedBrightness (Unity dims folded seats) is replaced by the v2 .v2-fold opacity.
+    // SeatView.foldedBrightness (Unity dims folded seats) is replaced by the v2 .v2-fold greyscale filter (v2hud.css).
 
     this.root = buildNode(data.root, { skip: (n) => SKIP.has(n.name) });
     this.root.el.classList.add('u-seat', 'v2-seat');
+    // Right-hand seats are authored mirrored (avatar on the right, token on the plate's left end).
+    this.root.el.classList.toggle('v2-mirror', this.mirrored);
     parent.append(this.root.el);
     const req = (p: string) => {
       const n = this.root.find(p);
@@ -119,6 +123,12 @@ export class SeatHudView implements SeatHud {
     this.handFill = req('Graphics/Hand/ProgressionBar/Handle');
     // The Hand panel is a live readout, not seat chrome: SeatView leaves it out of the fold tint.
     this.hand.foldBrightness = -1;
+    // The strength meter parks under the plate. Measure the plate and status chip from their authored layout once:
+    // their on-enable slide-in clips move them, which made the meter drift between hands (it was placed mid-clip).
+    const nh = this.nameBar.sizeDelta[1];
+    const bh = this.bottomBar.sizeDelta[1];
+    this.handAnchorX = this.bottomBar.anchoredPosition[0];
+    this.handClusterBottom = Math.min(this.nameBar.anchoredPosition[1] - nh * 0.5, this.bottomBar.anchoredPosition[1] - bh * 0.5);
 
     // VFX_Turn_Highlight (particle rings + light, not extractable) sits between Win_Medal and bg_circle.
     this.highlight = this.buildHighlight();
@@ -164,11 +174,32 @@ export class SeatHudView implements SeatHud {
     this.paintStatus();
   }
 
-  /** betText is not wired in Test.unity. */
-  setBet(): void {}
+  /** This street's chips in front of the seat (Unity's betText isn't wired; v2 draws a bet chip on the felt). */
+  setBet(bet = 0): void {
+    this.bet = bet > 0 ? bet : 0;
+    this.onBet?.(this.bet, this.bet > 0 && this.stack <= 0);
+  }
+
+  /** Bet chip hook (tableHud wires it to BetChips with this seat's slot). */
+  onBet: ((bet: number, allIn: boolean) => void) | null = null;
+  /** Street over: the bet chip sweeps into the pot (tableHud wires it). */
+  onSweep: (() => void) | null = null;
+  private bet = 0;
+
+  /**
+   * A new street: this street's bet sweeps into the pot and Check / Call / Bet / Raise statuses clear. Fold and All-in
+   * stay (they still describe the seat), as does Busted.
+   */
+  endStreet(): void {
+    if (this.bet > 0) this.onSweep?.();
+    this.bet = 0;
+    const kind = statusKind(this.statusRaw, this.stack);
+    if (kind === 'call' || kind === 'raise') this.setStatus('');
+  }
 
   setStatus(text: string): void {
-    this.statusRaw = text ?? '';
+    // The engine keeps Unity's bare-"s" plural ("Sixs") for parity; players read "Sixes".
+    this.statusRaw = (text ?? '').replace(/Sixs/g, 'Sixes');
     this.paintStatus();
   }
 
@@ -217,7 +248,7 @@ export class SeatHudView implements SeatHud {
     el.className = 'v2-winfloat';
     el.textContent = `+${TableMoney.chips(amount)}`;
     this.nameBar.el.append(el);
-    window.setTimeout(() => el.remove(), 2200);
+    window.setTimeout(() => el.remove(), 2500); // v2hud.css .v2-winfloat runs 2.4 s
   }
 
   resetForNewHand(): void {
@@ -275,6 +306,8 @@ export class SeatHudView implements SeatHud {
       el.style.setProperty('--p', fill.toFixed(4));
       el.dataset.tone = fill > 0.5 ? 'ok' : fill > 0.2 ? 'warn' : 'late';
       el.classList.toggle('v2-pulse', secondsLeft <= 5);
+      // Your own last 5 s also pulse the action row (v2hud.css html[data-turn-late]), so a timeout is hard to miss.
+      if (this.isHero()) document.documentElement.toggleAttribute('data-turn-late', secondsLeft <= 5);
     };
     paint(left / total, left);
     this.timer.setActive(true);
@@ -288,7 +321,12 @@ export class SeatHudView implements SeatHud {
     );
   }
 
+  private isHero(): boolean {
+    return this.root.el.getAttribute('data-name') === 'Name_Canvas_Player';
+  }
+
   stopTurnTimer(): void {
+    if (this.isHero()) document.documentElement.removeAttribute('data-turn-late');
     this.timerTween?.kill();
     this.timerTween = null;
     this.timer.setActive(false);
@@ -296,10 +334,29 @@ export class SeatHudView implements SeatHud {
 
   setVisible(visible: boolean): void {
     this.root.setActive(visible);
+    if (!visible) this.setBet(0);
   }
 
   get visible(): boolean {
     return this.root.activeSelf;
+  }
+
+  /** Screen rects of what this seat draws (avatar, name plate, status pill, D/SB/BB token): bet chips keep clear of them. */
+  occupiedRects(): DOMRect[] {
+    const out: DOMRect[] = [];
+    for (const n of [this.nameBar, this.bottomBar, this.avatar, this.dealerBadge]) {
+      if (!n.activeInHierarchy) continue;
+      let el: HTMLElement = n.el;
+      if (n === this.bottomBar) {
+        // The status chip: an empty bar is visibility:hidden (it covers nothing), and a long pill overflows its node, so
+        // what's drawn is the inner span.
+        if (getComputedStyle(el).visibility === 'hidden') continue;
+        el = el.querySelector<HTMLElement>('.u-text > span') ?? el;
+      }
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) out.push(r);
+    }
+    return out;
   }
 
   /** River-slam name-tag wobble (MMRotationShaker, channel 1). See Shaker for the formula. */
@@ -323,8 +380,8 @@ export class SeatHudView implements SeatHud {
       n.render();
     };
     // Canvas units: ≈0.136 px/unit at 1280×720, ≈0.123 on a 390 phone → names ≈12.3 px, money ≥17 px there.
-    set(this.nameText, V2_UI, 104, true, 0.9);
-    set(this.stackText, V2_DISPLAY, 140, false);
+    set(this.nameText, V2_UI, 104, true, 0.75);
+    set(this.stackText, V2_DISPLAY, 140, false, 0.7);
     set(this.statusText, V2_UI, 96);
     set(this.dealerLabel, V2_DISPLAY, 96, false);
     const bot = this.botIndicator.find('Text (TMP) (1)');
@@ -346,12 +403,10 @@ export class SeatHudView implements SeatHud {
     // v2: the meter draws 1.35× so its label stays ≥ 11 px on a phone (its text box can't grow inside the art).
     this.hand.scale = [HAND_SCALE, HAND_SCALE];
     this.hand.setAsLastSibling();
-    // ParkStrengthBesideNameplate: under the name plate / status chip cluster, aligned with the status chip.
-    const nameH = this.nameBar.h > 1 ? this.nameBar.h : this.nameBar.sizeDelta[1];
-    const barH = this.bottomBar.h > 1 ? this.bottomBar.h : this.bottomBar.sizeDelta[1];
+    // ParkStrengthBesideNameplate: under the name plate / status chip cluster, aligned with the status chip — from
+    // the authored layout (fixed), not the live one (the slide-in clips move it).
     const handH = (this.hand.sizeDelta[1] > 1 ? this.hand.sizeDelta[1] : 148) * HAND_SCALE;
-    const clusterBottom = Math.min(this.nameBar.anchoredPosition[1] - nameH * 0.5, this.bottomBar.anchoredPosition[1] - barH * 0.5);
-    this.hand.anchoredPosition = [this.bottomBar.anchoredPosition[0], clusterBottom - handH * 0.5 - 8];
+    this.hand.anchoredPosition = [this.handAnchorX, this.handClusterBottom - handH * 0.5 - 8];
     this.handPercent.setText(`${percent}%`);
     this.handCategory.setText(sentenceCase(strengthCategory(hole, board)));
 

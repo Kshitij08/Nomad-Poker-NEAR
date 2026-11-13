@@ -4,9 +4,9 @@
  *    Solana SDK prefab picker; SolanaService.picker still pushes this route, and the answer contract is the same
  *    (resolve exactly once: a pick, or null for Cancel / Escape / the screen going away).
  *  - 'private-buy-in': the private-room buy-in (500–1,000 Coins, blinds 5 / 10) as a v2 dialog.
- *  - The private-tables panels ('private-tables', 'private-host', 'private-tourneys', 'private-tourney-host',
- *    'private-agent') keep their routes and logic; their view layer (src/web3/ui/perUi.ts) draws the v2 skin, and
- *    Escape / back close them (src/web3/ui/lazy.ts).
+ *  - The private SOL tables are Tables › Private tables and Host a SOL table (play.ts); SOL tournaments are
+ *    solTourneys.ts; the SOL Agent is the Agents pages in On-chain mode (solAgent.ts). solKit.ts has their shared
+ *    progress dialog and helpers.
  */
 import type { AppContext, Screen } from '../../app/app';
 import type { NomadHost } from '../../menu/host';
@@ -112,7 +112,7 @@ class WalletSheet extends SheetScreen {
     const seen = new Set<string>();
     const wallets = (p.wallets ?? []).filter((w) => !seen.has(w.name) && (seen.add(w.name), true));
     const body = wallets.length
-      ? `<p class="v2-bi-cap">Pick the wallet to play On-chain with. SOL tables run on Solana devnet.</p><div class="v2-wl" role="list">${wallets
+      ? `<p class="v2-bi-cap">Pick the wallet to play On-chain with. SOL tables run on the Solana test network.</p><div class="v2-wl" role="list">${wallets
           .map((w, i) => `<button class="v2-wl-row" role="listitem" data-w="${i}"><img src="${esc(w.icon)}" alt="" draggable="false"><b>${esc(w.name)}</b><span class="v2-pill ok">Detected</span></button>`)
           .join('')}</div>`
       : `<div class="v2-wl-empty">${ico('sol', 4)}<b>No Solana wallet found</b><p>Install Phantom or Solflare in this browser, then reload the page. On a phone, open Nomad Poker inside the wallet app's browser.</p><div class="v2-wl-links">${INSTALL.map(([n, u]) => `<a class="v2-b blue sm" href="${u}" target="_blank" rel="noopener">Get ${n}</a>`).join('')}</div></div>`;
@@ -157,7 +157,7 @@ class BuyInSheet extends SheetScreen {
     const body = canAfford
       ? `<p class="v2-bi-cap">${esc(blinds)} · buy in ${formatN0(min)}–${formatN0(max)} Coins</p>
          <div class="v2-bi-amt" aria-live="polite">${formatN0(value)}</div>
-         <input class="v2-bi-range" type="range" min="${min}" max="${max}" step="10" value="${value}" aria-label="Buy-in"${max > min ? '' : ' disabled'}>
+         <input class="v2-bi-range v2-gd-range" type="range" min="${min}" max="${max}" step="10" value="${value}" aria-label="Buy-in"${max > min ? '' : ' disabled'}>
          <div class="v2-bi-ends"><button class="v2-chip" data-end="min">Min ${formatN0(min)}</button><button class="v2-chip" data-end="max">Max ${formatN0(max)}</button></div>`
       : `<p class="v2-bi-cap">${esc(blinds)}</p><p class="v2-bi-short">You have ${formatN0(coins)} Coins. This table needs ${formatN0(min)}–${formatN0(ChainTableMode.PRIVATE_MAX_BUY_IN)}.</p>`;
     const el = this.mountSheet(root, 'Buy in', body);
@@ -166,11 +166,15 @@ class BuyInSheet extends SheetScreen {
     const range = el.querySelector<HTMLInputElement>('.v2-bi-range');
     const set = (v: number): void => {
       amount = Math.max(min, Math.min(max, Math.round(v)));
-      if (range) range.value = String(amount);
+      if (range) {
+        range.value = String(amount);
+        range.style.setProperty('--fill', `${max > min ? ((amount - min) / (max - min)) * 100 : 100}%`);
+      }
       if (amt) amt.textContent = formatN0(amount);
       if (join) join.textContent = `Join · ${formatN0(amount)}`;
     };
     range?.addEventListener('input', () => set(Number(range.value)));
+    range?.style.setProperty('--fill', `${max > min ? ((value - min) / (max - min)) * 100 : 100}%`);
     el.querySelectorAll<HTMLElement>('[data-end]').forEach((b) => b.addEventListener('click', () => set(b.dataset.end === 'min' ? min : max)));
     this.button('Cancel', 'ghost', () => this.cancel());
     const join = canAfford ? this.button(`Join · ${formatN0(amount)}`, 'gold', () => this.confirm(amount)) : null;

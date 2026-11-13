@@ -3,6 +3,10 @@ import { cors } from 'hono/cors';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import {
   ProgressRoutes,
+  ShopRoutes,
+  type ShopBuyRequest,
+  type ShopSolIntentRequest,
+  type ShopSolConfirmRequest,
   SocialRoutes,
   StrategyRoutes,
   TournamentRoutes,
@@ -40,6 +44,7 @@ import type { AppEnv, Env, PlayerRow } from './env';
 import { verifyGoogleIdToken } from './google';
 import * as ledger from '@nomad/db/ledger';
 import * as progress from '@nomad/db/progress';
+import * as shop from '@nomad/db/shop';
 import * as socialDb from '@nomad/db/social';
 import { isLeaderboardKind, leaderboard } from '@nomad/db/leaderboards';
 import * as tournaments from '@nomad/db/tournaments';
@@ -109,6 +114,12 @@ const writeLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
   await next();
 };
+
+/** Tests replace the devnet transaction reader. */
+let shopTxFetcher: shop.FetchParsedTx | null = null;
+export function setShopTxFetcherForTests(f: shop.FetchParsedTx | null): void {
+  shopTxFetcher = f;
+}
 
 export function createApp(): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -280,6 +291,31 @@ export function createApp(): Hono<AppEnv> {
   app.post(ProgressRoutes.missionClaim, requirePlayer, async (c) => {
     const { id } = await readJson<MissionClaimRequest>(c.req.raw);
     return c.json(await progress.claimMission(c.env.DB, c.get('player').id, requireString(id, 'id', 64)));
+  });
+
+  // ---- Shop (Phase 3) ---------------------------------------------------------------------------
+  // Coins purchases debit the ledger; SOL purchases (devnet) need SOLANA_RPC_URL and SHOP_TREASURY.
+
+  const solShop = (env: Env) => !!(env.SOLANA_RPC_URL && env.SHOP_TREASURY && !/mainnet/i.test(env.SOLANA_RPC_URL));
+
+  app.get(ShopRoutes.catalog, requirePlayer, async (c) => c.json(await shop.catalog(c.env.DB, c.get('player').id, solShop(c.env))));
+
+  app.post(ShopRoutes.buy, requirePlayer, async (c) => {
+    const b = await readJson<ShopBuyRequest>(c.req.raw);
+    return c.json(await shop.buyWithCoins(c.env.DB, c.get('player').id, requireString(b.itemId, 'itemId', 64), requireString(b.requestId, 'requestId', 64)));
+  });
+
+  app.post(ShopRoutes.solIntent, requirePlayer, async (c) => {
+    if (!solShop(c.env)) fail(501, 'not_configured', 'SOL purchases are not open on this server.');
+    const b = await readJson<ShopSolIntentRequest>(c.req.raw);
+    return c.json(await shop.solIntent(c.env.DB, c.get('player').id, requireString(b.itemId, 'itemId', 64), c.env.SHOP_TREASURY!));
+  });
+
+  app.post(ShopRoutes.solConfirm, requirePlayer, async (c) => {
+    if (!solShop(c.env)) fail(501, 'not_configured', 'SOL purchases are not open on this server.');
+    const b = await readJson<ShopSolConfirmRequest>(c.req.raw);
+    const fetchTx = shopTxFetcher ?? shop.rpcFetchTx(c.env.SOLANA_RPC_URL!);
+    return c.json(await shop.solConfirm(c.env.DB, c.get('player').id, requireString(b.intentId, 'intentId', 64), requireString(b.signature, 'signature', 100), fetchTx));
   });
 
   // ---- Social, profile, leaderboards (Phase 4) ---------------------------------------------------

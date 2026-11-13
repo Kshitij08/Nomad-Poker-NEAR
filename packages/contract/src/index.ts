@@ -397,3 +397,143 @@ export interface LeaderboardPage {
   hasMore: boolean;
   rows: LeaderboardRowInfo[];
 }
+
+// ---- Shop (Phase 3) -------------------------------------------------------------------------------
+
+/**
+ * The shop. The server owns prices and effects; a client only names an item. Coins purchases debit the ledger;
+ * SOL purchases (devnet) quote an intent the player pays with a transfer carrying the intent id as its memo, which
+ * the server checks on chain before applying the item.
+ */
+export const ShopRoutes = {
+  /** GET — the catalogue, what the caller owns and their running boost. */
+  catalog: '/v1/shop',
+  /** POST `{ itemId, requestId }` — buy with Coins. Retrying the same requestId changes nothing. */
+  buy: '/v1/shop/buy',
+  /** POST `{ itemId }` — quote a SOL purchase (devnet): amount, treasury, memo. */
+  solIntent: '/v1/shop/sol/intent',
+  /** POST `{ intentId, signature }` — the transfer landed: check it on chain and apply the item. */
+  solConfirm: '/v1/shop/sol/confirm',
+} as const;
+
+export type ShopCategoryName = 'xp' | 'skins' | 'coins';
+
+/** What an item does. */
+export type ShopEffect =
+  | { kind: 'xp'; amount: number }
+  /** XP up to the start of the next level. */
+  | { kind: 'level_up' }
+  /** 2× XP from hands for this many hours (stacks: extends a running boost). */
+  | { kind: 'xp_boost'; hours: number }
+  /** A card back from one of the room themes, worn at every table (theme id, e.g. 'Neon_City'). */
+  | { kind: 'card_back'; theme: string }
+  /** Coins (chips) credited to the ledger. Sold for devnet SOL in On-chain mode only. */
+  | { kind: 'coins'; amount: number };
+
+export interface ShopItemInfo {
+  id: string;
+  category: ShopCategoryName;
+  name: string;
+  blurb: string;
+  /** Coins price, or null when not sold for Coins. */
+  priceCoins: number | null;
+  /** Devnet SOL price in lamports, or null when not sold for SOL. */
+  priceLamports: number | null;
+  effect: ShopEffect;
+  /** One-time items (card backs) can be bought once; the rest any number of times. */
+  oneTime: boolean;
+  ribbon?: string;
+}
+
+export interface ShopCatalogResponse {
+  items: ShopItemInfo[];
+  /** Item ids the caller owns (one-time items). */
+  owned: string[];
+  /** When the caller's 2× XP boost ends (ISO), or null. */
+  xpBoostUntil: string | null;
+  /** Whether SOL purchases are open on this server (devnet RPC and treasury configured). */
+  solEnabled: boolean;
+}
+
+export interface ShopBuyRequest {
+  itemId: string;
+  /** Client-made id for this purchase; a retry with the same id is a no-op. */
+  requestId: string;
+}
+
+export interface ShopBuyResponse {
+  itemId: string;
+  balances: Balances;
+  owned: string[];
+  xpBoostUntil: string | null;
+  /** Levels paid by an XP item (level rewards are paid as XP crosses them). */
+  levelsPaid: number[];
+}
+
+export interface ShopSolIntentRequest {
+  itemId: string;
+}
+
+export interface ShopSolIntentResponse {
+  intentId: string;
+  lamports: number;
+  /** Devnet address to pay. */
+  treasury: string;
+  /** The memo the transfer must carry (the intent id). */
+  memo: string;
+  expiresAt: string;
+}
+
+export interface ShopSolConfirmRequest {
+  intentId: string;
+  signature: string;
+}
+
+const LAMPORTS_PER_SOL_ = 1_000_000_000;
+const sol = (n: number) => Math.round(n * LAMPORTS_PER_SOL_);
+
+const deck = (theme: string, name: string, coins: number, solPrice: number, ribbon?: string): ShopItemInfo => ({
+  id: `deck:${theme}`,
+  category: 'skins',
+  name,
+  blurb: 'Card back · worn at every table',
+  priceCoins: coins,
+  priceLamports: sol(solPrice),
+  effect: { kind: 'card_back', theme },
+  oneTime: true,
+  ...(ribbon ? { ribbon } : {}),
+});
+
+const coinPack = (id: string, amount: number, solPrice: number, ribbon?: string): ShopItemInfo => ({
+  id,
+  category: 'coins',
+  name: `${amount.toLocaleString('en-US')} Coins`,
+  blurb: 'Coins added to your balance',
+  priceCoins: null,
+  priceLamports: sol(solPrice),
+  effect: { kind: 'coins', amount },
+  oneTime: false,
+  ...(ribbon ? { ribbon } : {}),
+});
+
+/**
+ * The shop catalogue (prices and effects). The API sells from this list; the web shows it (the server's copy when
+ * online). Theme ids are the room themes (apps/web src/theming THEMES). Room themes themselves are not sold.
+ */
+export const SHOP_ITEMS: readonly ShopItemInfo[] = [
+  { id: 'xp-boost-1h', category: 'xp', name: 'XP boost · 1 h', blurb: '2× XP from every hand for 1 hour', priceCoins: 2_000, priceLamports: sol(0.002), effect: { kind: 'xp_boost', hours: 1 }, oneTime: false },
+  { id: 'xp-boost-24h', category: 'xp', name: 'XP boost · 24 h', blurb: '2× XP from every hand for 24 hours', priceCoins: 12_000, priceLamports: sol(0.01), effect: { kind: 'xp_boost', hours: 24 }, oneTime: false, ribbon: 'POPULAR' },
+  { id: 'xp-pack', category: 'xp', name: 'XP pack', blurb: '+5,000 XP now', priceCoins: 8_000, priceLamports: sol(0.006), effect: { kind: 'xp', amount: 5_000 }, oneTime: false },
+  { id: 'xp-level', category: 'xp', name: 'Level up', blurb: 'Jump to the start of your next level', priceCoins: 25_000, priceLamports: sol(0.02), effect: { kind: 'level_up' }, oneTime: false },
+  deck('Default', 'Solana deck', 8_000, 0.006, 'HOT'),
+  deck('Neon_City', 'Neon City deck', 10_000, 0.008, 'NEW'),
+  deck('Forest', 'Forest deck', 6_000, 0.004),
+  deck('Desert', 'Desert deck', 6_000, 0.004),
+  deck('Town', 'Town deck', 6_000, 0.004),
+  // Coins (chip) packs: SOL only (On-chain mode, devnet). Demo mode shows real-money packs as "Coming soon".
+  coinPack('coins-5k', 5_000, 0.005),
+  coinPack('coins-25k', 25_000, 0.02, 'HOT'),
+  coinPack('coins-60k', 60_000, 0.04),
+  coinPack('coins-150k', 150_000, 0.075, 'BEST VALUE'),
+];
+

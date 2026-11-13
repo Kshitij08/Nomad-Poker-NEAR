@@ -91,3 +91,10 @@ The extractor's PNG/JPEG copies are re-encoded as WebP (sizes above are the extr
 | `Town/board_04.webp` | 2048×1176 | 52.6 KB | lossy |
 | `Town/poker_bg_03.webp` | 1408×768 | 201.6 KB | lossy |
 <!-- optimize-assets:end -->
+
+## cardbacks/ (Phase 3)
+
+| File | Source |
+|---|---|
+| `cardbacks/nomad_free_back.webp` | Generated (not from Unity): the free default card back — solid Nomad purple, gold frame, faint "NOMAD POKER" mark; 732 × 1024 with the room decks' rounded corners and UVs. |
+| `cardbacks/nomad_free_back_folded.webp` | Generated: its grey twin for folded cards. |

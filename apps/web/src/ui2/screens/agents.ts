@@ -3,8 +3,8 @@
  * "My Agents" list) · My twin · Marketplace · Coach. Twin, Marketplace and Coach were Unity pop-ups
  * (menu/screens/market.ts); they are pages here with the same backend calls and copy / publish rules.
  *
- * The backend runs ONE Agent per player: the list shows it, and "New agent" says so. The SOL Agent (On-chain mode) keeps
- * its own panel in the private tables lobby ('private-agent'); the v2 Overview links there.
+ * The backend runs ONE Agent per player: the list shows it, and "New agent" says so. In On-chain mode Overview and History
+ * show the SOL Agent instead (solAgent.ts): its limits, Deploy / Stop and its sessions; it plays the Strategy tab.
  */
 import { AgentStrategyWords as W, STRATEGY_BLURBS, STRATEGY_NAMES, STRATEGY_PRESETS, BRAIN_SMART, readNumberField, type AgentDeploymentSummary } from '@nomad/engine/agents';
 import type { AgentsService } from '../../agents/agentsService';
@@ -14,10 +14,11 @@ import {
   applyProfileTo, marketApi, marketOnchain, marketState, rememberCopy, solCopyIsOwn, solCopyMessage, solCopyOf, solProfile,
   format0Hash, TWIN_MIN_DECISIONS, COACH_MIN_HANDS, type AgentStrategyLike,
 } from '../../menu/screens/market';
-import { btn, esc, fmt, act, tabs, chips, slider, input, outFormats, out, type V2Screen } from '../core';
+import { btn, esc, fmt, act, tabs, chips, seg, slider, input, outFormats, out, type V2Screen } from '../core';
 import { ico } from '../icons';
-import { ui, host, app, S, onchain, topBar, setMode, signedIn, coins, prompt } from '../ctx';
+import { ui, host, app, S, onchain, topBar, setMode, signedIn, coins, prompt, friendlyError } from '../ctx';
 import type { ScreenDef } from '../install';
+import { solAgentActions, solAgentClose, solAgentHistory, solAgentOpen, solAgentOverview, solAgentStatus } from './solAgent';
 import './agents.css';
 
 type J = Record<string, unknown>;
@@ -38,7 +39,7 @@ function duration(seconds: number): string {
 
 /** One tab row for every Agents page (no tabs inside tabs): the Agent's own pages, then Twin, Marketplace, Coach. */
 const MAIN_TABS: [string, string, string][] = [
-  ['ag-overview', 'Overview', 'robot'], ['ag-strategy', 'Strategy', 'gear'], ['ag-history', 'History', 'clip'],
+  ['ag-overview', 'Overview', 'robot'], ['ag-strategy', 'Strategy', 'style-autopilot'], ['ag-history', 'History', 'agent-history'],
   ['ag-twin', 'My twin', 'twin'], ['ag-market', 'Marketplace', 'store'], ['ag-coach', 'Coach', 'coach'],
 ];
 
@@ -55,6 +56,7 @@ const common: Record<string, (v: string) => void | Promise<void>> = {
 let pollTimer = 0;
 function startPolling(): void {
   stopPolling();
+  solAgentOpen();
   const tick = () => {
     const svc = agents();
     if (!svc || onchain()) return;
@@ -65,6 +67,7 @@ function startPolling(): void {
   pollTimer = window.setInterval(tick, 5000);
 }
 function stopPolling(): void {
+  solAgentClose();
   window.clearInterval(pollTimer);
   pollTimer = 0;
 }
@@ -77,16 +80,16 @@ function agentColor(pill: string): string {
 function agShell(sub: string, inner: string): string {
   const svc = agents();
   const s = strat();
-  const st = svc?.status() ?? { active: false, pill: 'Idle', line: 'Not playing', progress: null };
+  const st = onchain() ? { active: false, ...solAgentStatus(), progress: null } : svc?.status() ?? { active: false, pill: 'Idle', line: 'Not playing', progress: null };
   const name = s?.agentName ?? 'Agent';
   const net = st.progress ? st.progress.NetPnl : sumNet();
-  const card = `<button class="v2-ag-card on"${act('tab', 'ag-overview')}><div class="v2-row" style="gap:.6em"><div class="v2-ag-badge" style="background:${agentColor(st.pill)}">${ico('robot', 2)}</div><div class="v2-grow"><b class="v2-ellip" style="display:block">${esc(name)}</b><div class="v2-xs ${st.pill === 'Playing' ? 'v2-good' : 'v2-mut'}">${st.pill === 'Playing' ? ico('dot', 0.7) + ' ' : ''}${esc(st.pill)}</div></div></div><div class="v2-row v2-xs v2-mut v2-ag-cardf"><span>${esc(s?.styleName ?? '')}</span><b class="${tone(net)}">${signed(net)}</b></div></button>`;
+  const card = `<button class="v2-ag-card on"${act('tab', 'ag-overview')}><div class="v2-row" style="gap:.6em"><div class="v2-ag-badge" style="background:${agentColor(st.pill)}">${ico('robot', 2)}</div><div class="v2-grow"><b class="v2-ellip" style="display:block">${esc(name)}</b><div class="v2-xs ${st.pill === 'Playing' ? 'v2-good' : 'v2-mut'}">${st.pill === 'Playing' ? ico('dot', 0.7) + ' ' : ''}${esc(st.pill)}</div></div></div><div class="v2-row v2-xs v2-mut v2-ag-cardf"><span>${esc(s?.styleName ?? '')}</span>${onchain() ? '<span class="v2-pill sol">SOL</span>' : `<b class="${tone(net)}">${signed(net)}</b>`}</div></button>`;
   const color = st.pill === 'Playing' ? 'v2-good' : 'v2-mut';
   return agMain(sub) + `<div class="v2-ag-shell">
-  <div class="v2-panel v2-ag-list"><b class="v2-h">My Agents <span class="v2-sm v2-mut" style="font-family:var(--v2-ui)">1</span></b>${card}<button class="v2-ag-card v2-ag-new"${act('ag-new')}>${ico('plus', 1.4)} New agent</button></div>
+  <div class="v2-panel v2-ag-list"><b class="v2-h">My Agents <span class="v2-sm v2-mut" style="font-family:var(--v2-ui)">1</span></b>${card}</div>
   <div class="v2-panel v2-ag-right">
     <div class="v2-row v2-ag-head"><div class="v2-ag-badge big" style="background:${agentColor(st.pill)}">${ico('robot', 2.5)}</div>
-      <div class="v2-grow"><div class="v2-row"><b class="v2-ellip" style="font-size:1.4em">${esc(name)}</b>${btn('Rename', 'ag-rename', { h: 'ghost', c: 'sm' })}</div><div class="v2-sm ${color} v2-ellip">${esc(onchain() ? 'On-chain: the SOL Agent plays from the private tables lobby' : st.line)}</div></div>
+      <div class="v2-grow"><div class="v2-row"><b class="v2-ellip" style="font-size:1.4em">${esc(name)}</b>${btn('Rename', 'ag-rename', { h: 'ghost', c: 'sm' })}</div><div class="v2-sm ${color} v2-ellip">${esc(st.line)}</div></div>
 </div>
     <div class="v2-ag-inner v2-scroll">${inner}</div>
   </div></div>`;
@@ -106,13 +109,13 @@ const shellActions: Record<string, (v: string) => void | Promise<void>> = {
     if (!svc) return;
     prompt('Rename your Agent', 'Other players see this name at the table.', 'Agent name', svc.strategy.agentName, 'Save', (raw) => {
       const err = svc.rename(raw);
-      if (err) ui().message('Rename your Agent', esc(err));
+      if (err) ui().message('Rename your Agent', esc(friendlyError(err, "Couldn't rename your Agent. Try again.")));
       ui().render();
     }, 20);
   },
   'ag-new': () =>
     ui().message('One Agent for now', 'Each account runs one Agent for now. Change its name, playstyle and budget on Overview and Strategy; more Agents per account are coming.', 'OK'),
-  'ag-solagent': () => void app().router.push('private-agent'),
+  ...solAgentActions,
 };
 
 // ------------------------------------------------------------------ Overview
@@ -131,7 +134,7 @@ const overview: ScreenDef = {
   render() {
     const svc = agents();
     const s = strat();
-    if (onchain()) return agShell('ag-overview', solNote());
+    if (onchain()) return agShell('ag-overview', solAgentOverview());
     if (!svc || !s) return agMain('ag-overview') + `<div class="v2-panel v2-empty">${ico('robot', 6)}Agents aren't available right now. Try again later.</div>`;
     const st = svc.status();
     const sessions = svc.history?.Sessions ?? [];
@@ -164,10 +167,6 @@ const overview: ScreenDef = {
   },
 };
 
-function solNote(): string {
-  return `<div class="v2-empty">${ico('sol', 5)}<b class="v2-h" style="font-size:1.4em;color:var(--v2-ink)">SOL Agent</b><span>In On-chain mode your Agent plays private SOL tables (devnet). Deploy it, set its stake and watch it from the SOL Agent panel. The Strategy tab here sets how it plays.</span>${btn('Open SOL Agent', 'ag-solagent', { h: 'gold', c: 'lg' })}</div>`;
-}
-
 function deployOrStop(): void {
   const svc = agents();
   if (!svc) return;
@@ -198,10 +197,10 @@ function deployOrStop(): void {
 async function runAgent(op: () => Promise<string | null>, onOk?: () => void): Promise<void> {
   try {
     const err = await op();
-    if (err) ui().message('Agents', esc(err));
+    if (err) ui().message('Agents', esc(friendlyError(err, "That didn't work. Try again in a moment.")));
     else onOk?.();
   } catch (e) {
-    ui().message('Agents', esc(e instanceof Error ? e.message : String(e)));
+    ui().message('Agents', esc(friendlyError(e, "That didn't work. Try again in a moment.")));
   }
   ui().render();
 }
@@ -285,7 +284,7 @@ const strategy: ScreenDef = {
     const s = strat();
     if (!s) return agMain('ag-strategy') + `<div class="v2-panel v2-empty">${ico('robot', 6)}Agents aren't available right now. Try again later.</div>`;
     const presets = STRATEGY_NAMES.slice(0, STRATEGY_PRESETS.length).map((n, i) =>
-      `<button class="v2-card v2-row v2-ag-pre${s.style === i ? ' on' : ''}"${act('st-pick', i)}>${ico(['robot', 'shield', 'eye', 'bolt'][i] ?? 'robot', 2)}<div class="v2-grow"><b>${esc(n)}</b><div class="v2-xs v2-mut">${esc(STRATEGY_BLURBS[i] ?? '')}</div></div></button>`).join('');
+      `<button class="v2-card v2-row v2-ag-pre${s.style === i ? ' on' : ''}"${act('st-pick', i)}>${ico(['style-autopilot', 'style-guardian', 'style-trapper', 'style-daredevil'][i] ?? 'robot', 2)}<div class="v2-grow"><b>${esc(n)}</b><div class="v2-xs v2-mut">${esc(STRATEGY_BLURBS[i] ?? '')}</div></div></button>`).join('');
     const smart = s.brain === BRAIN_SMART;
     const main = s.values;
     const [risk, riskLine] = riskText(s);
@@ -378,7 +377,7 @@ const history: ScreenDef = {
   close: stopPolling,
   render() {
     const svc = agents();
-    if (onchain()) return agShell('ag-history', solNote());
+    if (onchain()) return agShell('ag-history', solAgentHistory());
     const sessions: AgentDeploymentSummary[] = svc?.history?.Sessions ?? [];
     const total = svc?.history?.Total ?? sessions.length;
     let hands = 0;
@@ -445,7 +444,7 @@ async function fetchInto(l: Load, method: string, path: string, json: string | n
     }
   } catch (e) {
     l.state = 'error';
-    l.error = e instanceof Error ? e.message : 'The service sent something unexpected. Try again.';
+    l.error = friendlyError(e, "Agents aren't available right now. Try again in a moment.");
   }
   ui().render();
 }
@@ -630,7 +629,8 @@ const market: ScreenDef = {
   render() {
     const chain = onchain();
     const sorts: [string, string][] = chain ? [['top', 'Top'], ['popular', 'Popular'], ['new', 'New']] : [['styles', 'By style'], ['new', 'Promising'], ['top', 'Top'], ['popular', 'Popular']];
-    const bar = `<div class="v2-row v2-wrap v2-ag-mbar">${mktTab === 'browse' ? chips(sorts, mktSort, 'mkt-sort') : ''}<div class="v2-grow"></div><div class="v2-ag-mtabs">${tabs([['browse', 'Browse'], ['mine', 'My strategies']], mktTab, 'mkt-tab')}</div>${btn(`${ico('plus', 0.9)} Publish`, 'mkt-publish', { h: 'violet' })}</div>`;
+    const down = (mktTab === 'browse' ? mktLoad : mineLoad).state === 'error';
+    const bar = `<div class="v2-row v2-wrap v2-ag-mbar${down ? ' v2-ag-down' : ''}"${down ? ' aria-disabled="true"' : ''}>${mktTab === 'browse' ? chips(sorts, mktSort, 'mkt-sort') : ''}<div class="v2-grow"></div>${seg([['browse', 'Browse'], ['mine', 'My strategies']], mktTab, 'mkt-tab')}${btn(`${ico('plus', 0.9)} Publish`, 'mkt-publish', { h: 'violet' })}</div>`;
     const note = `<div class="v2-xs v2-mut">${chain ? 'Copy a strategy for your SOL Agent. Its creator gets 8% and Nomad 2% of the new profit it makes you, paid on chain; never of losses.' : 'Copy a strategy for your Coins Agent. Its creator gets 8% and Nomad 2% of the profit it makes you, never of losses.'}</div>`;
     const l = mktTab === 'browse' ? mktLoad : mineLoad;
     const wait = loadBody(l, 'store');

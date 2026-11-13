@@ -89,6 +89,17 @@ describe('local table server — Quick Play', () => {
     await until(() => b.view.seats[a.game.localSeat]!.reaction === 5, 5000, 'reaction');
   });
 
+  it('lets a player show their cards after a hand, and the others see them', async () => {
+    // A hand ends with Alice's cards unshown (she checks or folds): the client offers "Show cards".
+    await until(() => !!a.view.showOffer, 60000, 'show-cards offer');
+    const seat = a.game.localSeat;
+    const mine = a.view.holeCards.get(seat);
+    a.view.showOffer!();
+    await until(() => /^Shows/.test(b.view.seats[seat]!.status), 5000, 'show replicated');
+    expect(b.view.holeCards.get(seat)).toBe(mine);
+    expect(b.view.holeCards.get(seat)).not.toBe('??');
+  });
+
   it('relays table chat to the other players only', async () => {
     const chatA = new TableChat(a.conn, 'ua', () => 'Alice');
     const chatB = new TableChat(b.conn, 'ub', () => 'Bob');
@@ -211,4 +222,42 @@ describe('local table server — party rooms', () => {
       h.conn.close();
     }
   }, 40000);
+});
+
+describe('local table server — join refusals reach the player', () => {
+  it('tells a second tab of the same account that it is already seated', async () => {
+    const created = await connectTable({ kind: 'create' }, { url: server.url });
+    expect(created.ok, created.message).toBe(true);
+    const code = created.session!;
+    const who = { name: 'Twin', token: 'tok-twin', playerId: 'pid-twin', coins: 5000, speed: SPEED };
+    const first = headlessClient(created.conn!, who);
+    first.game.start();
+    await until(() => first.game.canJoinTable, 5000, 'join offer');
+    first.game.requestJoinTable();
+    await until(() => first.game.localSeat >= 0, 5000, 'first tab seated');
+
+    // The same account opens the room in a second tab and presses Join: the ledger refuses (already seated here).
+    const joined = await connectTable({ kind: 'join', code }, { url: server.url });
+    expect(joined.ok, joined.message).toBe(true);
+    const second = headlessClient(joined.conn!, who);
+    const errors: string[] = [];
+    second.game.onChange((what) => {
+      if (what === 'joinError' && second.game.joinError) errors.push(second.game.joinError.kind);
+    });
+    second.game.start();
+    await until(() => (second.game.roster ?? []).some((s) => s.isOccupied && s.name === 'Twin'), 5000, 'second tab sees the roster');
+    const coinsBefore = second.wallet.coins;
+    second.game.confirmPrivateBuyIn(1000);
+    await until(() => errors.length > 0, 8000, 'join refusal surfaced');
+    expect(errors[0]).toBe('duplicate');
+    expect(second.game.localSeat).toBe(-1);
+    // The optimistic buy-in debit is handed back.
+    expect(second.wallet.coins).toBe(coinsBefore);
+    expect(first.game.localSeat).toBeGreaterThanOrEqual(0);
+
+    for (const h of [first, second]) {
+      h.game.stop();
+      h.conn.close();
+    }
+  }, 30000);
 });

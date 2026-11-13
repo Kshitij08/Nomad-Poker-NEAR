@@ -22,6 +22,8 @@ const STAGES = {
     tournamentMinLead: '60',
     listingMinHands: '100',
     listingMinDays: '0',
+    // Local SOL shop tests pay the same devnet treasury as staging, read through Solana's public devnet RPC.
+    shopTreasury: 'GV5LYvyakPHtjNWENbFKnfyG2NuMLkL6xYPxo6YyEcJw',
   },
   staging: {
     worker: 'nomad-poker-api-staging',
@@ -34,6 +36,8 @@ const STAGES = {
     tournamentMinLead: '60',
     listingMinHands: '100',
     listingMinDays: '0',
+    // SOL shop purchases (devnet) pay the PER keeper key, a devnet key the project controls (apps/per health shows it).
+    shopTreasury: 'GV5LYvyakPHtjNWENbFKnfyG2NuMLkL6xYPxo6YyEcJw',
   },
   production: {
     worker: 'nomad-poker-api',
@@ -46,6 +50,7 @@ const STAGES = {
     tournamentMinLead: '',
     listingMinHands: '',
     listingMinDays: '',
+    shopTreasury: '',
   },
 } as const;
 
@@ -73,6 +78,10 @@ export default defineConfig(({ mode }) => {
         TOURNAMENT_MIN_LEAD_SECONDS: bindings.text(s.tournamentMinLead),
         LISTING_MIN_HANDS: bindings.text(s.listingMinHands),
         LISTING_MIN_DAYS: bindings.text(s.listingMinDays),
+        // The shop's SOL purchases (devnet only): the treasury, and the RPC URL as a secret on staging.
+        SHOP_TREASURY: bindings.text(s.shopTreasury),
+        ...(stage === 'staging' ? { SOLANA_RPC_URL: bindings.secret() } : {}),
+        ...(stage === 'development' ? { SOLANA_RPC_URL: bindings.text('https://api.devnet.solana.com') } : {}),
       },
     },
   };

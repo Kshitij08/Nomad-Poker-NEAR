@@ -47,7 +47,14 @@ export function btn(label: string, a: string, o: { h?: string; c?: string; v?: u
 /** Tab strip. items: [value, label, icon?]. */
 export function tabs(items: [string, string, string?][], on: string, a: string, cls = ''): string {
   return `<div class="v2-tabs ${cls}" role="tablist">${items
-    .map(([v, l, i]) => `<button class="v2-tab${v === on ? ' on' : ''}" role="tab" aria-selected="${v === on}"${act(a, v)}>${i ? ico(i, 1.5, v === on ? '' : 'color:#c3bef0') : ''}<span class="v2-ellip">${l}</span></button>`)
+    .map(([v, l, i]) => `<button class="v2-tab${v === on ? ' on' : ''}" role="tab" aria-selected="${v === on}"${act(a, v)}>${i ? ico(i, 1.5, v === on ? '' : 'color:var(--v2-mut)') : ''}<span class="v2-ellip">${l}</span></button>`)
+    .join('')}</div>`;
+}
+
+/** Segmented control for 2–3 view modes inside a tab (style guide: no tabs inside tabs). items: [value, label]. */
+export function seg(items: [string, string][], on: string, a: string, cls = ''): string {
+  return `<div class="v2-seg ${cls}" role="radiogroup">${items
+    .map(([v, l]) => `<button class="${v === on ? 'on' : ''}" role="radio" aria-checked="${v === on}"${act(a, v)}>${l}</button>`)
     .join('')}</div>`;
 }
 
@@ -266,6 +273,9 @@ export class V2 {
     this.toastTimer = window.setTimeout(() => t.remove(), ms);
   }
 
+  /** Called on every handled press (set by install.ts to play the menu click / start sounds). */
+  onPress?: (kind: 'click' | 'start') => void;
+
   // ------------------------------------------------------------------ events
 
   private onClick(e: Event): void {
@@ -282,12 +292,19 @@ export class V2 {
     const fn = (inDialog ? this.dialog?.actions?.[a] : undefined) ?? this.current?.actions?.[a] ?? this.globalActions[a];
     if (!fn) return;
     e.preventDefault();
+    // Menu sounds (install.ts wires the audio): the main call to action gets the start sound, anything else a click.
+    this.onPress?.(el.classList.contains('lg') ? 'start' : 'click');
+    // A failed action tells the player (it used to fail silently, only logging); the raw error stays in the console.
+    const failed = (err: unknown) => {
+      console.error('[ui2] action failed', a, err);
+      this.toast('Something went wrong. Try again.', 2600);
+    };
     try {
       const r = fn(v, el, e);
-      if (r instanceof Promise) r.catch((err) => console.error('[ui2] action failed', a, err)).finally(() => this.render());
+      if (r instanceof Promise) r.catch(failed).finally(() => this.render());
       else this.render();
     } catch (err) {
-      console.error('[ui2] action failed', a, err);
+      failed(err);
     }
   }
 

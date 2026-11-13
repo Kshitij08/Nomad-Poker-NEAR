@@ -25,6 +25,7 @@ import { PortraitSeats } from './portraitSeats';
 import { overlayScale } from './portraitRects';
 import { PORTRAIT_ROW, PORTRAIT_TOP_ROW_Y } from './portraitHud';
 import { PORTRAIT_LAYOUT as P, portraitCardSpot, SEAT_UNIT, STACKED_SEAT_BOX } from './portraitLayout';
+import { dealCrossings } from '../three/tableScene';
 
 /** Slot i is drawn in place of landscape slot (i + SHIFT) mod 8: a quarter of the oval, so slot 0 (you) is at the bottom. */
 export const PORTRAIT_SLOT_SHIFT = 2;
@@ -63,6 +64,14 @@ export class PortraitTable {
   private readonly cardHome = new Map<Object3D, CardHome>();
   /** Fit region (portrait coords), from the seat grid and the stacked seat box. */
   private readonly extent: { x0: number; x1: number; y0: number; y1: number };
+  /** Exact ring place of each slot's player (seatSpread.ts spreadRing); null / whole = the slot's own place. */
+  private ring: (number | null)[] = [];
+  /** Landscape: the seat canvases' authored places and the oval's centre (Unity x, z) they sit round. */
+  private readonly canvasHome: [number, number, number][];
+  private readonly ringCentre: { x: number; z: number };
+  /** The shoe (deck opening on the felt) and its landscape pose. */
+  private readonly shoe: Object3D | null;
+  private readonly shoeHome: { p: Vector3; q: Quaternion } | null;
 
   constructor(private readonly stage: TableStage) {
     this.world = stage.table.world;
@@ -82,8 +91,16 @@ export class PortraitTable {
       this.anchors.push(anchor);
       this.slotHome.push(root.position.clone());
     }
+    // Landscape: the chip piles sit left of the v2 pot pill (Unity's spot is under the pill's wider left edge).
     this.tokensHome = stage.potTokens.root.position.clone();
+    this.tokensHome.x += LANDSCAPE_TOKENS_DX;
+    stage.potTokens.root.position.copy(this.tokensHome);
     this.seats = new PortraitSeats(stage.hud.seats);
+    this.shoe = stage.table.world.getObjectByName('DealerSlot') ?? null;
+    this.shoeHome = this.shoe ? { p: this.shoe.position.clone(), q: this.shoe.quaternion.clone() } : null;
+    this.canvasHome = stage.hud.seats.map((seat) => [...seat.canvas.position] as [number, number, number]);
+    const homes = this.canvasHome.length ? this.canvasHome : [[0, 0, 0] as [number, number, number]];
+    this.ringCentre = { x: homes.reduce((a, p) => a + p[0], 0) / homes.length, z: homes.reduce((a, p) => a + p[2], 0) / homes.length };
 
     const u = SEAT_UNIT * P.hudScale;
     const b = STACKED_SEAT_BOX;
@@ -136,7 +153,7 @@ export class PortraitTable {
     const low = Math.min(LANDED_MAX_Y, ...src.map((s) => s.evaluatePosition(1).y));
     return src.map((s, card) => {
       const spot = portraitCardSpot(slot, card);
-      return { ...(portraitPath(s, spot, low + card * 0.03) as unknown as SplineFields) };
+      return { ...(portraitPath(s, spot, low + card * 0.03, [P.shoe.x, P.shoe.y]) as unknown as SplineFields) };
     });
   }
 
@@ -145,24 +162,12 @@ export class PortraitTable {
   private switchTo(p: boolean): void {
     this.portrait = p;
     const { stage } = this;
-    const n = stage.table.seatSplines.length;
-
-    stage.table.seatSplines.forEach((pair, i) => {
-      pair.forEach((s, k) => Object.assign(s as unknown as SplineFields, (p ? this.portraitSplines : this.splineSnap)[i][k]));
-    });
-    // Pot-fly targets: the re-placed avatars.
-    stage.seatWorld.forEach((pos, i) => {
-      const v = p ? unityOf(P.seats[i].avatar[0], P.seats[i].avatar[1], this.seatWorldSnap[i][1]) : this.seatWorldSnap[i];
-      pos.splice(0, pos.length, ...v);
-    });
 
     worldCanvasSpace.positions.clear();
     worldCanvasSpace.scales.clear();
+    this.placeSeats();
+    this.placeShoe();
     if (p) {
-      stage.hud.seats.forEach((seat, i) => {
-        const a = P.seats[i % n]?.avatar ?? [0, 0];
-        worldCanvasSpace.positions.set(seat.canvas, unityOf(a[0], a[1], seat.canvas.position[1]));
-      });
       const pot = stage.hud.pot.canvas;
       worldCanvasSpace.positions.set(pot, unityOf(P.pot.x, P.pot.y, pot.position[1]));
       worldCanvasSpace.scales.set(pot, P.pot.scale);
@@ -211,6 +216,90 @@ export class PortraitTable {
       const spline = (cv as unknown as { spline: UnitySpline | null }).spline;
       if (cv.alive && spline) cv.retargetSpline(spline);
     }
+  }
+
+  /**
+   * Where each slot's player sits on the ring (seatSpread.ts spreadRing). Between hands, when the seats are planned:
+   * a slot whose player sits between two slots slides there — plate, deal paths and pot-fly target — so every gap
+   * round the table is the same (7 players no longer leave a hole at the top).
+   *
+   * Landscape only: the portrait grid keeps whole slots, because between the side and top rows a sliding seat would
+   * run into the board and pot band in the middle of the phone table (portraitLayout.ts); its 8 places are already
+   * spread evenly by seatSpread.
+   */
+  setRing(ring: readonly (number | null)[]): void {
+    if (ring.length === this.ring.length && ring.every((f, i) => f === this.ring[i])) return;
+    this.ring = [...ring];
+    this.placeSeats();
+    for (const cv of this.spawned()) {
+      const spline = (cv as unknown as { spline: UnitySpline | null }).spline;
+      if (cv.alive && spline) cv.retargetSpline(spline);
+    }
+  }
+
+  /**
+   * The shoe sits where the deal paths rise through the felt: Unity's spot in landscape; in portrait the paths start
+   * at P.shoe (top of the table), and the opening turns with the table so it still reads as a wide slot on screen.
+   */
+  private placeShoe(): void {
+    const shoe = this.shoe;
+    const home = this.shoeHome;
+    if (!shoe || !home) return;
+    if (!this.portrait) {
+      shoe.position.copy(home.p);
+      shoe.quaternion.copy(home.q);
+      shoe.scale.setScalar(1);
+      return;
+    }
+    const feltY = (shoe.userData as { feltY?: number }).feltY ?? home.p.y;
+    const box = dealCrossings(this.portraitSplines.map((pair) => pair.map(splineOf)), feltY);
+    const [x, , z] = box ? [(box.minX + box.maxX) / 2, 0, (box.minZ + box.maxZ) / 2] : unityOf(P.shoe.x, P.shoe.y, 0);
+    shoe.position.set(x, home.p.y, z);
+    shoe.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+    shoe.scale.setScalar(P.shoe.scale);
+  }
+
+  /** Seat canvases, deal paths and pot-fly targets for the current orientation and ring. */
+  private placeSeats(): void {
+    const p = this.portrait;
+    const { stage } = this;
+    const n = stage.table.seatSplines.length;
+    stage.table.seatSplines.forEach((pair, i) => {
+      pair.forEach((s, k) => Object.assign(s as unknown as SplineFields, (p ? this.portraitSplines : this.splineSnap)[i][k]));
+    });
+    // Pot-fly targets: the re-placed avatars.
+    stage.seatWorld.forEach((pos, i) => {
+      const v = p ? unityOf(P.seats[i].avatar[0], P.seats[i].avatar[1], this.seatWorldSnap[i][1]) : this.seatWorldSnap[i];
+      pos.splice(0, pos.length, ...v);
+    });
+    stage.hud.seats.forEach((seat, i) => {
+      if (p) {
+        const a = P.seats[i % n]?.avatar ?? [0, 0];
+        worldCanvasSpace.positions.set(seat.canvas, unityOf(a[0], a[1], seat.canvas.position[1]));
+      } else worldCanvasSpace.positions.delete(seat.canvas);
+    });
+    if (!p) {
+      const c = this.ringCentre;
+      stage.hud.seats.forEach((seat, i) => {
+        const f = this.ring[i];
+        if (f == null || Math.abs(f - i) < 1e-6 || n < 2) return;
+        const a = ((Math.floor(f) % n) + n) % n;
+        const b = (a + 1) % n;
+        const t = f - Math.floor(f);
+        const home = this.canvasHome;
+        if (home[a] && home[b]) worldCanvasSpace.positions.set(seat.canvas, ringLerp(home[a], home[b], t, c));
+        const pos = stage.seatWorld[i];
+        if (pos && this.seatWorldSnap[a] && this.seatWorldSnap[b]) pos.splice(0, pos.length, ...ringLerp(this.seatWorldSnap[a], this.seatWorldSnap[b], t, c));
+        stage.table.seatSplines[i]?.forEach((live, k) => {
+          const endA = splineOf(this.splineSnap[a][k]).evaluatePosition(1);
+          const endB = splineOf(this.splineSnap[b][k]).evaluatePosition(1);
+          const [x, y, z] = ringLerp([endA.x, endA.y, endA.z], [endB.x, endB.y, endB.z], t, c);
+          const bent = bendSplineEnd(splineOf(this.splineSnap[i][k]), new Vector3(x, y, z));
+          Object.assign(live as unknown as SplineFields, { ...(bent as unknown as SplineFields) });
+        });
+      });
+    }
+    stage.hud.refreshCardClear();
   }
 
   private spawned(): CardViewLike[] {
@@ -394,19 +483,48 @@ const TURN_FROM = 0.72;
 const LANDED_MAX_Y = 0.85;
 /** Fraction of the path (by length) after which it starts bending onto the portrait card spot. */
 const TAIL_FROM = 0.55;
+/** Landscape pot chip piles: this far (Unity x, screen left) from Unity's spot, clear of the v2 pot pill. */
+const LANDSCAPE_TOKENS_DX = -0.65;
+/** Fraction of the path (by length) over which the portrait deck shift fades out. */
+const HEAD_TO = 0.3;
 
 /**
  * A landscape deal path re-drawn for the portrait table: squeezed by `SWIRL` and bent over its tail so it ends on
  * `spot` (portrait coords). Built in Unity world space; knot rotations (the banking up-vectors) are kept.
  */
-export function portraitPath(s: UnitySpline, spot: [number, number], endY?: number): UnitySpline {
+export function portraitPath(s: UnitySpline, spot: [number, number], endY?: number, deck?: [number, number]): UnitySpline {
+  // Portrait x = −Unity z, portrait y = Unity x.
+  const { knots, frac } = worldKnots(s, new Matrix4().makeScale(SWIRL.y, 1, SWIRL.x));
+  if (deck && !s.closed) {
+    // The deck moves to the portrait shoe (top of the table): the rise through the felt and the start of the swirl
+    // shift there together, fading out before the tail.
+    const [dx, , dz] = unityOf(deck[0], deck[1], 0);
+    const shift = new Vector3(dx - knots[0].position.x, 0, dz - knots[0].position.z);
+    knots.forEach((k, i) => k.position.addScaledVector(shift, 1 - MathUtils.smoothstep(frac[i], 0, HEAD_TO)));
+  }
+  const end = knots[knots.length - 1].position;
+  const [tx, , tz] = unityOf(spot[0], spot[1], end.y);
+  return bentPath(s, knots, frac, new Vector3(tx, endY ?? end.y, tz));
+}
+
+/**
+ * A deal path with its tail bent smoothly onto `target` (Unity world space) — how a seat slid round the oval
+ * (setRing) still gets its cards: same deck, same swirl, a different last stretch.
+ */
+export function bendSplineEnd(s: UnitySpline, target: Vector3): UnitySpline {
+  const { knots, frac } = worldKnots(s, new Matrix4());
+  return bentPath(s, knots, frac, target);
+}
+
+type WorldKnot = { position: Vector3; tangentIn: Vector3; tangentOut: Vector3; rotation: Quaternion };
+
+/** The path's knots in Unity world space (scaled by `S` about the origin), and each knot's fraction of its length. */
+function worldKnots(s: UnitySpline, S: Matrix4): { knots: WorldKnot[]; frac: number[] } {
   const W = s.world;
   const W3 = new Matrix3().setFromMatrix4(W);
+  const S3 = new Matrix3().setFromMatrix4(S);
   const wRot = new Quaternion();
   W.decompose(new Vector3(), wRot, new Vector3());
-  // Portrait x = −Unity z, portrait y = Unity x.
-  const S = new Matrix4().makeScale(SWIRL.y, 1, SWIRL.x);
-  const S3 = new Matrix3().setFromMatrix4(S);
   const knots = s.knots.map((k) => {
     const rotation = wRot.clone().multiply(k.rotation);
     const inv = rotation.clone().invert();
@@ -422,18 +540,35 @@ export function portraitPath(s: UnitySpline, spot: [number, number], endY?: numb
     if (i > 0) run += lengths[i - 1] ?? 0;
     return run / total;
   });
+  return { knots, frac };
+}
+
+/** Moves the knots past TAIL_FROM (smoothly weighted) so the path ends on `target`. */
+function bentPath(s: UnitySpline, knots: WorldKnot[], frac: number[], target: Vector3): UnitySpline {
   const end = knots[knots.length - 1].position;
-  const [tx, , tz] = unityOf(spot[0], spot[1], end.y);
-  const dx = tx - end.x;
-  const dy = endY === undefined ? 0 : endY - end.y;
-  const dz = tz - end.z;
+  const d = target.clone().sub(end);
   knots.forEach((k, i) => {
     const w = s.closed ? 0 : MathUtils.smoothstep(frac[i], TAIL_FROM, 1);
-    k.position.x += dx * w;
-    k.position.y += dy * w;
-    k.position.z += dz * w;
+    k.position.addScaledVector(d, w);
   });
   return new UnitySpline({ name: s.name, closed: s.closed, knots, worldMatrix: IDENTITY });
+}
+
+/** A UnitySpline over a snapshot of another's fields (to evaluate a saved path without touching the live one). */
+const splineOf = (f: SplineFields): UnitySpline => Object.assign(Object.create(UnitySpline.prototype) as UnitySpline, f);
+
+/**
+ * Point between `a` and `b` (Unity world) a fraction `t` of the way round the oval: angle and radius about `c` (x, z)
+ * are interpolated, height linearly — a seat slid between two slots stays on the ring instead of cutting inside it.
+ */
+export function ringLerp(a: readonly number[], b: readonly number[], t: number, c: { x: number; z: number }): [number, number, number] {
+  const a0 = Math.atan2(a[2] - c.z, a[0] - c.x);
+  const a1 = Math.atan2(b[2] - c.z, b[0] - c.x);
+  const r0 = Math.hypot(a[0] - c.x, a[2] - c.z);
+  const r1 = Math.hypot(b[0] - c.x, b[2] - c.z);
+  const ang = a0 + wrapAngle(a1 - a0) * t;
+  const r = r0 + (r1 - r0) * t;
+  return [c.x + Math.cos(ang) * r, a[1] + (b[1] - a[1]) * t, c.z + Math.sin(ang) * r];
 }
 
 const IDENTITY = new Matrix4().toArray();

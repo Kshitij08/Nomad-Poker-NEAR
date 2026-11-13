@@ -28,6 +28,8 @@ export type ClientMessage =
   | { t: 'hello'; name: string; token: string; ticket: string; buyIn: number }
   | { t: 'action'; seat: number; actionType: number; amount: number }
   | { t: 'reaction'; id: number }
+  /** After a hand: reveal my hole cards to the table (replicated as a one-seat Showdown). */
+  | { t: 'show' }
   | { t: 'voiceState'; talking: boolean; muted: boolean }
   | { t: 'avatar'; avatar: number }
   | { t: 'addBot' }

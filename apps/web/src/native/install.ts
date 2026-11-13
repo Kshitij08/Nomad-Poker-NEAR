@@ -25,6 +25,9 @@ export async function openDeepLink(ctx: AppContext, link: DeepLink): Promise<voi
     await ctx.services.net?.joinParty(link.code).catch((e: unknown) => console.warn('[native] join failed', e));
   } else if (link.kind === 'tournament') {
     // Show it, never register: registering spends the entry fee, which the player confirms on the screen.
+    // The v2 Join by code screen, with the code looked up; the Unity-era panel only when the v2 UI isn't running.
+    const v2 = await import('../ui2/ctx').then((m) => m.ui()).catch(() => undefined);
+    if (v2) return v2.show('t-code', link.code);
     const t = ctx.services.tournaments;
     if (!t || !ctx.router.has('tournaments')) return;
     await ctx.router.push('tournaments', { code: link.code });

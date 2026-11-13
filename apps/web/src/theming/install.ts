@@ -2,6 +2,7 @@ import type { AppContext } from '../app/app';
 import { ThemeService } from './themeService';
 import { ThemePickerScreen } from './themePicker';
 import { setThemeServiceForGraphics } from './themedGraphic';
+import { recheckCardBack, setCardBackOwnership } from './cardBack';
 
 export { bindThemeToTable, applyThemeToTable } from './tableBinding';
 export { themedColor, themedSprite, bindThemedGraphic, onThemeChanged, applyFrame, applyPotPlate, applyButtonLabels, applyMenuButton, applyMenuBackground, fitBackground } from './themedGraphic';
@@ -19,4 +20,8 @@ export function install(ctx: AppContext): void {
   ctx.services.theme = theme;
   setThemeServiceForGraphics(theme);
   ctx.router.register('theme-picker', (c) => new ThemePickerScreen(c, theme));
+  // A Shop card back is worn only while the wallet (the server's items when online) says the player owns it.
+  setCardBackOwnership((id) => !!ctx.services.wallet?.owns(id));
+  ctx.events.on('wallet:changed', () => recheckCardBack());
+  ctx.events.on('nomad:progress', () => recheckCardBack());
 }

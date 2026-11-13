@@ -39,6 +39,8 @@ export interface IPokerTableServer {
   onHello(player: PlayerRef, playerName: string, token: string, sessionTicket: string, buyInChips: number): void;
   onActionSubmitted(source: PlayerRef, seat: number, action: PlayerAction): void;
   onReaction(source: PlayerRef, reactionId: number): void;
+  /** After a hand: the player reveals their hole cards (optional: tournament servers may not support it). */
+  onShowCards?(source: PlayerRef): void;
   onVoiceState(source: PlayerRef, talking: boolean, muted: boolean): void;
   onAvatar(source: PlayerRef, avatar: number): void;
   onAddBot(source: PlayerRef): void;

@@ -151,7 +151,7 @@ class GlobalDialogs {
   /** Settings at the table (and anywhere the host opens them): Music / Sound effects, account rows, Leave table. */
   settings(leaveTable?: () => void, account: [string, () => void][] = []): void {
     const vol = (label: string, key: 'music' | 'sfx', v: number) =>
-      `<div class="v2-row v2-set-row"><span class="v2-set-l">${label}</span><input class="v2-gd-range" type="range" min="0" max="100" step="1" value="${Math.round(v * 100)}" data-vol="${key}" aria-label="${label}"><b class="v2-set-v" data-vol-out="${key}">${Math.round(v * 100)}%</b></div>`;
+      `<div class="v2-row v2-set-row"><span class="v2-set-l">${label}</span><input class="v2-gd-range" type="range" min="0" max="100" step="1" value="${Math.round(v * 100)}" style="--fill:${Math.round(v * 100)}%" data-vol="${key}" aria-label="${label}"><b class="v2-set-v" data-vol-out="${key}">${Math.round(v * 100)}%</b></div>`;
     const rows = account.length
       ? `<div class="v2-row v2-set-row v2-wrap"><span class="v2-set-l">Account</span>${account.map(([l], i) => `<button class="v2-b ${/sign out|disconnect/i.test(l) ? 'red' : 'blue'} sm" data-acc="${i}">${esc(l)}</button>`).join('')}</div>`
       : '';
@@ -167,6 +167,7 @@ class GlobalDialogs {
         const v = Number(r.value) / 100;
         if (r.dataset.vol === 'music') PokerAudio.musicVolume = v;
         else PokerAudio.sfxVolume = v;
+        r.style.setProperty('--fill', `${r.value}%`);
         const o = root.querySelector(`[data-vol-out="${r.dataset.vol}"]`);
         if (o) o.textContent = `${r.value}%`;
       }),

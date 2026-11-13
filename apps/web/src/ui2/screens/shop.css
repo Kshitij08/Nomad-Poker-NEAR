@@ -2,35 +2,35 @@
    Portrait: scrollable tabs, 2-up grid, stacked featured. */
 .v2-sh-tabs { flex: 0 0 auto; }
 .v2-sh-body { padding-bottom: 0.2em; }
-.v2-sh-grid { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2em; min-height: 0; }
+.v2-sh-grid { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: minmax(max-content, 1fr); gap: 1.2em; min-height: 0; overflow-y: auto; padding-bottom: 0.2em; }
 .v2-sh-feat { flex: 1; display: flex; gap: 1.2em; align-items: stretch; min-height: 0; }
 .v2-sh-side { flex: 1; gap: 1.2em; }
 
 .v2-scard {
-  position: relative; overflow: hidden; border-radius: var(--v2-r-lg); background: linear-gradient(170deg, #3a2490, var(--v2-dlg)); border: 0.15em solid var(--v2-accent);
+  position: relative; overflow: hidden; border-radius: var(--v2-r-lg); background: linear-gradient(170deg, color-mix(in srgb, var(--v2-accent) 30%, var(--v2-panel-solid)), var(--v2-dlg)); border: 0.15em solid var(--v2-accent);
   padding: 1em; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.35em; box-shadow: 0 0.5em 1.2em rgba(0, 0, 0, 0.35); min-width: 0;
 }
 .v2-scard > * { position: relative; }
-.v2-scard small { color: #c3bef0; font-weight: 700; }
+.v2-scard small { color: var(--v2-ink2); font-weight: 700; }
 .v2-rays { position: absolute !important; inset: -30%; background: repeating-conic-gradient(from 0deg at 50% 40%, rgba(255, 255, 255, 0.08) 0 7deg, transparent 7deg 14deg); pointer-events: none; }
-.v2-ribbon { position: absolute !important; top: 1.7em; right: -3.4em; width: 13em; text-align: center; transform: rotate(40deg); background: linear-gradient(#ff8a8a, #f0435a); padding: 0.25em 0; font-size: 0.75em; font-weight: 900; letter-spacing: 0.06em; z-index: 2; white-space: nowrap; }
+.v2-ribbon { position: absolute !important; top: 1.7em; right: -3.4em; width: 13em; text-align: center; transform: rotate(40deg); background: var(--v2-grad-ribbon); padding: 0.25em 0; font-size: 0.75em; font-weight: 900; letter-spacing: 0.06em; z-index: 2; white-space: nowrap; }
 .v2-sart { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 8em; filter: drop-shadow(0 0.5em 0.8em rgba(0, 0, 0, 0.4)); }
 .v2-sname { font-size: 1.2em; font-weight: 900; }
 .v2-scard-row { flex: 1; flex-direction: row; text-align: left; gap: 1em; }
 .v2-scard-row .v2-sart { flex: 0 0 11em; min-height: 0; }
-.v2-sfeat { flex: 1.6; background: linear-gradient(150deg, #6a35e0, #2a1678 70%); border-color: #ffc21f; }
+.v2-sfeat { flex: 1.6; background: linear-gradient(150deg, var(--v2-violet), var(--v2-bg-mid) 70%); border-color: var(--v2-gold); }
 .v2-sfeat-in { flex: 1; display: flex; align-items: center; justify-content: center; gap: 2em; }
 .v2-sfeat-art { align-items: center; }
 .v2-sfeat-txt { text-align: left; gap: 0.4em; align-items: flex-start; }
-.v2-sfeat-big { font-family: var(--v2-display); font-weight: 400; font-size: 2.6em; line-height: 1; }
+.v2-sfeat-big { font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 2.6em; line-height: 1; }
 .v2-sfeat-lines { font-size: 1.15em; }
 
 .v2-sh-rel { position: relative; display: inline-flex; }
 .v2-sh-bolt { position: absolute; right: -1em; top: -0.6em; }
-.v2-sh-theme { width: 12em; height: 7.5em; border-radius: var(--v2-r-md); background: linear-gradient(160deg, var(--c), #1a0f4a); position: relative; box-shadow: 0 0.4em 1em rgba(0, 0, 0, 0.4); }
+.v2-sh-theme { width: 12em; height: 7.5em; border-radius: var(--v2-r-md); background: linear-gradient(160deg, var(--c), var(--v2-bg-top)); position: relative; box-shadow: 0 0.4em 1em rgba(0, 0, 0, 0.4); }
 .v2-sh-theme > i { position: absolute; left: 2em; top: 2.4em; width: 8em; height: 3.8em; border-radius: var(--v2-r-pill); background: radial-gradient(#4a2db8, #2a1a6e); border: 0.3em solid #0e0830; }
 .v2-sh-skins { position: relative; width: 9em; height: 8em; }
-.v2-sh-skins > i { position: absolute; top: 0.5em; width: 4.4em; height: 6.2em; border-radius: var(--v2-r-sm); background: repeating-linear-gradient(45deg, var(--c) 0 0.4em, #1a0f4a 0.4em 0.8em); border: 0.25em solid #fff; box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.4); }
+.v2-sh-skins > i { position: absolute; top: 0.5em; width: 4.4em; height: 6.2em; border-radius: var(--v2-r-sm); background: repeating-linear-gradient(45deg, var(--c) 0 0.4em, var(--v2-bg-top) 0.4em 0.8em); border: 0.25em solid #fff; box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.4); }
 .v2-sh-mini { font-size: 0.8em; display: flex; flex: 0 0 auto; }
 
 /* ---------------------------------------------------------------- portrait */
@@ -52,3 +52,7 @@ html[data-orient='portrait'] .v2-sfeat-big { font-size: 2em; }
 html[data-orient='portrait'] .v2-sh-side { gap: 0.7em; }
 html[data-orient='portrait'] .v2-scard-row .v2-sart { flex: 0 0 7em; font-size: 0.7em; }
 html[data-orient='portrait'] .v2-sh-tabs .v2-tab, html[data-orient='portrait'] .v2-page[data-screen='shop'] .v2-b { min-height: 40px; }
+
+/* Tabs with two rows (Card skins): smaller art so both rows and their buttons fit without scrolling on desktop. */
+.v2-sh-grid:has(> :nth-child(5)) .v2-sart { min-height: 5.6em; font-size: 0.8em; }
+.v2-sh-grid:has(> :nth-child(5)) .v2-scard { padding-top: 0.8em; padding-bottom: 0.8em; gap: 0.3em; }

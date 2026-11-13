@@ -59,6 +59,10 @@ export class WorldCanvas {
    * localEulerAngles. Mapped to CSS as rotateY(-y) rotateX(x) rotateZ(z) about the canvas pivot.
    */
   eulerOffset: { x: number; y: number; z: number } | null = null;
+  /** Extra screen offset (CSS px) after projection: seats nudged clear of their hole cards (tableHud.ts). */
+  screenOffset: [number, number] = [0, 0];
+  /** The px-per-unit the sliced sprites were last laid out at (0 = never). */
+  private renderedAt = 0;
 
   constructor(
     readonly root: UNode,
@@ -74,6 +78,12 @@ export class WorldCanvas {
     // Unity → three: the Unity root's transform (z negated; turned/scaled by the portrait table).
     tmp.set(x, y, z).applyMatrix4(worldCanvasSpace.matrix).project(camera);
     return [((tmp.x + 1) / 2) * w, ((1 - tmp.y) / 2) * h];
+  }
+
+  /** The canvas pivot on screen (CSS px), following portrait re-placement, camera shake and zoom. */
+  screenPivot(camera: PerspectiveCamera, w: number, h: number): [number, number] {
+    const [px, py, pz] = worldCanvasSpace.positions.get(this) ?? this.position;
+    return this.projectPoint(px, py, pz, camera, w, h);
   }
 
   /** Re-projects the canvas onto the viewport (CSS px). Call after the camera moved / the viewport resized. */
@@ -92,15 +102,23 @@ export class WorldCanvas {
       Y = [0, -k];
     }
     // Sliced sprites rasterise at this resolution; re-render only when it drifts noticeably (resize, big zoom).
+    // Compared with the scale they were last drawn at (not last frame's), so a slow zoom also re-renders them.
     const pxPerUnit = Math.hypot(X[0], X[1]);
-    const prev = this.root.renderScale;
     this.root.renderScale = pxPerUnit;
-    if (Math.abs(pxPerUnit - prev) > prev * 0.1 && this.root.activeInHierarchy) this.root.layout();
+    if (this.renderedAt === 0 || Math.abs(pxPerUnit - this.renderedAt) > this.renderedAt * 0.1) {
+      if (this.root.activeInHierarchy) this.root.layout();
+      this.renderedAt = pxPerUnit;
+    }
     const hw = this.root.sizeDelta[0] / 2;
     const hh = this.root.sizeDelta[1] / 2;
-    // CSS local (u, v) from the root's top-left → canvas (u − hw, hh − v) → screen o + x·X + y·Y.
-    const e = o[0] - hw * X[0] + hh * Y[0];
-    const f = o[1] - hw * X[1] + hh * Y[1];
+    // CSS local (u, v) from the root's top-left → canvas (u − hw, hh − v) → screen o + x·X + y·Y. An upright canvas
+    // (seats, pot) lands on whole pixels: fractional offsets made the plate text soft.
+    let e = o[0] - hw * X[0] + hh * Y[0] + this.screenOffset[0];
+    let f = o[1] - hw * X[1] + hh * Y[1] + this.screenOffset[1];
+    if (worldCanvasSpace.upright) {
+      e = Math.round(e);
+      f = Math.round(f);
+    }
     let t = `matrix(${X[0]},${X[1]},${-Y[0]},${-Y[1]},${e},${f})`;
     const a = this.shaker.angle;
     if (a) {

@@ -1,0 +1,28 @@
+/* Shop purchases (Phase 3): card-back art, owned state, notices, "Coming soon". Tokens only (docs/ui-style-guide.md). */
+.v2-sh-deck { position: relative; width: 9em; height: 8em; }
+.v2-sh-deck > span {
+  position: absolute; left: 2.6em; top: 0.4em; width: 4.4em; height: 6.2em; border-radius: var(--v2-r-sm); overflow: hidden;
+  border: 0.22em solid var(--v2-ink); background: var(--v2-deep); box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.4); transform-origin: 50% 90%;
+}
+.v2-sh-deck > span img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.v2-sh-mini .v2-sh-deck { font-size: 0.55em; }
+.v2-scard.v2-sh-owned { border-color: var(--v2-line); }
+.v2-ribbon.v2-sh-ownedtag { background: var(--v2-grad-green); color: var(--v2-on-gold); }
+.v2-sh-note {
+  display: flex; align-items: center; gap: var(--v2-s2); padding: var(--v2-s2) var(--v2-s3); margin-bottom: var(--v2-s3);
+  background: var(--v2-deep); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-md); color: var(--v2-mut); font-weight: 800;
+}
+.v2-sh-note .v2-ico { color: var(--v2-gold); }
+.v2-sh-offline { border-color: var(--v2-accent); }
+.v2-sh-soon { opacity: 0.7; }
+html[data-orient='portrait'] .v2-sh-note { font-size: max(12px, 0.9em); }
+.v2-sh-note .v2-b { margin-left: auto; }
+.v2-sh-sig { display: flex; flex-wrap: wrap; align-items: center; gap: var(--v2-s2); margin-top: var(--v2-s2); }
+.v2-sh-sig a { color: var(--v2-gold); font-weight: 900; }
+.v2-sh-sig code { color: var(--v2-mut2); font-size: 0.85em; }
+
+/* Phone polish: the category tabs fill the row; side cards share one art column so their text starts at the same x. */
+html[data-orient='portrait'] .v2-sh-tabs .v2-tabs { grid-auto-columns: minmax(max-content, 1fr); min-width: 100%; }
+.v2-sh-body .v2-scard-row .v2-sart { width: 11em; flex: 0 0 11em; display: flex; align-items: center; justify-content: center; }
+.v2-sh-body .v2-scard-row > .v2-col { align-items: flex-start; text-align: left; }
+html[data-orient='portrait'] .v2-sh-body .v2-scard-row .v2-sart { width: 7em; flex: 0 0 7em; }

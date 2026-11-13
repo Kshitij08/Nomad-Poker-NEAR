@@ -26,7 +26,7 @@ export enum PokerSound {
   ChatMessage = 60,
   VoiceChatOn = 61,
   VoiceChatOff = 62,
-  Reaction = 63, // no clip mapped: silent
+  Reaction = 63, // a short pop (the button clip, a little louder)
   MusicIntro = 70,
   MusicLoop = 71,
 }
@@ -64,6 +64,7 @@ export const SFX_LIBRARY: Readonly<Partial<Record<PokerSound, SfxEntry>>> = Obje
   [PokerSound.ChatMessage]: { file: 'chat message notification (mp3cut.net).mp3', volume: 0.8, minRetrigger: 0.15 },
   [PokerSound.VoiceChatOn]: { file: 'voice chat on sfx (mp3cut.net).mp3', volume: 0.8, minRetrigger: 0.2 },
   [PokerSound.VoiceChatOff]: { file: 'voice chat off sfx (mp3cut.net).mp3', volume: 0.8, minRetrigger: 0.2 },
+  [PokerSound.Reaction]: { file: 'generic button (mp3cut.net).mp3', volume: 0.9, minRetrigger: 0.2 },
   [PokerSound.MusicIntro]: { file: 'Nomad Poker game BGM.mp3', volume: 1.0, minRetrigger: 0 },
   [PokerSound.MusicLoop]: { file: 'Nomad Poker game BGM looped.mp3', volume: 1.0, minRetrigger: 0 },
 });

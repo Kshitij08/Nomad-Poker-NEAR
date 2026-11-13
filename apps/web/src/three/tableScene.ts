@@ -2,6 +2,7 @@ import {
   AmbientLight,
   BufferAttribute,
   BufferGeometry,
+  CanvasTexture,
   Color,
   DirectionalLight,
   DoubleSide,
@@ -288,6 +289,12 @@ export function buildTableScene(): TableScene {
     (seat) => [splineFromData(seat.card0 as unknown as RawSpline), splineFromData(seat.card1 as unknown as RawSpline)] as [UnitySpline, UnitySpline],
   );
 
+  // Dealer slot: the cards start under the felt and rise through it near the deck. A dark shoe opening on the felt
+  // where every seat's path breaks the surface makes them come out of (and go back into) the slot instead of clipping
+  // through the cloth.
+  const shoe = buildDealerSlot(seatSplines, img.worldMatrix[13] ?? 0.11, img.worldMatrix[12] ?? 0);
+  if (shoe) world.add(shoe);
+
   // Community slots, placed at their world transforms.
   const slots = s.communitySlots.map((slot, i) => {
     const root = buildHierarchy(slot.hierarchy as unknown as HNode);
@@ -334,4 +341,103 @@ export function buildTableScene(): TableScene {
     setFelt: (url: string) => swapMap(felt.material, url, themeLoader),
     setBackground,
   };
+}
+
+/**
+ * The dealer slot: a dark rounded opening (with a soft rim) on the felt, centred where the seat splines break the
+ * surface, sized to cover all of them with a margin. Drawn on a small canvas texture so it needs no art.
+ */
+/**
+ * Where the deal paths come up through the felt (Unity x, z): the box round every path's first point at felt height.
+ * The shoe opening covers it (the portrait table re-places the shoe from its own paths, layout/portraitTable.ts).
+ */
+export function dealCrossings(splines: readonly (readonly UnitySpline[])[], feltY: number): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
+  const pts: { x: number; z: number }[] = [];
+  for (const pair of splines)
+    for (const sp of pair) {
+      for (let i = 0; i <= 200; i++) {
+        const p = sp.evaluatePosition(i / 200);
+        if (p.y >= feltY) {
+          pts.push({ x: p.x, z: p.z });
+          break;
+        }
+      }
+    }
+  if (!pts.length) return null;
+  return {
+    minX: Math.min(...pts.map((p) => p.x)),
+    maxX: Math.max(...pts.map((p) => p.x)),
+    minZ: Math.min(...pts.map((p) => p.z)),
+    maxZ: Math.max(...pts.map((p) => p.z)),
+  };
+}
+
+function buildDealerSlot(splines: [UnitySpline, UnitySpline][], feltY: number, feltX: number): Mesh | null {
+  if (typeof document === 'undefined') return null; // node tests: no canvas
+  const box = dealCrossings(splines, feltY);
+  if (!box) return null;
+  // Centred on the felt left-to-right (it read as off-centre on the crossings' own middle); wide enough each way to
+  // cover every crossing.
+  const half = Math.max(Math.abs(box.minX - feltX), Math.abs(box.maxX - feltX));
+  const minX = feltX - half;
+  const maxX = feltX + half;
+  const { minZ, maxZ } = box;
+  // The card is about 0.6 × 0.85 units on this table; the opening spans every crossing plus a card's width.
+  const w = maxX - minX + 0.95;
+  const d = maxZ - minZ + 0.42;
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = Math.max(64, Math.round((512 * d) / w));
+  const g = c.getContext('2d');
+  if (!g) return null;
+  const r = c.height * 0.48;
+  const path = (inset: number) => {
+    g.beginPath();
+    g.roundRect(inset, inset, c.width - inset * 2, c.height - inset * 2, Math.max(4, r - inset));
+  };
+  // Rim: the game's violet (like the seat plates) with a thin gold edge, so it reads as the dealer's shoe, not a hole.
+  path(2);
+  const rim = g.createLinearGradient(0, 0, 0, c.height);
+  rim.addColorStop(0, 'rgba(173, 132, 255, 0.95)');
+  rim.addColorStop(1, 'rgba(106, 53, 224, 0.95)');
+  g.fillStyle = rim;
+  g.fill();
+  g.lineWidth = 5;
+  g.strokeStyle = 'rgba(255, 213, 74, 0.85)';
+  g.stroke();
+  // The opening: deep galaxy violet with depth toward the middle.
+  path(c.height * 0.16);
+  const grad = g.createLinearGradient(0, 0, 0, c.height);
+  grad.addColorStop(0, 'rgba(14, 10, 48, 0.98)');
+  grad.addColorStop(0.5, 'rgba(26, 15, 74, 1)');
+  grad.addColorStop(1, 'rgba(14, 10, 48, 0.98)');
+  g.fillStyle = grad;
+  g.fill();
+  // A faint gold spade in the middle (cards rise over it while dealing).
+  const sz = c.height * 0.34;
+  g.save();
+  g.translate(c.width / 2, c.height / 2 + sz * 0.05);
+  g.scale(sz / 12, sz / 12);
+  g.beginPath();
+  g.moveTo(0, -6);
+  g.bezierCurveTo(-1.6, -3.2, -6, -1.2, -6, 2);
+  g.arc(-2.8, 2, 3.2, Math.PI, 0.35, true);
+  g.lineTo(-1.8, 7);
+  g.lineTo(1.8, 7);
+  g.lineTo(0.8, 4.4);
+  g.arc(2.8, 2, 3.2, Math.PI - 0.35, 0, true);
+  g.bezierCurveTo(6, -1.2, 1.6, -3.2, 0, -6);
+  g.closePath();
+  g.fillStyle = 'rgba(255, 213, 74, 0.55)';
+  g.fill();
+  g.restore();
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  const mesh = new Mesh(new PlaneGeometry(w, d), new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  mesh.rotation.x = -Math.PI / 2; // lie flat on the felt, facing up
+  mesh.position.set((minX + maxX) / 2, feltY + 0.004, (minZ + maxZ) / 2);
+  mesh.name = 'DealerSlot';
+  mesh.userData.feltY = feltY;
+  mesh.renderOrder = 1;
+  return mesh;
 }

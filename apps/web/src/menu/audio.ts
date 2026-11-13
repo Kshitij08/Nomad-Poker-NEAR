@@ -11,6 +11,7 @@ import type { AppContext } from '../app/app';
 import type { UNode } from '../hud/unityUi';
 import { widgetsOf, type MSlider, type MToggle } from './ui/tree';
 import type { VolumeSink } from './deps';
+import { musicTrackFor } from '../audio/roomMusic';
 
 const MASTER_KEY = 'poker.audio.master';
 const MUSIC_KEY = 'poker.audio.music';
@@ -46,6 +47,7 @@ export const PokerAudio = {
   attach(ctx: AppContext): void {
     sink = ctx.audio as unknown as Partial<VolumeSink>;
     apply();
+    followRoomMusic(ctx);
   },
   get masterVolume(): number {
     ensureLoaded();
@@ -138,4 +140,21 @@ export function bindVolumeControl(panel: UNode, assigned: { master?: MSlider; mu
     m?.setValueWithoutNotify(denorm(m, PokerAudio.masterVolume));
   });
   return () => offs.forEach((f) => f());
+}
+
+/** Switches the background music when the table opens / closes or its room theme changes. */
+function followRoomMusic(ctx: AppContext): void {
+  const audio = ctx.audio as unknown as { setMusicTrack?: (key: string | null) => void };
+  if (!audio.setMusicTrack) return;
+  // The base screen (the table or the menu), not an overlay pushed on top of it (level-up, a panel…).
+  let base: string | null = null;
+  const update = () => {
+    const router = ctx.router as unknown as { current?: string | null; depth?: number };
+    if ((router.depth ?? 1) <= 1) base = router.current ?? null;
+    const theme = (ctx.services as unknown as { theme?: { current?: string } }).theme?.current ?? null;
+    audio.setMusicTrack!(musicTrackFor(base, theme));
+  };
+  ctx.events.on('router:changed', update);
+  ctx.events.on('theme:changed', update);
+  update();
 }

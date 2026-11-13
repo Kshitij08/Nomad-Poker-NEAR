@@ -35,7 +35,14 @@ export class RecordingView implements NetTableViewPort {
   turn = -1;
   handNumber = 0;
 
+  /** "Show cards" offered after a hand (null when not offered). */
+  showOffer: (() => void) | null = null;
+
   constructor(readonly betting: BettingPanelPort) {}
+
+  offerShowCards(onShow: (() => void) | null): void {
+    this.showOffer = onShow;
+  }
 
   bindSeat(seat: number, name: string, stack: number, isBot: boolean): void {
     Object.assign(this.seats[seat]!, { visible: true, name, stack, isBot, status: '' });

@@ -1,173 +1,279 @@
 /**
- * Shop (new in Redesign v2). Browsing only: there is no purchase backend yet, so Buy shows the confirm step and then
- * says the Shop isn't open; nothing is granted and no Coins are spent. SHOP_CATALOG is the one place a backend
- * catalogue replaces.
+ * Shop (Phase 3). The Nomad API owns the catalogue, prices and effects (packages/contract SHOP_ITEMS, sold by
+ * packages/db/src/shop.ts); this screen shows it (the server's copy when online) and buys through ShopClient.
+ *
+ *   - Demo: XP items and card backs for Coins (a ledger debit on the server).
+ *   - On-chain: the same items for devnet SOL (a wallet transfer the server checks on chain), plus Coins (chip) packs
+ *     for SOL, credited to the Coins balance.
+ *   - Demo's Coin packs are real-money items: "Coming soon" until an app-store / Stripe account exists.
+ * Room themes aren't sold (they'd change the room backgrounds). Card backs are worn at every table once owned; without
+ * one, every table shows the free Nomad back ("Default · Free").
  */
+import { SHOP_ITEMS, type ShopItemInfo } from '@nomad/contract';
+import { shopClient, type ShopError } from '../../economy/shopClient';
+import { cardBackPreview, equipCardBack, equippedCardBack } from '../../theming/cardBack';
+import type { ThemeId } from '../../theming/themeData';
 import { btn, esc, tabs } from '../core';
-import { ico, coinStack } from '../icons';
-import { ui, onchain, topBar, setMode } from '../ctx';
+import { ico, coinStack, ui2Art } from '../icons';
+import { ui, app, host, onchain, onchainApi, topBar, setMode, sfx } from '../ctx';
+import { PokerSound } from '@nomad/engine';
 import type { ScreenDef } from '../install';
 import './shop.css';
+import './shopPurchase.css';
 
-export type ShopCategory = 'featured' | 'coins' | 'xp' | 'themes' | 'skins' | 'agents';
+export type ShopCategory = 'featured' | 'coins' | 'xp' | 'skins';
 
-export interface ShopItem {
-  id: string;
-  name: string;
-  blurb: string;
-  /** Demo price: real money for Coin packs ("$0.99"), else Coins ("2,000"). Empty = not sold in Demo. */
-  demo: string;
-  /** On-chain price in SOL ("◎ 0.005"). */
-  sol: string;
-  ribbon?: string;
-  /** Art colour (themes, skins, agents) or coin-stack size (coins). */
-  color?: string;
-  stack?: number;
-}
+/** Demo's real-money items: shown, not sold yet (no app-store / Stripe account). On-chain sells server packs for SOL. */
+const COIN_PACKS: { id: string; name: string; blurb: string; demo: string; ribbon?: string; stack: number }[] = [
+  { id: 'coins-5k', name: 'Pocket pile', blurb: '5,000 Coins', demo: '$0.99', stack: 1 },
+  { id: 'coins-25k', name: 'Big stack', blurb: '25,000 Coins', demo: '$3.99', ribbon: 'HOT', stack: 2 },
+  { id: 'coins-60k', name: 'Vault', blurb: '60,000 Coins', demo: '$7.99', stack: 3 },
+  { id: 'coins-150k', name: 'Treasure', blurb: '150,000 Coins', demo: '$14.99', ribbon: 'BEST VALUE', stack: 4 },
+];
 
-/** The catalogue (placeholder until a store backend exists). */
-export const SHOP_CATALOG: Record<Exclude<ShopCategory, 'featured'>, ShopItem[]> & { bundle: ShopItem & { was: { demo: string; sol: string }; ends: string; lines: string[] } } = {
-  coins: [
-    { id: 'coins-5k', name: 'Pocket Pile', blurb: '5,000 Coins', demo: '$0.99', sol: '◎ 0.005', stack: 1 },
-    { id: 'coins-25k', name: 'Big Stack', blurb: '25,000 Coins', demo: '$3.99', sol: '◎ 0.020', ribbon: 'HOT', stack: 2 },
-    { id: 'coins-60k', name: 'Vault', blurb: '60,000 Coins', demo: '$7.99', sol: '◎ 0.040', stack: 3 },
-    { id: 'coins-150k', name: 'Treasure', blurb: '150,000 Coins', demo: '$14.99', sol: '◎ 0.075', ribbon: 'BEST VALUE', stack: 4 },
-  ],
-  xp: [
-    { id: 'xp-1h', name: 'XP Boost · 1 h', blurb: '2× XP for 1 hour', demo: '2,000', sol: '◎ 0.002' },
-    { id: 'xp-24h', name: 'XP Boost · 24 h', blurb: '2× XP for 24 hours', demo: '12,000', sol: '◎ 0.010', ribbon: 'POPULAR' },
-    { id: 'xp-pack', name: 'XP Pack', blurb: '+5,000 XP', demo: '8,000', sol: '◎ 0.006' },
-    { id: 'xp-skip', name: 'Level Skip', blurb: '+1 level instantly', demo: '25,000', sol: '◎ 0.020' },
-  ],
-  themes: [
-    { id: 'th-neon', name: 'Neon City', blurb: 'Table theme', demo: '15,000', sol: '◎ 0.012', ribbon: 'NEW', color: '#ff4fa3' },
-    { id: 'th-desert', name: 'Desert Dusk', blurb: 'Table theme', demo: '12,000', sol: '◎ 0.010', color: '#d6a85c' },
-    { id: 'th-forest', name: 'Enchanted Forest', blurb: 'Table theme', demo: '12,000', sol: '◎ 0.010', color: '#2e8b57' },
-    { id: 'th-galaxy', name: 'Galaxy Castle', blurb: 'Table theme', demo: '20,000', sol: '◎ 0.015', ribbon: 'LIMITED', color: '#7b3ff2' },
-  ],
-  skins: [
-    { id: 'sk-galaxy', name: 'Galaxy Deck', blurb: 'Card back + faces', demo: '10,000', sol: '◎ 0.008', color: '#5b2bd1' },
-    { id: 'sk-gold', name: 'Royal Gold', blurb: 'Card back', demo: '8,000', sol: '◎ 0.006', ribbon: 'HOT', color: '#e8b54a' },
-    { id: 'sk-neon', name: 'Neon Glow', blurb: 'Card back', demo: '8,000', sol: '◎ 0.006', color: '#14f1c5' },
-    { id: 'sk-4c', name: 'Classic 4-Colour', blurb: 'Card faces', demo: '5,000', sol: '◎ 0.004', color: '#2f6bff' },
-  ],
-  agents: [
-    { id: 'ag-guard', name: 'Guardian Agent', blurb: 'Careful · low risk', demo: '', sol: '◎ 0.25', color: '#22c468' },
-    { id: 'ag-tact', name: 'Tactician Agent', blurb: 'Balanced · medium risk', demo: '', sol: '◎ 0.40', ribbon: 'POPULAR', color: '#2f6bff' },
-    { id: 'ag-dare', name: 'Daredevil Agent', blurb: 'Bold · high risk', demo: '', sol: '◎ 0.40', color: '#ff4f7a' },
-    { id: 'ag-slot', name: 'Extra Agent Slot', blurb: 'Run one more agent', demo: '', sol: '◎ 0.10', color: '#ffc21f' },
-  ],
-  bundle: {
-    id: 'bundle-starter', name: 'Starter Bundle', blurb: '50,000 Coins', demo: '$4.99', sol: '◎ 0.050', ribbon: '−60%',
-    was: { demo: '$12.49', sol: '◎ 0.125' }, ends: 'Limited time', lines: ['+ Neon City table theme', '+ 2× XP for 24 hours'],
-  },
+const fmtCoins = (n: number) => n.toLocaleString('en-US');
+const fmtSol = (lamports: number) => `${(lamports / 1e9).toFixed(lamports % 1_000_000 === 0 ? 3 : 4).replace(/0+$/, '').replace(/\.$/, '')} SOL`;
+/** A SOL price with the SOL icon (like Coins prices carry the coin), for buttons. */
+const solPrice = (lamports: number) => `${ico('sol', 1.1)} ${esc(fmtSol(lamports))}`;
+
+const items = (): ShopItemInfo[] => shopClient(app()).catalog?.items ?? [...SHOP_ITEMS];
+const byCat = (cat: 'xp' | 'skins' | 'coins') => items().filter((i) => i.category === cat);
+const deckTheme = (it: ShopItemInfo): ThemeId | null => (it.effect.kind === 'card_back' ? (it.effect.theme as ThemeId) : null);
+
+/** Shop item art (public/assets/ui2/shop/), by item id: the catalogue's XP items and Coins packs, and the demo packs. */
+const SHOP_ART: Record<string, string> = {
+  'xp-boost-1h': 'shop_xp_boost_1h',
+  'xp-boost-24h': 'shop_xp_boost_24h',
+  'xp-pack': 'shop_xp_pack',
+  'xp-level': 'shop_level_up',
+  'coins-5k': 'shop_coins_5k',
+  'coins-25k': 'shop_coins_25k',
+  'coins-60k': 'shop_coins_60k',
+  'coins-150k': 'shop_coins_150k',
 };
 
-type Cat = Exclude<ShopCategory, 'featured'>;
-
-function art(cat: Cat, it: ShopItem, i: number): string {
-  if (cat === 'coins') return coinStack((it.stack ?? 1) + 1, 3.6);
-  if (cat === 'xp') return `<div class="v2-sh-rel">${ico('xp', 7)}${i < 2 ? `<span class="v2-sh-bolt">${ico('bolt', 3.4)}</span>` : ''}</div>`;
-  if (cat === 'themes') return `<div class="v2-sh-theme" style="--c:${it.color}"><i></i></div>`;
-  if (cat === 'skins') return `<div class="v2-sh-skins">${[-16, 0, 16].map((r, j) => `<i style="left:${2.5 + j * 1.2}em;transform:rotate(${r}deg);--c:${it.color}"></i>`).join('')}</div>`;
-  return `<div class="v2-sh-rel">${ico('robot', 7, `filter:drop-shadow(0 .3em .6em ${it.color})`)}</div>`;
+/** The item's picture, or null when it has none (an id the server added later). */
+function shopArt(id: string): string | null {
+  const file = SHOP_ART[id];
+  return file ? `<img class="v2-ico v2-sh-art" src="${ui2Art(`shop/${file}`)}" alt="" draggable="false" decoding="async" style="width:7.5em;height:7.5em">` : null;
 }
 
-/** Price label and whether it's money (green button) or Coins / SOL (gold). */
-function price(cat: Cat | 'bundle', it: ShopItem): { label: string; hue: string } {
-  if (onchain() || cat === 'agents') return { label: esc(it.sol), hue: 'gold' };
-  if (cat === 'coins' || cat === 'bundle') return { label: esc(it.demo), hue: 'green' };
-  return { label: `${ico('coin', 1.1)} ${esc(it.demo)}`, hue: 'gold' };
+function art(it: ShopItemInfo): string {
+  const t = deckTheme(it);
+  if (t) {
+    const src = cardBackPreview(t);
+    return `<div class="v2-sh-deck">${[-14, 0, 14].map((r) => `<span style="transform:rotate(${r}deg)">${src ? `<img src="${esc(src)}" alt="" draggable="false">` : ''}</span>`).join('')}</div>`;
+  }
+  const pic = shopArt(it.id);
+  if (pic) return pic;
+  if (it.effect.kind === 'coins') {
+    const n = it.effect.amount;
+    return coinStack(n >= 150_000 ? 5 : n >= 60_000 ? 4 : n >= 25_000 ? 3 : 2, 3.6);
+  }
+  const bolt = it.effect.kind === 'xp_boost';
+  return `<div class="v2-sh-rel">${ico('xp', 7)}${bolt ? `<span class="v2-sh-bolt">${ico('bolt', 3.4)}</span>` : ''}</div>`;
 }
 
-function itemCard(cat: Cat, it: ShopItem, i: number): string {
-  const p = price(cat, it);
-  return `<div class="v2-scard"><div class="v2-rays"></div>${it.ribbon ? `<span class="v2-ribbon">${esc(it.ribbon)}</span>` : ''}<div class="v2-sart">${art(cat, it, i)}</div><b class="v2-sname">${esc(it.name)}</b><small>${esc(it.blurb)}</small>${btn(p.label, 'buy', { h: p.hue, c: 'w', v: `${cat}:${it.id}` })}</div>`;
-}
-
-function find(key: string): { cat: Cat | 'bundle'; it: ShopItem } | null {
-  const [cat, id] = key.split(':') as [Cat | 'bundle', string];
-  if (cat === 'bundle') return { cat, it: SHOP_CATALOG.bundle };
-  const it = SHOP_CATALOG[cat]?.find((x) => x.id === id);
-  return it ? { cat, it } : null;
-}
-
-function artFor(cat: Cat | 'bundle', it: ShopItem): string {
-  if (cat === 'bundle') return coinStack(4, 3);
-  const list = SHOP_CATALOG[cat];
-  return `<div class="v2-sh-mini">${art(cat, it, list.indexOf(it))}</div>`;
-}
-
-function buy(key: string): void {
-  const f = find(key);
-  if (!f) return;
-  const { cat, it } = f;
-  const p = price(cat, it);
+/** The buy button: price, or Owned / Wear / Wearing for card backs, or Coming soon. */
+function action(it: ShopItemInfo, wide = true): string {
+  const c = shopClient(app());
+  const t = deckTheme(it);
+  if (t && c.owns(it.id)) {
+    const wearing = equippedCardBack() === t;
+    return btn(wearing ? `${ico('check', 1.1)} Wearing` : 'Wear at tables', wearing ? 'unwear' : 'wear', { h: wearing ? 'ghost' : 'blue', c: wide ? 'w' : '', v: t });
+  }
   const chain = onchain();
-  const how = chain ? `${esc(it.sol)} from your game balance` : cat === 'coins' || cat === 'bundle' ? `${esc(it.demo)} · charged by the app store` : `${esc(it.demo)} Coins`;
-  ui().openDialog({
-    title: `Buy ${esc(it.name)}`,
-    body: `<div class="v2-row" style="gap:1.2em">${artFor(cat, it)}<div><b style="font-size:1.3em">${esc(it.blurb)}</b><div class="v2-mut">${how}</div></div></div>`,
-    buttons: btn('Cancel', 'sb-cancel', { h: 'ghost' }) + btn(chain ? `Approve ${esc(it.sol)}` : `Buy ${p.label}`, 'sb-ok', { h: 'gold' }),
-    actions: {
-      'sb-cancel': () => ui().closeDialog(),
-      'sb-ok': () =>
-        ui().message('The Shop opens soon', `Purchases aren't available yet, so nothing was charged${chain ? ' and your wallet was not asked to sign' : ''}. ${esc(it.name)} will be here when the Shop opens.`, 'Back to Shop'),
-    },
-  });
+  const price = chain ? it.priceLamports : it.priceCoins;
+  if (price === null) return btn('Not sold here', 'noop', { h: 'ghost', c: `${wide ? 'w ' : ''}dis`, dis: true });
+  const label = chain ? solPrice(price) : `${ico('coin', 1.1)} ${fmtCoins(price)}`;
+  return btn(label, 'buy', { h: 'gold', c: wide ? 'w' : '', v: it.id });
+}
+
+/** The item's subtitle; Coins packs always say Coins (an older server copy said "Chips"). */
+const blurbOf = (it: ShopItemInfo): string => (it.effect.kind === 'coins' ? 'Coins added to your balance' : it.blurb);
+
+function card(it: ShopItemInfo): string {
+  const owned = shopClient(app()).owns(it.id);
+  return `<div class="v2-scard${owned ? ' v2-sh-owned' : ''}"><div class="v2-rays"></div>${owned ? '<span class="v2-ribbon v2-sh-ownedtag">OWNED</span>' : it.ribbon ? `<span class="v2-ribbon">${esc(it.ribbon)}</span>` : ''}<div class="v2-sart">${art(it)}</div><b class="v2-sname">${esc(it.name)}</b><small>${esc(blurbOf(it))}</small>${action(it)}</div>`;
+}
+
+/** The free Nomad back every player has: worn whenever no owned deck is. */
+function freeDeckCard(): string {
+  const wearing = !equippedCardBack();
+  const src = cardBackPreview('free');
+  const deck = `<div class="v2-sh-deck">${[-14, 0, 14].map((r) => `<span style="transform:rotate(${r}deg)">${src ? `<img src="${esc(src)}" alt="" draggable="false">` : ''}</span>`).join('')}</div>`;
+  return `<div class="v2-scard"><div class="v2-rays"></div><span class="v2-ribbon v2-sh-ownedtag">FREE</span><div class="v2-sart">${deck}</div><b class="v2-sname">Nomad deck</b><small>Default · Free</small>${btn(wearing ? `${ico('check', 1.1)} Wearing` : 'Wear at tables', wearing ? 'noop' : 'unwear', { h: wearing ? 'ghost' : 'blue', c: 'w' })}</div>`;
+}
+
+function packCard(p: (typeof COIN_PACKS)[number]): string {
+  return `<div class="v2-scard"><div class="v2-rays"></div>${p.ribbon ? `<span class="v2-ribbon">${esc(p.ribbon)}</span>` : ''}<div class="v2-sart">${shopArt(p.id) ?? coinStack(p.stack + 1, 3.6)}</div><b class="v2-sname">${esc(p.name)}</b><small>${esc(p.blurb)} · ${esc(p.demo)}</small>${btn('Coming soon', 'soon', { h: 'ghost', c: 'w v2-sh-soon' })}</div>`;
+}
+
+function boostNote(): string {
+  const until = shopClient(app()).catalog?.xpBoostUntil;
+  if (!until) return '';
+  const left = new Date(until).getTime() - Date.now();
+  if (left <= 0) return '';
+  const h = Math.floor(left / 3_600_000);
+  const m = Math.ceil((left % 3_600_000) / 60_000);
+  return `<div class="v2-sh-note">${ico('bolt', 1.4)}<span>2× XP is on · ends in ${h ? `${h}h ` : ''}${m}m</span></div>`;
+}
+
+function notice(): string {
+  const c = shopClient(app());
+  if (!c.hasServer) return `<div class="v2-sh-note v2-sh-offline">${ico('lock', 1.4)}<span>This version plays offline, so the Shop is for browsing only.</span></div>`;
+  if (!c.online) return `<div class="v2-sh-note v2-sh-offline">${ico('lock', 1.4)}<span>Sign in to buy. You can still look around.</span>${btn('Sign in', 'signin', { h: 'blue', c: 'sm' })}</div>`;
+  if (onchain() && c.catalog && !c.catalog.solEnabled) return `<div class="v2-sh-note v2-sh-offline">${ico('sol', 1.4)}<span>SOL purchases aren't open right now. Switch to Demo to buy with Coins.</span></div>`;
+  return boostNote();
 }
 
 const CATS: [ShopCategory, string, string][] = [
   ['featured', 'Featured', 'bag'],
-  ['coins', 'Coins', 'coin'],
   ['xp', 'XP boosts', 'xp'],
-  ['themes', 'Themes', 'palette'],
   ['skins', 'Card skins', 'cards'],
+  ['coins', 'Coins', 'coin'],
 ];
 
-const shop: ScreenDef & { cat: ShopCategory } = {
+const shop: ScreenDef & { cat: ShopCategory; busy: string | null } = {
   id: 'shop',
   cat: 'featured',
+  busy: null,
   open(arg) {
-    this.cat = typeof arg === 'string' ? (arg as ShopCategory) : 'featured';
+    this.cat = typeof arg === 'string' && CATS.some(([k]) => k === arg) ? (arg as ShopCategory) : 'featured';
+    // Fresh ownership and boost on every visit (one request at a time; render() only loads a missing catalogue).
+    shopClient(app()).ensure(() => ui().render(), true);
   },
   render() {
-    const chain = onchain();
-    const cats = chain ? [...CATS, ['agents', 'AI Agents', 'robot'] as [ShopCategory, string, string]] : CATS;
-    const cat: ShopCategory = this.cat === 'agents' && !chain ? 'featured' : this.cat;
+    const cat = this.cat;
+    // The session can finish restoring after the Shop opened: fetch the catalogue (ownership, prices) then.
+    shopClient(app()).ensure(() => ui().render());
     let body: string;
     if (cat === 'featured') {
-      const b = SHOP_CATALOG.bundle;
-      const bp = price('bundle', b);
-      const side = ([['coins', SHOP_CATALOG.coins[3]!], ['skins', SHOP_CATALOG.skins[1]!]] as [Cat, ShopItem][])
-        .map(([c, it]) => {
-          const p = price(c, it);
-          return `<div class="v2-scard v2-scard-row"><div class="v2-rays"></div>${it.ribbon ? `<span class="v2-ribbon">${esc(it.ribbon)}</span>` : ''}<div class="v2-sart">${c === 'coins' ? coinStack(5, 3.2) : art(c, it, 0)}</div><div class="v2-col v2-grow" style="gap:.3em;align-items:flex-start"><b class="v2-sname">${esc(it.name)}</b><small>${esc(it.blurb)}</small>${btn(p.label, 'buy', { h: p.hue, v: `${c}:${it.id}` })}</div></div>`;
-        }).join('');
+      const hero = items().find((i) => i.id === 'xp-boost-24h') ?? byCat('xp')[0]!;
+      const side = [items().find((i) => i.id === 'deck:Neon_City'), items().find((i) => i.id === 'xp-pack')].filter(Boolean) as ShopItemInfo[];
       body = `<div class="v2-sh-feat">
-  <div class="v2-scard v2-sfeat"><div class="v2-rays"></div><span class="v2-ribbon">${esc(b.ribbon!)}</span>
-    <div class="v2-sfeat-in"><div class="v2-col v2-sfeat-art">${coinStack(5, 4)}<div class="v2-row">${ico('xp', 4)}${ico('palette', 4)}</div></div>
-    <div class="v2-col v2-sfeat-txt"><span class="v2-pill gold" style="width:max-content">Starter bundle</span><b class="v2-sfeat-big">${esc(b.blurb)}</b><span class="v2-sfeat-lines">${b.lines.map(esc).join('<br>')}</span><span class="v2-mut"><s>${esc(chain ? b.was.sol : b.was.demo)}</s></span>${btn(bp.label, 'buy', { h: 'gold', c: 'lg', v: 'bundle:' + b.id })}</div></div>
-    <small class="v2-mut">${esc(b.ends)}</small></div>
-  <div class="v2-col v2-sh-side">${side}</div>
+  <div class="v2-scard v2-sfeat"><div class="v2-rays"></div>${hero.ribbon ? `<span class="v2-ribbon">${esc(hero.ribbon)}</span>` : ''}
+    <div class="v2-sfeat-in"><div class="v2-col v2-sfeat-art">${art(hero)}</div>
+    <div class="v2-col v2-sfeat-txt"><span class="v2-pill gold" style="width:max-content">Double XP</span><b class="v2-sfeat-big">${esc(hero.name)}</b><span class="v2-sfeat-lines">${esc(hero.blurb)}.<br>Stacks with a running boost.</span>${action(hero, false)}</div></div></div>
+  <div class="v2-col v2-sh-side">${side.map((it) => `<div class="v2-scard v2-scard-row"><div class="v2-rays"></div><div class="v2-sart">${art(it)}</div><div class="v2-col v2-grow" style="gap:.3em;align-items:flex-start"><b class="v2-sname">${esc(it.name)}</b><small>${esc(it.blurb)}</small>${action(it, false)}</div></div>`).join('')}</div>
 </div>`;
+    } else if (cat === 'coins') {
+      // One state at a time: the notice above already says when buying isn't possible (offline / signed out).
+      const canSell = shopClient(app()).hasServer && shopClient(app()).online;
+      body = onchain()
+        ? `${canSell ? `<div class="v2-sh-note">${ico('sol', 1.4)}<span>Buy Coins with SOL on the Solana test network. They go straight to your Coins balance.</span></div>` : ''}<div class="v2-sh-grid">${byCat('coins').map(card).join('')}</div>`
+        : `<div class="v2-sh-note">${ico('coin', 1.4)}<span>Coin packs open soon. Switch to On-chain to buy Coins with SOL, or claim the Daily spin and Weekly rewards for free Coins.</span></div><div class="v2-sh-grid">${COIN_PACKS.map(packCard).join('')}</div>`;
+    } else if (cat === 'skins') {
+      body = `<div class="v2-sh-grid">${freeDeckCard()}${byCat('skins').map(card).join('')}</div>`;
     } else {
-      const list = SHOP_CATALOG[cat];
-      body = `<div class="v2-sh-grid">${list.map((it, i) => itemCard(cat, it, i)).join('')}</div>`;
+      body = `<div class="v2-sh-grid">${byCat(cat).map(card).join('')}</div>`;
     }
     return `${topBar('Shop')}
-<div class="v2-sh-tabs">${tabs(cats.map(([k, l, i]) => [k, l, i]), cat, 'cat')}</div>
-<div class="v2-body v2-scroll v2-sh-body">${body}</div>`;
+<div class="v2-sh-tabs">${tabs(CATS.map(([k, l, i]) => [k, l, i]), cat, 'cat')}</div>
+<div class="v2-body v2-scroll v2-sh-body">${notice()}${body}</div>`;
   },
   actions: {
     cat: (v) => {
       shop.cat = v as ShopCategory;
     },
-    buy: (v) => buy(v),
+    buy: (v) => confirmBuy(v),
+    wear: (v) => {
+      equipCardBack(v as ThemeId);
+      ui().toast('Now on your cards at every table');
+    },
+    unwear: () => {
+      equipCardBack(null);
+      ui().toast('Back to the free Nomad cards');
+    },
+    soon: () => ui().toast('Coin packs open soon'),
+    signin: () => host().show('Login'),
+    noop: () => undefined,
     mode: (v) => setMode(v),
   },
 };
 
+function confirmBuy(id: string): void {
+  const c = shopClient(app());
+  const it = items().find((x) => x.id === id);
+  if (!it) return;
+  if (!c.hasServer) return ui().message('Browsing only', 'This version plays offline, so nothing can be bought here.');
+  if (!c.online) return ui().message('Sign in to buy', 'Sign in (a guest account works) and your purchase is one tap away.', 'Sign in', () => host().show('Login'), 'Not now');
+  const chain = onchain();
+  const price = chain ? it.priceLamports : it.priceCoins;
+  if (price === null) return;
+  if (chain && c.catalog && !c.catalog.solEnabled) return ui().message('SOL purchases are closed', "SOL purchases aren't open right now. Switch to Demo to buy with Coins.");
+  if (chain && !onchainApi.walletAddress?.()) {
+    ui().message('Connect a wallet to buy', 'SOL purchases are paid from your Solana wallet (on the test network). Connect one, then tap Buy again.', 'Connect wallet', () => {
+      void onchainApi.connectWallet?.().then(() => ui().render());
+    }, 'Not now');
+    return;
+  }
+  const how = chain ? `${fmtSol(price)} on the Solana test network, paid from your wallet` : `${fmtCoins(price)} Coins from your balance`;
+  ui().openDialog({
+    title: `Buy ${esc(it.name)}`,
+    body: `<div class="v2-row" style="gap:1.2em"><div class="v2-sh-mini">${art(it)}</div><div><b style="font-size:1.2em">${esc(blurbOf(it))}</b><div class="v2-mut">${esc(how)}</div></div></div>`,
+    buttons: btn('Cancel', 'sb-cancel', { h: 'ghost' }) + btn(chain ? `Pay ${solPrice(price)}` : `Buy for ${ico('coin', 1.1)} ${fmtCoins(price)}`, 'sb-ok', { h: 'gold' }),
+    actions: {
+      'sb-cancel': () => ui().closeDialog(),
+      'sb-ok': () => {
+        ui().closeDialog();
+        void runBuy(it, chain);
+      },
+    },
+  });
+}
+
+async function runBuy(it: ShopItemInfo, chain: boolean): Promise<void> {
+  const c = shopClient(app());
+  // The busy dialog gets the guide's ghost "Hide": the purchase carries on, and its result still shows when it lands.
+  let hidden = false;
+  const busy = (text: string) => {
+    if (hidden) return;
+    ui().openDialog({
+      title: `Buying ${esc(it.name)}`,
+      body: `<div class="v2-row" style="gap:.9em"><i class="v2-spin" aria-hidden="true"></i><span>${esc(text)}</span></div>`,
+      buttons: btn('Hide', 'sh-hide', { h: 'ghost' }),
+      actions: { 'sh-hide': () => { hidden = true; ui().closeDialog(); } },
+      dismiss: false,
+    });
+  };
+  busy(chain ? 'Getting a price…' : 'Buying…');
+  try {
+    const r = chain ? await c.buyWithSol(it.id, busy) : await c.buyWithCoins(it.id);
+    if (!hidden) ui().closeDialog();
+    sfx(PokerSound.ChipsToWinner);
+    const t = deckTheme(it);
+    if (t) {
+      equipCardBack(t);
+      ui().toast(`${it.name} bought · now on your cards at every table`, 2600);
+    } else if (it.effect.kind === 'coins') ui().toast(`${fmtCoins(it.effect.amount)} Coins added to your balance`, 2600);
+    else if (it.effect.kind === 'xp_boost') ui().toast(`2× XP is on for ${it.effect.hours === 1 ? '1 hour' : `${it.effect.hours} hours`}`, 2600);
+    else ui().toast(`${it.name} bought${r.levelsPaid.length ? ` · level ${Math.max(...r.levelsPaid)}!` : ''}`, 2600);
+  } catch (e) {
+    if (!hidden) ui().closeDialog();
+    const err = e as ShopError;
+    if (err.code === 'insufficient_funds')
+      ui().message('Not enough Coins', `${esc(it.name)} costs ${fmtCoins(it.priceCoins ?? 0)} Coins. Claim today's Daily spin and Weekly reward for more.`);
+    else if (err.code === 'declined') ui().message('Payment cancelled', esc(err.message));
+    else if (err.signature) {
+      // After the transfer was sent: never say "nothing was charged". Show the transaction on the devnet explorer.
+      const url = `https://explorer.solana.com/tx/${encodeURIComponent(err.signature)}?cluster=devnet`;
+      ui().message(
+        err.code === 'unconfirmed' ? 'Payment sent' : 'Payment failed',
+        `${esc(err.message)}<div class="v2-sh-sig"><a href="${esc(url)}" target="_blank" rel="noopener">View the transaction</a><code>${esc(err.signature.slice(0, 10))}…${esc(err.signature.slice(-6))}</code></div>`,
+      );
+    } else if (chain) ui().message("That didn't go through", `${esc(err.message || 'Something went wrong.')} No SOL left your wallet.`);
+    else ui().message("That didn't go through", `${esc(err.message || 'Something went wrong.')} No Coins were spent.`);
+  }
+  ui().render();
+}
+
 export function shopScreens(): ScreenDef[] {
+  // A SOL payment that was sent earlier but confirmed only now (retried when the Shop loads).
+  app().events.on('shop:credited', (p: unknown) => {
+    const it = items().find((x) => x.id === (p as { itemId?: string })?.itemId);
+    ui().toast(`${it?.name ?? 'Your purchase'} came through`, 2600);
+    ui().render();
+  });
   return [shop];
 }
