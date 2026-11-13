@@ -3,7 +3,7 @@
 .v2-rooms { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 0.6em; }
 .v2-rm-stage { flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; gap: 1.4em; touch-action: pan-y; }
 .v2-rm-card {
-  position: relative; flex: 0 1 56em; height: 100%; max-height: 30em; border-radius: 1.6em; overflow: hidden;
+  position: relative; flex: 0 1 56em; height: 100%; max-height: 30em; border-radius: var(--v2-r-lg); overflow: hidden;
   border: 0.18em solid rgba(255, 255, 255, 0.4); box-shadow: 0 0.6em 1.6em rgba(0, 0, 0, 0.4), inset 0 0.2em 0 rgba(255, 255, 255, 0.25);
   display: flex; align-items: flex-end;
 }
@@ -27,7 +27,7 @@
 .v2-rm-friends { padding: 0.75em 1.2em; }
 .v2-rm-arr { font-size: 1.2em; line-height: 0; }
 
-.v2-rm-lock { position: absolute; top: 1em; left: 1em; display: inline-flex; align-items: center; gap: 0.3em; background: rgba(10, 6, 40, 0.8); border: 0.1em solid #4b3fa6; border-radius: 1em; padding: 0.25em 0.8em; font-weight: 900; }
+.v2-rm-lock { position: absolute; top: 1em; left: 1em; display: inline-flex; align-items: center; gap: 0.3em; background: rgba(10, 6, 40, 0.8); border: 0.1em solid var(--v2-line); border-radius: var(--v2-r-pill); padding: 0.25em 0.8em; font-weight: 900; }
 /* Arrows centred on the card's height. */
 .v2-rm-arrow {
   position: absolute; top: 50%; transform: translateY(-50%); z-index: 1; width: 3em; height: 3em; border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -38,7 +38,7 @@
 .v2-rm-arrow.next { right: 0.9em; }
 
 .v2-rm-peek {
-  flex: 0 1 14em; min-width: 6em; height: 78%; max-height: 22em; border-radius: 1.3em; overflow: hidden; opacity: 0.5; filter: saturate(0.6);
+  flex: 0 1 14em; min-width: 6em; height: 78%; max-height: 22em; border-radius: var(--v2-r-lg); overflow: hidden; opacity: 0.5; filter: saturate(0.6);
   border: 0.12em solid rgba(255, 255, 255, 0.25); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 0.8em; transition: opacity 0.15s;
 }
 .v2-rm-peek:hover { opacity: 0.8; }
@@ -47,14 +47,14 @@
 .v2-rm-dots { display: flex; }
 /* The dot is a larger transparent hit box; the pip is drawn inside it. */
 .v2-rm-dot { width: 1.8em; height: 1.8em; display: flex; align-items: center; justify-content: center; }
-.v2-rm-dot::before { content: ''; width: 0.8em; height: 0.8em; border-radius: 1em; background: rgba(255, 255, 255, 0.3); transition: width 0.15s; }
+.v2-rm-dot::before { content: ''; width: 0.8em; height: 0.8em; border-radius: var(--v2-r-pill); background: rgba(255, 255, 255, 0.3); transition: width 0.15s; }
 .v2-rm-dot.on::before { background: var(--v2-gold); width: 2em; }
 .v2-rm-dot.on { width: 2.8em; }
 
 /* ---------------------------------------------------------------- portrait */
 html[data-orient='portrait'] .v2-rm-stage { gap: 0; }
 html[data-orient='portrait'] .v2-rm-peek { display: none; }
-html[data-orient='portrait'] .v2-rm-card { flex: 1 1 auto; max-height: none; border-radius: 1.3em; }
+html[data-orient='portrait'] .v2-rm-card { flex: 1 1 auto; max-height: none; border-radius: var(--v2-r-lg); }
 html[data-orient='portrait'] .v2-rm-bar { flex-direction: column; align-items: stretch; gap: 0.8em; padding: 4em 1em 1em; }
 html[data-orient='portrait'] .v2-rm-name { font-size: 2.3em; }
 html[data-orient='portrait'] .v2-rm-actions { display: grid; grid-template-columns: 1fr auto; gap: 0.5em; }
@@ -71,3 +71,10 @@ html[data-orient='portrait'] .v2-rm-dot.on::before { width: 2.2em; }
   .v2-rm-arrow { width: 3.4em; height: 3.4em; }
   .v2-rm-dot { width: 2.6em; height: 2.6em; }
 }
+
+/* Peeks name the stake and show a lock; the room picked for the player is tagged. */
+.v2-rm-peek { flex-direction: column; align-items: center; gap: 0.1em; position: relative; }
+.v2-rm-peek small { font-size: 0.85em; font-weight: 800; color: var(--v2-ink); text-shadow: 0 0.08em 0.2em rgba(0, 0, 0, 0.6); }
+.v2-rm-peek.locked { filter: saturate(0.35) brightness(0.75); }
+.v2-rm-peek-lock { position: absolute; top: 0.7em; right: 0.7em; width: 2em; height: 2em; border-radius: var(--v2-r-pill); background: var(--v2-deep); display: flex; align-items: center; justify-content: center; }
+.v2-rm-rec { background: var(--v2-grad-gold); color: var(--v2-on-gold); border-color: transparent; }

@@ -45,6 +45,11 @@ interface RowButtonSpec {
 const realtime = () => performance.now() / 1000;
 const signedIn = () => Friends.available;
 
+/** A replacement view for the invite toast (Redesign v2, src/ui2/screens/entry.ts). When set, the Unity toast stays hidden. */
+export const inviteToastView: {
+  render?: (invite: { title: string; detail: string } | null, join: () => void, decline: () => void) => void;
+} = {};
+
 export class FriendsHud {
   private readonly layer = document.createElement('div');
   private readonly toastCanvas: OverlayCanvas;
@@ -235,6 +240,17 @@ export class FriendsHud {
     const inbox = FriendInvites.inbox;
     this.toastInvite = this.atTable || inbox.length === 0 ? null : inbox[0]!;
     const show = this.toastInvite !== null && !this.joining;
+    if (inviteToastView.render) {
+      this.toast.node.setActive(false);
+      const inv = this.toastInvite;
+      const more = inbox.length > 1 ? ` · +${inbox.length - 1} more` : '';
+      inviteToastView.render(
+        show && inv ? { title: `${clean(inviteLabel(inv))} invited you to play`, detail: `${inv.money ? 'Real-money table' : 'Free table'} · ${inv.session}${more}` } : null,
+        () => void this.joinAsync(),
+        () => inv && FriendInvites.decline(inv),
+      );
+      return;
+    }
     this.toast.node.setActive(show);
     if (show) {
       const inv = this.toastInvite!;
@@ -269,7 +285,8 @@ export class FriendsHud {
     }
     if (error === null) return;
     this.refreshToast();
-    if (this.toast.node.activeSelf) this.toast.detail.setText(error);
+    if (inviteToastView.render && this.toastInvite) inviteToastView.render({ title: `${clean(inviteLabel(this.toastInvite))} invited you to play`, detail: error }, () => void this.joinAsync(), () => this.toastInvite && FriendInvites.decline(this.toastInvite));
+    else if (this.toast.node.activeSelf) this.toast.detail.setText(error);
   }
 }
 

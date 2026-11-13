@@ -4,6 +4,7 @@
  * Per/Unity/PerEntry.cs. Unity loads the Test scene and hooks PerTableController in; here `join` returns the seat and
  * the caller navigates to 'table' with `perTableSession(seat)` (see perTableController.ts).
  */
+import { noPerBackend } from './agent';
 import { Keypair, PublicKey } from '@solana/web3.js';
 import { bytesEq } from '../lib/bytes';
 import type { PerHttp } from '../lib/http';
@@ -265,7 +266,7 @@ export class PerEntry {
   /** Lobby rows from the private-tables backend: live tables, or every table `creator` hosted. */
   async listTables(creator?: PublicKey | null): Promise<Record<string, unknown>[]> {
     const base = this.backendUrl();
-    if (!base) throw new Error("The private-tables lobby isn't configured in this build (pass ?perbackend=, or ?web3deployed=1).");
+    if (!base) noPerBackend();
     const r = await this.http.get(base + '/tables' + (creator ? '?creator=' + creator.toBase58() : ''));
     if (r.status !== 200) return [];
     return JSON.parse(r.body) as Record<string, unknown>[];

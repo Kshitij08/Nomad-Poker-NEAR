@@ -5,15 +5,17 @@
  */
 import { formatN0 } from '@nomad/engine/util/dotnetMath';
 import { roundHalfEven } from '@nomad/engine/util/dotnetMath';
+import { ico } from '../../ui2/icons';
 import './agents.css';
 
+/** Text colours: the Redesign v2 tokens (src/ui2/ui2.css :root). */
 export const COLORS = {
-  gold: 'rgb(255, 212, 77)',
-  agentLine: 'rgb(158, 227, 255)',
-  soft: 'rgb(168, 184, 224)',
-  good: 'rgb(102, 230, 128)',
-  bad: 'rgb(242, 115, 115)',
-  white: '#fff',
+  gold: 'var(--v2-gold)',
+  agentLine: 'var(--v2-mut2)',
+  soft: 'var(--v2-mut)',
+  good: 'var(--v2-good)',
+  bad: 'var(--v2-bad)',
+  white: 'var(--v2-ink)',
 } as const;
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -49,7 +51,9 @@ export function refPanel(host: HTMLElement, title: string, w: number, h: number,
   panel.style.width = `${w}px`;
   panel.style.height = `${h}px`;
   const head = el('div', 'agent-panel-head', title);
-  const close = el('button', 'agent-panel-close', '✕');
+  const close = el('button', 'agent-panel-close');
+  close.innerHTML = ico('close', 0.9);
+  close.setAttribute('aria-label', 'Close');
   close.addEventListener('click', onClose);
   const body = el('div', 'agent-panel-body');
   panel.append(head, close, body);
@@ -87,9 +91,10 @@ export function line(p: RefPanel | { body: HTMLElement; w: number; h: number }, 
   return t;
 }
 
-/** NomadDialogs.Button (the art's yellow TABLES / blue QUICK PLAY buttons). */
+/** NomadDialogs.Button, in the Redesign v2 look. */
 export function button(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
-  const b = el('button', 'nomad-btn' + (primary ? ' primary' : ''), label);
+  // v2 pill buttons (gold primary, blue secondary); .nomad-btn keeps the reference-pixel size of these panels.
+  const b = el('button', 'nomad-btn v2-b ' + (primary ? 'gold primary' : 'blue'), label);
   b.addEventListener('click', (e) => {
     e.stopPropagation();
     onClick();

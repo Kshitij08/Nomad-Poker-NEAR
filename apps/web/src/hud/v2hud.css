@@ -1,0 +1,166 @@
+/* Redesign v2 skin of the table HUD (docs/ui-style-guide.md › Table HUD).
+   Positions stay Unity's (world-space seats and pot follow the camera; portrait rects keep their tests); only the
+   look changes: the Unity sprites under these nodes are hidden and the nodes are drawn with v2 tokens instead.
+   Sizes inside seats and the pot are canvas units (the world canvas scales them, ≈0.136 px/unit at 1280×720). */
+
+/* ---------------------------------------------------------------- seats */
+.v2-seat [data-name='Name_bar'] > :is(.u-gfx, .u-slice),
+.v2-seat [data-name='Bottom_bar'] > :is(.u-gfx, .u-slice),
+.v2-seat [data-name='bg_circle'] > :is(.u-gfx, .u-slice),
+.v2-seat [data-name='D_Token'] > :is(.u-gfx, .u-slice),
+.v2-seat [data-name='D_Token'] [data-name='Circle (1)'],
+.v2-seat [data-name='Hand'] > :is(.u-gfx, .u-slice),
+.v2-seat [data-name='ProgressionBar'] > :is(.u-gfx, .u-slice),
+.v2-seat .v2-timer > :is(.u-gfx, .u-slice),
+.v2-seat .u-turn-vfx { display: none !important; }
+
+/* plate */
+.v2-seat [data-name='Name_bar'] {
+  background: rgba(14, 10, 48, 0.92); border: 14px solid var(--v2-line, #4b3fa6); border-radius: 170px;
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.45); transition: border-color 0.2s, box-shadow 0.2s;
+}
+.v2-seat [data-name='Name_txt'] > .u-text { color: #d2ccf7 !important; font-weight: 800 !important; }
+.v2-seat [data-name='Amount_txt'] > .u-text { color: #fff !important; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.v2-seat.v2-turn [data-name='Name_bar'] { border-color: var(--v2-gold, #ffd54a); box-shadow: 0 0 0 12px rgba(255, 213, 74, 0.22), 0 0 90px rgba(255, 200, 60, 0.6); }
+.v2-seat.v2-win [data-name='Name_bar'] { border-color: var(--v2-gold, #ffd54a); box-shadow: 0 0 0 16px rgba(255, 194, 31, 0.3), 0 0 120px rgba(255, 194, 31, 0.8); }
+.v2-seat.v2-fold { opacity: 0.55; }
+
+/* avatar + turn ring */
+.v2-seat [data-name='U_Icon'] { border-radius: 50%; box-shadow: 0 0 0 22px var(--v2-line, #4b3fa6), 0 14px 40px rgba(0, 0, 0, 0.45); }
+.v2-seat [data-name='U_Icon'] > .u-gfx { border-radius: 50%; }
+.v2-seat.v2-turn [data-name='U_Icon'] { box-shadow: 0 0 0 22px var(--v2-gold, #ffd54a), 0 14px 40px rgba(0, 0, 0, 0.45); }
+.v2-timer { --p: 1; --tc: var(--v2-good, #2ee38a); }
+.v2-timer[data-tone='warn'] { --tc: var(--v2-gold, #ffd54a); }
+.v2-timer[data-tone='late'] { --tc: var(--v2-bad, #ff6b7f); }
+.v2-timer::before {
+  content: ''; position: absolute; inset: -58px; border-radius: 50%;
+  background: conic-gradient(var(--tc) calc(var(--p) * 360deg), rgba(255, 255, 255, 0.14) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 30px), #000 calc(100% - 29px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 30px), #000 calc(100% - 29px));
+}
+.v2-timer.v2-pulse::before { animation: v2hud-pulse 0.6s ease-in-out infinite alternate; }
+@keyframes v2hud-pulse { to { opacity: 0.45; } }
+
+/* dealer / blinds */
+.v2-seat [data-name='D_Token'] { background: #fff; border-radius: 100px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45); }
+.v2-seat [data-name='D_Token'] .u-text { color: #1c1450 !important; }
+.v2-seat [data-name='D_Token'][data-role='SB'],
+.v2-seat [data-name='D_Token'][data-role='BB'] { background: var(--v2-grad-violet, linear-gradient(#ad84ff, #6a35e0)); width: 230px !important; margin-left: -50px; border: 8px solid rgba(255, 255, 255, 0.55); }
+.v2-seat [data-name='D_Token'][data-role='SB'] .u-text,
+.v2-seat [data-name='D_Token'][data-role='BB'] .u-text { color: #fff !important; }
+
+/* status chip (Bottom_bar): hidden when empty */
+.v2-seat [data-name='Bottom_bar'][data-st=''],
+.v2-seat [data-name='Bottom_bar']:not([data-st]) { visibility: hidden; }
+.v2-seat [data-name='Bottom_bar'] .u-text { align-items: center; justify-content: flex-end !important; }
+.v2-seat [data-name='Bottom_bar'] .u-text > span {
+  display: inline-block; padding: 8px 60px; border-radius: 120px; font-weight: 900; color: #fff;
+  background: rgba(14, 10, 48, 0.92); border: 8px solid var(--v2-line, #4b3fa6);
+}
+.v2-seat [data-st='fold'] .u-text > span { background: #4a4570; border-color: #6b6690; color: #e2defa; }
+.v2-seat [data-st='call'] .u-text > span { background: var(--v2-grad-blue, linear-gradient(#58b6ff, #2266e0)); border-color: rgba(255, 255, 255, 0.3); }
+.v2-seat [data-st='raise'] .u-text > span { background: var(--v2-grad-gold, linear-gradient(#ffe36b, #f5a915)); border-color: rgba(255, 255, 255, 0.4); color: #3a2200; }
+.v2-seat [data-st='allin'] .u-text > span { background: var(--v2-grad-hot, linear-gradient(135deg, #ff8ad8, #ff4fa3, #ff6a2b)); border-color: rgba(255, 255, 255, 0.45); }
+
+/* hand-strength meter */
+.v2-seat [data-name='Hand'] { background: rgba(14, 10, 48, 0.9); border: 8px solid var(--v2-line, #4b3fa6); border-radius: 60px; }
+.v2-seat [data-name='Hand'] .u-text { color: #d8d3ff !important; }
+.v2-seat [data-name='ProgressionBar'] { background: rgba(255, 255, 255, 0.15); border-radius: 40px; }
+.v2-seat [data-name='Handle'] > .u-gfx { border-radius: 40px; }
+
+/* winner "+amount" */
+.v2-winfloat {
+  position: absolute; left: 50%; top: -60px; transform: translate(-50%, 0); pointer-events: none; white-space: nowrap;
+  font-family: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif; font-size: 190px; color: var(--v2-good, #2ee38a);
+  text-shadow: 0 10px 0 rgba(0, 0, 0, 0.35), 0 0 60px rgba(46, 227, 138, 0.6); animation: v2hud-float 2.1s ease-out forwards;
+}
+@keyframes v2hud-float { 0% { opacity: 0; transform: translate(-50%, 40px) scale(0.8); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -220px); } }
+
+/* ---------------------------------------------------------------- pot */
+.v2-pot [data-name='bar'] > :is(.u-gfx, .u-slice) { display: none !important; }
+.v2-pot [data-name='bar'] { background: rgba(14, 10, 48, 0.9); border: 14px solid rgba(255, 194, 31, 0.6); border-radius: 200px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45); }
+.v2-pot [data-name='bar'] .u-text { color: var(--v2-gold, #ffd54a) !important; align-items: center; line-height: 1.05 !important; }
+.v2-pot [data-name='bar'] .u-text::before { content: 'POT'; font-family: 'Nunito', system-ui, sans-serif; font-weight: 900; font-size: 0.66em; letter-spacing: 0.12em; color: #a69fe0; }
+.v2-pot.v2-empty { visibility: hidden; }
+/* Phone: the pot canvas is drawn small (~0.073 px/unit); scale the pill so the amount is ≥ 14 px and "POT" ≥ 11 px. */
+html[data-orient='portrait'] .v2-pot [data-name='bar'] { scale: 1.75; }
+
+/* ---------------------------------------------------------------- action row (screen canvas, 1920×1080 units) */
+[data-hud='betting'] [data-v2b] > :is(.u-gfx, .u-slice) { display: none !important; }
+[data-hud='betting'] [data-v2b] { border-radius: 200px; transition: filter 0.1s, opacity 0.15s; }
+[data-hud='betting'] [data-v2b] .u-text { font-family: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif !important; font-weight: 400 !important; letter-spacing: 0.03em; color: #fff !important; }
+[data-hud='betting'] [data-v2b='fold'] { background: var(--v2-grad-red, linear-gradient(#ff7d8a, #d8304a)); box-shadow: inset 0 -6px 0 rgba(110, 0, 20, 0.5); }
+[data-hud='betting'] [data-v2b='call'] { background: var(--v2-grad-blue, linear-gradient(#58b6ff, #2266e0)); box-shadow: inset 0 -6px 0 rgba(10, 40, 120, 0.5), 0 0 24px rgba(70, 170, 255, 0.35); }
+[data-hud='betting'] [data-v2b='raise'] { background: var(--v2-grad-gold, linear-gradient(#ffe36b, #f5a915)); box-shadow: inset 0 -6px 0 rgba(150, 80, 0, 0.45), 0 0 24px rgba(255, 200, 60, 0.35); }
+[data-hud='betting'] [data-v2b='raise'] .u-text { color: #3a2200 !important; }
+[data-hud='betting'] [data-v2b].v2-allin { background: var(--v2-grad-hot, linear-gradient(135deg, #ff8ad8, #ff4fa3, #ff6a2b)); }
+[data-hud='betting'] [data-v2b]:hover:not(.v2-dis) { filter: brightness(1.08); }
+[data-hud='betting'] [data-v2b].v2-dis { opacity: 0.45; box-shadow: none; filter: none; }
+/* Not your turn: readable ghost buttons, not dark text on a dark plate. */
+[data-hud='betting'].v2-off [data-v2b] { background: rgba(14, 10, 48, 0.8); box-shadow: none; outline: 4px solid var(--v2-line, #4b3fa6); outline-offset: -4px; opacity: 0.85; }
+[data-hud='betting'].v2-off [data-v2b] .u-text { color: #d8d3ff !important; }
+/* The Unity raise panel keeps the logic; the v2 sheet (raiseSheet.ts) is what shows. */
+[data-hud='betting'] [data-name='Confirm_Panel'] { visibility: hidden !important; pointer-events: none !important; }
+[data-hud='betting'] [data-name='Confirm_Panel'] * { pointer-events: none !important; }
+
+/* ---------------------------------------------------------------- raise sheet */
+.v2hud-raise {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 6; width: min(36em, calc(100% - 24px));
+  font-family: 'Nunito', system-ui, sans-serif; font-weight: 700; color: #fff; font-size: clamp(12px, min(1.05vw, 1.95vh), 17px);
+  background: var(--v2-dlg, #1c1450); border: 2px solid var(--v2-accent, #7c6bff); border-radius: 1.2em; padding: 0.9em 1em 1em;
+  box-shadow: 0 1em 2.5em rgba(0, 0, 0, 0.55); display: flex; flex-direction: column; gap: 0.75em; pointer-events: auto;
+  animation: v2hud-sheet 0.16s ease-out;
+}
+.v2hud-raise[hidden] { display: none; }
+@keyframes v2hud-sheet { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .v2hud-raise, .v2-winfloat, .v2-timer.v2-pulse::before { animation: none; } }
+.v2hud-raise *, .v2hud-raise *::before { box-sizing: border-box; }
+.v2hud-raise button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+.v2hud-raise-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1em; }
+.v2hud-raise-title { font-family: 'Lilita One', system-ui, sans-serif; font-weight: 400; font-size: 1.45em; }
+.v2hud-raise-stack { color: var(--v2-mut, #b9b3e6); font-weight: 800; font-variant-numeric: tabular-nums; }
+.v2hud-raise-presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.4em; }
+.v2hud-chip {
+  min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.05em;
+  background: rgba(14, 10, 48, 0.9) !important; border: 2px solid var(--v2-line, #4b3fa6) !important; border-radius: 0.8em; padding: 0.35em 0.2em !important;
+}
+.v2hud-chip span { font-size: max(11px, 0.78em); color: var(--v2-mut, #b9b3e6); font-weight: 800; white-space: nowrap; }
+.v2hud-chip b { font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.v2hud-chip.hot span { color: #ff9ad8; }
+.v2hud-chip.on { border-color: var(--v2-gold, #ffd54a) !important; box-shadow: 0 0 0.8em rgba(255, 213, 74, 0.3); }
+.v2hud-raise-amt { display: flex; align-items: center; gap: 0.7em; }
+.v2hud-raise-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 0.25em; }
+.v2hud-raise-val { font-family: 'Lilita One', system-ui, sans-serif; font-weight: 400; font-size: 1.9em; color: var(--v2-gold, #ffd54a); line-height: 1; font-variant-numeric: tabular-nums; }
+.v2hud-rnd svg { width: 1em; height: 1em; }
+.v2hud-rnd {
+  width: max(44px, 2.8em); height: max(44px, 2.8em); flex: 0 0 auto; border-radius: 50% !important; font-size: 1.5em !important; font-weight: 900 !important;
+  background: var(--v2-grad-violet, linear-gradient(#ad84ff, #6a35e0)) !important; box-shadow: inset 0 -0.15em 0 rgba(50, 10, 120, 0.5);
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+.v2hud-rnd:disabled { opacity: 0.4; cursor: default; }
+.v2hud-range { --fill: 0%; width: 100%; height: 44px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; touch-action: none; }
+.v2hud-range::-webkit-slider-runnable-track { height: 0.55em; border-radius: 1em; background: linear-gradient(90deg, var(--v2-gold, #ffd54a) var(--fill), rgba(173, 132, 255, 0.35) var(--fill)); }
+.v2hud-range::-moz-range-track { height: 0.55em; border-radius: 1em; background: linear-gradient(90deg, var(--v2-gold, #ffd54a) var(--fill), rgba(173, 132, 255, 0.35) var(--fill)); }
+.v2hud-range::-webkit-slider-thumb { -webkit-appearance: none; width: 1.6em; height: 1.6em; margin-top: -0.53em; border-radius: 50%; background: #fff; border: 0.28em solid #f5a915; box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.45); }
+.v2hud-range::-moz-range-thumb { width: 1.1em; height: 1.1em; border-radius: 50%; background: #fff; border: 0.28em solid #f5a915; }
+.v2hud-raise-foot { display: flex; gap: 0.6em; }
+.v2hud-b {
+  min-height: 44px; border-radius: 2em !important; padding: 0.5em 1.2em !important; font-weight: 800; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.v2hud-b.ghost { flex: 0 0 auto; background: rgba(255, 255, 255, 0.08) !important; border: 2px solid #5a7cc8 !important; }
+.v2hud-b.gold, .v2hud-b.hot { flex: 1; font-family: 'Lilita One', system-ui, sans-serif; font-weight: 400; font-size: 1.25em; letter-spacing: 0.03em; }
+.v2hud-b.gold { background: var(--v2-grad-gold, linear-gradient(#ffe36b, #f5a915)) !important; color: #3a2200 !important; box-shadow: inset 0 -0.2em 0 rgba(150, 80, 0, 0.45); }
+.v2hud-b.hot { background: var(--v2-grad-hot, linear-gradient(135deg, #ff8ad8, #ff4fa3, #ff6a2b)) !important; color: #fff !important; }
+.v2hud-b:hover:not(:disabled) { filter: brightness(1.08); }
+html[data-orient='portrait'] .v2hud-raise { width: calc(100% - 16px); font-size: clamp(12px, 3.5vw, 16px); }
+/* Phone: compact two rows over the action row (presets; − slider + · Cancel · Raise to N), under your seat. */
+.v2hud-raise.compact { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'p p' 'a f'; gap: 0.5em; padding: 0.6em; border-radius: 1em; }
+.v2hud-raise.compact .v2hud-raise-head, .v2hud-raise.compact .v2hud-raise-val { display: none; }
+.v2hud-raise.compact .v2hud-raise-presets { grid-area: p; gap: 0.3em; }
+.v2hud-raise.compact .v2hud-raise-amt { grid-area: a; gap: 0.35em; }
+.v2hud-raise.compact .v2hud-raise-foot { grid-area: f; gap: 0.35em; }
+.v2hud-raise.compact .v2hud-b.gold, .v2hud-raise.compact .v2hud-b.hot { font-size: 1em; padding: 0.4em 0.8em !important; }
+.v2hud-raise.compact .v2hud-b.ghost { padding: 0.4em 0.7em !important; }
+.v2hud-raise.compact .v2hud-rnd { width: 44px; height: 44px; font-size: 1.1em !important; }
+.v2hud-raise.compact .v2hud-chip b { font-size: 0.95em; }

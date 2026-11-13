@@ -75,9 +75,15 @@ export function classifyThemeDefault(td: BakedThemeDefault | undefined, def: Def
 
 let active: HudThemePack | null = null;
 
+/**
+ * Redesign v2: one purple HUD skin on every table (docs/ui-style-guide.md). The room's scene (felt, backdrop, card
+ * backs) still follows the theme; the HUD plates and buttons no longer take the pack's sprites and colours.
+ */
+export const hudSkin = { v2: true };
+
 /** The pack buildNode() applies to newly built nodes (null = keep the baked default). */
 export function getActiveHudTheme(): HudThemePack | null {
-  return active;
+  return hudSkin.v2 ? null : active;
 }
 
 export function setActiveHudTheme(pack: HudThemePack | null): void {
@@ -115,6 +121,7 @@ export function trackThemedNode(n: UNode): void {
 /** ThemeManager.Apply over the HUD layer: re-skins every tracked node with `pack` and re-renders it. */
 export function applyHudThemeEverywhere(pack: HudThemePack): void {
   active = pack;
+  if (hudSkin.v2) return;
   for (const ref of themedNodes) {
     const n = ref.deref();
     if (!n) {
@@ -128,6 +135,7 @@ export function applyHudThemeEverywhere(pack: HudThemePack): void {
 
 /** Re-skins every themed node under `root` with `pack`, then re-renders it. */
 export function applyHudThemeToTree(root: UNode, pack: HudThemePack): void {
+  if (hudSkin.v2) return;
   let any = false;
   for (const n of root.walk()) {
     if (!n.themeSlots) continue;

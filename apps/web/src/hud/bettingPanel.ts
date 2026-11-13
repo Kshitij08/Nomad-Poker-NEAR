@@ -23,6 +23,7 @@ import { Ease, ticker, type Tween } from '../anim/tween';
 import { animatorOnEnable, uiClip } from './uiClips';
 import { buildNode, HUD_DATA, UNode, type RGBA } from './unityUi';
 import { overlayScale } from '../layout/portraitRects';
+import { RaiseSheet } from './raiseSheet';
 import { portraitBettingRects } from '../layout/portraitHud';
 
 // ---------------------------------------------------------------- Selectable transitions
@@ -120,6 +121,8 @@ class UButton {
   }
 
   refresh(instant = false): void {
+    // v2 skin (hud/v2hud.css): disabled buttons dim to .45 with no glow.
+    this.node.el.classList.toggle('v2-dis', !this.interactable);
     const s = this.target();
     if (s !== this.state || instant) this.apply(s, instant);
   }
@@ -191,6 +194,7 @@ export class BettingPanelView implements BettingPanelPort {
   private readonly handleRect: UNode;
   private readonly handleArea: UNode;
 
+  private readonly sheet: RaiseSheet;
   private onChosen: ((a: PlayerAction) => void) | null = null;
   private legal: LegalActions | null = null;
   private myCurrentBet = 0;
@@ -231,12 +235,20 @@ export class BettingPanelView implements BettingPanelPort {
       return { normal: col('normal'), highlighted: col('highlighted'), pressed: col('pressed'), disabled: col('disabled'), fade: b!.colors.fadeDuration as unknown as number };
     };
 
+    // v2 order (docs/ui-style-guide.md): Fold · Check/Call · Bet/Raise — the art had Call left, Fold in the middle,
+    // which put Fold under the thumb. Swap the two slots (portrait: layout/portraitHud.ts does the same).
+    swapSlots(req('Call'), req('Check/fold'));
     this.checkCall = new UButton(req('Call'), 'Animation');
     this.fold = new UButton(req('Check/fold'), 'Animation');
     this.betRaise = new UButton(req('Callany or raise'), 'Animation');
+    req('Call').el.dataset.v2b = 'call';
+    req('Check/fold').el.dataset.v2b = 'fold';
+    req('Callany or raise').el.dataset.v2b = 'raise';
     this.checkCallLabel = req('Call/Text (TMP)');
     this.foldLabel = req('Check/fold/Text (TMP)');
     this.betRaiseLabel = req('Callany or raise/Text (TMP)');
+    // v2: sentence case ("Fold", "Call 50", "Raise"), not the art's TMP all-caps.
+    for (const l of [this.foldLabel, this.checkCallLabel, this.betRaiseLabel]) if (l.text) l.text.upper = false;
     this.panel = req('Confirm_Panel');
     this.panel.el.classList.add('u-blocker'); // the panel Image is a raycast target over the action row
     this.confirm = new UButton(req('Confirm_Panel/Confirm'), 'Animation');
@@ -257,6 +269,22 @@ export class BettingPanelView implements BettingPanelPort {
     this.handleRect = req('Confirm_Panel/Slider/Handle Slide Area/Handle');
 
     animatorOnEnable(this.panel, uiClip('ConfirmPanel_In'));
+    // v2: the Confirm_Panel art stays as the logic's state holder (hidden by v2hud.css); the raise sheet is DOM.
+    this.sheet = new RaiseSheet(parent, {
+      preset: (p) => this.legal && this.setAmount(presetAmount(p, this.legal, this.myCurrentBet)),
+      set: (v) => this.setAmount(v),
+      nudge: (d) => this.nudge(d),
+      confirm: () => this.confirm.submit(),
+      close: () => this.close.submit(),
+      anchor: () => this.rowTop(),
+    });
+    this.panel.onEnable.push(() => this.paintSheet());
+    // UNode.onDisable doesn't fire when a node turns itself off, so follow setActive directly.
+    const setPanelActive = this.panel.setActive.bind(this.panel);
+    this.panel.setActive = (v: boolean) => {
+      setPanelActive(v);
+      if (!v) this.sheet.hide();
+    };
 
     this.fold.onClick = () => this.choose(PlayerAction.fold());
     this.checkCall.onClick = () => this.legal && this.choose(checkCallAction(this.legal));
@@ -287,6 +315,7 @@ export class BettingPanelView implements BettingPanelPort {
     (this.portraitRects ??= portraitBettingRects(this.root)).apply();
     this.root.layout();
     this.root.el.style.transform = `scale(${s})`;
+    this.sheet?.placeSoon();
   }
 
   // ---------------------------------------------------------------- BettingPanelPort
@@ -300,9 +329,14 @@ export class BettingPanelView implements BettingPanelPort {
 
     const s = bettingPanelState(legal, myCurrentBet);
     this.state = s;
+    this.root.el.classList.remove('v2-off');
     this.fold.setInteractable(s.foldEnabled);
     this.foldLabel.setText(s.foldLabel);
-    this.checkCallLabel.setText(s.checkCallLabel);
+    // v2: a call that puts the whole stack in is named ("All-in 3,600") and goes hot.
+    const stack = legal.maxRaiseTo > 0 ? legal.maxRaiseTo - myCurrentBet : Infinity;
+    const callAllIn = legal.canCall && legal.callAmount > 0 && legal.callAmount >= stack;
+    this.checkCall.node.el.classList.toggle('v2-allin', callAllIn);
+    this.checkCallLabel.setText(callAllIn ? `All-in ${TableMoney.chips(legal.callAmount)}` : s.checkCallLabel);
     this.checkCall.setInteractable(s.checkCallEnabled);
     this.betRaise.setInteractable(s.betRaiseEnabled);
     this.betRaiseLabel.setText(s.betRaiseLabel);
@@ -321,6 +355,13 @@ export class BettingPanelView implements BettingPanelPort {
 
   hide(): void {
     this.showing = false;
+    this.root.el.classList.add('v2-off');
+    // Between turns the row shows plain, neutral labels — never the art's pre-action placeholders or the last
+    // table's "Call 25".
+    this.foldLabel.setText('Fold');
+    this.checkCallLabel.setText('Check');
+    this.betRaiseLabel.setText('Raise');
+    this.checkCall.node.el.classList.remove('v2-allin');
     this.onChosen = null;
     this.endHold();
     this.plus.setInteractable(false);
@@ -345,6 +386,33 @@ export class BettingPanelView implements BettingPanelPort {
     this.plus.setInteractable(clamped < this.sliderMax);
     this.minus.setInteractable(clamped > this.sliderMin);
     this.layoutSlider();
+    if (this.panel.activeSelf) this.paintSheet();
+  }
+
+  /** The raise sheet's state from the panel model (amounts on the presets, stack, Raise to / All-in). */
+  private paintSheet(): void {
+    const legal = this.legal;
+    const s = this.state;
+    if (!legal || !s || !s.betRaiseEnabled) return this.sheet.hide();
+    const presets = (['MIN', '1/4', '1/2', '3/4', 'ALL IN'] as const).map((p) => ({ key: p, amount: presetAmount(p, legal, this.myCurrentBet) }));
+    this.sheet.show({
+      verb: s.betRaiseLabel,
+      value: this.value,
+      min: this.sliderMin,
+      max: this.sliderMax,
+      stack: Math.max(0, legal.maxRaiseTo - this.myCurrentBet),
+      presets,
+      canMinus: this.minus.interactable,
+      canPlus: this.plus.interactable,
+    });
+  }
+
+  /** Top of the action row in the HUD layer's CSS px (the raise sheet sits just above it). */
+  private rowTop(): number {
+    const layer = this.root.el.parentElement;
+    const row = this.checkCall.node.el.getBoundingClientRect();
+    const top = layer?.getBoundingClientRect().top ?? 0;
+    return row.height > 0 ? row.top - top : (layer?.clientHeight ?? 0) - 90;
   }
 
   private nudge(dir: number): void {
@@ -455,4 +523,20 @@ export class BettingPanelView implements BettingPanelPort {
     this.panel.setActive(false);
     cb(action);
   }
+}
+
+/** Swaps two buttons' slots (anchors, pivot, position, size) so the art keeps its spacing. */
+function swapSlots(a: UNode, b: UNode): void {
+  const pick = (n: UNode) => ({ amin: [...n.anchorMin] as typeof n.anchorMin, amax: [...n.anchorMax] as typeof n.anchorMax, pv: [...n.pivot] as typeof n.pivot, pos: [...n.anchoredPosition] as typeof n.anchoredPosition, sz: [...n.sizeDelta] as typeof n.sizeDelta });
+  const put = (n: UNode, v: ReturnType<typeof pick>) => {
+    n.anchorMin = v.amin;
+    n.anchorMax = v.amax;
+    n.pivot = v.pv;
+    n.anchoredPosition = v.pos;
+    n.sizeDelta = v.sz;
+  };
+  const va = pick(a);
+  const vb = pick(b);
+  put(a, vb);
+  put(b, va);
 }

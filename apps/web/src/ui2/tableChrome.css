@@ -1,0 +1,156 @@
+/* Table chrome (tableChrome.ts): top bars, chips, icon buttons, pre-game row, chat drawer, reaction tray, toast,
+   sheets. Uses the :root --v2-* tokens (ui2.css) and the .v2t base (table.css). */
+.v2t-chrome { pointer-events: none; }
+.v2t-cbar {
+  position: absolute; display: flex; align-items: center; gap: 0.5em; pointer-events: none;
+  top: calc(0.9em + env(safe-area-inset-top, 0px));
+}
+.v2t-cbar > * { pointer-events: auto; }
+.v2t-cbar.left { left: calc(1em + env(safe-area-inset-left, 0px)); }
+.v2t-cbar.right { right: calc(1em + env(safe-area-inset-right, 0px)); }
+.v2t-cbar.left2 { left: calc(1em + env(safe-area-inset-left, 0px)); top: calc(4.2em + env(safe-area-inset-top, 0px)); }
+.v2t-cbar:empty { display: none; }
+
+/* Round icon button (settings, chat, reactions, rankings). */
+.v2t-ib {
+  position: relative; width: 2.9em; height: 2.9em; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--v2-deep); border: 0.12em solid var(--v2-line); color: #e6e2ff; pointer-events: auto; flex: 0 0 auto;
+  box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.35);
+}
+.v2t-ib:hover { border-color: var(--v2-accent); color: #fff; }
+.v2t-ib.on { background: var(--v2-grad-violet); border-color: #ad84ff; color: #fff; }
+.v2t-ib.sm { width: 2.2em; height: 2.2em; box-shadow: none; }
+.v2t-dot { position: absolute; top: -0.25em; right: -0.25em; min-width: 1.35em; height: 1.35em; padding: 0 0.3em; border-radius: 1em; background: #ff3355; border: 0.12em solid #fff; font-size: 0.72em; font-weight: 900; display: flex; align-items: center; justify-content: center; color: #fff; }
+
+/* Chip button (Leave, room code, + Bot). */
+.v2t-chip {
+  display: inline-flex; align-items: center; gap: 0.45em; height: 2.9em; padding: 0 1em 0 0.8em; border-radius: var(--v2-r-pill);
+  background: var(--v2-deep); border: 0.12em solid var(--v2-line); font-weight: 900; color: #fff; white-space: nowrap; pointer-events: auto;
+  box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.35); max-width: 16em;
+}
+.v2t-chip:hover { border-color: var(--v2-accent); }
+.v2t-chip > span { overflow: hidden; text-overflow: ellipsis; }
+.v2t-chip.code { font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+.v2t-chip.code small { font-size: 0.72em; color: var(--v2-mut2); letter-spacing: 0.1em; }
+.v2t-chip.code.static { cursor: default; }
+.v2t-chip.bot { background: var(--v2-grad-violet); border-color: #ad84ff; }
+.v2t-chip[disabled] { opacity: 0.45; cursor: default; }
+
+/* Pre-game row: landscape bottom centre (the betting row hides meanwhile), portrait in the middle of the felt. */
+.v2t-pgrow {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(1.6em + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; align-items: center; gap: 0.45em; pointer-events: none;
+}
+.v2t-pgrow:empty { display: none; }
+.v2t-pgrow-in { display: flex; align-items: center; gap: 0.8em; }
+.v2t-pgrow .v2t-b { pointer-events: auto; }
+.v2t-pgrow .v2t-b.lg { font-family: var(--v2-display); font-weight: 400; font-size: 1.5em; letter-spacing: 0.03em; padding: 0.5em 1.6em; min-width: 9em; }
+.v2t-pgrow .v2t-b.violet { background: var(--v2-grad-violet); box-shadow: inset 0 -0.22em 0 rgba(50, 10, 120, 0.5); padding: 0.75em 1.3em; }
+.v2t-pgrow .v2t-cap { font-size: 0.85em; color: var(--v2-mut); background: var(--v2-deep); padding: 0.25em 0.8em; border-radius: 1em; }
+.v2t-b[disabled] { opacity: 0.45; cursor: default; filter: none; box-shadow: none; }
+html[data-orient='portrait'] .v2t-pgrow { top: 50%; bottom: auto; transform: translate(-50%, -50%); }
+html[data-orient='portrait'] .v2t-pgrow-in { flex-direction: column-reverse; }
+
+/* Status pill (Reconnecting…) */
+.v2t-status-pill {
+  position: absolute; left: 50%; top: calc(4.6em + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 0.6em; padding: 0.5em 1.2em; border-radius: var(--v2-r-pill);
+  background: var(--v2-deep); border: 0.12em solid var(--v2-gold); font-weight: 900;
+}
+.v2t-spin { width: 1.1em; height: 1.1em; border-radius: 50%; border: 0.18em solid rgba(255, 255, 255, 0.2); border-top-color: var(--v2-gold); animation: v2t-spin 0.8s linear infinite; }
+@keyframes v2t-spin { to { transform: rotate(360deg); } }
+
+/* Toast */
+.v2t-toast {
+  position: absolute; left: 50%; top: calc(4.2em + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 5;
+  padding: 0.5em 1.2em; border-radius: var(--v2-r-pill); background: var(--v2-dlg); border: 0.12em solid var(--v2-accent);
+  font-weight: 900; box-shadow: 0 0.4em 1.2em rgba(0, 0, 0, 0.45); animation: v2t-tin 0.18s ease-out; pointer-events: none;
+}
+@keyframes v2t-tin { from { opacity: 0; transform: translate(-50%, -0.5em); } }
+
+/* Drawer (chat, reactions): hangs under the top-right bar. */
+.v2t-drawer {
+  position: absolute; right: calc(1em + env(safe-area-inset-right, 0px)); top: calc(4.4em + env(safe-area-inset-top, 0px));
+  width: 22em; max-height: calc(100% - 13em); display: flex; flex-direction: column; gap: 0.55em;
+  background: var(--v2-dlg); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-lg); padding: 0.8em; pointer-events: auto;
+  box-shadow: 0 1em 2em rgba(0, 0, 0, 0.5); animation: v2t-tin2 0.16s ease-out;
+}
+@keyframes v2t-tin2 { from { opacity: 0; transform: translateY(-0.4em); } }
+.v2t-drawer-head { display: flex; align-items: center; gap: 0.5em; }
+.v2t-drawer-head .v2t-h { font-size: 1.15em; flex: 1; }
+.v2t-drawer-head small { color: var(--v2-mut2); font-weight: 800; }
+.v2t-chat-log {
+  flex: 1 1 auto; min-height: 6em; max-height: 16em; overflow-y: auto; display: flex; flex-direction: column; gap: 0.35em;
+  background: rgba(5, 3, 25, 0.5); border-radius: var(--v2-r-md); padding: 0.55em 0.65em; scrollbar-width: thin; user-select: text; -webkit-user-select: text;
+}
+.v2t-chat-row { line-height: 1.3; overflow-wrap: anywhere; white-space: pre-wrap; font-weight: 700; }
+.v2t-chat-row b { font-weight: 900; margin-right: 0.35em; }
+.v2t-chat-empty { color: var(--v2-mut2); font-size: 0.9em; margin: auto; text-align: center; }
+.v2t-chat-presets { display: flex; flex-wrap: wrap; gap: 0.35em; }
+.v2t-pchip { padding: 0.35em 0.8em; border-radius: var(--v2-r-pill); background: rgba(255, 255, 255, 0.06); border: 0.1em solid var(--v2-line); font-weight: 800; font-size: 0.88em; }
+.v2t-pchip:hover:not([disabled]) { border-color: var(--v2-accent); }
+.v2t-pchip[disabled] { opacity: 0.45; cursor: default; }
+.v2t-chat-in { display: flex; gap: 0.45em; }
+.v2t-chat-in input {
+  flex: 1; min-width: 0; font: inherit; color: #fff; background: rgba(5, 3, 25, 0.6); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-md);
+  padding: 0.55em 0.8em; outline: 0; user-select: text; -webkit-user-select: text;
+}
+.v2t-chat-in input:focus { border-color: var(--v2-accent); }
+.v2t-chat-in input::placeholder { color: #8e86c9; }
+.v2t-chat-in .v2t-b { padding: 0.5em 0.9em; min-width: 4.2em; }
+
+.v2t-react-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.4em; max-height: 15em; overflow-y: auto; scrollbar-width: thin; }
+.v2t-react { aspect-ratio: 1; border-radius: var(--v2-r-md); background: rgba(255, 255, 255, 0.05); border: 0.1em solid transparent; display: flex; align-items: center; justify-content: center; padding: 0.25em; }
+.v2t-react:hover:not([disabled]) { border-color: var(--v2-accent); background: rgba(124, 107, 255, 0.15); }
+.v2t-react[disabled] { opacity: 0.4; cursor: default; }
+.v2t-react img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+
+/* Sheets (hand rankings, buy-in, bust) */
+.v2t-sheet { display: flex; flex-direction: column; max-height: 100%; pointer-events: auto; }
+.v2t-sheet.wide { width: min(40em, 100%); }
+.v2t-sheet-head { display: flex; align-items: center; gap: 0.6em; margin-bottom: 0.6em; }
+.v2t-sheet-head .v2t-h { flex: 1; margin: 0 !important; }
+.v2t-sheet-body { overflow-y: auto; min-height: 0; margin-bottom: 1em; line-height: 1.45; }
+.v2t-ranks { display: flex; flex-direction: column; gap: 0.35em; }
+.v2t-rank { display: flex; align-items: center; gap: 0.7em; padding: 0.4em 0.6em; border-radius: var(--v2-r-md); background: rgba(255, 255, 255, 0.04); }
+.v2t-rank-n { width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--v2-grad-violet); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 0.85em; flex: 0 0 auto; }
+.v2t-rank-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.v2t-rank-t small { color: var(--v2-mut); font-size: 0.82em; }
+.v2t-rank-cards { display: flex; gap: 0.15em; flex: 0 0 auto; }
+.v2t-mc { width: 1.9em; height: 2.6em; border-radius: 0.25em; background: #fbf8ef; color: #141414; font-style: normal; font-weight: 900; font-size: 0.78em; display: flex; align-items: center; justify-content: center; box-shadow: 0 0.1em 0.2em rgba(0, 0, 0, 0.35); }
+.v2t-mc.r { color: #d3263a; }
+.v2t-buyin-amt { font-family: var(--v2-display); font-size: 2em; color: var(--v2-gold); text-align: center; font-variant-numeric: tabular-nums; }
+.v2t-buyin-range { width: 100%; accent-color: #f5a915; height: 2em; }
+.v2t-buyin-ends { display: flex; justify-content: space-between; color: var(--v2-mut2); font-size: 0.85em; font-weight: 800; }
+.v2t-df .v2t-b.red { background: var(--v2-grad-red); box-shadow: inset 0 -0.22em 0 rgba(110, 0, 20, 0.5); }
+
+/* The tournament title (tournament overlay) moves right of the Leave chip in landscape. */
+html:not([data-orient='portrait']) .v2t-ttitle { left: calc(9.2em + env(safe-area-inset-left, 0px)); }
+html:not([data-orient='portrait']) .v2t-tinfo { left: calc(9.2em + env(safe-area-inset-left, 0px)); }
+
+/* ---------------------------------------------------------------- portrait */
+html[data-orient='portrait'] .v2t-cbar { top: calc(0.6em + env(safe-area-inset-top, 0px)); gap: 0.35em; }
+html[data-orient='portrait'] .v2t-cbar.left { left: calc(0.6em + env(safe-area-inset-left, 0px)); }
+html[data-orient='portrait'] .v2t-cbar.right { right: calc(0.6em + env(safe-area-inset-right, 0px)); }
+html[data-orient='portrait'] .v2t-cbar.left2 { left: calc(0.6em + env(safe-area-inset-left, 0px)); top: calc(3.6em + env(safe-area-inset-top, 0px)); }
+html[data-orient='portrait'] .v2t-ib { width: 2.7em; height: 2.7em; }
+html[data-orient='portrait'] .v2t-chip { height: 2.7em; padding: 0 0.8em 0 0.6em; max-width: 11em; }
+html[data-orient='portrait'] .v2t-drawer {
+  left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 72%; border-radius: 1.4em 1.4em 0 0; border-bottom: 0;
+  padding: 0.9em 0.9em calc(0.9em + env(safe-area-inset-bottom, 0px)); z-index: 4;
+}
+html[data-orient='portrait'] .v2t-chat-log { max-height: none; min-height: 9em; }
+html[data-orient='portrait'] .v2t-react-grid { grid-template-columns: repeat(5, 1fr); max-height: 50vh; }
+html[data-orient='portrait'] .v2t-rank-cards { display: none; }
+@media (prefers-reduced-motion: reduce) { .v2t-toast, .v2t-drawer, .v2t-spin { animation: none; } }
+
+/* Offline table over (bust / won): the action row has nothing left to act on (table/tableScreen.ts). */
+html.v2t-tableover [data-hud='betting'] { visibility: hidden !important; }
+
+/* Phones: every top-bar control at least ~44 px (3.45em at the portrait .v2t size). The room code and + Bot move
+   to the second row (netChrome.ts) so the first row fits Leave and four icons. */
+html[data-orient='portrait'] .v2t-ib { width: 3.45em; height: 3.45em; }
+html[data-orient='portrait'] .v2t-ib.sm { width: 3.1em; height: 3.1em; }
+html[data-orient='portrait'] .v2t-chip { height: 3.45em; }
+html[data-orient='portrait'] .v2t-cbar.left2 { top: calc(4.6em + env(safe-area-inset-top, 0px)); }
+html[data-orient='portrait'] .screen:has(.v2t:not([hidden]) > .v2t-ttitle) .v2t-ib.help { display: none; }

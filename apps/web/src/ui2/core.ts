@@ -302,6 +302,13 @@ export class V2 {
       if (i < 0) this.show(v);
       else this.show(v.slice(0, i), v.slice(i + 1));
     },
+    // tab:<screen>: a sibling page in the same section (Tournaments, Agents). It replaces the current page, so Back
+    // leaves the section instead of stepping back through every tab.
+    tab: (v) => {
+      const i = v.indexOf(':');
+      if (i < 0) this.show(v, undefined, false);
+      else this.show(v.slice(0, i), v.slice(i + 1), false);
+    },
   };
 
   private onInput(e: Event): void {

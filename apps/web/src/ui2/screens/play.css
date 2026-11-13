@@ -2,23 +2,23 @@
 
 /* ---- room / stake cards (shared by Tables and Host a SOL table) */
 .v2-stc {
-  flex: 1; min-width: 0; background: rgba(28, 20, 80, 0.9); border: 0.12em solid var(--v2-line); border-radius: 0.9em; padding: 0.4em;
+  flex: 1; min-width: 0; background: rgba(28, 20, 80, 0.9); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-md); padding: 0.4em;
   text-align: center; display: flex; flex-direction: column; gap: 0.15em; transition: transform 0.12s, box-shadow 0.12s;
 }
 .v2-stc.on { border-color: var(--v2-gold); box-shadow: 0 0 1em rgba(255, 213, 74, 0.35); transform: translateY(-0.3em); }
 .v2-stc.locked { opacity: 0.55; }
 .v2-stc > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .v2-stc > small { color: var(--v2-mut); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.v2-stc-art { height: 4.2em; border-radius: 0.6em; position: relative; flex: 0 0 auto; }
+.v2-stc-art { height: 4.2em; border-radius: var(--v2-r-sm); position: relative; flex: 0 0 auto; }
 .v2-stc-lock { position: absolute; right: 0.3em; top: 0.3em; }
 
 /* ---- Choose your table */
 .v2-ts-tabs { width: 20em; max-width: 100%; flex: 0 0 auto; }
 .v2-ts { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 27.5em; gap: 1.2em; }
 .v2-ts-left { display: flex; flex-direction: column; gap: 1em; min-width: 0; min-height: 0; }
-.v2-ts-preview { flex: 1; min-height: 8em; border-radius: 1.2em; border: 0.12em solid var(--v2-line); position: relative; overflow: hidden; }
+.v2-ts-preview { flex: 1; min-height: 8em; border-radius: var(--v2-r-lg); border: 0.12em solid var(--v2-line); position: relative; overflow: hidden; }
 .v2-ts-felt {
-  position: absolute; left: 50%; top: 44%; width: 50%; max-width: 24em; aspect-ratio: 2.4; transform: translate(-50%, -50%); border-radius: 6em;
+  position: absolute; left: 50%; top: 44%; width: 50%; max-width: 24em; aspect-ratio: 2.4; transform: translate(-50%, -50%); border-radius: var(--v2-r-pill);
   background: radial-gradient(#4a2db8, #2a1a6e); border: 0.6em solid #0e0830; box-shadow: 0 0 0 0.25em #9b6bff, 0 1em 2em rgba(0, 0, 0, 0.45);
 }
 .v2-ts-cap { position: absolute; left: 1.2em; bottom: 1em; text-shadow: 0 0.1em 0.4em rgba(0, 0, 0, 0.6); }
@@ -34,7 +34,7 @@
 .v2-ptgrid { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1.2fr 1.2fr 9em; gap: 0.6em; align-items: center; padding: 0.55em 1em; font-size: 1.05em; }
 .v2-pthdr { padding: 0.3em 1em; border-bottom: 0.1em solid rgba(124, 107, 255, 0.35); }
 .v2-pthdr > span { font-size: 0.78em; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-mut2); }
-.v2-ptrow { background: rgba(255, 255, 255, 0.05); border: 0.1em solid rgba(124, 107, 255, 0.35); border-radius: 0.8em; }
+.v2-ptrow { background: rgba(255, 255, 255, 0.05); border: 0.1em solid rgba(124, 107, 255, 0.35); border-radius: var(--v2-r-md); }
 
 /* ---- Party */
 .v2-party-sub { text-align: center; font-size: 1.1em; flex: 0 0 auto; }
@@ -51,7 +51,7 @@
 .v2-sh-blinds { display: flex; gap: 0.6em; padding-top: 0.3em; }
 .v2-sh-blinds .v2-stc-art { height: 3.6em; }
 .v2-sh-sum { gap: 0.45em; }
-.v2-sh-felt { height: 7em; flex: 0 0 auto; border-radius: 1em; background: radial-gradient(#4a2db8, #2a1a6e); border: 0.4em solid #0e0830; box-shadow: 0 0 0 0.2em #9b6bff; }
+.v2-sh-felt { height: 7em; flex: 0 0 auto; border-radius: var(--v2-r-pill); background: radial-gradient(#4a2db8, #2a1a6e); border: 0.4em solid #0e0830; box-shadow: 0 0 0 0.2em #9b6bff; }
 
 /* ---------------------------------------------------------------- portrait */
 html[data-orient='portrait'] .v2-ts-tabs { width: 100%; }

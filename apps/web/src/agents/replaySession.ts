@@ -91,7 +91,7 @@ export function replaySession(replay: AgentHandReplay, opts: ReplaySessionOption
       }
       if (!signal.aborted) {
         setCaption(AgentHandReplayText.summary(replay));
-        if (playBtn) playBtn.textContent = 'REPLAY';
+        if (playBtn) playBtn.textContent = 'Replay';
       }
     }
 
@@ -100,7 +100,7 @@ export function replaySession(replay: AgentHandReplay, opts: ReplaySessionOption
       resume?.();
       abort = new AbortController();
       paused = false;
-      if (playBtn) playBtn.textContent = 'PAUSE';
+      if (playBtn) playBtn.textContent = 'Pause';
       host.view.endHand();
       const signal = abort.signal;
       void tickerWait(0.8, signal).then(() => {
@@ -122,17 +122,17 @@ export function replaySession(replay: AgentHandReplay, opts: ReplaySessionOption
       buttons.className = 'agent-replay-buttons';
       const button = (label: string, onClick: (b: HTMLButtonElement) => void, primary = false) => {
         const b = document.createElement('button');
-        b.className = 'nomad-btn' + (primary ? ' primary' : '');
+        b.className = 'nomad-btn v2-b ' + (primary ? 'gold primary' : 'blue');
         b.textContent = label;
         b.addEventListener('click', () => onClick(b));
         buttons.append(b);
         return b;
       };
       button('Restart', restart);
-      playBtn = button('PAUSE', (b) => {
-        if (b.textContent === 'REPLAY') return restart();
+      playBtn = button('Pause', (b) => {
+        if (b.textContent === 'Replay') return restart();
         paused = !paused;
-        b.textContent = paused ? 'PLAY' : 'PAUSE';
+        b.textContent = paused ? 'Play' : 'Pause';
         if (!paused) resume?.();
       }, true);
       button('SPEED 1X', (b) => {

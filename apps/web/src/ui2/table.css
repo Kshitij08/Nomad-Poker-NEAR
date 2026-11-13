@@ -65,7 +65,7 @@ html[data-orient='portrait'] .v2t { font-size: clamp(11px, 3.3vw, 15px); }
 .v2t-tinfo .v2t-b { margin-top: 0.5em; }
 .v2t-tables { width: min(36em, 100%); max-height: 80%; display: flex; flex-direction: column; gap: 0.6em; }
 .v2t-tables-list { display: flex; flex-direction: column; gap: 0.5em; overflow-y: auto; min-height: 0; flex: 0 1 auto; }
-.v2t-tables-list .v2t-card span { flex: 1; min-width: 0; }
+.v2t-tables-list .v2t-card span:not(.v2t-pill) { flex: 1; min-width: 0; }
 .v2t-row { display: flex; gap: 0.6em; }
 .v2t-row > .v2t-b { flex: 1; }
 /* Portrait: the top row is [LEAVE] … [⚙]; the title sits between them. */

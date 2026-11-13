@@ -1,4 +1,6 @@
 import type { AppContext } from '../app/app';
+import { tableLeaveHooks } from '../menu/table/nomadTableHud';
+import { PRACTICE_SESSION } from './offline/practiceSession';
 import { addTableChrome } from '../table/tableScreen';
 import { tournamentOverlayChrome } from './overlay/tournamentOverlay';
 import { TournamentsPanelScreen } from './hud/tournamentsPanel';
@@ -34,6 +36,15 @@ export function install(ctx: AppContext): void {
   ctx.services.tournaments = service;
   ctx.router.register('tournaments', (c) => new TournamentsPanelScreen(c));
   addTableChrome(tournamentOverlayChrome(service.state));
+  // The menu's Leave confirm words a tournament table differently: practice and net tournament tables begin a
+  // tournament session (cleared on leaving). Chained so the PER (SOL) tournament check still applies.
+  const prevLeaveHook = tableLeaveHooks.isTournament;
+  tableLeaveHooks.isTournament = (host) => service.state.session !== null || (prevLeaveHook?.(host) ?? false);
+  const prevLeaveText = tableLeaveHooks.leaveText;
+  tableLeaveHooks.leaveText = (host) =>
+    service.state.session === PRACTICE_SESSION
+      ? { title: 'Leave the practice tournament?', body: 'This practice run ends here and nothing carries over. You can start another from Tournaments.' }
+      : (prevLeaveText?.(host) ?? null);
   // NomadUiHost.Tournaments: the Nomad menu's Tournaments_* screens and the Leaderboard.
   registerNomadPartial(nomadTournamentsPartial);
   if (live) service.startPolling();

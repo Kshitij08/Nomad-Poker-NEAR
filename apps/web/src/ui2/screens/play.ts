@@ -70,7 +70,7 @@ const tables: ScreenDef & {
   render() {
     const chain = onchain();
     const tabsHtml = chain ? `<div class="v2-ts-tabs">${tabs([['pub', 'Public tables'], ['priv', 'Private tables']], this.tab, 'ts-tab')}</div>` : '';
-    if (chain && this.tab === 'priv') return topBar('CHOOSE YOUR TABLE') + `<div class="v2-body">${tabsHtml}${privatePanel(this)}</div>`;
+    if (chain && this.tab === 'priv') return topBar('Tables') + `<div class="v2-body">${tabsHtml}${privatePanel(this)}</div>`;
     const stakes = host().stakes;
     const level = levelOf(this.theme);
     const room = ROOMS[level]!;
@@ -85,7 +85,7 @@ const tables: ScreenDef & {
       return `<button class="v2-stc${r.theme === this.theme ? ' on' : ''}${locked ? ' locked' : ''}"${act('room', r.theme)} aria-pressed="${r.theme === this.theme}"><div class="v2-stc-art" style="${bgArt(r.theme, r.color)}">${locked ? `<span class="v2-stc-lock">${ico('lock', 1.6)}</span>` : ''}</div><b>${r.name}</b><small>${esc(sub)}</small></button>`;
     }).join('');
     const buyVal = chain ? solInfo?.buyIn ?? '' : formatN0(canSit ? stakes.selectedBuyInChips : tier.minBuyIn);
-    return topBar('CHOOSE YOUR TABLE') + `<div class="v2-body">${tabsHtml}
+    return topBar('Tables') + `<div class="v2-body">${tabsHtml}
 <div class="v2-ts">
   <div class="v2-ts-left">
     <div class="v2-ts-preview" style="${bgArt(room.theme, room.color)}"><div class="v2-ts-felt"></div><div class="v2-ts-cap"><b>${room.name} room</b><div class="v2-sm v2-mut">Your table plays in this room</div></div></div>
@@ -94,15 +94,15 @@ const tables: ScreenDef & {
   <div class="v2-panel v2-col v2-ts-sel">
     <span class="v2-cap">Selected table</span>
     <b class="v2-h v2-ts-name">${room.name}</b>
-    <div class="v2-kv"><span>Stakes</span><b>${chain ? `${esc(StakeCatalog.Tiers[level]?.displayName ?? solInfo?.label ?? '')} Stakes (SOL)` : `${tier.displayName} Stakes`}</b></div>
+    <div class="v2-kv"><span>Stakes</span><b>${chain ? `${esc(StakeCatalog.Tiers[level]?.displayName ?? solInfo?.label ?? '')} stakes (SOL)` : `${tier.displayName} stakes`}</b></div>
     <div class="v2-kv"><span>Blinds</span><b>${esc(chain ? solInfo?.blinds ?? '' : tier.blindsLabel)}</b></div>
     <div class="v2-kv"><span>Minimum buy-in</span><b>${esc(chain ? solInfo?.minBuyIn ?? '' : formatN0(tier.minBuyIn))}</b></div>
     <span class="v2-sm v2-mut" style="margin-top:.4em">Your buy-in</span>
-    <div class="v2-row">${btn('−', 'buy-step', { h: 'ghost', v: -1 })}<div class="v2-field v2-grow v2-num v2-ts-buy">${esc(buyVal)}</div>${btn('+', 'buy-step', { h: 'ghost', v: 1 })}</div>
-    <div class="v2-row">${btn('MIN', 'buy-end', { v: 'min', c: 'v2-grow' })}${btn('2×', 'buy-end', { v: 'double', c: 'v2-grow' })}${btn('MAX', 'buy-end', { v: 'max', c: 'v2-grow' })}</div>
+    <div class="v2-row">${btn(ico('minus', 1), 'buy-step', { h: 'ghost', v: -1, title: 'Less' })}<div class="v2-field v2-grow v2-num v2-ts-buy">${esc(buyVal)}</div>${btn(ico('plus', 1), 'buy-step', { h: 'ghost', v: 1, title: 'More' })}</div>
+    <div class="v2-row">${btn('Min', 'buy-end', { v: 'min', c: 'v2-grow' })}${btn('2×', 'buy-end', { v: 'double', c: 'v2-grow' })}${btn('Max', 'buy-end', { v: 'max', c: 'v2-grow' })}</div>
     ${!chain && !canSit ? `<div class="v2-xs v2-badc">You need ${formatN0(tier.minBuyIn)} Coins to sit here.</div>` : ''}
     <div class="v2-grow"></div>
-    ${btn('JOIN TABLE ›', 'join', { h: 'gold', c: 'lg w' })}
+    ${btn(`Join Table ${ico('next', 0.8)}`, 'join', { h: 'gold', c: 'lg w' })}
   </div>
 </div></div>`;
   },
@@ -243,11 +243,11 @@ const party: ScreenDef = {
   },
   render() {
     const chain = onchain();
-    return topBar('PARTY') + `<div class="v2-body">
+    return topBar('Play with friends') + `<div class="v2-body">
 <div class="v2-party-sub v2-mut">${chain ? 'Private SOL tables with friends' : 'Private tables with friends'}</div>
 <div class="v2-party">
-  <div class="v2-panel v2-col v2-party-card">${ico('cards', 7)}<b class="v2-h">Create Party</b><div class="v2-mut">${chain ? 'Open a private SOL table and share its code.' : 'Start a private table and share the code.'}</div><div class="v2-grow"></div>${btn('CREATE', 'create', { h: 'gold', c: 'lg w' })}</div>
-  <div class="v2-panel v2-col v2-party-card">${ico('friends', 7)}<b class="v2-h">Join Party</b><div class="v2-mut">Join a friend's table with their code.</div>${input('code', this.input?.code ?? '', 'Enter session code', { max: chain ? 44 : 12, cls: 'v2-party-code' })}<div class="v2-grow"></div><button class="v2-b blue lg w" data-a="join" data-enter="code">JOIN</button></div>
+  <div class="v2-panel v2-col v2-party-card">${ico('cards', 7)}<b class="v2-h">Create a party</b><div class="v2-mut">${chain ? 'Open a private SOL table and share its code.' : 'Start a private table and share the code.'}</div><div class="v2-grow"></div>${btn('Create a table', 'create', { h: 'gold', c: 'w' })}</div>
+  <div class="v2-panel v2-col v2-party-card">${ico('friends', 7)}<b class="v2-h">Join a party</b><div class="v2-mut">Join a friend's table with their code.</div>${input('code', this.input?.code ?? '', 'Enter session code', { max: chain ? 44 : 12, cls: 'v2-party-code' })}<div class="v2-grow"></div><button class="v2-b blue w" data-a="join" data-enter="code">Join table</button></div>
 </div></div>`;
   },
   actions: {
@@ -291,14 +291,14 @@ const solHost: ScreenDef & { stake: number; seats: number; access: Access; invit
     }).join('');
     const seats: [string, string][] = [2, 3, 4, 5, 6, 7, 8].map((n) => [String(n), String(n)]);
     const name = StakeCatalog.Tiers[this.stake]?.displayName ?? st.label;
-    return topBar('HOST A SOL TABLE', { toggle: false, back: 'tables' }) + `<div class="v2-body"><div class="v2-sh">
+    return topBar('Host a SOL table', { back: 'tables' }) + `<div class="v2-body"><div class="v2-sh">
   <div class="v2-panel v2-col v2-sh-form v2-scroll">
     <b class="v2-h">Blinds <span class="v2-sm v2-mut" style="font-family:var(--v2-ui)">buy-in 10 to 100 big blinds</span></b>
     <div class="v2-sh-blinds">${blinds}</div>
     <b class="v2-h">Seats</b><div class="v2-row v2-wrap">${chips(seats, String(this.seats), 'sh-seats', true)}</div>
     <b class="v2-h">Who can join</b><div class="v2-row v2-wrap">${chips([['anyone', 'Anyone'], ['link', 'Link only'], ['invite', 'Invite-only']], this.access, 'sh-access', true)}</div>
     ${this.access === 'invite' ? `<div class="v2-row">${input('wallet', this.input?.wallet ?? '', 'Invitee wallet address (up to 15)', { max: 44, cls: 'v2-grow' })}<button class="v2-b blue" data-a="sh-add" data-enter="wallet">+ Add</button></div>
-    <div class="v2-row v2-wrap v2-sm">${this.invitees.length ? this.invitees.map((w) => `<button class="v2-pill"${act('sh-del', w)} aria-label="Remove ${esc(w)}">${esc(w.slice(0, 4))}…${esc(w.slice(-3))} ✕</button>`).join('') : '<span class="v2-mut">Only you and wallets you add (plus the invite link) can sit.</span>'}</div>` : `<div class="v2-sm v2-mut">${this.access === 'link' ? 'Only people with the invite link can sit. You get the link in Your tables.' : 'Anyone can find and join this table.'}</div>`}
+    <div class="v2-row v2-wrap v2-sm">${this.invitees.length ? this.invitees.map((w) => `<button class="v2-pill"${act('sh-del', w)} aria-label="Remove ${esc(w)}">${esc(w.slice(0, 4))}…${esc(w.slice(-3))} ${ico('close', 0.8)}</button>`).join('') : '<span class="v2-mut">Only you and wallets you add (plus the invite link) can sit.</span>'}</div>` : `<div class="v2-sm v2-mut">${this.access === 'link' ? 'Only people with the invite link can sit. You get the link in Your tables.' : 'Anyone can find and join this table.'}</div>`}
   </div>
   <div class="v2-panel v2-col v2-sh-sum">
     <b class="v2-h">Summary</b>
@@ -310,7 +310,7 @@ const solHost: ScreenDef & { stake: number; seats: number; access: Access; invit
     <div class="v2-kv"><span>Auto-close</span><b>6 h empty</b></div>
     <div class="v2-grow"></div>
     <div class="v2-xs v2-mut">You approve once in your wallet, then you're seated from your game balance.</div>
-    ${btn(this.busy ? 'CREATING…' : 'CREATE TABLE', 'sh-create', { h: 'gold', c: 'lg w', dis: this.busy })}
+    ${btn(this.busy ? 'Creating…' : 'Create Table', 'sh-create', { h: 'gold', c: 'lg w', dis: this.busy })}
   </div>
 </div></div>`;
   },

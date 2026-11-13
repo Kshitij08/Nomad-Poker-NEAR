@@ -120,9 +120,9 @@ function buy(key: string): void {
 const CATS: [ShopCategory, string, string][] = [
   ['featured', 'Featured', 'bag'],
   ['coins', 'Coins', 'coin'],
-  ['xp', 'XP Boosts', 'xp'],
+  ['xp', 'XP boosts', 'xp'],
   ['themes', 'Themes', 'palette'],
-  ['skins', 'Card Skins', 'cards'],
+  ['skins', 'Card skins', 'cards'],
 ];
 
 const shop: ScreenDef & { cat: ShopCategory } = {
@@ -147,7 +147,7 @@ const shop: ScreenDef & { cat: ShopCategory } = {
       body = `<div class="v2-sh-feat">
   <div class="v2-scard v2-sfeat"><div class="v2-rays"></div><span class="v2-ribbon">${esc(b.ribbon!)}</span>
     <div class="v2-sfeat-in"><div class="v2-col v2-sfeat-art">${coinStack(5, 4)}<div class="v2-row">${ico('xp', 4)}${ico('palette', 4)}</div></div>
-    <div class="v2-col v2-sfeat-txt"><span class="v2-pill gold" style="width:max-content">STARTER BUNDLE</span><b class="v2-sfeat-big">${esc(b.blurb)}</b><span class="v2-sfeat-lines">${b.lines.map(esc).join('<br>')}</span><span class="v2-mut"><s>${esc(chain ? b.was.sol : b.was.demo)}</s></span>${btn(bp.label, 'buy', { h: 'gold', c: 'lg', v: 'bundle:' + b.id })}</div></div>
+    <div class="v2-col v2-sfeat-txt"><span class="v2-pill gold" style="width:max-content">Starter bundle</span><b class="v2-sfeat-big">${esc(b.blurb)}</b><span class="v2-sfeat-lines">${b.lines.map(esc).join('<br>')}</span><span class="v2-mut"><s>${esc(chain ? b.was.sol : b.was.demo)}</s></span>${btn(bp.label, 'buy', { h: 'gold', c: 'lg', v: 'bundle:' + b.id })}</div></div>
     <small class="v2-mut">${esc(b.ends)}</small></div>
   <div class="v2-col v2-sh-side">${side}</div>
 </div>`;
@@ -155,7 +155,7 @@ const shop: ScreenDef & { cat: ShopCategory } = {
       const list = SHOP_CATALOG[cat];
       body = `<div class="v2-sh-grid">${list.map((it, i) => itemCard(cat, it, i)).join('')}</div>`;
     }
-    return `${topBar('SHOP')}
+    return `${topBar('Shop')}
 <div class="v2-sh-tabs">${tabs(cats.map(([k, l, i]) => [k, l, i]), cat, 'cat')}</div>
 <div class="v2-body v2-scroll v2-sh-body">${body}</div>`;
   },

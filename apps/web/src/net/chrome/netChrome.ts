@@ -1,13 +1,14 @@
 /**
- * The networked table's chrome, registered with addTableChrome and drawn only while a net session is live. Built from
- * the extracted uGUI canvas (unity-hud.json, `Canvas` = the screen HUD) with the same CanvasScaler as the betting
- * panel (Scale With Screen Size 1920×1080, match 0.5):
+ * The networked table's chrome, registered with addTableChrome and drawn only while a net session is live.
+ * Redesign v2 (docs/ui-style-guide.md › Table HUD): plain DOM in the shared table chrome slots (src/ui2/tableChrome.ts)
+ * instead of the extracted uGUI canvases; the behaviour is the Unity components':
  *
- *  - Chat_Panel      → PokerChatPanel (toggle + unread badge, log, presets, input, send with cooldown, status)
- *  - Reaction_Panel  → PokerReactionPanel (toggle, tray of the whole ReactionLibrary, cooldown, docked above the chat)
- *  - Join_Table      → SeatActionButtons (Join table / Joining…; Rebuy and Cashout stay hidden on Coins tables)
- *  - Start Game, AddBotButton, InviteButton → PokerLobbyView (owner controls on private rooms, the room code)
- *  - PrivateBuyInPrompt (runtime-built in Unity) → a DOM prompt with the same texts and 500–1,000 slider
+ *  - PokerChatPanel     → chat toggle (+ unread badge) in the top-right bar, a drawer (landscape) / bottom sheet
+ *                         (portrait): log, preset chips, input, Send with cooldown, link status
+ *  - PokerReactionPanel → reactions toggle in the top-right bar, a tray of the whole ReactionLibrary, cooldown
+ *  - SeatActionButtons / PokerLobbyView → the pre-game row (Join table, + Add Bot, Start game / Play again with the
+ *                         reason it can't start yet) and the room code chip (tap to copy) next to Leave
+ *  - PrivateBuyInPrompt → the web3 module's 'private-buy-in' screen, else a v2 sheet (500–1,000 Coins)
  *  - PokerSeatMic on the local seat (voice on only with ?voice=1, as Unity ships voice off)
  *
  * Leaving the table is the menu's Leave / Settings (NomadTableHud) → host.leave() → NetTableSession.stop(), which is
@@ -16,79 +17,45 @@
 import type { AppContext } from '../../app/app';
 import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
 import { TablePhase } from '@nomad/engine/events/pokerEvent';
-import { buildNode, HUD_DATA, UNode, whenFontsReady, type NodeData, type RGBA } from '../../hud/unityUi';
+import { assetUrl, HUD_DATA, type NodeData } from '../../hud/unityUi';
 import type { TableChrome } from '../../table/tableScreen';
 import type { ClientGame } from '../clientGame';
 import type { NetService, NetTableSession } from '../netService';
 import { PokerChatText } from '@nomad/table-server/chat';
 import { ChainTableMode, StakeSessionNames } from '@nomad/table-server/sessions';
-import { TableChat, type PokerChatRow } from '../tableChat';
+import { TableChat, ChatLinkState, type PokerChatRow } from '../tableChat';
 import { VoiceLinkState } from '../voice/tableVoice';
-import { applyLayoutGroups, pairNodes } from './uguiLayout';
-import './net.css';
-import { isPortrait } from '../../layout/orientation';
 import '../../ui2/table.css'; // v2 pre-game row rule (html.v2t-pregame)
-import { overlayScale } from '../../layout/portraitRects';
-import { portraitNetChromeRects } from '../../layout/portraitHud';
+import { v2tEl } from '../../ui2/tableKit';
+import { isPortrait } from '../../layout/orientation';
+import { chromeSlots, chipButton, iconButton, tableSheet, tableToast, tIcon, type ChromeSlots } from '../../ui2/tableChrome';
 
 const SCREEN = HUD_DATA.canvases.find((c) => c.role === 'screen-hud')!;
 const child = (name: string): NodeData | undefined => SCREEN.root.children?.find((c) => c.name === name);
 type Fields = Record<string, unknown>;
 const fieldsOf = (d: NodeData | undefined): Fields => ((d?.components as { other?: { fields?: Fields }[] } | undefined)?.other?.[0]?.fields ?? {}) as Fields;
 const REACTIONS = (HUD_DATA as unknown as { reactions: { entries: { id: number; sprite: string }[] } }).reactions;
+/** Sender name colours (PokerChatPanel.senderPalette, re-picked to read on the v2 purple). */
+const NAME_COLORS = ['#ffd54a', '#6af0a0', '#7fd0ff', '#ff9ad5', '#c3a6ff', '#ffb36b', '#9ef0ff', '#ff8a9a'];
+const n0 = (v: number): string => v.toLocaleString('en-US');
 
-function button(n: UNode | null, fn: () => void, sound = true, audio?: { play(s: PokerSound): void }): void {
-  if (!n) return;
-  n.el.classList.add('net-btn');
-  n.el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (n.el.classList.contains('net-disabled')) return;
-    if (sound) audio?.play(PokerSound.ButtonGeneric);
-    fn();
-  });
-}
-
-function setInteractable(n: UNode | null, on: boolean): void {
-  n?.el.classList.toggle('net-disabled', !on);
-}
-
-const css = (c: RGBA) => `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${c.a})`;
+type Audio = { play(s: PokerSound): void };
 
 export function netTableChrome(ctx: AppContext, service: NetService): TableChrome {
   return (host, layer) => {
-    const holder = document.createElement('div');
-    holder.className = 'net-layer';
-    layer.append(holder);
-    const root = new UNode('NetTableChrome');
-    root.el.classList.add('net-canvas');
-    holder.append(root.el);
-
-    const chat = new ChatPanelView(root, host.audio);
-    const reactions = new ReactionPanelView(root, host.audio);
-    const lobby = new LobbyButtonsView(root, host.audio);
-    const portrait = portraitNetChromeRects(root);
-    const banner = document.createElement('div');
-    banner.className = 'net-banner';
-    banner.style.display = 'none';
-    holder.append(banner);
-
-    const layout = () => {
-      const w = holder.clientWidth || window.innerWidth;
-      const h = holder.clientHeight || window.innerHeight;
-      if (!(w > 0 && h > 0)) return; // zero-size viewport (hidden tab / pane): the scale would be 0 and w / s NaN; the next resize lays out
-      const s = overlayScale(w, h); // portrait: everything in the top row (layout/portraitHud.ts)
-      root.sizeDelta = [w / s, h / s];
-      root.renderScale = s;
-      root.el.style.transform = `scale(${s})`;
-      portrait.apply();
-      lobby.placeAddBot();
-      root.layout();
-      chat.relayout();
-      if (!isPortrait()) reactions.dockTo(chat, s);
-    };
+    const slots = chromeSlots(layer);
+    const chat = new ChatView(slots, host.audio);
+    const reactions = new ReactionView(slots, host.audio, () => chat.close());
+    chat.onOpen = () => reactions.close();
+    const lobby = new LobbyView(slots, host.audio);
+    const banner = v2tEl('div', 'v2t-status-pill', slots.layer);
+    banner.innerHTML = '<i class="v2t-spin" aria-hidden="true"></i><span>Reconnecting…</span>';
+    banner.setAttribute('role', 'status');
+    banner.hidden = true;
 
     let session: NetTableSession | null = null;
     let offGame: (() => void) | null = null;
+    let boundGame: ClientGame | null = null;
     const bind = (s: NetTableSession | null) => {
       if (s === session && s?.game === boundGame) {
         refresh();
@@ -101,143 +68,146 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       chat.bind(s?.chat ?? null);
       if (s?.game) {
         offGame = s.game.onChange(() => refresh());
-        s.game.privateBuyInPrompt = (g) => openPrivateBuyIn(holder, g, service, ctx);
+        s.game.privateBuyInPrompt = (g) => openPrivateBuyIn(slots, g, service, ctx);
         service.privateBuyInPrompt = s.game.privateBuyInPrompt;
         bindSeatMic(s);
       }
       refresh();
     };
-    let boundGame: ClientGame | null = null;
 
     const refresh = () => {
       const g = session?.game ?? null;
       const live = !!session && session.status !== 'closed';
-      root.setActive(live);
-      reactions.render(g);
-      lobby.render(g);
+      chat.setLive(live);
+      reactions.render(live ? g : null);
+      lobby.render(live ? g : null);
       chat.render();
-      banner.style.display = session?.status === 'reconnecting' ? '' : 'none';
-      banner.textContent = 'Reconnecting…';
-      layout();
+      banner.hidden = session?.status !== 'reconnecting';
     };
 
     const offSession = ctx.events.on<NetTableSession | null>('net:session', (s) => bind(s ?? null));
     const tick = window.setInterval(() => {
       // SeatActionButtons / reaction panel poll their few bools every frame in Unity.
       if (session) {
-        reactions.render(session.game);
-        lobby.render(session.game);
+        reactions.render(session.status !== 'closed' ? session.game : null);
+        lobby.render(session.status !== 'closed' ? session.game : null);
         chat.render();
       }
     }, 200);
-    window.addEventListener('resize', layout);
-    whenFontsReady([root]);
     bind(service.current);
 
     return () => {
       offSession();
       offGame?.();
       window.clearInterval(tick);
-      window.removeEventListener('resize', layout);
       chat.bind(null);
-      holder.remove();
+      chat.dispose();
+      reactions.dispose();
+      lobby.dispose();
+      banner.remove();
+      setPregame(false);
     };
   };
 }
 
 // ---------------------------------------------------------------------------------------------------- chat
 
-/** Port of Net/Chat/PokerChatPanel.cs over the extracted Chat_Panel. */
-class ChatPanelView {
-  readonly root: UNode;
-  readonly toggle: UNode;
-  readonly window: UNode;
-  private readonly unreadBadge: UNode | null;
-  private readonly unreadLabel: UNode | null;
-  private readonly statusLabel: UNode | null;
-  private readonly sendButton: UNode | null;
-  private readonly sendLabel: UNode | null;
-  private readonly presets: UNode[] = [];
-  private readonly logEl = document.createElement('div');
-  private readonly input = document.createElement('input');
-  private readonly pairs;
+/** Port of Net/Chat/PokerChatPanel.cs as a v2 drawer. */
+class ChatView {
+  private readonly toggle: HTMLButtonElement;
+  private readonly badge: HTMLElement;
+  private readonly drawer: HTMLElement;
+  private readonly status: HTMLElement;
+  private readonly logEl: HTMLElement;
+  private readonly presets: HTMLButtonElement[] = [];
+  private readonly input: HTMLInputElement;
+  private readonly sendBtn: HTMLButtonElement;
   private chat: TableChat | null = null;
   private off: (() => void)[] = [];
   private open = false;
   private unread = 0;
-  private readonly palette: RGBA[];
-  private readonly bodyColor: string;
+  private live = false;
+  private sendLabel = '';
+  onOpen: (() => void) | null = null;
+  private readonly onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape' && this.open) {
+      e.stopImmediatePropagation();
+      this.setOpen(false);
+    }
+  };
 
-  constructor(parent: UNode, private readonly audio: { play(s: PokerSound): void }) {
-    const data = child('Chat_Panel')!;
-    const f = fieldsOf(data);
-    this.root = parent.add(buildNode({ ...data, active: true }));
-    this.pairs = pairNodes(this.root, data);
-    this.toggle = this.root.find('Chat_Toggle')!;
-    this.window = this.root.find('Chat_Window')!;
-    this.unreadBadge = this.root.find('Chat_Toggle/Unread_Badge');
-    this.unreadLabel = this.root.find('Chat_Toggle/Unread_Badge/Unread_Label');
-    this.statusLabel = this.root.find('Chat_Window/Header/Status_Label');
-    this.sendButton = this.root.find('Chat_Window/Input_Row/Send_Button');
-    this.sendLabel = this.root.find('Chat_Window/Input_Row/Send_Button/Send_Label');
-    this.palette = ((f.senderPalette as { r: string; g: string; b: string; a: string }[] | undefined) ?? []).map((c) => ({ r: +c.r, g: +c.g, b: +c.b, a: +c.a }));
-    // MessageBodyColor = ThemeManager.LabelColor — the themed input text colour.
-    const inputText = this.root.find('Chat_Window/Input_Row/Chat_Input/Text_Area/Text');
-    this.bodyColor = inputText?.text ? css(inputText.text.color) : '#2b7bae';
-
-    button(this.toggle, () => this.setOpen(!this.open), true, audio);
-    button(this.root.find('Chat_Window/Header/Close_Button'), () => this.setOpen(false), true, audio);
-    button(this.sendButton, () => this.sendFromInput(), true, audio);
-
+  constructor(slots: ChromeSlots, private readonly audio: Audio) {
+    const f = fieldsOf(child('Chat_Panel'));
+    this.toggle = iconButton(slots.right, 'chat', 'Table chat', () => {
+      audio.play(PokerSound.ButtonGeneric);
+      this.setOpen(!this.open);
+    }, 2);
+    this.badge = v2tEl('span', 'v2t-dot', this.toggle);
+    this.drawer = v2tEl('div', 'v2t-drawer v2t-chat', slots.layer);
+    this.drawer.setAttribute('role', 'dialog');
+    this.drawer.setAttribute('aria-label', 'Table chat');
+    const head = v2tEl('div', 'v2t-drawer-head', this.drawer);
+    v2tEl('div', 'v2t-h', head, 'Table chat');
+    this.status = v2tEl('small', '', head);
+    const x = v2tEl('button', 'v2t-ib sm', head);
+    x.type = 'button';
+    x.innerHTML = tIcon('close', 0.95);
+    x.setAttribute('aria-label', 'Close chat');
+    x.addEventListener('click', () => this.setOpen(false));
+    this.logEl = v2tEl('div', 'v2t-chat-log', this.drawer);
+    this.logEl.setAttribute('aria-live', 'polite');
+    const presetRow = v2tEl('div', 'v2t-chat-presets', this.drawer);
     const texts = (f.presetTexts as string[] | undefined) ?? ['Nice hand!', 'Good game', 'Thanks!', 'Nice bluff', 'gl hf'];
-    const row = this.root.find('Chat_Window/Presets_Row');
-    row?.children.forEach((b, i) => {
-      const text = texts[i];
-      if (!text) {
-        b.setActive(false);
-        return;
-      }
-      b.children.find((c) => c.text)?.setText(text);
+    for (const t of texts.slice(0, 5)) {
+      const b = v2tEl('button', 'v2t-pchip', presetRow, t);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        audio.play(PokerSound.ButtonGeneric);
+        this.sendText(t);
+      });
       this.presets.push(b);
-      button(b, () => this.sendText(text), true, audio);
-    });
-
-    // Log: TMP rows under Log_Scroll/Viewport/Content, drawn as DOM (rich text, wrapping, scrolling).
-    const viewport = this.root.find('Chat_Window/Log_Scroll/Viewport');
-    this.logEl.className = 'net-chat-log';
-    viewport?.el.append(this.logEl);
-    this.root.find('Chat_Window/Log_Scroll/Viewport/Content')?.setActive(false);
-
-    // TMP_InputField: a real input over Text_Area, with the placeholder text.
-    const area = this.root.find('Chat_Window/Input_Row/Chat_Input/Text_Area');
-    const placeholder = area?.find('Placeholder');
-    this.input.className = 'net-chat-input';
+    }
+    const inRow = v2tEl('div', 'v2t-chat-in', this.drawer);
+    this.input = v2tEl('input', '', inRow);
     this.input.maxLength = PokerChatText.MaxLength;
-    this.input.placeholder = placeholder?.text?.text ?? 'Say something…';
-    this.input.style.color = this.bodyColor;
-    placeholder?.setActive(false);
-    area?.find('Text')?.setActive(false);
-    area?.el.append(this.input);
-    if (area) area.el.style.pointerEvents = 'auto';
+    this.input.placeholder = 'Say something…';
+    this.input.setAttribute('aria-label', 'Chat message');
+    this.input.autocomplete = 'off';
+    this.sendBtn = v2tEl('button', 'v2t-b blue', inRow);
+    this.sendBtn.type = 'button';
+    this.sendBtn.addEventListener('click', () => {
+      audio.play(PokerSound.ButtonGeneric);
+      this.sendFromInput();
+    });
     this.input.addEventListener('keydown', (e) => {
       e.stopPropagation(); // the betting panel's hotkeys stand down while typing (PokerTableChat.IsTyping)
       if (e.key === 'Enter') this.sendFromInput();
+      if (e.key === 'Escape') this.setOpen(false);
     });
     this.input.addEventListener('keyup', (e) => e.stopPropagation());
     this.input.addEventListener('focus', () => (TableChat.isTyping = true));
     this.input.addEventListener('blur', () => (TableChat.isTyping = false));
-    for (const n of [this.window, this.toggle]) n.el.classList.add('net-hit');
-
-    // startCollapsed, and always collapsed on a narrow screen.
-    this.setOpen(false);
+    window.addEventListener('keydown', this.onKey, true);
+    this.setOpen(false); // startCollapsed
   }
 
   get isOpen(): boolean {
     return this.open;
   }
 
-  relayout(): void {
-    applyLayoutGroups(this.root, this.pairs);
+  close(): void {
+    if (this.open) this.setOpen(false);
+  }
+
+  setLive(on: boolean): void {
+    this.live = on;
+  }
+
+  dispose(): void {
+    window.removeEventListener('keydown', this.onKey, true);
+    TableChat.isTyping = false;
+    this.toggle.remove();
+    this.drawer.remove();
   }
 
   bind(chat: TableChat | null): void {
@@ -262,13 +232,16 @@ class ChatPanelView {
 
   private setOpen(open: boolean): void {
     this.open = open;
-    if (open) this.unread = 0;
-    this.window.setActive(open);
-    this.renderUnread();
     if (open) {
-      this.relayout();
-      this.scrollToBottom();
+      this.unread = 0;
+      this.onOpen?.();
     }
+    this.drawer.hidden = !open;
+    this.toggle.classList.toggle('on', open);
+    this.toggle.setAttribute('aria-expanded', String(open));
+    this.renderUnread();
+    if (open) this.scrollToBottom();
+    else this.input.blur();
   }
 
   private sendFromInput(): void {
@@ -291,7 +264,7 @@ class ChatPanelView {
     const atBottom = this.logEl.scrollTop + this.logEl.clientHeight >= this.logEl.scrollHeight - 4;
     this.rebuild();
     if (row.isLocal || (this.open && atBottom)) this.scrollToBottom();
-    else if (!row.isLocal) {
+    else if (!row.isLocal && !this.open) {
       this.unread++;
       this.renderUnread();
     }
@@ -299,18 +272,16 @@ class ChatPanelView {
 
   private rebuild(): void {
     this.logEl.replaceChildren();
-    for (const row of this.chat?.log ?? []) {
-      const el = document.createElement('div');
-      el.className = 'net-chat-row';
-      const name = document.createElement('span');
-      name.className = 'net-chat-name';
-      name.textContent = row.name;
-      name.style.color = row.isLocal || this.palette.length === 0 ? this.bodyColor : css(this.palette[row.colorIndex % this.palette.length]!);
-      const body = document.createElement('span');
-      body.textContent = '  ' + row.body; // <noparse>: never markup
-      body.style.color = this.bodyColor;
-      el.append(name, body);
-      this.logEl.append(el);
+    const log = this.chat?.log ?? [];
+    if (!log.length) {
+      v2tEl('div', 'v2t-chat-empty', this.logEl, 'No messages yet. Say hi, or tap a quick message.');
+      return;
+    }
+    for (const row of log) {
+      const el = v2tEl('div', 'v2t-chat-row', this.logEl);
+      const name = v2tEl('b', '', el, row.name); // <noparse>: never markup
+      name.style.color = row.isLocal ? 'var(--v2-mut)' : NAME_COLORS[row.colorIndex % NAME_COLORS.length]!;
+      el.append(document.createTextNode(row.body));
     }
   }
 
@@ -320,135 +291,112 @@ class ChatPanelView {
 
   render(): void {
     const c = this.chat;
-    const available = !c || c.isAvailable;
-    this.root.setActive(available);
+    const available = this.live && (!c || c.isAvailable);
+    this.toggle.hidden = !available;
+    if (!available && this.open) this.setOpen(false);
     const state = c?.state;
-    const status = state === undefined ? '' : ['', 'Connecting…', 'Connecting…', '', 'Reconnecting…', 'Chat offline'][state] ?? '';
-    this.statusLabel?.setText(status);
-    this.statusLabel?.setActive(!!status);
+    this.status.textContent =
+      state === ChatLinkState.Connecting || state === ChatLinkState.Subscribing ? 'Connecting…' : state === ChatLinkState.Retrying ? 'Reconnecting…' : state === ChatLinkState.Unavailable ? 'Offline' : '';
     this.renderUnread();
     const canSend = !!c && c.canSend;
-    setInteractable(this.sendButton, canSend);
-    for (const b of this.presets) setInteractable(b, canSend);
+    this.sendBtn.disabled = !canSend;
+    for (const b of this.presets) b.disabled = !canSend;
     const wait = c?.sendCooldownRemaining ?? 0;
-    this.sendLabel?.setText(!canSend && wait > 0.05 ? `${Math.ceil(wait)}s` : 'Send');
+    const label = !canSend && wait > 0.05 ? `${Math.ceil(wait)}s` : `${tIcon('send', 1)}<span>Send</span>`;
+    if (label !== this.sendLabel) this.sendBtn.innerHTML = this.sendLabel = label;
   }
 
   private renderUnread(): void {
     const show = !this.open && this.unread > 0;
-    this.unreadBadge?.setActive(show);
-    this.unreadLabel?.setText(this.unread > 9 ? '9+' : String(this.unread));
+    this.badge.hidden = !show;
+    this.badge.textContent = this.unread > 9 ? '9+' : String(this.unread);
   }
 }
 
 // ---------------------------------------------------------------------------------------------------- reactions
 
-/** Port of Net/PokerReactionPanel.cs over the extracted Reaction_Panel. */
-class ReactionPanelView {
-  readonly root: UNode;
-  private readonly toggle: UNode;
-  private readonly tray: UNode;
-  private readonly status: UNode | null;
-  private readonly buttons: UNode[] = [];
-  private readonly pairs;
+/** Port of Net/PokerReactionPanel.cs as a v2 tray (the whole ReactionLibrary, closeAfterSend, cooldown). */
+class ReactionView {
+  private readonly toggle: HTMLButtonElement;
+  private readonly tray: HTMLElement;
+  private readonly status: HTMLElement;
+  private readonly buttons: HTMLButtonElement[] = [];
   private open = false;
-  private usable = true;
+  private game: ClientGame | null = null;
+  private readonly onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape' && this.open) {
+      e.stopImmediatePropagation();
+      this.setOpen(false);
+    }
+  };
 
-  constructor(parent: UNode, audio: { play(s: PokerSound): void }) {
-    const data = child('Reaction_Panel')!;
-    this.root = parent.add(buildNode({ ...data, active: true }));
-    this.toggle = this.root.find('Reaction_Toggle')!;
-    this.tray = this.root.find('Reaction_Tray')!;
-    this.status = this.root.find('Reaction_Tray/Reaction_Status');
-    const gridNode = this.root.find('Reaction_Tray/Viewport/Reaction_Grid')!;
-    this.root.find('Reaction_Tray/Viewport')?.el.classList.add('net-reaction-viewport');
-    this.root.find('Reaction_Tray/Scrollbar')?.setActive(false); // the DOM viewport scrolls itself
-
-    // showWholeLibrary: every reaction the library holds, cloning the first button for the ones not authored.
-    const template = gridNode.children[0]!;
-    const templateData = (data.children!.find((c) => c.name === 'Reaction_Tray')!.children!.find((c) => c.name === 'Viewport')!.children![0]!.children![0]!) as NodeData;
-    const entries = REACTIONS.entries;
-    for (let i = gridNode.children.length; i < entries.length; i++) gridNode.add(buildNode({ ...templateData, name: `Reaction_${i + 1}` }));
-    void template;
-    gridNode.children.forEach((b, i) => {
-      const entry = entries[i];
-      if (!entry) {
-        b.setActive(false);
-        return;
-      }
-      const icon = b.children[0] ?? b;
+  constructor(slots: ChromeSlots, audio: Audio, private readonly onOpen: () => void) {
+    this.toggle = iconButton(slots.right, 'smile', 'Reactions', () => {
+      audio.play(PokerSound.ButtonGeneric);
+      this.setOpen(!this.open);
+    }, 1);
+    this.tray = v2tEl('div', 'v2t-drawer v2t-reactions', slots.layer);
+    this.tray.setAttribute('role', 'dialog');
+    this.tray.setAttribute('aria-label', 'Reactions');
+    const head = v2tEl('div', 'v2t-drawer-head', this.tray);
+    v2tEl('div', 'v2t-h', head, 'Reactions');
+    this.status = v2tEl('small', '', head);
+    const x = v2tEl('button', 'v2t-ib sm', head);
+    x.type = 'button';
+    x.innerHTML = tIcon('close', 0.95);
+    x.setAttribute('aria-label', 'Close reactions');
+    x.addEventListener('click', () => this.setOpen(false));
+    const grid = v2tEl('div', 'v2t-react-grid', this.tray);
+    for (const entry of REACTIONS.entries) {
       const sprite = HUD_DATA.sprites[entry.sprite];
-      if (icon.image && sprite) {
-        icon.image.sprite = sprite;
-        icon.image.preserveAspect = true;
-      }
+      if (!sprite?.file) continue;
+      const b = v2tEl('button', 'v2t-react', grid);
+      b.type = 'button';
+      b.setAttribute('aria-label', `Reaction ${entry.id}`);
+      const img = v2tEl('img', '', b);
+      img.src = assetUrl(sprite.file);
+      img.alt = '';
+      img.loading = 'lazy';
+      b.addEventListener('click', () => {
+        audio.play(PokerSound.ButtonGeneric);
+        if (this.game?.sendReaction(entry.id)) this.setOpen(false); // closeAfterSend
+      });
       this.buttons.push(b);
-      button(b, () => this.send(entry.id), true, audio);
-    });
-    this.pairs = pairNodes(this.root, { ...data, children: data.children }, undefined);
-    button(this.toggle, () => this.setOpen(!this.open), true, audio);
-    this.tray.el.classList.add('net-hit');
+    }
+    window.addEventListener('keydown', this.onKey, true);
     this.setOpen(false);
   }
 
-  private game: ClientGame | null = null;
+  close(): void {
+    if (this.open) this.setOpen(false);
+  }
 
-  private send(id: number): void {
-    if (!this.game || !this.game.sendReaction(id)) return;
-    this.setOpen(false); // closeAfterSend
+  dispose(): void {
+    window.removeEventListener('keydown', this.onKey, true);
+    this.toggle.remove();
+    this.tray.remove();
   }
 
   private setOpen(open: boolean): void {
-    this.open = open;
-    this.tray.setActive(open && this.usable);
-    if (this.tray.activeSelf) {
-      applyLayoutGroups(this.root, this.pairs);
-      const grid = this.root.find('Reaction_Tray/Viewport/Reaction_Grid');
-      if (grid) {
-        // Re-run the grid with the cloned buttons (pairNodes only knows the authored ones).
-        const g = (child('Reaction_Panel')!.children!.find((c) => c.name === 'Reaction_Tray')!.children!.find((c) => c.name === 'Viewport')!.children![0]!.components as { layoutGroup?: unknown }).layoutGroup;
-        if (g) applyLayoutGroups(grid, new Map([[grid, { name: 'Reaction_Grid', components: { layoutGroup: g } } as unknown as NodeData]]));
-        // Scroll content: the grid extends below the viewport; the viewport scrolls (verticalNormalizedPosition = 1).
-        const vp = grid.parent!;
-        grid.anchorMin = [0, 1];
-        grid.anchorMax = [0, 1];
-        grid.pivot = [0, 1];
-        grid.anchoredPosition = [0, 0];
-        grid.layout();
-        vp.el.style.overflowY = 'auto';
-        grid.el.style.position = 'relative';
-        vp.el.scrollTop = 0;
-      }
-    }
+    this.open = open && !!this.game;
+    if (this.open) this.onOpen();
+    this.tray.hidden = !this.open;
+    this.toggle.classList.toggle('on', this.open);
+    this.toggle.setAttribute('aria-expanded', String(this.open));
   }
 
   render(game: ClientGame | null): void {
     this.game = game;
     const usable = !!game && game.localSeat >= 0;
-    if (usable !== this.usable) {
-      this.usable = usable;
-      this.root.setActive(usable);
-      this.setOpen(this.open);
+    this.toggle.hidden = !usable;
+    if (!usable) {
+      if (this.open) this.setOpen(false);
+      return;
     }
-    if (!usable || !game) return;
-    const can = game.canReact;
-    for (const b of this.buttons) setInteractable(b, can);
-    const cd = game.reactionCooldownRemaining;
-    const text = cd > 0 ? `${Math.ceil(cd)}s` : '';
-    this.status?.setText(text);
-    this.status?.setActive(text.length > 0);
-  }
-
-  /** DockToChat: the emote button sits chatDockGap (8) above the chat toggle (closed) or window (open). */
-  dockTo(chat: ChatPanelView, scale: number): void {
-    const target = chat.isOpen ? chat.window : chat.toggle;
-    const canvasEl = this.root.parent?.el;
-    if (!canvasEl || !target.activeInHierarchy) return;
-    const top = (target.el.getBoundingClientRect().top - canvasEl.getBoundingClientRect().top) / scale;
-    const fromBottom = (this.root.parent!.h || 0) - top;
-    const toggleOffsetY = this.toggle.anchoredPosition[1];
-    this.root.anchoredPosition = [this.root.anchoredPosition[0], fromBottom + 8 - toggleOffsetY];
-    this.root.layout();
+    const can = game!.canReact;
+    for (const b of this.buttons) b.disabled = !can;
+    const cd = game!.reactionCooldownRemaining;
+    this.status.textContent = cd > 0 ? `Wait ${Math.ceil(cd)}s` : '';
   }
 }
 
@@ -459,119 +407,111 @@ function setPregame(on: boolean): void {
   if (typeof document !== 'undefined') document.documentElement.classList.toggle('v2t-pregame', on);
 }
 
-/** SeatActionButtons (Join_Table) + PokerLobbyView (Start Game, AddBotButton, InviteButton room code). */
-class LobbyButtonsView {
-  private readonly join: UNode;
-  private readonly joinLabel: UNode | null;
-  private readonly start: UNode;
-  private readonly startLabel: UNode | null;
-  private readonly addBot: UNode;
-  private readonly invite: UNode;
-  private readonly inviteLabel: UNode | null;
+/** SeatActionButtons (Join table) + PokerLobbyView (Start game / Play again, + Add Bot, the room code). */
+class LobbyView {
+  private readonly row: HTMLElement;
+  private readonly wrap: HTMLElement;
+  private readonly caption: HTMLElement;
+  private readonly join: HTMLButtonElement;
+  private readonly start: HTMLButtonElement;
+  private readonly addBot: HTMLButtonElement;
+  private readonly botChip: HTMLButtonElement;
+  private readonly code: HTMLButtonElement;
   private game: ClientGame | null = null;
-  private copiedUntil = 0;
-  private readonly addBotHome: { anchorMin: [number, number]; anchorMax: [number, number]; pivot: [number, number]; pos: [number, number]; size: [number, number]; scale: [number, number] };
-  private readonly addBotBar: { pos: [number, number]; scale: [number, number] };
-  private pregame = false;
 
-  constructor(parent: UNode, audio: { play(s: PokerSound): void }) {
-    const add = (name: string) => parent.add(buildNode({ ...child(name)!, active: false }, { skip: (n) => n.name === 'dot' }));
-    this.join = add('Join_Table');
-    this.joinLabel = this.join.find('Text (TMP)');
-    this.start = add('Start Game');
-    this.startLabel = this.start.find('Text (TMP)');
-    this.addBot = add('AddBotButton');
-    this.invite = add('InviteButton');
-    this.inviteLabel = this.invite.find('Text');
-    // Redesign v2 (landscape): the pre-game buttons share the action row's bottom-centre line instead of the middle
-    // of the screen (Join table / Start game in the middle slot, + Add Bot left of it). Portrait keeps its own spots
-    // (layout/portraitHud.ts portraitNetChromeRects).
-    for (const n of [this.join, this.start]) {
-      n.anchorMin = n.anchorMax = [0.5, 0];
-      n.pivot = [0.5, 0.5];
-      n.anchoredPosition = [0, 97];
-    }
-    // + Add Bot: during the pre-game it takes the action row's left slot at the bar buttons' size (the action row is
-    // hidden then, see render); once a hand runs it goes back to Unity's own spot so it never covers CALL.
-    this.addBotHome = { anchorMin: [...this.addBot.anchorMin] as [number, number], anchorMax: [...this.addBot.anchorMax] as [number, number], pivot: [...this.addBot.pivot] as [number, number], pos: [...this.addBot.anchoredPosition] as [number, number], size: [...this.addBot.sizeDelta] as [number, number], scale: [...this.addBot.scale] as [number, number] };
-    // Scaled up uniformly (its label and icon grow with it) to the bar buttons' height, in the slot left of centre.
-    const w = this.join.sizeDelta[0];
-    const k = this.addBotHome.size[1] > 0 ? this.join.sizeDelta[1] / this.addBotHome.size[1] : 1;
-    this.addBotBar = { pos: [-(w * 236) / 219, 97], scale: [k, k] };
-    // Rebuy / Cashout are SeatActionButtons' too, but CanCashOut is false and there is no escrow seat to top up on a
-    // Coins table, so Unity never shows them; they are not built.
-    button(this.join, () => this.game?.requestJoinTable(), true, audio);
-    button(this.start, () => this.game?.requestStartGame(), true, audio);
-    button(this.addBot, () => this.game?.requestAddBot(), true, audio);
-    button(this.invite, () => this.copyCode(), true, audio);
+  constructor(private readonly slots: ChromeSlots, audio: Audio) {
+    const click = (fn: () => void) => () => {
+      audio.play(PokerSound.ButtonGeneric);
+      fn();
+    };
+    this.wrap = v2tEl('div', '', slots.pregame);
+    this.wrap.style.display = 'contents';
+    this.row = v2tEl('div', 'v2t-pgrow-in', this.wrap);
+    this.addBot = v2tEl('button', 'v2t-b violet', this.row);
+    this.addBot.type = 'button';
+    this.addBot.innerHTML = `${tIcon('bot', 1.2)}<span>Add bot</span>`;
+    this.addBot.addEventListener('click', click(() => this.game?.requestAddBot()));
+    this.join = v2tEl('button', 'v2t-b gold lg', this.row, 'Join table');
+    this.join.type = 'button';
+    this.join.addEventListener('click', click(() => this.game?.requestJoinTable()));
+    this.start = v2tEl('button', 'v2t-b gold lg', this.row, 'Start game');
+    this.start.type = 'button';
+    this.start.addEventListener('click', click(() => this.game?.requestStartGame()));
+    this.caption = v2tEl('div', 'v2t-cap', this.wrap);
+    // During a hand + Add Bot stays reachable as a small chip under Leave.
+    this.botChip = chipButton(slots.left2, `${tIcon('bot', 1.1)}<span>Add bot</span>`, 'Add a bot', click(() => this.game?.requestAddBot()), 'bot', 2);
+    this.code = chipButton(slots.left, '', 'Room code', click(() => this.copyCode()), 'code', 1);
   }
 
-  /** Landscape only (portrait's PortraitRects own the rect there); called on render and after each layout. */
-  placeAddBot(): void {
-    if (isPortrait()) return;
-    const n = this.addBot;
-    if (this.pregame) {
-      n.anchorMin = n.anchorMax = [0.5, 0];
-      n.pivot = [0.5, 0.5];
-      n.anchoredPosition = [...this.addBotBar.pos];
-      n.sizeDelta = [...this.addBotHome.size];
-      n.scale = [...this.addBotBar.scale];
-    } else {
-      n.anchorMin = [...this.addBotHome.anchorMin];
-      n.anchorMax = [...this.addBotHome.anchorMax];
-      n.pivot = [...this.addBotHome.pivot];
-      n.anchoredPosition = [...this.addBotHome.pos];
-      n.sizeDelta = [...this.addBotHome.size];
-      n.scale = [...this.addBotHome.scale];
-    }
-    n.layout();
+  dispose(): void {
+    this.wrap.remove();
+    this.botChip.remove();
+    this.code.remove();
   }
 
   private copyCode(): void {
     const code = this.game?.roomCode;
     if (!code || StakeSessionNames.isPool(code)) return;
-    void navigator.clipboard?.writeText(code).catch(() => undefined);
-    this.copiedUntil = performance.now() + 1200; // copiedMessageSeconds
-    this.render(this.game);
+    void navigator.clipboard?.writeText(code).then(
+      () => tableToast(this.slots.layer, 'Room code copied'),
+      () => tableToast(this.slots.layer, `Room code ${code}`),
+    );
   }
 
   render(game: ClientGame | null): void {
     this.game = game;
     const lobby = game?.lobby ?? null;
     if (!game || !lobby) {
-      for (const n of [this.join, this.start, this.addBot, this.invite]) n.setActive(false);
+      for (const n of [this.join, this.start, this.addBot, this.botChip, this.code]) n.hidden = true;
+      this.caption.hidden = true;
       setPregame(false);
       return;
     }
     // SeatActionButtons.Refresh
     const joining = game.isJoining;
     const seatOffered = (game.localSeat < 0 && (lobby.youCanBuyIn || game.isPrivateTable)) || joining;
-    this.join.setActive(seatOffered);
-    setInteractable(this.join, game.canJoinTable && !joining);
-    this.joinLabel?.setText(joining ? 'Joining…' : 'Join table');
+    this.join.hidden = !seatOffered;
+    this.join.disabled = !game.canJoinTable || joining;
+    this.join.textContent = joining ? 'Joining…' : 'Join table';
 
     // PokerLobbyView.SetVisible / Render
     const owner = lobby.youAreOwner;
     const playing = lobby.phase === TablePhase.Playing;
     const showBots = owner && !game.isMoneyTable && !lobby.autoStart;
-    this.addBot.setActive(showBots);
-    setInteractable(this.addBot, showBots && (game.roster ?? []).some((s) => !s.isOccupied));
-    this.start.setActive(owner && !playing && !lobby.autoStart && !joining && !seatOffered);
-    setInteractable(this.start, !lobby.autoStart && lobby.seatedCount >= lobby.minToStart && lobby.readyCount >= lobby.minToStart);
-    this.startLabel?.setText(lobby.phase === TablePhase.GameOver ? 'Play again' : 'Start game');
+    const freeSeat = (game.roster ?? []).some((s) => !s.isOccupied);
+    const startShown = owner && !playing && !lobby.autoStart && !joining && !seatOffered;
+    this.start.hidden = !startShown;
+    const enough = lobby.seatedCount >= lobby.minToStart && lobby.readyCount >= lobby.minToStart;
+    this.start.disabled = !enough;
+    this.start.textContent = lobby.phase === TablePhase.GameOver ? 'Play again' : 'Start game';
 
-    // Redesign v2 pre-game row (landscape): [+ Add Bot][Join table | Start game] at the bottom centre, alone — the
-    // action row (inactive until a hand is dealt to you) hides while Join or Start is up, so they don't stack.
-    this.pregame = this.join.activeSelf || this.start.activeSelf;
-    setPregame(this.pregame);
-    this.placeAddBot();
+    // Pre-game row: [+ Add bot][Join table | Start game], with why Start can't go yet.
+    const pregame = !this.join.hidden || startShown;
+    this.addBot.hidden = !(showBots && pregame && !seatOffered);
+    this.addBot.disabled = !freeSeat;
+    this.botChip.hidden = !(showBots && !pregame && playing);
+    this.botChip.disabled = !freeSeat;
+    const need = Math.max(0, lobby.minToStart - lobby.seatedCount);
+    this.caption.hidden = !(startShown && !enough);
+    this.caption.textContent = need > 0 ? `Need ${need} more player${need === 1 ? '' : 's'} to start${showBots ? ' · add a bot' : ''}` : 'Waiting for everyone to be ready';
+    setPregame(pregame);
+
+    // Phones: the room code sits on the second row (with + Bot) so the top row fits Leave and the icons.
+    const codeSlot = isPortrait() ? this.slots.left2 : this.slots.left;
+    if (this.code.parentElement !== codeSlot) codeSlot.append(this.code);
 
     // SetRoomCode: "Quick Play" on a shared pool table, else the party code (tap to copy).
     const code = game.roomCode;
     const shared = StakeSessionNames.isPool(code);
-    this.invite.setActive(code.length > 0 && !game.isTournament);
-    this.inviteLabel?.setText(performance.now() < this.copiedUntil ? 'COPIED!' : shared ? 'Quick Play' : code);
-    setInteractable(this.invite, code.length > 0 && !shared);
+    this.code.hidden = !(code.length > 0 && !game.isTournament);
+    this.code.classList.toggle('static', shared);
+    this.code.disabled = shared;
+    const html = shared ? '<span>Quick Play</span>' : `<small>CODE</small><span>${code.replace(/[<&>]/g, '')}</span>${tIcon('copy', 1.1)}`;
+    if (this.code.dataset.html !== html) {
+      this.code.dataset.html = html;
+      this.code.innerHTML = html;
+      this.code.setAttribute('aria-label', shared ? 'Quick Play table' : `Room code ${code}, tap to copy`);
+    }
   }
 }
 
@@ -579,10 +519,10 @@ class LobbyButtonsView {
 
 /**
  * PrivateBuyInPrompt.Open: 500–1,000 table chips from the Coin balance (blinds 5 / 10). The prompt itself is the web3
- * module's 'private-buy-in' screen (Net/PrivateBuyInPrompt.cs); this keeps the old DOM prompt only as a fallback for a
- * build without it. It closes itself once the seat is taken.
+ * module's 'private-buy-in' screen (Net/PrivateBuyInPrompt.cs); this keeps a v2 sheet as the fallback for a build
+ * without it. It closes itself once the seat is taken.
  */
-function openPrivateBuyIn(holder: HTMLElement, game: ClientGame, service: NetService, ctx: AppContext): void {
+function openPrivateBuyIn(slots: ChromeSlots, game: ClientGame, service: NetService, ctx: AppContext): void {
   if (ctx.router.has('private-buy-in')) {
     const off = game.onChange((w) => {
       if (w === 'seat' && game.localSeat >= 0) {
@@ -600,47 +540,68 @@ function openPrivateBuyIn(holder: HTMLElement, game: ClientGame, service: NetSer
     });
     return;
   }
-  openDomPrivateBuyIn(holder, game, service);
+  openSheetPrivateBuyIn(slots, game, service);
 }
 
-function openDomPrivateBuyIn(holder: HTMLElement, game: ClientGame, service: NetService): void {
-  holder.querySelector('.net-buyin')?.remove();
+function openSheetPrivateBuyIn(slots: ChromeSlots, game: ClientGame, service: NetService): void {
   const coins = service.wallet.coins;
   const min = ChainTableMode.PrivateMinBuyIn;
   const max = Math.min(ChainTableMode.PrivateMaxBuyIn, coins);
   const canAfford = coins >= min;
-  const n0 = (v: number) => v.toLocaleString('en-US');
-  const wrap = document.createElement('div');
-  wrap.className = 'net-buyin';
-  wrap.innerHTML = `<button class="net-buyin-close" aria-label="Close">×</button><div class="net-buyin-panel"><div class="net-buyin-title">Buy in</div>
-    <div class="net-buyin-range"></div><input class="net-buyin-slider" type="range"><button class="net-buyin-join"></button></div>`;
-  const range = wrap.querySelector('.net-buyin-range') as HTMLElement;
-  const slider = wrap.querySelector('.net-buyin-slider') as HTMLInputElement;
-  const join = wrap.querySelector('.net-buyin-join') as HTMLButtonElement;
-  range.textContent = canAfford
-    ? `${n0(min)} – ${n0(max)}    ·    blinds ${n0(ChainTableMode.PrivateSmallBlind)} / ${n0(ChainTableMode.PrivateBigBlind)}`
-    : `You have ${n0(coins)} Coins. This table needs ${n0(min)}–${n0(ChainTableMode.PrivateMaxBuyIn)}.`;
-  slider.min = String(min);
-  slider.max = String(Math.max(min, max));
-  slider.step = String(ChainTableMode.PrivateBigBlind);
-  slider.value = String(Math.max(min, max));
-  slider.disabled = !canAfford || max <= min;
-  const label = () => (join.textContent = canAfford ? `JOIN  –  ${n0(Number(slider.value))}` : 'NOT ENOUGH BALANCE');
-  label();
-  join.disabled = !canAfford;
-  slider.addEventListener('input', label);
-  join.addEventListener('click', () => {
-    game.confirmPrivateBuyIn(Number(slider.value));
-    wrap.remove();
+  let off: () => void = () => undefined;
+  const { body, foot, close } = tableSheet(slots.layer, 'Buy in', { onClose: () => off() });
+  const cap = v2tEl('div', 'v2t-mut', body, `Private table · blinds ${n0(ChainTableMode.PrivateSmallBlind)} / ${n0(ChainTableMode.PrivateBigBlind)} · you have ${n0(coins)} Coins`);
+  cap.style.marginBottom = '0.8em';
+  let amount = Math.max(min, max);
+  const cancel = v2tEl('button', 'v2t-b ghost', foot, 'Cancel');
+  cancel.type = 'button';
+  cancel.addEventListener('click', close);
+  const join = v2tEl('button', 'v2t-b gold', foot);
+  join.type = 'button';
+  if (!canAfford) {
+    v2tEl('p', '', body, `This table needs ${n0(min)}–${n0(ChainTableMode.PrivateMaxBuyIn)} Coins.`);
+    join.textContent = 'Not enough Coins';
+    join.disabled = true;
+  } else {
+    const amt = v2tEl('div', 'v2t-buyin-amt', body);
+    const range = v2tEl('input', 'v2t-buyin-range', body);
+    range.type = 'range';
+    range.min = String(min);
+    range.max = String(Math.max(min, max));
+    range.step = String(ChainTableMode.PrivateBigBlind);
+    range.value = String(amount);
+    range.disabled = max <= min;
+    range.setAttribute('aria-label', 'Buy-in');
+    const ends = v2tEl('div', 'v2t-buyin-ends', body);
+    const lo = v2tEl('button', 'v2t-pchip', ends, `Min ${n0(min)}`);
+    const hi = v2tEl('button', 'v2t-pchip', ends, `Max ${n0(Math.max(min, max))}`);
+    const paint = () => {
+      amt.textContent = n0(amount);
+      join.textContent = `Join · ${n0(amount)}`;
+    };
+    range.addEventListener('input', () => {
+      amount = Number(range.value);
+      paint();
+    });
+    lo.addEventListener('click', () => {
+      amount = min;
+      range.value = String(amount);
+      paint();
+    });
+    hi.addEventListener('click', () => {
+      amount = Math.max(min, max);
+      range.value = String(amount);
+      paint();
+    });
+    paint();
+    join.addEventListener('click', () => {
+      game.confirmPrivateBuyIn(amount);
+      close();
+    });
+  }
+  off = game.onChange((w) => {
+    if (w === 'seat' && game.localSeat >= 0) close();
   });
-  (wrap.querySelector('.net-buyin-close') as HTMLElement).addEventListener('click', () => wrap.remove());
-  const off = game.onChange((w) => {
-    if (w === 'seat' && game.localSeat >= 0) {
-      wrap.remove();
-      off();
-    }
-  });
-  holder.append(wrap);
 }
 
 // ---------------------------------------------------------------------------------------------------- voice

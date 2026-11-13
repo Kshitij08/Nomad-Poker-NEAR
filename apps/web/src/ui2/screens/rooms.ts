@@ -18,6 +18,11 @@ export const rooms = { theme: 'Town' as Theme, animate: false };
 export function syncRoom(): void {
   const stakes = host().stakes;
   rooms.theme = StakeTableSkin.themeFor(stakes.resolve().minBuyIn);
+  // Never open on a room the player can't sit in: fall back to the richest room whose buy-in they cover.
+  if (stakes.coins < roomTier(rooms.theme).startingStack) {
+    const ok = ROOMS.filter((r) => stakes.coins >= roomTier(r.theme).startingStack);
+    rooms.theme = (ok[ok.length - 1] ?? ROOMS[0]!).theme;
+  }
   // The fixed buy-in replaces any amount picked earlier on Choose your table.
   const tier = roomTier(rooms.theme);
   stakes.selectedMinBuyIn = tier.minBuyIn;
@@ -54,9 +59,19 @@ export function step(dir: number): void {
   select(ROOMS[n]!.theme);
 }
 
+/** The room we'd suggest: the richest one whose buy-in the player covers (Solana when none). */
+export function recommendedRoom(): Theme {
+  const coins = host().stakes.coins;
+  const ok = ROOMS.filter((r) => coins >= roomTier(r.theme).startingStack);
+  return (ok[ok.length - 1] ?? ROOMS[0]!).theme;
+}
+
 function peek(i: number, side: 'prev' | 'next'): string {
   const r = ROOMS[(i + ROOMS.length) % ROOMS.length]!;
-  return `<button class="v2-rm-peek ${side}" style="${bgArt(r.theme, r.color)}"${act('room-step', side === 'prev' ? -1 : 1)} aria-label="${esc(r.name)} room"><b>${esc(r.name)}</b></button>`;
+  const t = roomTier(r.theme);
+  const locked = !onchain() && host().stakes.coins < t.startingStack;
+  const stake = onchain() ? onchainApi.tableStakes?.(ROOMS.indexOf(r))?.blinds ?? '' : `${t.displayName} · ${t.blindsLabel}`;
+  return `<button class="v2-rm-peek ${side}${locked ? ' locked' : ''}" style="${bgArt(r.theme, r.color)}"${act('room-step', side === 'prev' ? -1 : 1)} aria-label="${esc(r.name)} room${locked ? ', locked' : ''}">${locked ? `<span class="v2-rm-peek-lock">${ico('lock', 1.1)}</span>` : ''}<b>${esc(r.name)}</b><small>${esc(stake)}</small></button>`;
 }
 
 /** The room stage markup for the main menu. */
@@ -82,14 +97,14 @@ export function roomStage(): string {
   <div class="v2-rm-stage">
     ${peek(i - 1, 'prev')}
     <div class="v2-rm-card${locked ? ' locked' : ''}${enter}" style="${bgArt(r.theme, r.color)}">
-      ${locked ? `<span class="v2-rm-lock">${ico('lock', 1.4)} Locked</span>` : ''}
+      ${locked ? `<span class="v2-rm-lock">${ico('lock', 1.4)} Locked</span>` : !chain && rooms.theme === recommendedRoom() ? `<span class="v2-rm-lock v2-rm-rec">${ico('star', 1.2)} Recommended</span>` : ''}
       <button class="v2-rm-arrow prev"${act('room-step', -1)} aria-label="Previous room">${ico('back', 1.2)}</button>
       <button class="v2-rm-arrow next"${act('room-step', 1)} aria-label="Next room">${ico('back', 1.2, 'transform:scaleX(-1)')}</button>
       <div class="v2-rm-bar">
         <div class="v2-rm-info" aria-live="polite"><b class="v2-rm-name">${esc(r.name)}</b><span class="v2-rm-stake">${stakeLine}</span><span class="v2-rm-buy">${buyLine}</span></div>
         <div class="v2-rm-actions">
-          ${locked ? btn(`GET COINS <span class="v2-rm-arr">›</span>`, 'go', { h: 'green', c: 'lg v2-rm-sit', v: 'shop:coins' }) : btn(`SIT DOWN <span class="v2-rm-arr">›</span>`, 'room-sit', { h: 'gold', c: 'lg v2-rm-sit' })}
-          ${btn(`${ico('friends', 1.3)} With friends`, 'room-friends', { h: 'violet', c: 'v2-rm-friends' })}
+          ${locked ? btn(`Get Coins ${ico('next', 0.8)}`, 'go', { h: 'green', c: 'lg v2-rm-sit', v: 'shop:coins' }) : btn(`Sit Down ${ico('next', 0.8)}`, 'room-sit', { h: 'gold', c: 'lg v2-rm-sit' })}
+          ${btn(`${ico('friends', 1.3)} Play with friends`, 'room-friends', { h: 'violet', c: 'v2-rm-friends' })}
         </div>
       </div>
     </div>

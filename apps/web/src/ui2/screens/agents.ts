@@ -1,6 +1,6 @@
 /**
- * Agents (atlas: Redesign v2 › Agents). Main tabs Agents · My Twin · Marketplace · Coach; Agents has the sub-tabs
- * Overview · Strategy · Session History around a "My Agents" list. Twin, Marketplace and Coach were Unity pop-ups
+ * Agents (atlas: Redesign v2 › Agents). One tab row: Overview · Strategy · History (the Agent's pages, around a
+ * "My Agents" list) · My twin · Marketplace · Coach. Twin, Marketplace and Coach were Unity pop-ups
  * (menu/screens/market.ts); they are pages here with the same backend calls and copy / publish rules.
  *
  * The backend runs ONE Agent per player: the list shows it, and "New agent" says so. The SOL Agent (On-chain mode) keeps
@@ -36,13 +36,14 @@ function duration(seconds: number): string {
 
 // ------------------------------------------------------------------ shared chrome
 
-const MAIN_TABS: [string, string, string][] = [['ag-overview', 'Agents', 'robot'], ['ag-twin', 'My Twin', 'twin'], ['ag-market', 'Marketplace', 'store'], ['ag-coach', 'Coach', 'coach']];
-const SUB_TABS: [string, string][] = [['ag-overview', 'Overview'], ['ag-strategy', 'Strategy'], ['ag-history', 'Session History']];
-const AGENT_IDS = ['ag-overview', 'ag-strategy', 'ag-history'];
+/** One tab row for every Agents page (no tabs inside tabs): the Agent's own pages, then Twin, Marketplace, Coach. */
+const MAIN_TABS: [string, string, string][] = [
+  ['ag-overview', 'Overview', 'robot'], ['ag-strategy', 'Strategy', 'gear'], ['ag-history', 'History', 'clip'],
+  ['ag-twin', 'My twin', 'twin'], ['ag-market', 'Marketplace', 'store'], ['ag-coach', 'Coach', 'coach'],
+];
 
 function agMain(on: string): string {
-  const mainOn = AGENT_IDS.includes(on) ? 'ag-overview' : on;
-  return topBar('AFK AGENTS') + `<div class="v2-ag-main">${tabs(MAIN_TABS, mainOn, 'go')}</div>`;
+  return topBar('Agents') + `<div class="v2-ag-main">${tabs(MAIN_TABS, on, 'tab')}</div>`;
 }
 
 /** Shared actions of every Agents page. */
@@ -79,14 +80,14 @@ function agShell(sub: string, inner: string): string {
   const st = svc?.status() ?? { active: false, pill: 'Idle', line: 'Not playing', progress: null };
   const name = s?.agentName ?? 'Agent';
   const net = st.progress ? st.progress.NetPnl : sumNet();
-  const card = `<button class="v2-ag-card on"${act('go', 'ag-overview')}><div class="v2-row" style="gap:.6em"><div class="v2-ag-badge" style="background:${agentColor(st.pill)}">${ico('robot', 2)}</div><div class="v2-grow"><b class="v2-ellip" style="display:block">${esc(name)}</b><div class="v2-xs ${st.pill === 'Playing' ? 'v2-good' : 'v2-mut'}">${st.pill === 'Playing' ? '● ' : ''}${esc(st.pill)}</div></div></div><div class="v2-row v2-xs v2-mut v2-ag-cardf"><span>${esc(s?.styleName ?? '')}</span><b class="${tone(net)}">${signed(net)}</b></div></button>`;
+  const card = `<button class="v2-ag-card on"${act('tab', 'ag-overview')}><div class="v2-row" style="gap:.6em"><div class="v2-ag-badge" style="background:${agentColor(st.pill)}">${ico('robot', 2)}</div><div class="v2-grow"><b class="v2-ellip" style="display:block">${esc(name)}</b><div class="v2-xs ${st.pill === 'Playing' ? 'v2-good' : 'v2-mut'}">${st.pill === 'Playing' ? ico('dot', 0.7) + ' ' : ''}${esc(st.pill)}</div></div></div><div class="v2-row v2-xs v2-mut v2-ag-cardf"><span>${esc(s?.styleName ?? '')}</span><b class="${tone(net)}">${signed(net)}</b></div></button>`;
   const color = st.pill === 'Playing' ? 'v2-good' : 'v2-mut';
   return agMain(sub) + `<div class="v2-ag-shell">
   <div class="v2-panel v2-ag-list"><b class="v2-h">My Agents <span class="v2-sm v2-mut" style="font-family:var(--v2-ui)">1</span></b>${card}<button class="v2-ag-card v2-ag-new"${act('ag-new')}>${ico('plus', 1.4)} New agent</button></div>
   <div class="v2-panel v2-ag-right">
     <div class="v2-row v2-ag-head"><div class="v2-ag-badge big" style="background:${agentColor(st.pill)}">${ico('robot', 2.5)}</div>
       <div class="v2-grow"><div class="v2-row"><b class="v2-ellip" style="font-size:1.4em">${esc(name)}</b>${btn('Rename', 'ag-rename', { h: 'ghost', c: 'sm' })}</div><div class="v2-sm ${color} v2-ellip">${esc(onchain() ? 'On-chain: the SOL Agent plays from the private tables lobby' : st.line)}</div></div>
-      <div class="v2-ag-sub">${tabs(SUB_TABS, sub, 'go')}</div></div>
+</div>
     <div class="v2-ag-inner v2-scroll">${inner}</div>
   </div></div>`;
 }
@@ -131,7 +132,7 @@ const overview: ScreenDef = {
     const svc = agents();
     const s = strat();
     if (onchain()) return agShell('ag-overview', solNote());
-    if (!svc || !s) return agMain('ag-overview') + `<div class="v2-panel v2-empty">${ico('robot', 6)}Agents aren't available in this build.</div>`;
+    if (!svc || !s) return agMain('ag-overview') + `<div class="v2-panel v2-empty">${ico('robot', 6)}Agents aren't available right now. Try again later.</div>`;
     const st = svc.status();
     const sessions = svc.history?.Sessions ?? [];
     let hands = 0;
@@ -145,15 +146,15 @@ const overview: ScreenDef = {
     const field = (k: string, label: string) => `<label class="v2-row v2-ag-field"><span class="v2-grow">${label}</span>${input(k, fields[k] ?? '', '0', { cls: 'v2-num', type: 'text', max: 7 })}</label>`;
     const inner = `<div class="v2-ag-ov">
   <div class="v2-col v2-ag-ovl">
-    <button class="v2-card v2-ag-strat"${act('go', 'ag-strategy')}><div class="v2-cap">Current strategy</div><div style="font-size:1.3em;font-weight:900">${esc(s.styleName)}</div><div class="v2-mut v2-sm">${esc(s.shortSummary)}</div>${copying}</button>
-    <div class="v2-card"><div class="v2-cap">Recent performance</div><div class="v2-row v2-ag-stats">${[[String(svc.history?.Total ?? sessions.length), 'Sessions'], [fmt(hands), 'Hands'], [signed(net), 'Net result']].map(([v, l], i) => `<div><b class="${i === 2 ? tone(net) : ''}" style="font-size:1.5em">${v}</b><div class="v2-xs v2-mut">${l}</div></div>`).join('')}</div>${btn('View history', 'go', { h: 'ghost', c: 'sm', v: 'ag-history' })}</div>
+    <button class="v2-card v2-ag-strat"${act('tab', 'ag-strategy')}><div class="v2-cap">Current strategy</div><div style="font-size:1.3em;font-weight:900">${esc(s.styleName)}</div><div class="v2-mut v2-sm">${esc(s.shortSummary)}</div>${copying}</button>
+    <div class="v2-card"><div class="v2-cap">Recent performance</div><div class="v2-row v2-ag-stats">${[[String(svc.history?.Total ?? sessions.length), 'Sessions'], [fmt(hands), 'Hands'], [signed(net), 'Net result']].map(([v, l], i) => `<div><b class="${i === 2 ? tone(net) : ''}" style="font-size:1.5em">${v}</b><div class="v2-xs v2-mut">${l}</div></div>`).join('')}</div>${btn('View history', 'tab', { h: 'ghost', c: 'sm', v: 'ag-history' })}</div>
     ${live}
   </div>
   <div class="v2-card v2-col v2-ag-setup"><div class="v2-cap">Session setup</div>
     ${field('bankroll', 'Bankroll (Coins)')}${field('maxHands', 'Max hands')}${field('maxMinutes', 'Max minutes')}${field('stopLoss', 'Stop loss')}${field('profitTarget', 'Profit target')}
     <div class="v2-xs v2-mut">Plays Coins tables from your Coins (you have ${fmt(coins())}). Stop it any time; its stack comes back to your Coins. 0 = off.</div>
     <div class="v2-grow"></div>
-    ${st.active ? btn(st.pill === 'Stopping' ? 'STOPPING…' : 'STOP AGENT', 'ag-deploy', { h: 'red', c: 'lg w', dis: st.pill === 'Stopping' }) : btn('REVIEW &amp; DEPLOY', 'ag-deploy', { h: 'gold', c: 'lg w' })}
+    ${st.active ? btn(st.pill === 'Stopping' ? 'Stopping…' : 'Stop Agent', 'ag-deploy', { h: 'red', c: 'lg w', dis: st.pill === 'Stopping' }) : btn('Review &amp; Deploy', 'ag-deploy', { h: 'gold', c: 'lg w' })}
   </div></div>`;
     return agShell('ag-overview', inner);
   },
@@ -164,7 +165,7 @@ const overview: ScreenDef = {
 };
 
 function solNote(): string {
-  return `<div class="v2-empty">${ico('sol', 5)}<b class="v2-h" style="font-size:1.4em;color:#fff">SOL Agent</b><span>In On-chain mode your Agent plays private SOL tables (devnet). Deploy it, set its stake and watch it from the SOL Agent panel. The Strategy tab here sets how it plays.</span>${btn('OPEN SOL AGENT', 'ag-solagent', { h: 'gold', c: 'lg' })}</div>`;
+  return `<div class="v2-empty">${ico('sol', 5)}<b class="v2-h" style="font-size:1.4em;color:var(--v2-ink)">SOL Agent</b><span>In On-chain mode your Agent plays private SOL tables (devnet). Deploy it, set its stake and watch it from the SOL Agent panel. The Strategy tab here sets how it plays.</span>${btn('Open SOL Agent', 'ag-solagent', { h: 'gold', c: 'lg' })}</div>`;
 }
 
 function deployOrStop(): void {
@@ -282,7 +283,7 @@ const strategy: ScreenDef = {
   close: stopPolling,
   render() {
     const s = strat();
-    if (!s) return agMain('ag-strategy') + `<div class="v2-panel v2-empty">${ico('robot', 6)}Agents aren't available in this build.</div>`;
+    if (!s) return agMain('ag-strategy') + `<div class="v2-panel v2-empty">${ico('robot', 6)}Agents aren't available right now. Try again later.</div>`;
     const presets = STRATEGY_NAMES.slice(0, STRATEGY_PRESETS.length).map((n, i) =>
       `<button class="v2-card v2-row v2-ag-pre${s.style === i ? ' on' : ''}"${act('st-pick', i)}>${ico(['robot', 'shield', 'eye', 'bolt'][i] ?? 'robot', 2)}<div class="v2-grow"><b>${esc(n)}</b><div class="v2-xs v2-mut">${esc(STRATEGY_BLURBS[i] ?? '')}</div></div></button>`).join('');
     const smart = s.brain === BRAIN_SMART;
@@ -311,7 +312,7 @@ const strategy: ScreenDef = {
     ${body}
     <div class="v2-xs v2-mut" style="margin-top:.4em"><b>Risk: ${esc(risk)}.</b> ${esc(riskLine)}</div>
   </div>
-  <div class="v2-row v2-ag-stbar" style="margin-top:.8em"><button class="v2-chip on"${act('st-fine')}>Fine-tune ${fine ? '▴ Hide' : '▾ Show'}</button>${inUse && !fine ? '<span class="v2-xs v2-mut v2-ag-inuse">Different play before / after the flop: in use</span>' : ''}<div class="v2-grow"></div>${btn('Reset to ' + esc(STRATEGY_NAMES[resetPreset(s.style)] ?? ''), 'st-reset', { h: 'ghost' })}${btn('SAVE', 'st-save', { h: 'gold' })}</div>`;
+  <div class="v2-row v2-ag-stbar" style="margin-top:.8em"><button class="v2-b ghost sm"${act('st-fine')} aria-expanded="${fine}">${fine ? 'Hide fine-tuning' : 'Fine-tune'} ${ico(fine ? 'chevup' : 'chev', 0.9)}</button>${inUse && !fine ? '<span class="v2-xs v2-mut v2-ag-inuse">Different play before / after the flop: in use</span>' : ''}<div class="v2-grow"></div>${btn('Reset to ' + esc(STRATEGY_NAMES[resetPreset(s.style)] ?? ''), 'st-reset', { h: 'ghost' })}${btn('Save', 'st-save', { h: 'gold' })}</div>`;
     return agShell('ag-strategy', inner);
   },
   slide(key, v, done) {
@@ -427,7 +428,7 @@ async function fetchInto(l: Load, method: string, path: string, json: string | n
   const api = marketApi(app());
   if (!api) {
     l.state = 'error';
-    l.error = 'The Agent service is offline in this build.';
+    l.error = "The Agent service isn't available right now. Try again later.";
     ui().render();
     return;
   }
@@ -492,7 +493,7 @@ const twin: ScreenDef = {
       ? `<div class="v2-row" style="gap:1.6em;justify-content:center"><div><b style="font-size:1.8em">${pctTxt(t.confidence)}</b><div class="v2-xs v2-mut">sure</div></div><div><b style="font-size:1.8em">${t.matchRate == null ? '…' : pctTxt(t.matchRate)}</b><div class="v2-xs v2-mut">plays like you</div></div></div>
         <span class="v2-mut">Learned from ${fmt(n)} of your decisions</span>
         <div class="v2-row v2-wrap" style="justify-content:center">${((t.tags as string[] | undefined) ?? []).map((x) => `<span class="v2-pill">${esc(x)}</span>`).join('')}</div>
-        <div class="v2-grow"></div>${btn('USE MY TWIN', 'twin-use', { h: 'gold', c: 'lg w' })}${btn('Publish to Marketplace', 'twin-publish', { h: 'violet', c: 'w' })}`
+        <div class="v2-grow"></div>${btn('Use My Twin', 'twin-use', { h: 'gold', c: 'lg w' })}${btn('Publish to Marketplace', 'twin-publish', { h: 'violet', c: 'w' })}`
       : `<span class="v2-mut">Your twin learns how you play from your Coins hands.</span><div class="v2-bar" style="width:100%;flex:none;height:.8em"><i style="width:${Math.min(100, (n / TWIN_MIN_DECISIONS) * 100)}%;background:linear-gradient(90deg,#8a5cff,#14f1c5)"></i></div><b>${n} of ${TWIN_MIN_DECISIONS} decisions</b><div class="v2-grow"></div>${btn('Play a Coins table', 'twin-play', { h: 'gold', c: 'w' })}`;
     const traits = [0, 1, 2, 3, 4].map((i) => `<div class="v2-row v2-ag-trait"><b class="v2-ag-dn">${esc(W.Names[i]!)}</b><div class="v2-bar" style="height:.7em"><i style="width:${ready ? toT(i, v[i]!) : 15}%;background:linear-gradient(90deg,#8a5cff,#14f1c5)"></i></div><span class="v2-pill v2-ag-tag wide">${ready ? esc(s?.tag(i, v) ?? Math.round(v[i]! * 100) + '%') : 'learning…'}</span></div>`).join('');
     return agMain('ag-twin') + `<div class="v2-ag-two">
@@ -629,7 +630,7 @@ const market: ScreenDef = {
   render() {
     const chain = onchain();
     const sorts: [string, string][] = chain ? [['top', 'Top'], ['popular', 'Popular'], ['new', 'New']] : [['styles', 'By style'], ['new', 'Promising'], ['top', 'Top'], ['popular', 'Popular']];
-    const bar = `<div class="v2-row v2-wrap v2-ag-mbar">${mktTab === 'browse' ? chips(sorts, mktSort, 'mkt-sort') : ''}<div class="v2-grow"></div><div class="v2-ag-mtabs">${tabs([['browse', 'Browse'], ['mine', 'My strategies']], mktTab, 'mkt-tab')}</div>${btn('+ Publish', 'mkt-publish', { h: 'violet' })}</div>`;
+    const bar = `<div class="v2-row v2-wrap v2-ag-mbar">${mktTab === 'browse' ? chips(sorts, mktSort, 'mkt-sort') : ''}<div class="v2-grow"></div><div class="v2-ag-mtabs">${tabs([['browse', 'Browse'], ['mine', 'My strategies']], mktTab, 'mkt-tab')}</div>${btn(`${ico('plus', 0.9)} Publish`, 'mkt-publish', { h: 'violet' })}</div>`;
     const note = `<div class="v2-xs v2-mut">${chain ? 'Copy a strategy for your SOL Agent. Its creator gets 8% and Nomad 2% of the new profit it makes you, paid on chain; never of losses.' : 'Copy a strategy for your Coins Agent. Its creator gets 8% and Nomad 2% of the profit it makes you, never of losses.'}</div>`;
     const l = mktTab === 'browse' ? mktLoad : mineLoad;
     const wait = loadBody(l, 'store');
@@ -701,7 +702,7 @@ const coach: ScreenDef = {
     const r = coachLoad.data!;
     const hands = num(r.hands);
     if (hands < COACH_MIN_HANDS)
-      return agMain('ag-coach') + `<div class="v2-panel v2-body"><div class="v2-empty">${ico('coach', 7)}<b class="v2-h" style="font-size:1.5em;color:#fff">The coach learns from your Coins hands</b>Play ${COACH_MIN_HANDS - hands} more hands, then come back for what's working and what to try.${btn('Play now', 'coach-play', { h: 'gold' })}</div></div>`;
+      return agMain('ag-coach') + `<div class="v2-panel v2-body"><div class="v2-empty">${ico('coach', 7)}<b class="v2-h" style="font-size:1.5em;color:var(--v2-ink)">The coach learns from your Coins hands</b>Play ${COACH_MIN_HANDS - hands} more hands, then come back for what's working and what to try.${btn('Play now', 'coach-play', { h: 'gold' })}</div></div>`;
     const st = (r.stats ?? {}) as J;
     const stats = [[fmt(hands), 'Hands'], [num(st.bbPer100).toFixed(1), 'bb / 100'], [pctTxt(st.vpip), 'Plays'], [pctTxt(st.pfr), 'Raises'], [pctTxt(st.wonAtShowdown), 'Showdowns won']]
       .map(([v, l]) => `<div class="v2-panel v2-ag-cstat"><b style="font-size:1.8em">${v}</b><div class="v2-sm v2-mut">${l}</div></div>`).join('');

@@ -20,11 +20,16 @@ export class PotHudView implements PotHud {
 
   constructor(data: CanvasData, parent: HTMLElement) {
     this.root = buildNode(data.root, { skip: (n) => n.name === 'HoverPanel' });
-    this.root.el.classList.add('u-pot');
+    this.root.el.classList.add('u-pot', 'v2-pot');
     parent.append(this.root.el);
     const t = this.root.find('Graphics/bar/Text (TMP)');
     if (!t) throw new Error('Pot_UI text missing');
     this.text = t;
+    // v2 pot pill (hud/v2hud.css): Lilita gold amount under a small "Pot" caption.
+    if (t.text) {
+      t.text.family = "'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif";
+      t.text.bold = false;
+    }
     const w = data.world!;
     this.canvas = new WorldCanvas(this.root, w.position, w.scale[0]);
     this.root.layout();
@@ -34,6 +39,8 @@ export class PotHudView implements PotHud {
   setPot(pot: number): void {
     this.pot = pot;
     this.text.setText(TableMoney.pot(pot));
+    // v2: no "0" pill before the blinds or after the award.
+    this.root.el.classList.toggle('v2-empty', !(pot > 0));
   }
 
   setMessage(message: string): void {

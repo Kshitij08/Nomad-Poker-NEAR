@@ -82,7 +82,7 @@ const main: ScreenDef & { profile: boolean } = {
     return `
 <div class="v2-mm-top">
   <div class="v2-rplayer">
-    <button class="v2-row v2-pl"${act('profile')} aria-label="Profile">${avatar('', undefined, 'width:3.6em;height:3.6em')}<div class="v2-grow"><b class="v2-ellip v2-pl-name">${esc(playerName())}</b><div class="v2-xs v2-mut v2-ellip">${chain && addr ? `${esc(addr.slice(0, 4))}…${esc(addr.slice(-4))} · devnet` : (accountExtras(app()).isGuest ?? true) ? 'Guest · online' : 'Signed in · online'}</div></div></button>
+    <button class="v2-row v2-pl"${act('profile')} aria-label="Profile">${avatar('', undefined, 'width:3.6em;height:3.6em')}<div class="v2-grow"><b class="v2-ellip v2-pl-name">${esc(playerName())}</b><div class="v2-xs v2-mut v2-ellip">${chain && addr ? `${esc(addr.slice(0, 4))}…${esc(addr.slice(-4))} · devnet` : (accountExtras(app()).isGuest ?? true) ? 'Guest account' : 'Signed in'}</div></div></button>
     <button class="v2-row"${act('unity', 'LevelRewards')} aria-label="Level and missions"><span class="v2-lvb">LV ${lv.level}</span><div class="v2-bar"><i style="width:${Math.round(lv.p * 100)}%"></i></div>${lv.next ? `<span class="v2-xs v2-num">${fmt(lv.into)} / ${fmt(lv.next)} XP</span>` : ''}</button>
   </div>
   <div class="v2-rlogo" aria-label="Nomad Poker">NOMAD<br><span>POKER</span></div>
@@ -118,11 +118,10 @@ ${this.profile ? profilePanel() : ''}`;
     'profile-close': () => {
       main.profile = false;
     },
+    // One picture picker for the game: the v2 Friends picker (the legacy FriendsHud sheet is never opened from here).
     'pf-avatar': () => {
       main.profile = false;
-      const f = S('friends');
-      if (f?.openAvatarPicker) f.openAvatarPicker();
-      else ui().message('Avatar', "The avatar picker isn't loaded.");
+      ui().show('friends', 'edit');
     },
     'pf-rename': () => renameDialog(),
     'pf-deposit': () => {
@@ -140,8 +139,8 @@ function profilePanel(): string {
   return `<div class="v2-pop-dim"${act('profile-close')}></div>
 <div class="v2-profile v2-panel" role="dialog" aria-label="Profile">
   <div class="v2-row" style="gap:1em">
-    <button class="v2-pf-av"${act('pf-avatar')} aria-label="Change your picture">${avatar('', undefined, 'width:5em;height:5em')}<span class="v2-editb">✎</span></button>
-    <div class="v2-grow"><div class="v2-row"><b class="v2-ellip" style="font-size:1.3em">${esc(playerName())}</b><button class="v2-pill"${act('pf-rename')} aria-label="Rename">✎</button></div>
+    <button class="v2-pf-av"${act('pf-avatar')} aria-label="Change your picture">${avatar('', undefined, 'width:5em;height:5em')}<span class="v2-editb">${ico('edit', 1)}</span></button>
+    <div class="v2-grow"><div class="v2-row"><b class="v2-ellip" style="font-size:1.3em">${esc(playerName())}</b><button class="v2-pill"${act('pf-rename')} aria-label="Rename">${ico('edit', 1)}</button></div>
     <div class="v2-xs v2-mut">${(accountExtras(app()).isGuest ?? true) ? 'Guest account' : 'Signed in'}</div></div>
   </div>
   <div class="v2-cap" style="margin-top:.9em">Play mode</div>
@@ -179,8 +178,22 @@ export function openSettings(): void {
         if (email) void run(() => acc.addRecoveryLogin!(email, ''), () => ui().message('Account saved', 'Sign in with this email on any device: your Coins and progress come with you.'));
       }, 80)]);
   }
-  if (signedIn() && acc.signInAsGuest)
-    rows.push(['Sign out', () => ui().message('Sign out?', (acc.isGuest ?? true) ? "This is a guest account: without Google or an email saved, you can't get back into it from another device." : 'You can sign back in any time.', 'Sign out', () => void app().services.account.signOut(), 'Cancel', undefined, 'red')]);
+  if (signedIn() && acc.signInAsGuest) {
+    const saves = rows.slice(); // the Save with Google / email rows (guests only)
+    rows.push(['Sign out', () => {
+      const signOut = () => void app().services.account.signOut();
+      if (!(acc.isGuest ?? true)) return ui().message('Sign out?', 'You can sign back in any time.', 'Sign out', signOut, 'Cancel', undefined, 'red');
+      // A guest who signs out can't come back: offer the saves first.
+      const a: Record<string, () => void> = { 'so-cancel': () => ui().closeDialog(), 'so-out': () => { ui().closeDialog(); signOut(); } };
+      saves.forEach(([, fn], i) => (a[`so-save${i}`] = () => { ui().closeDialog(); fn(); }));
+      ui().openDialog({
+        title: 'Sign out?',
+        body: "You'll lose this guest account, with its Coins and progress. Save it with Google or email first to keep them.",
+        buttons: `<div class="v2-btn-grid">${saves.map(([l], i) => btn(esc(l), `so-save${i}`, { h: 'blue' })).join('')}${btn('Cancel', 'so-cancel', { h: 'ghost' })}${btn('Sign out', 'so-out', { h: 'red' })}</div>`,
+        actions: a,
+      });
+    }]);
+  }
   for (const extra of settingsAccountExtras) extra(h, rows);
   const actions: Record<string, () => void> = {
     'set-close': () => ui().closeDialog(),
@@ -199,7 +212,7 @@ export function openSettings(): void {
     body: () => vol('Music', 'set-music', PokerAudio.musicVolume) + vol('Sound effects', 'set-sfx', PokerAudio.sfxVolume) +
       `<div class="v2-row v2-set-row v2-wrap"><span class="v2-set-l">Community</span>${btn('Discord', 'set-discord', { h: 'violet', c: 'sm' })}${btn('X', 'set-x', { h: 'ghost', c: 'sm' })}</div>` +
       (rows.length ? `<div class="v2-row v2-set-row v2-wrap"><span class="v2-set-l">Account</span>${rows.map(([l], i) => btn(esc(l), `set-acc${i}`, { h: /sign out|disconnect/i.test(l) ? 'red' : 'blue', c: 'sm' })).join('')}</div>` : ''),
-    buttons: btn('Close', 'set-close', { h: 'gold' }),
+    buttons: btn('Close', 'set-close', { h: 'ghost' }),
     actions,
   });
 }

@@ -39,6 +39,8 @@ export function playerName(): string {
 /** Avatar image URL for a player (current player when omitted). */
 export function avatarUrl(avatar?: number, name?: string): string | null {
   const av = S('avatars');
+  // With no picture chosen, show the same name-based default the table shows (not a blank placeholder).
+  if (avatar === undefined && name === undefined) name = playerName();
   try {
     const n = avatar ?? (av?.current as number | undefined) ?? (_ctx?.services.account as unknown as { avatar?: number }).avatar ?? 0;
     if (n > 0 && av?.spriteUrl) return av.spriteUrl(n) as string | null;
@@ -72,9 +74,9 @@ export function level(): { level: number; p: number; into: number; next: number 
 export function coinCap(): string {
   if (onchain()) {
     const t = onchainApi.walletAddress?.() ? (onchainApi.balanceText?.() ?? _host.solShort ?? '').split(' (')[0].split(' · ')[0] : 'Connect';
-    return `<button class="v2-coin" data-a="profile-open" aria-label="SOL balance and wallet">${ico('sol', 1.9)}<b class="v2-num">${esc(t || '◎ —')}</b><span class="v2-plus">+</span></button>`;
+    return `<button class="v2-coin" data-a="profile-open" aria-label="SOL balance and wallet">${ico('sol', 1.9)}<b class="v2-num">${esc(t || '—')}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
   }
-  return `<button class="v2-coin" data-a="go" data-v="shop:coins" aria-label="Coins, open the Shop">${ico('coin', 1.9)}<b class="v2-num">${fmt(coins())}</b><span class="v2-plus">+</span></button>`;
+  return `<button class="v2-coin" data-a="go" data-v="shop:coins" aria-label="Coins, open the Shop">${ico('coin', 1.9)}<b class="v2-num">${fmt(coins())}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
 }
 
 /** Demo / On-chain switch. */
@@ -95,9 +97,18 @@ export async function setMode(v: string): Promise<void> {
   _ui.render();
 }
 
-/** The standard top bar: Back, centred title with spades, optional Demo/On-chain switch, coins. */
+/** The play mode as a small pill (sub-screens): the switch itself lives on the main menu and the profile popover. */
+export function modePill(): string {
+  return onchain() ? `<span class="v2-pill sol v2-mode-pill">On-chain</span>` : `<span class="v2-pill v2-mode-pill">Demo</span>`;
+}
+
+/**
+ * The standard top bar: Back, the screen title (the same words as the dock item or button that opened it, Title Case,
+ * spade ornaments on every screen), the play-mode pill, coins. `toggle: true` shows the switch instead of the pill.
+ */
 export function topBar(title: string, o: { toggle?: boolean; right?: string; back?: string } = {}): string {
-  return `<div class="v2-top"><button class="v2-back" data-a="${o.back ? 'go' : 'back'}"${o.back ? ` data-v="${o.back}"` : ''} aria-label="Back">${ico('back', 1.1)}<span class="v2-lbl">Back</span></button><div class="v2-title">${ico('spade', 0.8)} ${title} ${ico('spade', 0.8)}</div>${o.toggle === false ? '' : modeSeg()}${o.right ?? coinCap()}</div>`;
+  const mode = o.toggle === true ? modeSeg() : modePill();
+  return `<div class="v2-top"><button class="v2-back" data-a="${o.back ? 'go' : 'back'}"${o.back ? ` data-v="${o.back}"` : ''} aria-label="Back">${ico('back', 1.1)}<span class="v2-lbl">Back</span></button><h1 class="v2-title">${ico('spade', 0.8)} ${title} ${ico('spade', 0.8)}</h1>${mode}${o.right ?? coinCap()}</div>`;
 }
 
 /** Runs an async action that returns an error string or null; shows the error in a v2 dialog. */

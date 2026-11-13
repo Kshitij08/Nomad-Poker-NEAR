@@ -106,27 +106,27 @@ class LobbyPanel implements PanelImpl {
     box(root, 'Dim', PerColor.Dim, [0, 0], [1, 1]);
     const panel = box(root, 'Panel', PerColor.Panel, [0.18, 0.1], [0.82, 0.9]);
     const col = column(panel, 'Column', [0, 0], [1, 1]);
-    text(col, '<b>Private tables</b>  <size=60%>MagicBlock TEE rollup · devnet</size>', 40);
+    text(col, '<b>Private tables</b>  <size=60%>on Solana (test network)</size>', 40);
     text(col, 'Your cards are readable only by your own table key. Every hand can be verified when it ends.', 22).color = [1, 1, 1, 0.7];
     const walletRow = line(col, 64, PerColor.Row);
     this.wallet = text(walletRow, '', 24);
     button(walletRow, 'Connect wallet', () => void this.connectWallet(), PerColor.Accent, 240);
     // M9b: an invited player sends this address to the host.
     button(walletRow, 'Copy my wallet', () => this.copyWallet(), PerColor.Muted, 220);
-    button(walletRow, 'Host a table', () => void this.host(), PerColor.Accent, 220);
+    button(walletRow, 'Host a table', () => void this.host(), PerColor.Secondary, 220);
     // M11: on-chain tournaments.
-    button(walletRow, 'Tournaments', () => void this.ctx.router.push('private-tourneys'), PerColor.Accent, 220);
+    button(walletRow, 'Tournaments', () => void this.ctx.router.push('private-tourneys'), PerColor.Secondary, 220);
     // M12: an Agent plays private SOL tables for you.
-    button(walletRow, 'Agent', () => void this.ctx.router.push('private-agent'), PerColor.Accent, 160);
+    button(walletRow, 'Agent', () => void this.ctx.router.push('private-agent'), PerColor.Secondary, 160);
     button(walletRow, 'Refresh', () => void this.refresh(), PerColor.Muted, 160);
     // M9: the game balance (a vault in the rollup). Deposits and withdrawals are the only wallet transactions.
     const balanceRow = line(col, 64, PerColor.Row);
     this.balance = text(balanceRow, '', 24);
-    button(balanceRow, 'Deposit 0.01', () => void this.deposit(10_000_000n), PerColor.Accent, 190);
-    button(balanceRow, 'Deposit 0.05', () => void this.deposit(50_000_000n), PerColor.Accent, 190);
+    button(balanceRow, 'Deposit 0.01', () => void this.deposit(10_000_000n), PerColor.Secondary, 190);
+    button(balanceRow, 'Deposit 0.05', () => void this.deposit(50_000_000n), PerColor.Secondary, 190);
     button(balanceRow, 'Withdraw all', () => void this.withdrawAll(), PerColor.Muted, 200);
     // M10: a lost or shared browser: cancel every play key this wallet authorized, everywhere.
-    button(balanceRow, 'Cancel play keys', () => void this.revokeKeys(), PerColor.Muted, 230);
+    button(balanceRow, 'Cancel play keys', () => void this.revokeKeys(), PerColor.Warn, 230);
     // The buy-in for Join (and for the host's own seat on a new table): each table keeps it inside its limits.
     const buyInRow = line(col, 56, PerColor.Clear);
     text(buyInRow, 'Buy-in:', 24, 'Left', 0.4);
@@ -147,7 +147,7 @@ class LobbyPanel implements PanelImpl {
   }
 
   private paintBuyIn(): void {
-    this.buyInButtons.forEach((b, i) => (b.color = i === this.per.buyIn.choice ? PerColor.Accent : PerColor.Muted));
+    this.buyInButtons.forEach((b, i) => (b.color = i === this.per.buyIn.choice ? PerColor.Selected : PerColor.Muted));
   }
 
   private async connectWallet(): Promise<void> {
@@ -301,7 +301,7 @@ class LobbyPanel implements PanelImpl {
       text(row, `${tag}Blinds ${sol(sb)} / ${sol(bb)}   ·   ${int(t.seated)}/${int(t.maxSeats)} seated   ·   hand ${str(t.handNo)}   ·   ${short(address)}`, 24);
       // An invite-only table without a link here: joining works only if the host added this wallet.
       const joinLabel = invite && !haveLink && !mineTable ? 'Join if invited' : 'Join';
-      button(row, `${joinLabel}  ${sol(buyIn)}`, () => void this.join(address, buyIn, { smallBlind: sb, bigBlind: bb, minBuyIn: min, maxBuyIn: max }), PerColor.Accent, 300);
+      button(row, `${joinLabel}  ${sol(buyIn)}`, () => void this.join(address, buyIn, { smallBlind: sb, bigBlind: bb, minBuyIn: min, maxBuyIn: max }), PerColor.Secondary, 300);
       shown++;
     }
     if (shown === 0) text(this.list, 'No private tables are open right now.', 22);
@@ -366,7 +366,7 @@ class LobbyPanel implements PanelImpl {
           rows.push(() => {
             const l = line(this.list, 70, PerColor.Row);
             text(l, `Reclaimed · its invite list still holds rent   ·   ${short(key)}`, 24);
-            button(l, 'Reclaim list rent', () => void this.closeOldInvites(id), PerColor.Accent, 260);
+            button(l, 'Reclaim list rent', () => void this.closeOldInvites(id), PerColor.Secondary, 260);
           });
           continue;
         }
@@ -382,13 +382,13 @@ class LobbyPanel implements PanelImpl {
         // Solana first: the lobby (the backend) can list a table for a minute after it closed.
         if (st === Hosted.Closed) {
           text(l, `Closed   ·   ${short(key)}`, 24);
-          button(l, 'Reclaim rent', () => void this.reclaim(table, id), PerColor.Accent, 220);
+          button(l, 'Reclaim rent', () => void this.reclaim(table, id), PerColor.Secondary, 220);
         } else if (row !== null) {
           const seated = int(row.seated);
           text(l, `Open   ·   ${seated}/${int(row.maxSeats)} seated   ·   ${short(key)}`, 24);
           // Invite links need the private list (M9c); a table hosted before keeps its Solana list.
           if (row.inviteOnly === true && !oldList) {
-            if (per.invites.hostCode(table) !== null) button(l, 'Copy invite link', () => this.copyInviteLink(table), PerColor.Accent, 240);
+            if (per.invites.hostCode(table) !== null) button(l, 'Copy invite link', () => this.copyInviteLink(table), PerColor.Secondary, 240);
             button(l, 'New link', () => void this.newInviteLink(table), PerColor.Muted, 160);
           }
           const b = button(l, 'Close table', () => void this.closeHosted(table), seated === 0 ? PerColor.Warn : PerColor.Muted, 220);
@@ -397,11 +397,11 @@ class LobbyPanel implements PanelImpl {
           // Open, but the lobby list hasn't caught up: join from here.
           const buyIn = per.buyIn.for(openLimits.min, openLimits.max, openLimits.bigBlind);
           text(l, `Open   ·   ${short(key)}   ·   in the lobby list within a minute`, 24);
-          button(l, `Join  ${sol(buyIn)}`, () => void this.join(key, buyIn), PerColor.Accent, 240);
+          button(l, `Join  ${sol(buyIn)}`, () => void this.join(key, buyIn), PerColor.Secondary, 240);
         } else if (st === Hosted.Open) {
           // Handed to the rollup but not in the lobby: not opened yet (or the lobby lags). Opening is harmless.
           text(l, `Not open yet   ·   ${short(key)}`, 24);
-          button(l, 'Open', () => void this.openHosted(table), PerColor.Accent, 160);
+          button(l, 'Open', () => void this.openHosted(table), PerColor.Secondary, 160);
         } else text(l, `${st === Hosted.Closing ? 'Closing…' : 'Opening…'}   ·   ${short(key)}`, 24);
       });
     }

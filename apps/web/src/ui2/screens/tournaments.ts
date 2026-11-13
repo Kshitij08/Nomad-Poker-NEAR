@@ -4,7 +4,7 @@
  * leave / cancel, host form options, join by code. Coins tournaments only; SOL tournaments stay in the SOL lobby.
  */
 import { NomadHost } from '../../menu/host';
-import { isMine as isMineOf, isOpen, isRegistered, type MineResult, type TournamentInfo } from '../../tournaments/api/tournamentInfo';
+import { isDemo, isMine as isMineOf, isOpen, isRegistered, type MineResult, type TournamentInfo } from '../../tournaments/api/tournamentInfo';
 import { N0, blindsText, payout, speedShort, startLabel } from '../../tournaments/format';
 import { HOST_FEES, HOST_MAX, HOST_PRIZES, HOST_SPEEDS, HOST_STARTS } from '../../tournaments/menu/nomadTournaments';
 import { BlindSchedule } from '@nomad/engine/tournament/blindSchedule';
@@ -120,7 +120,7 @@ function registerOrJoin(x: TournamentInfo | null): void {
     void run(async () => (await svc().register(x.id)).error, () => {
       void loadList();
       void loadMine();
-      ui().message('Registered', `You're in ${esc(x.name)}. ${esc(NomadHost.until(x.startsAtUnix))}.`, 'OK', () => ui().show('t-mine'));
+      ui().toast(`Registered for ${x.name} · ${NomadHost.until(x.startsAtUnix)}`, 2600);
     }), 'Cancel', undefined);
 }
 
@@ -156,7 +156,7 @@ function openShare(x: TournamentInfo): void {
     body: `<div class="v2-row"><div class="v2-field v2-grow v2-num v2-ellip">${esc(link)}</div>${btn('Copy', 'sh-copy', { h: 'blue' })}</div>
       ${x.visibility === 'private' && x.joinCode ? `<div class="v2-sm v2-mut" style="margin-top:.6em">Private tournament: the link carries the join code <b class="v2-goldc">${esc(x.joinCode)}</b>.</div>` : ''}
       <div class="v2-row v2-wrap" style="margin-top:1em;gap:.6em">${targets.map(([l], i) => btn(l, 'sh-to', { h: 'ghost', c: 'v2-grow', v: i })).join('')}</div>`,
-    buttons: btn('Close', 'sh-close', { h: 'gold' }),
+    buttons: btn('Close', 'sh-close', { h: 'ghost' }),
     actions: {
       'sh-copy': () => copy(`${text}: ${link}`, 'Link copied'),
       'sh-to': (v) => {
@@ -196,7 +196,7 @@ function createTournament(confirmed = false): void {
     const code = isPrivate ? ` Its code is <b class="v2-goldc">${esc(m!.joinCode)}</b> (copied); share it with your players.` : '';
     T.hName = '';
     T.mineTab = 'hosting';
-    ui().show('t-mine');
+    ui().show('t-mine', undefined, false);
     ui().message('Tournament created', `${esc(name)} ${esc(startLabel(startMinutes).toLowerCase())}.${code}`);
   });
 }
@@ -243,7 +243,7 @@ function tRow(x: TournamentInfo, o: { action?: string; pill?: string } = {}): st
   const exp = T.expanded === x.id;
   const fill = x.maxPlayers > 0 ? Math.round((x.players / x.maxPlayers) * 100) : 0;
   const action = o.action ?? (() => {
-    if (isRegistered(x)) return x.serverReady ? btn('JOIN TABLE', 't-reg', { h: 'gold', v: x.id }) : btn('Registered', 't-reg', { h: 'ghost', v: x.id });
+    if (isRegistered(x)) return x.serverReady ? btn('Join table', 't-reg', { h: 'gold', v: x.id }) : btn('Registered', 't-reg', { h: 'ghost', v: x.id });
     return isOpen(x) ? btn('Register', 't-reg', { h: 'gold', v: x.id }) : btn('Closed', 't-reg', { h: 'ghost', c: 'dis', v: x.id });
   })();
   const d = new Date(x.startsAtUnix * 1000);
@@ -273,7 +273,9 @@ function tRow(x: TournamentInfo, o: { action?: string; pill?: string } = {}): st
 
 function head(on: string): string {
   const chain = onchain();
-  return topBar('TOURNAMENTS') + tabs([['t-browse', 'Browse', 'spade'], ['t-mine', 'My Tournaments', 'trophy'], ['t-host', 'Host', 'cal2'], ['t-code', 'Join by Code', 'code']], on, 'go', 'v2-ttabs') +
+  return topBar('Tournaments') + tabs([['t-browse', 'Browse', 'spade'], ['t-mine', 'My tournaments', 'trophy'], ['t-host', 'Host', 'cal2'], ['t-code', 'Join by code', 'code']], on, 'tab', 'v2-ttabs') +
+    // Offline the list is the practice backend's example data (some already "registered" or "hosted"): say so.
+    (!chain && T.list?.length && T.list.every(isDemo) ? `<div class="v2-card v2-row v2-tnote">${ico('trophy', 1.8)}<span class="v2-grow">Practice tournaments: example events to try the flow while the tournament server is offline.</span></div>` : '') +
     (chain ? `<div class="v2-card v2-row v2-tnote">${ico('sol', 1.8)}<span class="v2-grow">These are Coins tournaments. SOL tournaments are in the private SOL lobby.</span>${btn('SOL tournaments', 't-sol', { h: 'violet', c: 'sm' })}</div>` : '');
 }
 
@@ -310,7 +312,7 @@ const browse: ScreenDef = {
   },
   render() {
     const l = browseList();
-    const body = !svc() ? empty('trophy', 'Tournaments are not available in this build.')
+    const body = !svc() ? empty('trophy', "Tournaments aren't available right now. Try again later.")
       : T.listErr && !T.list ? errorBox(T.listErr, 't-reload')
         : !T.list ? loading()
           : l.length === 0 ? empty('trophy', T.filter === 'all' ? 'No tournaments are open right now.<br>Host one, or join a private one by code.' : `No ${speedShort(T.filter)} tournaments right now.`)
@@ -318,7 +320,7 @@ const browse: ScreenDef = {
     const sortLabel = SORTS.find(([k]) => k === T.sort)![1];
     return `${head('t-browse')}
 <div class="v2-panel v2-tpanel">
-  <div class="v2-row v2-wrap v2-thead"><b class="v2-h v2-grow">Browse Tournaments</b>
+  <div class="v2-row v2-wrap v2-thead"><b class="v2-h v2-grow">Browse tournaments</b>
     <div class="v2-row v2-tchips">${chips([['all', 'All'], ['turbo', 'Turbo'], ['regular', 'Regular'], ['slow', 'Slow']], T.filter, 't-filter')}</div>
     <div class="v2-tsortw"><button class="v2-chip v2-tsort"${act('t-sort')} aria-haspopup="listbox" aria-expanded="${T.sortOpen}">${sortLabel} ${ico('chev', 1)}</button>
     ${T.sortOpen ? `<div class="v2-tsortm" role="listbox">${SORTS.map(([k, lb]) => `<button class="v2-chip${k === T.sort ? ' on' : ''}" role="option"${act('t-sortby', k)}>${lb}</button>`).join('')}</div>` : ''}</div>
@@ -361,7 +363,7 @@ const mine: ScreenDef = {
         action = btn('Cancel', 't-leave', { h: 'red', v: x.id });
         pill = `<span class="v2-pill gold">Hosting${x.visibility === 'private' && x.joinCode ? ` · code ${esc(x.joinCode)}` : ''}</span>`;
       } else if (x.serverReady) {
-        action = btn('JOIN TABLE', 't-reg', { h: 'gold', v: x.id });
+        action = btn('Join table', 't-reg', { h: 'gold', v: x.id });
         pill = '<span class="v2-pill ok">Table ready</span>';
       } else {
         action = btn('Leave', 't-leave', { h: 'red', v: x.id });
@@ -369,14 +371,14 @@ const mine: ScreenDef = {
       }
       return tRow(x, { action, pill });
     };
-    const body = !svc() ? empty('trophy', 'Tournaments are not available in this build.')
+    const body = !svc() ? empty('trophy', "Tournaments aren't available right now. Try again later.")
       : T.mineErr && !T.mine ? errorBox(T.mineErr, 't-reload')
         : !T.mine ? loading()
           : l.length === 0 ? empty('trophy', T.mineTab === 'hosting' ? "You aren't hosting a tournament.<br>Host one from the Host tab." : T.mineTab === 'past' ? 'No past tournaments yet.' : 'Nothing here yet.<br>Tournaments you join show up here.')
             : l.map(rowFor).join('');
     return `${head('t-mine')}
 <div class="v2-panel v2-tpanel">
-  <div class="v2-row v2-wrap v2-thead"><b class="v2-h v2-grow">My Tournaments</b><div class="v2-row v2-tchips">${chips([['joined', 'Joined'], ['hosting', 'Hosting'], ['past', 'Past']], T.mineTab, 't-mtab')}</div></div>
+  <div class="v2-row v2-wrap v2-thead"><b class="v2-h v2-grow">My tournaments</b><div class="v2-row v2-tchips">${chips([['joined', 'Joined'], ['hosting', 'Hosting'], ['past', 'Past']], T.mineTab, 't-mtab')}</div></div>
   <div class="v2-tlist v2-scroll">${body}</div>
 </div>`;
   },
@@ -438,9 +440,9 @@ const hostScreen: ScreenDef = {
     <div class="v2-kv"><span>Visibility</span><b>${T.hPrivate ? 'Private (code)' : 'Public'}</b></div>
     <div class="v2-grow"></div>
     ${prize > 0 ? `<div class="v2-xs v2-mut">Your ${N0(prize)} Coins prize is taken from your balance.</div>` : ''}
-    <div class="v2-hcta-d">${btn('CREATE TOURNAMENT', 'h-create', { h: 'gold', c: 'lg w' })}</div>
+    <div class="v2-hcta-d">${btn('Create Tournament', 'h-create', { h: 'gold', c: 'lg w' })}</div>
   </div>
-  <div class="v2-hcta-p">${btn('CREATE TOURNAMENT', 'h-create', { h: 'gold', c: 'lg w' })}</div>
+  <div class="v2-hcta-p">${btn('Create Tournament', 'h-create', { h: 'gold', c: 'lg w' })}</div>
 </div>`;
   },
   actions: {
@@ -477,7 +479,7 @@ const codeScreen: ScreenDef = {
       ${chars.map((c, i) => `<span class="v2-codec${i === Math.min(T.code.length, CODE_LEN - 1) ? ' cur' : ''}" data-codec="${i}">${esc(c.trim())}</span>`).join('')}
       ${input('tcode', T.code, '', { cls: 'v2-codein', max: CODE_LEN })}
     </label>
-    <button class="v2-b gold lg"${act('c-find')} data-enter="tcode"${T.codeBusy ? ' disabled' : ''}>${T.codeBusy ? 'FINDING…' : 'FIND'}</button>
+    <button class="v2-b blue"${act('c-find')} data-enter="tcode"${T.codeBusy ? ' disabled' : ''}>${T.codeBusy ? 'Finding…' : 'Find'}</button>
   </div>
   ${x ? `<div class="v2-tfound">${tRow(x)}</div>` : ''}
 </div>`;

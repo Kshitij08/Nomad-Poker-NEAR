@@ -1,0 +1,24 @@
+/* On-chain sheets (wallet picker, private buy-in): router overlays drawn as v2 dialogs / portrait bottom sheets.
+   The private-tables panels (lobby, tournaments, Agent) are re-skinned in src/web3/ui/perUi.ts. */
+.v2.v2-sheet-host { position: absolute; inset: 0; z-index: auto; background: none; }
+.v2-sheet-host .v2-dlg { display: flex; flex-direction: column; }
+.v2-wl { display: flex; flex-direction: column; gap: var(--v2-s2); max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }
+.v2-wl-row {
+  display: flex; align-items: center; gap: var(--v2-s3); width: 100%; min-height: 3.6em; padding: 0.6em 1em;
+  border-radius: var(--v2-r-md); background: rgba(255, 255, 255, 0.05); border: 0.1em solid var(--v2-line2); text-align: left;
+}
+.v2-wl-row:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--v2-accent); }
+.v2-wl-row img { width: 2.4em; height: 2.4em; border-radius: var(--v2-r-sm); object-fit: contain; flex: 0 0 auto; }
+.v2-wl-row b { flex: 1; min-width: 0; font-size: 1.1em; }
+.v2-wl-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--v2-s2); padding: 0.4em 0 0.2em; }
+.v2-wl-empty p { margin: 0; color: var(--v2-mut); }
+.v2-wl-links { display: flex; gap: var(--v2-s2); flex-wrap: wrap; justify-content: center; margin-top: var(--v2-s1); }
+.v2-wl-links a { text-decoration: none; }
+
+.v2-bi-cap { color: var(--v2-mut); margin: 0 0 var(--v2-s3); }
+.v2-bi-amt { font-family: var(--v2-display); font-weight: 400; font-size: 2.2em; color: var(--v2-gold); text-align: center; font-variant-numeric: tabular-nums; }
+.v2-bi-range { width: 100%; accent-color: #f5a915; height: 2.2em; margin: var(--v2-s2) 0; }
+.v2-bi-ends { display: flex; gap: var(--v2-s2); justify-content: center; }
+.v2-bi-short { color: var(--v2-bad); text-align: center; margin: 0; }
+
+html[data-orient='portrait'] .v2-wl { max-height: 55vh; }

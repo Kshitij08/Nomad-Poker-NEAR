@@ -93,6 +93,7 @@ export class NetTableSession implements TableSession {
       if (reason === 'lost' && !this.stopped) void this.recover();
     });
     this.bindTournament(conn);
+    this.applyRoomSkin(conn);
     econ(this.host.ctx).friends?.setCurrentTable?.(conn.session ? { session: conn.session, money: false } : null);
     this.game.start();
     try {
@@ -145,13 +146,26 @@ export class NetTableSession implements TableSession {
     if (seat >= 0 && !wasSeated) {
       ctx.events.emit('table:joined', { localSeat: seat, moneyTable: false, roomCode: this.game.roomCode });
       const stake = ChainTableMode.resolveStake(this.conn.session ?? '', this.conn.properties[ChainTableMode.StakeProperty] ?? null);
-      theme(ctx)?.applyTableSkinForStake?.(stake.minBuyIn, false);
       econ(ctx).telemetry?.funnel?.beginTable?.(this.game.roomCode, stake.minBuyIn, this.service.identity.selectedBuyInChips(), false);
       econ(ctx).economy?.markAtTable?.();
     } else if (seat < 0 && wasSeated) {
       econ(ctx).economy?.clearAtTable?.();
       econ(ctx).telemetry?.funnel?.endTable?.();
     }
+  }
+
+  /**
+   * The table's room (StakeTableSkin), set once when the session opens so the room never changes between opening the
+   * table and playing (it used to switch on seat assignment). Quick Play pools and tournaments play a stake tier: the
+   * room is that stake's (the same room the main-menu carousel shows for it). A private party table has no stake tier
+   * of its own (500–1,000 Coins, blinds 5 / 10; its name parses to the default stake), so it keeps the room the player
+   * picked in the menu instead of jumping to an arbitrary one.
+   */
+  private applyRoomSkin(conn: NetConnection): void {
+    const session = conn.session ?? '';
+    if (ChainTableMode.isPrivateSession(session, conn.properties[ChainTableMode.KindProperty])) return;
+    const stake = ChainTableMode.resolveStake(session, conn.properties[ChainTableMode.StakeProperty] ?? null);
+    theme(this.host.ctx)?.applyTableSkinForStake?.(stake.minBuyIn, false);
   }
 
   /**

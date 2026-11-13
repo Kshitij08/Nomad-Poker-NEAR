@@ -5,7 +5,7 @@
  */
 import { PublicKey } from '@solana/web3.js';
 import type { AppContext } from '../../app/app';
-import { NO_PER_BACKEND } from '../per/agent';
+import { noPerBackend } from '../per/agent';
 import { PerSessionKeys } from '../per/keys';
 import { PerRpc } from '../per/rpc';
 import type { PerRuntime } from '../per/service';
@@ -69,11 +69,11 @@ class TourneyPanel implements PanelImpl {
     box(root, 'Dim', PerColor.Dim, [0, 0], [1, 1]);
     const panel = box(root, 'Panel', PerColor.Panel, [0.14, 0.08], [0.86, 0.92]);
     const col = column(panel, 'Column', [0, 0], [1, 1]);
-    text(col, '<b>Tournaments</b>  <size=60%>SOL freezeouts on the private rollup · devnet</size>', 38);
+    text(col, '<b>Tournaments</b>  <size=60%>SOL tournaments on Solana (test network)</size>', 38);
     text(col, '2 to 30 players, 8-seat tables, 5,000 chips each round; blinds rise every level. 60% to 1st, 40% to 2nd (after a 5% platform fee on entries). Fees and prizes come from and go to your game balance.', 21).color = [1, 1, 1, 0.7];
     const top = line(col, 64, PerColor.Clear);
     button(top, 'Host a tournament', () => void this.ctx.router.push('private-tourney-host', { onDone: () => this.alive && void this.refresh() }), PerColor.Accent, 280);
-    button(top, 'Enter code', () => void this.enterCode(), PerColor.Muted, 200);
+    button(top, 'Enter code', () => void this.enterCode(), PerColor.Secondary, 200);
     button(top, 'Refresh', () => void this.refresh(), PerColor.Muted, 160);
     button(top, 'Close', () => closeScreen(this.ctx, this.root), PerColor.Muted, 160);
     this.status = text(col, '', 22);
@@ -82,7 +82,7 @@ class TourneyPanel implements PanelImpl {
 
   private async fetch(all: boolean): Promise<Json[]> {
     const base = this.per.config.perBackendUrl;
-    if (!base) throw new Error(NO_PER_BACKEND);
+    if (!base) noPerBackend();
     const r = await this.per.http.get(base + '/tournaments' + (all ? '?all=1' : ''));
     if (r.status !== 200) return [];
     const items = (JSON.parse(r.body) as { items?: Json[] }).items;
@@ -145,7 +145,7 @@ class TourneyPanel implements PanelImpl {
     const you = !en ? '' : int(en.state) === T.ENTRANT_OUT ? ` · <color=#e0c27e>you finished ${ordinal(int(en.place))}</color>` : ' · <color=#5ed39b>registered</color>';
     text(l, `<b>${str(t.name)}</b>${t.private === true ? ' (private)' : ''} · ${when} · ${count}/${max} · entry ${sol(fee)} · 1st ${sol(first)}, 2nd ${sol(second)}${you}`, 22, 'Left', 3);
     if (status === T.REGISTERING) {
-      if (!en && count < max) button(l, `Register  ${sol(fee)}`, () => void this.registerAsk(address, t.private === true), PerColor.Accent, 260);
+      if (!en && count < max) button(l, `Register  ${sol(fee)}`, () => void this.registerAsk(address, t.private === true), PerColor.Secondary, 260);
       if (en) button(l, 'Leave', () => void this.money('Leaving (your fee comes back)…', (k) => T.leave(address, k)[1]!), PerColor.Muted, 140);
       if (host) button(l, 'Cancel', () => void this.money('Cancelling (everyone is refunded)…', (k) => T.cancel(address, k)[1]!), PerColor.Warn, 150);
     } else if (status === T.RUNNING && en && int(en.state) === T.ENTRANT_PLAYING) {
@@ -167,7 +167,7 @@ class TourneyPanel implements PanelImpl {
   private async registerAsk(tourney: PublicKey, isPrivate: boolean): Promise<void> {
     let code: Uint8Array | null = null;
     if (isPrivate) {
-      const input = ask('This tournament is private. Enter its code:', '');
+      const input = await ask('This tournament is private. Enter its code:', '');
       if (!input || input === '\u0001') return;
       code = codeBytes(input);
     }
@@ -214,7 +214,7 @@ class TourneyPanel implements PanelImpl {
 
   /** A private tournament's code, tried against every private tournament (its hash is public). */
   private async enterCode(): Promise<void> {
-    const input = ask('Tournament code:', '');
+    const input = await ask('Tournament code:', '');
     if (!input || input === '\u0001') return;
     const code = codeBytes(input);
     const T = this.per.tourney;
@@ -296,8 +296,8 @@ class TourneyHostPanel implements PanelImpl {
     text(col, 'One wallet approval creates it (about 0.03 SOL of rent). Your prize comes from your game balance and can only go up. The game pays for the tables. If fewer than 2 players register, everyone is refunded.', 20).color = [1, 1, 1, 0.7];
     const nameRow = line(col, 60, PerColor.Clear);
     this.nameText = text(nameRow, '', 24, 'Left', 2);
-    button(nameRow, 'Name…', () => {
-      const s = ask('Tournament name (1 to 40 characters):', this.name);
+    button(nameRow, 'Name…', async () => {
+      const s = await ask('Tournament name (1 to 40 characters):', this.name);
       if (s && s !== '\u0001') this.name = s.length > 40 ? s.slice(0, 40) : s;
       this.paint();
     }, PerColor.Muted, 160);
@@ -325,8 +325,8 @@ class TourneyHostPanel implements PanelImpl {
 
   private paint(): void {
     const picked = [this.speed, this.players, this.fee, this.prize, this.start];
-    this.groups.forEach((g, gi) => g.forEach((b, i) => (b.color = i === picked[gi] ? PerColor.Accent : PerColor.Muted)));
-    this.privateButton.color = this.isPrivate ? PerColor.Accent : PerColor.Muted;
+    this.groups.forEach((g, gi) => g.forEach((b, i) => (b.color = i === picked[gi] ? PerColor.Selected : PerColor.Muted)));
+    this.privateButton.color = this.isPrivate ? PerColor.Selected : PerColor.Muted;
     this.nameText.text = 'Name: ' + this.name;
   }
 

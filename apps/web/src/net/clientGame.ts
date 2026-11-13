@@ -580,6 +580,9 @@ export class ClientGame {
   }
 
   /** Only empty↔occupied changes sit or hide a HUD; a label tick covers "(next hand)" / "(leaving)". */
+  /** Last stack shown per seat by the roster (see applyRosterHud). */
+  private readonly lobbyStacks = new Map<number, number>();
+
   private applyRosterHud(): void {
     const roster = this._roster;
     if (!roster) return;
@@ -589,9 +592,16 @@ export class ClientGame {
         let name = s.name ?? '';
         if (s.isPendingNextHand) name = `${name} (next hand)`;
         else if (s.isLeaving) name = `${name} (leaving)`;
-        if (s.isPendingNextHand || !this.view.isSeatVisible(seat)) this.view.bindSeat(seat, name, s.stack, s.isBot, s.avatar, s.name);
+        // Between games (lobby), a seat's stack can change after it is shown (the buy-in is confirmed after the seat
+        // appears): re-bind it so the plate shows the real stack instead of 0.
+        const lobbyStackChanged = this._lobby?.phase === TablePhase.Lobby && this.lobbyStacks.get(seat) !== s.stack;
+        if (s.isPendingNextHand || !this.view.isSeatVisible(seat) || lobbyStackChanged) this.view.bindSeat(seat, name, s.stack, s.isBot, s.avatar, s.name);
         else this.view.updateSeatLabel(seat, name, s.isBot, s.avatar, s.name);
-      } else this.view.hideSeat(seat);
+        this.lobbyStacks.set(seat, s.stack);
+      } else {
+        this.view.hideSeat(seat);
+        this.lobbyStacks.delete(seat);
+      }
     }
   }
 

@@ -17,6 +17,7 @@ import { PotHudView } from './potHud';
 import { SeatHudView } from './seatHud';
 import { HUD_DATA, whenFontsReady } from './unityUi';
 import './hud.css';
+import './v2hud.css'; // Redesign v2 skin (seats, pot, action row, raise sheet)
 
 export interface DomTableHud extends TableHud {
   readonly seats: SeatHudView[];

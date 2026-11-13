@@ -112,7 +112,15 @@ function set(k: PlayKey, agent: PublicKey | null, until: bigint | number, stake:
 /** The runner's JSON response (a JObject). */
 export type AgentJson = Record<string, any>;
 
-export const NO_PER_BACKEND = "The private-tables backend isn't configured in this build (pass ?perbackend=, or ?web3deployed=1).";
+/** What players read when no private-tables backend is configured (the developer detail goes to the console). */
+export const NO_PER_BACKEND = 'SOL tables are unavailable right now. Try again later.';
+/** The developer detail behind NO_PER_BACKEND (console only). */
+export const NO_PER_BACKEND_DEV = "The private-tables backend isn't configured in this build (pass ?perbackend=, or ?web3deployed=1).";
+/** Throws NO_PER_BACKEND after logging the developer detail. */
+export function noPerBackend(): never {
+  console.warn('[PER]', NO_PER_BACKEND_DEV);
+  throw new Error(NO_PER_BACKEND);
+}
 
 export const PerAgent = {
   /** The program's longest Agent run (MAX_AGENT_SECS). */
@@ -214,7 +222,7 @@ export const PerAgent = {
 
   /** Posts a signed request to the runner; the response's JSON, or an error with its message. */
   async call(http: PerHttp, backendUrl: string, k: PlayKey, path: string, data: Record<string, unknown> | null = null): Promise<AgentJson> {
-    if (!backendUrl) throw new Error(NO_PER_BACKEND);
+    if (!backendUrl) noPerBackend();
     const { status, body } = await http.post(backendUrl + path, PerAgent.signedRequest(k, path, data));
     let j: AgentJson;
     try {
@@ -233,7 +241,7 @@ export const PerAgent = {
    * object, or an error with the backend's `error` (else "HTTP <code>").
    */
   async get(http: PerHttp, backendUrl: string, path: string): Promise<AgentJson> {
-    if (!backendUrl) throw new Error(NO_PER_BACKEND);
+    if (!backendUrl) noPerBackend();
     const { status, body } = await http.get(backendUrl + path);
     let j: AgentJson;
     try {

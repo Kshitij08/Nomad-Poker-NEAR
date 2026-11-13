@@ -97,3 +97,11 @@ return and withdrawal flights. The return sweep is frame-for-frame identical ove
   - Each capture is POSTed to `tools/receiver.mjs` on 127.0.0.1:5199.
   - `tools/compose.cjs` makes the composites and diffs; `tools/strips.cjs` makes the filmstrips and lag estimates.
   - The HUD is rasterised by html-to-image, so small differences in text edges may come from that rasteriser, not the port.
+
+## Redesign v2 HUD (13 Nov 2026)
+
+The table HUD now wears the Redesign v2 skin (docs/ui-style-guide.md, `src/hud/v2hud.css`, `src/hud/raiseSheet.ts`):
+seat plates, status chips, timer ring, D / SB / BB tokens, hand meter, pot pill, the action row (now Fold · Check/Call ·
+Bet/Raise) and a DOM raise sheet, with one skin on every room (`hudTheme.hudSkin.v2` turns off per-room HUD tinting).
+HUD pixels therefore intentionally differ from the Unity captures; only the scene (felt, cards, chips, deal paths,
+river slam) is still expected to match. Mask the HUD out (or compare with `hudSkin.v2 = false`) when re-running the diffs.

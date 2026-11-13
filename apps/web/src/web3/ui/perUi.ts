@@ -14,6 +14,11 @@
  *    flexibleWidth from their preferred (one-line) width and shrink first, buttons keep their width.
  *  - Text: TextMeshProUGUI with the TMP default font (LiberationSans SDF), white, word wrap, rich text.
  *  - Button: Image (colour) + Button (ColorTint transition, default ColorBlock) + LayoutElement (width × 52).
+ *
+ * Redesign v2 skin (docs/ui-style-guide.md): the same calls draw v2 surfaces — PerColor.Panel is a v2 dialog panel,
+ * Row a v2 card, Dim the v2 dim; Accent buttons are gold pills, Muted ghost pills, Warn red pills; titles (32+) use
+ * Lilita One, everything else Nunito. Phones in portrait get a 720-wide reference, a full-width panel and wrapping
+ * rows, so nothing is drawn at 4 px. Layout and logic are unchanged.
  */
 import { tmpToHtml } from './richText';
 
@@ -24,6 +29,10 @@ export const PerColor = {
   Panel: [0.07, 0.09, 0.12, 0.96] as Rgba,
   Row: [1, 1, 1, 0.06] as Rgba,
   Accent: [0.2, 0.62, 0.45, 1] as Rgba,
+  /** v2 roles: Accent = the panel's one gold primary; Secondary = blue; Muted = ghost (tertiary); Warn = red. */
+  Secondary: [0.13, 0.4, 0.88, 1] as Rgba,
+  /** A picked option in a group of choices (ghost with a gold ring), not a call to action. */
+  Selected: [0.95, 0.75, 0.2, 1] as Rgba,
   Muted: [0.3, 0.33, 0.38, 1] as Rgba,
   Warn: [0.8, 0.42, 0.25, 1] as Rgba,
   Clear: [0, 0, 0, 0] as Rgba,
@@ -37,6 +46,9 @@ export const css = (c: Rgba, tint: Rgba = [1, 1, 1, 1]): string =>
 /** TMP LiberationSans SDF: line height 98.8916 at point size 86. */
 const LINE_RATIO = 98.8916 / 86;
 const REF: [number, number] = [1920, 1080];
+/** Portrait phones: a narrower reference so text stays readable (rows wrap instead). */
+const REF_PORTRAIT: [number, number] = [720, 1280];
+const portrait = (): boolean => typeof document !== 'undefined' && document.documentElement.dataset.orient === 'portrait';
 
 type Kind = 'free' | 'column' | 'line' | 'button';
 const kindOf = (el: HTMLElement): Kind => (el.dataset.perKind as Kind | undefined) ?? 'free';
@@ -48,17 +60,34 @@ function injectStyle(): void {
   const s = document.createElement('style');
   s.textContent = `
 .per-host{position:absolute;inset:0;overflow:hidden;pointer-events:auto}
-.per-canvas{position:absolute;left:0;top:0;transform-origin:0 0;font-family:'UnityLiberationSans','Liberation Sans',Arial,sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
+.per-canvas{position:absolute;left:0;top:0;transform-origin:0 0;font-family:var(--v2-ui,'Nunito',system-ui,sans-serif);font-weight:700;color:var(--v2-ink,#fff);-webkit-font-smoothing:antialiased;user-select:none}
 .per-canvas *{box-sizing:border-box}
 .per-free{position:absolute}
-.per-col{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start}
-.per-line{display:flex;flex-direction:row;align-items:stretch;justify-content:flex-start;flex:0 0 auto}
+.per-col{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--v2-line,#4b3fa6) transparent}
+.per-line{display:flex;flex-direction:row;align-items:stretch;justify-content:flex-start;flex:0 0 auto;flex-wrap:wrap;row-gap:10px;height:auto!important}
+.per-line>.per-text{min-width:240px}
+.per-line>.per-btn{height:52px}
 .per-text{display:flex;flex-direction:column;justify-content:center;white-space:pre-wrap;overflow-wrap:normal;word-break:normal;line-height:${LINE_RATIO};min-width:0;min-height:0}
 .per-text.top{justify-content:flex-start}
+.per-text.per-title{font-family:var(--v2-display,'Lilita One',system-ui,sans-serif);font-weight:400;letter-spacing:.02em}
+.per-text.per-title b{font-weight:400}
 .per-text>span{display:block}
-.per-btn{position:relative;flex:0 0 auto;align-self:center;height:100%;min-height:52px;cursor:pointer;transition:background-color .1s linear;user-select:none}
-.per-btn.off{cursor:default}
-.per-btn>.per-text{position:absolute;inset:0;pointer-events:none}
+.per-dim{background:rgba(4,2,20,.62)}
+.per-panel{background:var(--v2-dlg,#1c1450);border:3px solid var(--v2-accent,#7c6bff);border-radius:32px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.per-row{background:rgba(255,255,255,.05);border:2px solid var(--v2-line2,rgba(124,107,255,.45));border-radius:18px}
+.per-btn{position:relative;flex:0 0 auto;align-self:center;height:100%;min-height:52px;cursor:pointer;user-select:none;border-radius:999px;transition:filter .12s,transform .08s;font-weight:800}
+.per-btn:hover{filter:brightness(1.08)}
+.per-btn:active{transform:translateY(1px)}
+.per-btn.off{cursor:default;opacity:.45;filter:none}
+.per-btn.gold{background:var(--v2-grad-gold,linear-gradient(#ffe36b,#f5a915));color:var(--v2-on-gold,#3a2200);box-shadow:inset 0 -5px 0 rgba(150,80,0,.45)}
+.per-btn.ghost{background:rgba(255,255,255,.08);border:2px solid var(--v2-line,#4b3fa6);color:#fff}
+.per-btn.blue{background:var(--v2-grad-blue,linear-gradient(#58b6ff,#2266e0));color:#fff;box-shadow:inset 0 -5px 0 rgba(10,40,120,.5)}
+.per-btn.sel{background:rgba(255,213,74,.12);border:3px solid var(--v2-gold,#ffd54a);color:var(--v2-gold,#ffd54a)}
+.per-btn.red{background:var(--v2-grad-red,linear-gradient(#ff7d8a,#d8304a));color:#fff;box-shadow:inset 0 -5px 0 rgba(110,0,20,.5)}
+.per-btn>.per-text{position:absolute;inset:0;pointer-events:none;font-weight:800}
+html[data-orient='portrait'] .per-canvas>[data-name='Panel']{left:2%!important;right:2%!important;top:calc(1.5% + env(safe-area-inset-top,0px))!important;bottom:calc(1.5% + env(safe-area-inset-bottom,0px))!important;border-radius:24px}
+html[data-orient='portrait'] .per-line>.per-text{flex-basis:100%!important}
+html[data-orient='portrait'] .per-btn{height:76px;min-height:76px}
 `;
   document.head.append(s);
 }
@@ -85,7 +114,8 @@ export class PerCanvas {
   layout(): void {
     const w = this.host.clientWidth || window.innerWidth;
     const h = this.host.clientHeight || window.innerHeight;
-    const s = Math.min(w / REF[0], h / REF[1]);
+    const ref = portrait() ? REF_PORTRAIT : REF;
+    const s = Math.min(w / ref[0], h / ref[1]);
     this.root.style.width = `${w / s}px`;
     this.root.style.height = `${h / s}px`;
     this.root.style.transform = `scale(${s})`;
@@ -114,9 +144,16 @@ export function box(parent: HTMLElement, name: string, color: Rgba, min: [number
   injectStyle();
   const el = document.createElement('div');
   el.dataset.name = name;
-  el.style.backgroundColor = css(color);
+  paintSurface(el, color);
   place(parent, el, min, max);
   return el;
+}
+
+/** v2 surfaces for PerUi's colours (other colours paint as before). */
+function paintSurface(el: HTMLElement, color: Rgba): void {
+  const cls = color === PerColor.Dim ? 'per-dim' : color === PerColor.Panel ? 'per-panel' : color === PerColor.Row ? 'per-row' : '';
+  if (cls) el.classList.add(cls);
+  else el.style.backgroundColor = css(color);
 }
 
 /** PerUi.Column (the LayoutElement's flexibleHeight 1 makes a nested column take the spare height). */
@@ -137,7 +174,7 @@ export function line(parent: HTMLElement, height: number, color: Rgba): HTMLElem
   el.dataset.name = 'Row';
   el.dataset.perKind = 'line';
   el.className = 'per-line';
-  el.style.backgroundColor = css(color);
+  paintSurface(el, color);
   el.style.height = `${height}px`;
   el.style.minHeight = `${height}px`;
   el.style.gap = '12px';
@@ -155,7 +192,7 @@ export class PerText {
   private value = '';
 
   constructor(text: string, size: number, align: TextAlign) {
-    this.el.className = 'per-text' + (align === 'TopLeft' ? ' top' : '');
+    this.el.className = 'per-text' + (align === 'TopLeft' ? ' top' : '') + (size >= 32 ? ' per-title' : '');
     this.el.style.fontSize = `${size}px`;
     this.el.style.textAlign = align === 'Center' ? 'center' : 'left';
     this.el.append(this.span);
@@ -276,9 +313,16 @@ export class PerButton {
     this.paint();
   }
 
+  /** v2: Accent = gold, Secondary = blue, Muted = ghost, Warn = red, Selected = picked option (CSS does hover / press / disabled). */
   paint(): void {
-    const t = !this.on ? TINT.disabled : this.down && this.hover ? TINT.pressed : this.hover ? TINT.highlighted : selected === this ? TINT.selected : TINT.normal;
-    this.el.style.backgroundColor = css(this.base, t);
+    const b = this.base;
+    const hue = b === PerColor.Accent ? 'gold' : b === PerColor.Secondary ? 'blue' : b === PerColor.Muted ? 'ghost' : b === PerColor.Warn ? 'red' : b === PerColor.Selected ? 'sel' : '';
+    for (const c of ['gold', 'blue', 'ghost', 'red', 'sel']) this.el.classList.toggle(c, c === hue);
+    if (hue) this.el.style.backgroundColor = '';
+    else {
+      const t = !this.on ? TINT.disabled : this.down && this.hover ? TINT.pressed : this.hover ? TINT.highlighted : selected === this ? TINT.selected : TINT.normal;
+      this.el.style.backgroundColor = css(this.base, t);
+    }
   }
 }
 
@@ -303,13 +347,28 @@ export function logStatus(tag: string, s: string): void {
   if (s) console.log(`[${tag}] ${s}`);
 }
 
-/** Exception.Message for whatever was thrown. */
-export const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+/** Exception.Message for whatever was thrown — what players read. Configuration hints are for developers (logged). */
+export const errMsg = (e: unknown): string => friendlyError(e instanceof Error ? e.message : String(e));
 
-/** PerPrompt_Ask (PerPrompt.jslib): window.prompt; null when cancelled. */
-export function ask(message: string, defaultText: string): string | null {
+/** Developer / configuration messages → what a player should read. */
+export function friendlyError(m: string): string {
+  if (/\?perbackend|web3deployed|isn't configured|not configured|NetworkPolicy|refused: /i.test(m)) {
+    console.warn('[PerUi]', m);
+    return 'SOL tables are unavailable right now. Try again later.';
+  }
+  return m;
+}
+
+/** PerPrompt_Ask: a v2 text dialog (was window.prompt); resolves null when cancelled. */
+export async function ask(message: string, defaultText: string): Promise<string | null> {
   try {
-    return window.prompt(message, defaultText);
+    const { globalDialogs } = await import('../../ui2/globalDialogs');
+    return await new Promise<string | null>((resolve) => {
+      globalDialogs().message('Private tables', message, 'OK', undefined, 'Cancel', () => resolve(null), '', (v) => resolve(v), defaultText);
+      // Invite lists can hold many wallet addresses.
+      const field = document.querySelector<HTMLInputElement>('.v2-global .v2-gd-in');
+      if (field) field.maxLength = 2000;
+    });
   } catch {
     return null;
   }

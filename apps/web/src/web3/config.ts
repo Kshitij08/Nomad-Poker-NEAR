@@ -133,6 +133,9 @@ export function assertAllowedUrl(cfg: Web3Config, url: string): void {
 
 /** The backend URL, or a clear error when none is configured (offline build). */
 export function requireBackend(url: string, what: string): string {
-  if (!url) throw new NetworkPolicyError(`${what} isn't configured in this build (pass ?web3backend= / ?perbackend=, or ?web3deployed=1)`);
+  if (!url) {
+    console.warn(`[web3] ${what} isn't configured in this build (pass ?web3backend= / ?perbackend=, or ?web3deployed=1)`);
+    throw new NetworkPolicyError('SOL tables are unavailable right now. Try again later.');
+  }
   return url;
 }
