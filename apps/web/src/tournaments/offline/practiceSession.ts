@@ -108,6 +108,8 @@ export function practiceTournamentSession(options: PracticeOptions): TableSessio
     const name = options.playerName ?? host.ctx.services.account?.displayName ?? 'You';
 
     return {
+      // No server: chat and reactions stay on this screen (table chrome). The client draws you at the near slot.
+      localPlayerSeated: () => (client?.seat ?? -1) >= 0,
       start: () => {
         client!.start();
         tournamentClientState.watchHandler = (tableId) => server.onWatchTable(LOCAL_PLAYER, tableId);

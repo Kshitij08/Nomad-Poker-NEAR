@@ -178,6 +178,9 @@ export class Room implements TableNet {
         case 'reaction':
           s.onReaction(p, num(m.id) & 0xff);
           break;
+        case 'show':
+          s.onShowCards?.(p);
+          break;
         case 'voiceState':
           s.onVoiceState(p, !!m.talking, !!m.muted);
           break;

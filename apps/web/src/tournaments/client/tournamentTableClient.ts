@@ -57,6 +57,11 @@ export class TournamentTableClient {
     this.presenter = new TableEventPresenter(this.view, -1, audio);
   }
 
+  /** Your seat at the table on the felt (-1 while waiting or watching). */
+  get seat(): number {
+    return this.localSeat;
+  }
+
   start(): void {
     this.state.begin(this.opts.session);
     void this.pump();

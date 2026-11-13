@@ -96,7 +96,14 @@ html[data-orient='portrait'] .per-btn{height:76px;min-height:76px}
 export class PerCanvas {
   readonly host: HTMLElement;
   readonly root: HTMLElement;
-  private readonly onResize = () => this.layout();
+  // Re-layout on resize and rotation; again a frame and a moment later, because some browsers (and iOS on rotate)
+  // report the new size late — the panels used to keep their desktop size after a phone was turned.
+  private readonly onResize = () => {
+    this.layout();
+    requestAnimationFrame(() => this.layout());
+    setTimeout(() => this.layout(), 200);
+  };
+  private readonly ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => this.layout()) : null;
 
   constructor(parent: HTMLElement, name: string) {
     injectStyle();
@@ -108,6 +115,8 @@ export class PerCanvas {
     this.host.append(this.root);
     parent.append(this.host);
     window.addEventListener('resize', this.onResize);
+    window.addEventListener('orientationchange', this.onResize);
+    this.ro?.observe(this.host);
     this.layout();
   }
 
@@ -123,6 +132,8 @@ export class PerCanvas {
 
   dispose(): void {
     window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('orientationchange', this.onResize);
+    this.ro?.disconnect();
     this.host.remove();
   }
 }

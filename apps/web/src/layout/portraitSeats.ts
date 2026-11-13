@@ -2,7 +2,7 @@
  * Portrait seat HUD (docs/portrait-design.md §Seats): the landscape `Name_Canvas` puts the name bar beside the avatar
  * (≈ 1,650 canvas units wide), which cannot fit three seats across a phone. In portrait every seat stacks instead:
  * avatar on top, the same Name_bar art centred under it (narrower), the status pill (Bottom_bar) peeking out below,
- * the D/S/B token on the bar's right end and the hand-strength panel under the stack. Same nodes, sprites, fonts and
+ * the D/SB/BB token beside the avatar (off the plate) and the hand-strength panel under the stack. Same nodes, sprites, fonts and
  * colours — only their RectTransforms move.
  *
  * The seat's on-enable clips (Name_Graphics_In, Botton_name_Bar) write these rects while they play, so the portrait
@@ -24,7 +24,8 @@ const STACK: RectTarget[] = [
   { path: 'Graphics/Name_bar', anchor: [0.5, 0.5], pos: [0, -400], size: [840, 295] },
   { path: 'Graphics/Name_bar/Name_txt', pos: [0, 73], size: [-150, -188] },
   { path: 'Graphics/Name_bar/Amount_txt', pos: [0, -36], size: [-150, -22] },
-  { path: 'Graphics/Name_bar/D_Token', anchor: [1, 0.5], pos: [-6, 0] },
+  // D / SB / BB: off the plate, in the corner right of the avatar (v2hud.css sizes it 200 wide in portrait).
+  { path: 'Graphics/Name_bar/D_Token', anchor: [1, 0.5], pos: [-134, 225] },
   { path: 'Graphics/Bottom_bar', anchor: [0.5, 0.5], pos: [0, -590], size: [760, 295] },
 ];
 /** The hand-strength panel (local seat): under the stack. */

@@ -1,5 +1,5 @@
 import type { AppContext, Screen } from '../app/app';
-import { HUMAN_SEAT, PokerGameController, TEST_SCENE_TABLE_SETTINGS, type AudioPort, type TableSettings } from '@nomad/engine';
+import { HandEvaluator, HUMAN_SEAT, PokerGameController, TEST_SCENE_TABLE_SETTINGS, type AudioPort, type TableSettings } from '@nomad/engine';
 import type { TableStage } from './tableStage';
 import { tickerWait, type TableView } from './tableView';
 
@@ -16,6 +16,12 @@ export interface TableSession {
    * on-chain cash-out that must finish at the table (PER/escrow). leave() awaits it, then stops the session.
    */
   requestLeave?(): Promise<void>;
+  /**
+   * Optional: a table with no server behind it (the offline engine, the practice tournament). The table chrome then
+   * keeps chat local (your messages in your own log) and draws your reactions itself, over your seat at the near HUD
+   * slot (slot 0). Returns whether you hold that seat now (reactions are offered only then).
+   */
+  localPlayerSeated?(): boolean;
 }
 
 export interface TableSessionHost {
@@ -27,6 +33,8 @@ export interface TableSessionHost {
   leave(to?: string): void;
   /** Starts the same table again (same params): the offline Rebuy / Play again. */
   again(): void;
+  /** The session this visit runs (null while the chrome is being built, before the session is made). */
+  readonly session?: TableSession | null;
 }
 
 /** The message box the menu installs (host.dialogs, rendered as a v2 dialog), if any. */
@@ -78,6 +86,40 @@ export function offlineSession(settings?: Partial<TableSettings>): TableSessionF
       const me = human();
       if (me && me.stack <= 0) tell(false);
     };
+    // "Show cards": once a hand is decided, you may show cards that weren't shown at showdown (offline the bots
+    // see it as your seat's "Shows · …" chip, like the online table).
+    const showBtn = host.stage.hud.showCards;
+    const pp = controller.presenter as unknown as { onHandStarted(e: unknown): void; onShowdown(e: { entries: { seat: number }[] }): void; onPotAwarded(e: unknown): void };
+    let shown = false;
+    const started = pp.onHandStarted.bind(pp);
+    pp.onHandStarted = (e) => {
+      shown = false;
+      showBtn.hide();
+      started(e);
+    };
+    const showdown = pp.onShowdown.bind(pp);
+    pp.onShowdown = (e) => {
+      if (e.entries.some((x) => x.seat === HUMAN_SEAT)) shown = true;
+      showdown(e);
+    };
+    const awarded = pp.onPotAwarded.bind(pp);
+    pp.onPotAwarded = (e) => {
+      awarded(e);
+      const me = human();
+      const hole = me?.holeCards ?? [];
+      if (shown || hole.length < 2) return;
+      showBtn.offer(() => {
+        shown = true;
+        const board = controller.engine.table.community;
+        let desc = 'Shows';
+        try {
+          if (board.length >= 3) desc = `Shows · ${HandEvaluator.evaluateHand(hole, board).describe()}`;
+        } catch {
+          /* plain "Shows" */
+        }
+        host.view.showShowdown(HUMAN_SEAT, hole[0]!, hole[1]!, desc);
+      });
+    };
     const gameOver = p.onGameOver.bind(p);
     p.onGameOver = (e) => {
       gameOver(e);
@@ -85,6 +127,8 @@ export function offlineSession(settings?: Partial<TableSettings>): TableSessionF
       tell(!(me && me.stack <= 0));
     };
     return {
+      // No server: chat and reactions stay on this screen (table chrome). You are seat 0, drawn at the near slot.
+      localPlayerSeated: () => !controller.stopped && !!human(),
       start: () =>
         void controller.start().then(() => {
           // The loop ends without a GameOver when only you are left funded.
@@ -93,6 +137,7 @@ export function offlineSession(settings?: Partial<TableSettings>): TableSessionF
         }),
       stop: () => {
         window.clearTimeout(timer);
+        showBtn.hide();
         document.documentElement.classList.remove('v2t-tableover');
         controller.stop();
       },
@@ -121,6 +166,7 @@ export class TableScreen implements Screen {
     this.params = (params as TableScreenParams) ?? {};
     root.classList.add('screen-table');
     this.stage.setVisible(true);
+    const screen = this;
     const host: TableSessionHost = {
       view: this.stage.newView(),
       audio: this.ctx.audio,
@@ -128,6 +174,9 @@ export class TableScreen implements Screen {
       ctx: this.ctx,
       leave: (to) => void this.leave(to),
       again: () => void this.ctx.router.navigate('table', this.params),
+      get session() {
+        return screen.session;
+      },
     };
     for (const c of chrome) this.disposers.push(c(host, root));
     const factory = this.params.session ?? offlineSession(this.params.settings);

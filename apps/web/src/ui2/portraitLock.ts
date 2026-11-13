@@ -18,7 +18,7 @@ export function installPortraitLock(): void {
   const card = document.createElement('div');
   card.className = 'v2-rotate';
   card.setAttribute('role', 'alert');
-  card.innerHTML = `${ico('phone', 1)}<b>Turn your phone upright</b><span>Nomad Poker plays in portrait on phones.</span>`;
+  card.innerHTML = `${ico('rotate', 1)}<b>Turn your phone upright</b><span>Nomad Poker plays in portrait on phones.</span>`;
   document.body.append(card);
   const check = (): void => {
     // The screen's orientation, not the window's: an on-screen keyboard shrinks the window but doesn't turn the phone.

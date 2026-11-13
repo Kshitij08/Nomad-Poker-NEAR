@@ -19,7 +19,9 @@ export function buildPerIx(name: string, args: Record<string, unknown>, named: R
       keys.push({ pubkey: PerIds.program, isSigner: false, isWritable: false });
       continue;
     }
-    const key = a.addr ? new PublicKey(a.addr) : named[a.name];
+    // The IDL names the test program as its own address (owner_program on every delegate_*): use the active one, so a
+    // ?perprogram= other than the test program delegates to itself (Anchor error 2012 otherwise).
+    const key = a.addr ? (a.addr === IDS.perTestProgram ? PerIds.program : new PublicKey(a.addr)) : named[a.name];
     if (!key) throw new Error(`no address for account '${a.name}'`);
     keys.push({ pubkey: key, isSigner: !!a.s, isWritable: !!a.w });
   }

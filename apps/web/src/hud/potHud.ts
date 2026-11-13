@@ -27,7 +27,7 @@ export class PotHudView implements PotHud {
     this.text = t;
     // v2 pot pill (hud/v2hud.css): Lilita gold amount under a small "Pot" caption.
     if (t.text) {
-      t.text.family = "'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif";
+      t.text.family = "'Fredoka', 'Arial Rounded MT Bold', system-ui, sans-serif";
       t.text.bold = false;
     }
     const w = data.world!;

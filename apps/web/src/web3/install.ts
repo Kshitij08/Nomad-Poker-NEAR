@@ -39,6 +39,9 @@ export function install(ctx: AppContext): void {
   ctx.services.solana = solana;
   ctx.services.per = lazy(async () => new (await import('./per/service')).PerRuntime(config, http, solana));
   installWeb3Screens(ctx);
+  // DEV ONLY: a devnet test wallet on localhost with ?testwallet=1 (dev/testWallet.ts). The dynamic import sits
+  // inside the DEV check, so production builds don't contain it.
+  if (import.meta.env.DEV) void import('./dev/testWallet').then((m) => m.maybeInstallTestWallet(true));
   // NomadUiHost.Onchain: the DEMO / ONCHAIN mode and every SOL control of the Nomad menu (runs once the menu has built).
   registerOnchainPartial();
 }

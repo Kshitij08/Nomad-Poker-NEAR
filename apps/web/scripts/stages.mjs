@@ -6,5 +6,7 @@ export const STAGES = {
     // Private tables (PER) on the new stack's program instance and service (apps/per).
     VITE_PER_PROGRAM: 'nomad',
     VITE_PER_BACKEND: 'https://nomad-poker-per-staging.kshitijiitgn.workers.dev',
+    // The UI style picker (src/ui2/themes) on staging, to compare the variations before one is chosen.
+    VITE_DESIGN_OPTIONS: '1',
   },
 };

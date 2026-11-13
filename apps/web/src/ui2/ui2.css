@@ -1,8 +1,9 @@
-/* Redesign v2 (Screen Atlas "Redesign v2" skin): purple galaxy, Lilita One titles, Nunito UI.
+/* Redesign v2 (Screen Atlas "Redesign v2" skin): purple galaxy, Fredoka titles, Nunito UI.
    One em = 1/80 of a 16:9 stage on desktop (like the atlas), ~1/30 of the width on a portrait phone.
    Layouts are flex / grid so the same markup serves both orientations; portrait rules are under
    html[data-orient='portrait']. */
-@import '@fontsource/lilita-one/400.css';
+@import '@fontsource/fredoka/600.css';
+@import '@fontsource/fredoka/700.css';
 @import '@fontsource/nunito/500.css';
 @import '@fontsource/nunito/700.css';
 @import '@fontsource/nunito/800.css';
@@ -12,17 +13,17 @@
    layer, and the table HUD (.v2t). Screen CSS uses these, not literal hex values. */
 :root {
   --v2-ink: #fff;
-  --v2-mut: #b9b3e6;
-  --v2-mut2: #a69fe0;
-  --v2-line: #4b3fa6;
-  --v2-line2: rgba(124, 107, 255, 0.45);
-  --v2-accent: #7c6bff;
-  --v2-bg-top: #1a0f4a;
-  --v2-bg-mid: #2a1678;
-  --v2-bg-bot: #160c42;
-  --v2-panel: rgba(28, 20, 80, 0.92);
-  --v2-deep: rgba(14, 10, 48, 0.9);
-  --v2-dlg: #1c1450;
+  --v2-mut: #e0d5ff;
+  --v2-mut2: #cbbcf5;
+  --v2-line: #a98af5;
+  --v2-line2: rgba(201, 171, 252, 0.55);
+  --v2-accent: #b69bff;
+  --v2-bg-top: #4f2bb8;
+  --v2-bg-mid: #7448e0;
+  --v2-bg-bot: #43249c;
+  --v2-panel: rgba(104, 66, 214, 0.66);
+  --v2-deep: rgba(58, 32, 142, 0.78);
+  --v2-dlg: #4b2ca3;
   --v2-gold: #ffd54a;
   --v2-good: #2ee38a;
   --v2-bad: #ff6b7f;
@@ -34,6 +35,9 @@
   --v2-grad-hot: linear-gradient(135deg, #ff8ad8, #ff4fa3, #ff6a2b);
   --v2-grad-sol: linear-gradient(90deg, #9945ff, #14f195);
   --v2-on-gold: #3a2200;
+  --v2-badge: #ff3355; /* notification dots and counts */
+  --v2-grad-ribbon: linear-gradient(#ff8a8a, #f0435a); /* shop ribbons (POPULAR, HOT, BEST VALUE) */
+  --v2-xp-ink: #d38cff; /* XP amounts as text (--v2-xp is the XP bar gradient) */
   --v2-r-sm: 0.5em;
   --v2-r-md: 0.8em;
   --v2-r-lg: 1.2em;
@@ -42,8 +46,31 @@
   --v2-s2: 0.6em;
   --v2-s3: 1em;
   --v2-s4: 1.4em;
-  --v2-display: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif;
+  --v2-display: 'Fredoka', 'Arial Rounded MT Bold', system-ui, sans-serif;
   --v2-ui: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Tokens shared by every surface. */
+  --v2-ink2: #f1ecff;
+  --v2-mut3: #bfb0ee;
+  --v2-shade: #23125c;
+  --v2-panel-solid: #3d2390;
+  --v2-gold-deep: #f5a915;
+  --v2-violet: #6a35e0;
+  --v2-violet-line: #ad84ff;
+  --v2-bg-glow: #4a23b0;
+  --v2-bg-glow2: rgba(150, 90, 255, 0.55);
+  --v2-star: #fff;
+  --v2-logo-shadow: 0 0.06em 0 #2a5fe0, 0 0.12em 0 #1a3a9a, 0 0 0.5em rgba(90, 160, 255, 0.6);
+  --v2-display-weight: 700;
+  --v2-display-case: none;
+  --v2-display-track: 0.01em;
+  --v2-blur: 0px;
+  --v2-panel-glow: none;
+  --v2-xp: linear-gradient(90deg, #8a5cff, #d38cff);
+  --v2-fold-bg: #4a4570;
+  --v2-fold-line: #6b6690;
+  --v2-info: #2266e0;
+  --v2-info-line: #5bb8ff;
+  --v2-meter: #4fc3ff;
 }
 .v2 {
   position: absolute;
@@ -67,20 +94,46 @@ html[data-orient='portrait'] .v2 { font-size: min(calc(100vw / 30), calc(100dvh 
 .v2 :where(input, select) { font: inherit; color: inherit; }
 .v2 :focus-visible { outline: 0.14em solid var(--v2-gold); outline-offset: 0.12em; }
 .v2 .v2-ico { flex: 0 0 auto; display: inline-block; vertical-align: middle; }
+/* The coin on gold price buttons: a little bigger, with a thin dark rim so its gold edge doesn't melt into the button.
+   Negative margins keep the button's height. */
+.v2 .v2-b.gold img.v2-ico[src*='ico_coin'] {
+  width: 1.45em !important; height: 1.45em !important; margin: -0.18em 0;
+  filter: drop-shadow(0 0 0.05em rgba(58, 34, 0, 0.95)) drop-shadow(0 0.06em 0.08em rgba(58, 34, 0, 0.45));
+}
 
 /* ---------------------------------------------------------------- background + screen frame */
+/* Menu background: the Unity loading screen art without its logo (public/assets/menu/galaxy/MANIFEST.md). The main
+   menu shows it nearly as is; other pages tint it a little so panels stay readable. A lavender 'screen' layer on top
+   lifts the dark art toward the lighter galaxy (reference: Art-Factory art-out/nomad-poker/reference/). */
 .v2-bg {
   position: absolute; inset: 0; pointer-events: none;
   background:
-    radial-gradient(ellipse at 50% -10%, rgba(150, 90, 255, 0.55), transparent 55%),
-    radial-gradient(ellipse at 50% 120%, #4a23b0 0, transparent 60%),
-    radial-gradient(1.5px 1.5px at 12% 22%, #fff 50%, transparent),
-    radial-gradient(1.5px 1.5px at 72% 18%, #fff 50%, transparent),
-    radial-gradient(1px 1px at 42% 64%, #fff 50%, transparent),
-    radial-gradient(1px 1px at 88% 52%, #fff 50%, transparent),
-    radial-gradient(1px 1px at 8% 80%, #fff 50%, transparent),
-    radial-gradient(1px 1px at 58% 88%, #fff 50%, transparent),
-    radial-gradient(1.5px 1.5px at 30% 40%, #fff 50%, transparent),
+    linear-gradient(rgba(150, 105, 245, 0.42), rgba(120, 80, 230, 0.32)),
+    linear-gradient(color-mix(in srgb, var(--v2-bg-top) 30%, transparent), color-mix(in srgb, var(--v2-bg-bot) 45%, transparent)),
+    url('/assets/menu/galaxy/menu_bg.webp') center 40% / cover no-repeat,
+    var(--v2-bg-mid);
+  background-blend-mode: screen, normal, normal, normal;
+}
+.v2:has(> .v2-page[data-screen='main']) > .v2-bg {
+  background:
+    linear-gradient(rgba(160, 115, 250, 0.45), rgba(130, 90, 240, 0.35)),
+    linear-gradient(180deg, color-mix(in srgb, var(--v2-bg-top) 14%, transparent) 0, transparent 30%, transparent 62%, color-mix(in srgb, var(--v2-bg-bot) 45%, transparent) 100%),
+    url('/assets/menu/galaxy/menu_bg.webp') center 40% / cover no-repeat,
+    var(--v2-bg-mid);
+  background-blend-mode: screen, normal, normal, normal;
+}
+/* The old procedural galaxy (kept for surfaces outside the menu layer, e.g. the connecting cover). */
+.v2-bg.v2-bg-plain {
+  background:
+    radial-gradient(ellipse at 50% -10%, var(--v2-bg-glow2), transparent 55%),
+    radial-gradient(ellipse at 50% 120%, var(--v2-bg-glow) 0, transparent 60%),
+    radial-gradient(1.5px 1.5px at 12% 22%, var(--v2-star) 50%, transparent),
+    radial-gradient(1.5px 1.5px at 72% 18%, var(--v2-star) 50%, transparent),
+    radial-gradient(1px 1px at 42% 64%, var(--v2-star) 50%, transparent),
+    radial-gradient(1px 1px at 88% 52%, var(--v2-star) 50%, transparent),
+    radial-gradient(1px 1px at 8% 80%, var(--v2-star) 50%, transparent),
+    radial-gradient(1px 1px at 58% 88%, var(--v2-star) 50%, transparent),
+    radial-gradient(1.5px 1.5px at 30% 40%, var(--v2-star) 50%, transparent),
     linear-gradient(var(--v2-bg-top), var(--v2-bg-mid) 60%, var(--v2-bg-bot));
 }
 /* The page: safe-area padded column, top bar then body. */
@@ -95,23 +148,31 @@ html[data-orient='portrait'] .v2 { font-size: min(calc(100vw / 30), calc(100dvh 
 .v2-scroll::-webkit-scrollbar-thumb { background: var(--v2-line); border-radius: var(--v2-r-pill); }
 
 /* ---------------------------------------------------------------- top bar */
-.v2-top { display: flex; align-items: center; gap: 0.9em; min-height: 3.6em; flex: 0 0 auto; }
+.v2-top { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 0.9em; min-height: 3.6em; flex: 0 0 auto; }
+.v2-top-l { display: flex; align-items: center; justify-self: start; min-width: 0; }
+.v2-top-r { display: flex; align-items: center; justify-content: flex-end; gap: 0.7em; justify-self: end; min-width: 0; }
+.v2-title { display: inline-flex; align-items: center; justify-content: center; gap: 0.35em; max-width: 60vw; }
+.v2-title-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.v2-title-orn { display: inline-flex; flex: 0 0 auto; }
 .v2-title {
-  flex: 1; min-width: 0; text-align: center; font-family: var(--v2-display); font-weight: 400; font-size: 2.3em;
+  min-width: 0; text-align: center; font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 2.3em;
   letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  text-shadow: 0 0.06em 0 #2a1678, 0 0 0.5em rgba(140, 100, 255, 0.6);
+  text-shadow: 0 0.06em 0 var(--v2-bg-mid), 0 0 0.5em color-mix(in srgb, var(--v2-accent) 60%, transparent);
 }
-.v2-title .v2-ico { color: #7fb8ff; vertical-align: -0.05em; }
+.v2-title .v2-ico { color: var(--v2-accent); vertical-align: -0.05em; }
 h1.v2-title { margin: 0; }
 /* Play mode on sub-screens: a pill (the switch lives on the main menu and the profile popover). */
 .v2-mode-pill { flex: 0 0 auto; font-size: 0.9em; padding: 0.35em 0.9em; border: 0.1em solid var(--v2-line); }
 .v2-mode-pill.sol { border-color: transparent; }
+/* The Back chip wears the violet fill so it reads as one set with the solid buttons. */
 .v2-back {
-  display: flex; align-items: center; gap: 0.4em; background: rgba(14, 10, 48, 0.85); border: 0.12em solid var(--v2-line);
+  display: flex; align-items: center; gap: 0.4em; background: var(--v2-grad-violet);
+  border: 0.12em solid color-mix(in srgb, var(--v2-violet-line, #ad84ff) 70%, transparent);
+  box-shadow: inset 0 -0.18em 0 color-mix(in srgb, var(--v2-violet) 60%, #000);
   border-radius: var(--v2-r-md); padding: 0.55em 1.1em; font-weight: 900; font-size: 1.1em; flex: 0 0 auto;
 }
 .v2-seg { display: flex; background: var(--v2-deep); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-pill); padding: 0.22em; flex: 0 0 auto; }
-.v2-seg > button { padding: 0.4em 1em; border-radius: var(--v2-r-pill); font-weight: 900; color: #c3bef0; white-space: nowrap; }
+.v2-seg > button { padding: 0.4em 1em; border-radius: var(--v2-r-pill); font-weight: 900; color: var(--v2-ink2); white-space: nowrap; }
 .v2-seg > button.on { background: var(--v2-grad-violet); color: #fff; }
 .v2-coin {
   display: flex; align-items: center; gap: 0.5em; background: var(--v2-deep); border: 0.12em solid var(--v2-line);
@@ -128,21 +189,21 @@ h1.v2-title { margin: 0; }
 }
 .v2-b:hover { filter: brightness(1.08); }
 .v2-b:active { transform: translateY(0.06em); }
-.v2-b.lg { font-size: 1.45em; padding: 0.5em 1.4em; font-family: var(--v2-display); font-weight: 400; letter-spacing: 0.03em; }
+.v2-b.lg { font-size: 1.45em; padding: 0.5em 1.4em; font-family: var(--v2-display); font-weight: var(--v2-display-weight); letter-spacing: 0.03em; }
 .v2-b.sm { font-size: 0.82em; padding: 0.4em 0.9em; }
 .v2-b.w { width: 100%; }
 .v2-b[disabled], .v2-b.dis { opacity: 0.45; cursor: default; filter: none; transform: none; }
-.v2-b.gold { background: var(--v2-grad-gold); color: var(--v2-on-gold); box-shadow: inset 0 -0.22em 0 rgba(150, 80, 0, 0.45), 0 0 0.8em rgba(255, 200, 60, 0.35); }
+.v2-b.gold { background: var(--v2-grad-gold); color: var(--v2-on-gold); box-shadow: inset 0 -0.22em 0 rgba(150, 80, 0, 0.45), 0 0 0.8em color-mix(in srgb, var(--v2-gold) 35%, transparent); }
 .v2-b.blue { background: var(--v2-grad-blue); box-shadow: inset 0 -0.22em 0 rgba(10, 40, 120, 0.5), 0 0 0.8em rgba(70, 170, 255, 0.35); }
-.v2-b.violet { background: var(--v2-grad-violet); box-shadow: inset 0 -0.22em 0 rgba(50, 10, 120, 0.5); }
+.v2-b.violet { background: var(--v2-grad-violet); box-shadow: inset 0 -0.22em 0 color-mix(in srgb, var(--v2-violet) 60%, #000); }
 .v2-b.red { background: var(--v2-grad-red); box-shadow: inset 0 -0.22em 0 rgba(110, 0, 20, 0.5); }
 .v2-b.green { background: var(--v2-grad-green); box-shadow: inset 0 -0.22em 0 rgba(0, 80, 30, 0.5); }
-.v2-b.ghost { background: rgba(255, 255, 255, 0.08); border: 0.1em solid #5a7cc8; }
+.v2-b.ghost { background: rgba(255, 255, 255, 0.08); border: 0.1em solid var(--v2-line); }
 .v2-b.hot { background: var(--v2-grad-hot); }
 
 .v2-panel { background: var(--v2-panel); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-lg); padding: 1em 1.2em; min-width: 0; min-height: 0; }
 .v2-card { background: rgba(255, 255, 255, 0.05); border: 0.1em solid var(--v2-line2); border-radius: var(--v2-r-md); padding: 0.7em 0.9em; min-width: 0; }
-.v2-h { font-family: var(--v2-display); font-weight: 400; font-size: 1.35em; letter-spacing: 0.02em; }
+.v2-h { font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 1.35em; letter-spacing: 0.02em; }
 .v2-cap { font-size: 0.72em; font-weight: 900; letter-spacing: 0.1em; color: var(--v2-mut2); text-transform: uppercase; }
 .v2-mut { color: var(--v2-mut); }
 .v2-sm { font-size: 0.85em; }
@@ -160,32 +221,33 @@ h1.v2-title { margin: 0; }
 
 .v2-tabs { display: grid; gap: 0.6em; grid-auto-flow: column; grid-auto-columns: 1fr; }
 .v2-tab {
-  height: 2.9em; border-radius: var(--v2-r-md); background: rgba(20, 14, 62, 0.95); border: 0.12em solid #3b2f8f;
-  display: flex; align-items: center; justify-content: center; gap: 0.5em; font-weight: 900; font-size: 1.08em; color: #d8d3ff; padding: 0 0.6em; white-space: nowrap; min-width: 0;
+  height: 2.9em; border-radius: var(--v2-r-md); background: color-mix(in srgb, var(--v2-shade) 95%, transparent); border: 0.12em solid var(--v2-line);
+  display: flex; align-items: center; justify-content: center; gap: 0.5em; font-weight: 900; font-size: 1.08em; color: var(--v2-ink2); padding: 0 0.6em; white-space: nowrap; min-width: 0;
 }
-.v2-tab.on { background: var(--v2-grad-gold); color: var(--v2-on-gold); border-color: #ffe27a; }
+.v2-tab.on { background: var(--v2-grad-gold); color: var(--v2-on-gold); border-color: var(--v2-gold); }
 .v2-chip {
-  padding: 0.4em 1em; border-radius: var(--v2-r-sm); border: 0.12em solid var(--v2-line); font-weight: 800; color: #d8d3ff;
+  padding: 0.4em 1em; border-radius: var(--v2-r-sm); border: 0.12em solid var(--v2-line); font-weight: 800; color: var(--v2-ink2);
   background: rgba(255, 255, 255, 0.03); white-space: nowrap; display: inline-flex; align-items: center; gap: 0.4em;
 }
-.v2-chip.on { background: var(--v2-grad-gold); color: var(--v2-on-gold); border-color: #ffe27a; }
+.v2-chip.on { background: var(--v2-grad-gold); color: var(--v2-on-gold); border-color: var(--v2-gold); }
 .v2-chip.big { padding: 0.55em 1.1em; font-size: 1.05em; }
 .v2-field {
-  background: rgba(5, 3, 25, 0.6); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-md); padding: 0.55em 0.8em; color: #fff; min-width: 0; outline: 0;
+  background: color-mix(in srgb, var(--v2-shade) 60%, transparent); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-md); padding: 0.55em 0.8em; color: #fff; min-width: 0; outline: 0;
 }
-.v2-field::placeholder { color: #8e86c9; }
-.v2-field:focus { border-color: #a98bff; }
+.v2-field::placeholder { color: var(--v2-mut3); }
+.v2-field:focus { border-color: var(--v2-accent); }
 .v2-pill { display: inline-block; padding: 0.2em 0.7em; border-radius: var(--v2-r-pill); background: rgba(255, 255, 255, 0.1); font-weight: 800; font-size: 0.85em; white-space: nowrap; }
-.v2-pill.ok { background: rgba(46, 227, 138, 0.2); color: #6af0a0; }
-.v2-pill.bad { background: rgba(255, 77, 106, 0.2); color: #ff8a9a; }
-.v2-pill.gold { background: rgba(255, 194, 31, 0.2); color: var(--v2-gold); }
+.v2-pill.ok { background: color-mix(in srgb, var(--v2-good) 20%, transparent); color: var(--v2-good); }
+.v2-pill.bad { background: color-mix(in srgb, var(--v2-bad) 20%, transparent); color: var(--v2-bad); }
+.v2-pill.gold { background: color-mix(in srgb, var(--v2-gold) 20%, transparent); color: var(--v2-gold); }
 .v2-pill.sol { background: var(--v2-grad-sol); color: #fff; }
-.v2-kv { display: flex; justify-content: space-between; gap: 1em; font-size: 1.05em; padding: 0.35em 0; border-bottom: 0.08em solid rgba(124, 107, 255, 0.25); }
+.v2-kv { display: flex; justify-content: space-between; gap: 1em; font-size: 1.05em; padding: 0.35em 0; border-bottom: 0.08em solid color-mix(in srgb, var(--v2-accent) 25%, transparent); }
 .v2-kv > span { color: var(--v2-mut); }
 .v2-bar { height: 0.55em; border-radius: var(--v2-r-pill); background: rgba(255, 255, 255, 0.18); overflow: hidden; flex: 1; min-width: 2em; }
-.v2-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #8a5cff, #d38cff); }
-.v2-dot { position: absolute; top: 0; right: 0; width: 0.75em; height: 0.75em; border-radius: 50%; background: #ff3355; border: 0.14em solid #fff; }
-.v2-cnt { position: absolute; top: -0.3em; right: -0.5em; background: #ff3355; color: #fff; border: 0.12em solid #fff; border-radius: var(--v2-r-pill); font-size: 0.7em; font-weight: 900; padding: 0 0.45em; font-style: normal; }
+.v2-bar > i { display: block; height: 100%; background: var(--v2-xp); }
+.v2-upper { text-transform: uppercase; letter-spacing: 0.06em; }
+.v2-dot { position: absolute; top: 0; right: 0; width: 0.75em; height: 0.75em; border-radius: 50%; background: var(--v2-badge); border: 0.14em solid #fff; }
+.v2-cnt { position: absolute; top: -0.3em; right: -0.5em; background: var(--v2-badge); color: #fff; border: 0.12em solid #fff; border-radius: var(--v2-r-pill); font-size: 0.7em; font-weight: 900; padding: 0 0.45em; font-style: normal; }
 .v2-av {
   width: 4.2em; height: 4.2em; border-radius: 50%; flex: 0 0 auto; position: relative; overflow: hidden;
   background: radial-gradient(circle at 35% 30%, #9db8ff, #3b4fa8) center / cover no-repeat; border: 0.2em solid #c9d6ff;
@@ -204,24 +266,24 @@ h1.v2-title { margin: 0; }
 /* Slider (draggable knob) */
 .v2-sld { padding: 0.55em 0; cursor: pointer; touch-action: none; width: 100%; }
 .v2-sld .trk { position: relative; height: 0.6em; border-radius: var(--v2-r-pill); background: rgba(255, 255, 255, 0.16); }
-.v2-sld .trk > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--v2-r-pill); background: linear-gradient(90deg, #ffb323, #ffe27a); }
-.v2-sld .knob { position: absolute; top: 50%; width: 1.6em; height: 1.6em; border-radius: 50%; background: #fff; border: 0.28em solid #f5a915; transform: translate(-50%, -50%); box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.45); }
+.v2-sld .trk > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--v2-r-pill); background: linear-gradient(90deg, #ffb323, var(--v2-gold)); }
+.v2-sld .knob { position: absolute; top: 50%; width: 1.6em; height: 1.6em; border-radius: 50%; background: #fff; border: 0.28em solid var(--v2-gold-deep); transform: translate(-50%, -50%); box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.45); }
 .v2-sld.drag .knob { width: 1.9em; height: 1.9em; }
 
 /* ---------------------------------------------------------------- dialogs + toast */
-.v2-dim { position: absolute; inset: 0; background: rgba(4, 2, 20, 0.62); z-index: 20; display: flex; align-items: center; justify-content: center; padding: 1em; }
+.v2-dim { position: absolute; inset: 0; background: color-mix(in srgb, var(--v2-shade) 62%, transparent); z-index: 20; display: flex; align-items: center; justify-content: center; padding: 1em; }
 .v2-dlg {
   width: min(34em, 100%); max-height: 100%; overflow-y: auto; background: var(--v2-dlg); border: 0.15em solid var(--v2-accent); border-radius: var(--v2-r-lg);
   padding: 1.3em 1.5em; box-shadow: 0 1em 3em rgba(0, 0, 0, 0.5); font-size: 1.05em; animation: v2-pop 0.16s ease-out;
 }
 .v2-dlg.wide { width: min(40em, 100%); }
-.v2-dh { font-family: var(--v2-display); font-weight: 400; font-size: 1.6em; margin-bottom: 0.5em; }
+.v2-dh { font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 1.6em; margin-bottom: 0.5em; }
 .v2-db { line-height: 1.45; margin-bottom: 1.2em; }
 .v2-df { display: flex; justify-content: flex-end; gap: 0.8em; flex-wrap: wrap; }
 @keyframes v2-pop { from { opacity: 0; transform: scale(0.96); } }
 .v2-toast {
   position: absolute; left: 50%; top: calc(5.4em + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 40;
-  background: #130d33; color: #fff; border: 0.1em solid var(--v2-accent); border-radius: var(--v2-r-md); padding: 0.6em 1.2em; font-weight: 800;
+  background: var(--v2-dlg); color: #fff; border: 0.1em solid var(--v2-accent); border-radius: var(--v2-r-md); padding: 0.6em 1.2em; font-weight: 800;
   max-width: 80%; text-align: center; box-shadow: 0 0.4em 1.2em rgba(0, 0, 0, 0.4); animation: v2-tin 0.2s ease-out; pointer-events: none;
 }
 @keyframes v2-tin { from { opacity: 0; transform: translate(-50%, -0.6em); } }
@@ -229,18 +291,22 @@ h1.v2-title { margin: 0; }
 
 /* ---------------------------------------------------------------- portrait (phones): shared */
 html[data-orient='portrait'] .v2-page { gap: 0.7em; padding: calc(0.7em + env(safe-area-inset-top, 0px)) calc(0.8em + env(safe-area-inset-right, 0px)) calc(0.7em + env(safe-area-inset-bottom, 0px)) calc(0.8em + env(safe-area-inset-left, 0px)); }
-html[data-orient='portrait'] .v2-top { min-height: 2.8em; gap: 0.5em; flex-wrap: wrap; }
-html[data-orient='portrait'] .v2-title { font-size: 1.6em; order: 1; }
-html[data-orient='portrait'] .v2-back { order: 0; padding: 0.45em 0.7em; font-size: 1em; }
+/* Phones: Back left and mode + coins right on the first row, the title centred on its own row below. */
+html[data-orient='portrait'] .v2-top { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'l r' 't t'; min-height: 2.8em; row-gap: 0.35em; column-gap: 0.5em; }
+html[data-orient='portrait'] .v2-top-l { grid-area: l; }
+html[data-orient='portrait'] .v2-top-r { grid-area: r; gap: 0.4em; }
+html[data-orient='portrait'] .v2-top > .v2-title { grid-area: t; justify-self: center; max-width: 100%; }
+html[data-orient='portrait'] .v2-title { font-size: 1.6em; }
+html[data-orient='portrait'] .v2-back { padding: 0.45em 0.7em; font-size: 1em; }
 html[data-orient='portrait'] .v2-back .v2-lbl { display: none; }
-html[data-orient='portrait'] .v2-top > .v2-coin { order: 2; font-size: 0.95em; }
-html[data-orient='portrait'] .v2-top > .v2-mode-pill { order: 2; font-size: 0.8em; }
-html[data-orient='portrait'] .v2-top > .v2-seg { order: 3; flex: 1 1 100%; justify-content: stretch; font-size: 0.95em; }
-html[data-orient='portrait'] .v2-top > .v2-seg > button { flex: 1; }
+html[data-orient='portrait'] .v2-top-r > .v2-coin { font-size: 0.95em; }
+html[data-orient='portrait'] .v2-top-r > .v2-mode-pill { font-size: 0.8em; }
+html[data-orient='portrait'] .v2-top-r > .v2-seg { font-size: 0.85em; }
+
 html[data-orient='portrait'] .v2-tabs { gap: 0.35em; }
 html[data-orient='portrait'] .v2-tab { font-size: 0.92em; height: 2.6em; }
 html[data-orient='portrait'] .v2-tab .v2-ico { display: none; }
-html[data-orient='portrait'] .v2-panel { padding: 0.8em 0.9em; border-radius: var(--v2-r-pill); }
+html[data-orient='portrait'] .v2-panel { padding: 0.8em 0.9em; border-radius: var(--v2-r-lg); }
 html[data-orient='portrait'] .v2-dim { align-items: flex-end; padding: 0; }
 html[data-orient='portrait'] .v2-dlg {
   width: 100%; border-radius: var(--v2-r-lg) var(--v2-r-lg) 0 0; border-bottom: 0; padding: 1.2em 1.2em calc(1.2em + env(safe-area-inset-bottom, 0px));
@@ -252,14 +318,14 @@ html[data-orient='portrait'] .v2-df > .v2-b { flex: 1; }
 /* Phone held sideways (store apps are locked; browsers are not). */
 .v2-rotate {
   position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 1em;
-  background: #1a0f4a; color: #fff; font-family: 'Nunito', system-ui, sans-serif; font-weight: 800; font-size: 18px; text-align: center; padding: 24px;
+  background: var(--v2-bg-top); color: #fff; font-family: var(--v2-ui); font-weight: 800; font-size: 18px; text-align: center; padding: 24px;
 }
-.v2-rotate b { font-family: 'Lilita One', system-ui, sans-serif; font-weight: 400; font-size: 26px; }
+.v2-rotate b { font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 26px; }
 .v2-rotate svg { width: 64px; height: 64px; color: var(--v2-gold); animation: v2-turn 2.4s ease-in-out infinite; }
 @keyframes v2-turn { 0%, 30% { transform: rotate(90deg); } 60%, 100% { transform: rotate(0deg); } }
 html.v2-phone-landscape .v2-rotate { display: flex; }
-html[data-orient='portrait'] .v2-top > .v2-coin { max-width: 10em; overflow: hidden; }
-html[data-orient='portrait'] .v2-top > .v2-coin b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+html[data-orient='portrait'] .v2-top-r > .v2-coin { max-width: 10em; overflow: hidden; }
+html[data-orient='portrait'] .v2-top-r > .v2-coin b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 /* Portrait tap targets: every control at least ~40 px tall (13 px base font). */
 html[data-orient='portrait'] .v2-back,
@@ -278,7 +344,7 @@ html[data-orient='portrait'] .v2-page :where(.v2-sm) { font-size: max(0.85em, 12
 html[data-orient='portrait'] .v2-page :where(.v2-pill) { font-size: max(0.85em, 11px); }
 
 /* Phones (QA): smallest text 11 px, every control at least ~40 px (3.1em at the 13 px portrait base). */
-html[data-orient='portrait'] .v2-top > .v2-mode-pill { font-size: max(0.8em, 11px); }
+html[data-orient='portrait'] .v2-top-r > .v2-mode-pill { font-size: max(0.8em, 11px); }
 html[data-orient='portrait'] .v2-seg > button { font-size: max(1em, 12px); min-width: 3.1em; }
 html[data-orient='portrait'] .v2-b.sm { font-size: max(0.82em, 12px); min-width: 3.1em; }
 html[data-orient='portrait'] .v2-field { min-height: 3.1em; }
@@ -299,9 +365,42 @@ html[data-orient='portrait'] .v2-scard small { font-size: max(0.8em, 11px); }
 .v2-spin { flex: 0 0 auto; width: 1.6em; height: 1.6em; border-radius: 50%; border: 0.22em solid rgba(255, 255, 255, 0.2); border-top-color: var(--v2-gold); animation: v2-spin 0.8s linear infinite; }
 @keyframes v2-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .v2-spin { animation-duration: 2.4s; } }
-.v2-gd-range { flex: 1; min-width: 0; accent-color: #f5a915; height: 2em; }
+/* Native range inputs (table Settings, private buy-in) drawn like the menu's .v2-sld slider: gold fill, white knob. The
+   fill follows --fill (set from the value in globalDialogs.ts / sol.ts). */
+.v2-gd-range { --fill: 50%; flex: 1; min-width: 0; height: 2.2em; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; touch-action: none; }
+.v2-gd-range::-webkit-slider-runnable-track { height: 0.6em; border-radius: var(--v2-r-pill); background: linear-gradient(90deg, #ffb323, var(--v2-gold) var(--fill), rgba(255, 255, 255, 0.16) var(--fill)); }
+.v2-gd-range::-moz-range-track { height: 0.6em; border-radius: var(--v2-r-pill); background: linear-gradient(90deg, #ffb323, var(--v2-gold) var(--fill), rgba(255, 255, 255, 0.16) var(--fill)); }
+.v2-gd-range::-webkit-slider-thumb { -webkit-appearance: none; width: 1.6em; height: 1.6em; margin-top: -0.5em; border-radius: 50%; background: #fff; border: 0.28em solid var(--v2-gold-deep); box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.45); }
+.v2-gd-range::-moz-range-thumb { width: 1.05em; height: 1.05em; border-radius: 50%; background: #fff; border: 0.28em solid var(--v2-gold-deep); box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.45); }
+.v2-gd-range:focus-visible { outline: 0.14em solid var(--v2-gold); outline-offset: 0.2em; border-radius: var(--v2-r-pill); }
 /* Phones: absolute floor for control height (tabs and small buttons have their own smaller font sizes). */
 html[data-orient='portrait'] :is(.v2-tab, .v2-b, .v2-chip, .v2-back, .v2-ib, .v2-coin, .v2-field, .v2-seg > button, button.v2-pill, .v2-fr-toggle) { min-height: max(3.1em, 40px); }
 html[data-orient='portrait'] .v2-rplayer > button { min-height: 40px; }
 html[data-orient='portrait'] .v2-ticon { min-width: 40px; min-height: 40px; }
 html[data-orient='portrait'] .v2-cnt { font-size: max(0.7em, 11px); }
+
+/* ---------------------------------------------------------------- one button style: the plate
+   Every button wears the name-plate look (docs/ui-style-guide.md › Buttons): a dark fill with a faint tint of its hue,
+   a ring in that hue and a matching soft glow; labels are white, the primary's gold. Covers menu buttons (.v2-b), table
+   chrome buttons (.v2t-b), the SOL panels (.per-btn) and the Back chip. `:root:root` outranks the older solid rules
+   (.v2-b.gold, .v2t-pgrow .v2t-b.violet…) without !important. */
+:root:root :is(.v2-b, .v2t-b, .per-btn) {
+  --hue: var(--v2-line);
+  background: linear-gradient(color-mix(in srgb, var(--hue) 30%, var(--v2-panel-solid)), color-mix(in srgb, var(--hue) 12%, var(--v2-panel-solid)));
+  border: 0.13em solid var(--hue);
+  color: #fff;
+  box-shadow: 0 0 0.7em color-mix(in srgb, var(--hue) 32%, transparent), inset 0 0.08em 0 rgba(255, 255, 255, 0.08);
+}
+:root:root :is(.v2-b, .v2t-b, .per-btn).gold { --hue: var(--v2-gold); color: var(--v2-gold); }
+:root:root :is(.v2-b, .v2t-b, .per-btn).blue { --hue: #58b6ff; }
+:root:root :is(.v2-b, .v2t-b, .per-btn).violet { --hue: #ad84ff; }
+:root:root :is(.v2-b, .v2t-b, .per-btn).red { --hue: #ff7d8a; }
+:root:root :is(.v2-b, .v2t-b, .per-btn).green { --hue: #6af0a0; color: #c9ffe0; }
+:root:root :is(.v2-b, .v2t-b, .per-btn).hot { --hue: #ff4fa3; color: #ffd0ef; }
+:root:root :is(.v2-b, .v2t-b, .per-btn).ghost { --hue: var(--v2-line); background: var(--v2-deep); box-shadow: none; color: var(--v2-ink2); }
+:root:root :is(.v2-b, .v2t-b, .per-btn):is([disabled], .dis, .off) { box-shadow: none; }
+:root:root :is(.v2-b, .v2t-b, .per-btn):hover:not([disabled], .dis, .off) { filter: brightness(1.15); }
+/* The Back chip is a violet plate like the rest. */
+:root:root .v2-back { background: linear-gradient(color-mix(in srgb, #ad84ff 30%, var(--v2-panel-solid)), color-mix(in srgb, #ad84ff 12%, var(--v2-panel-solid))); border-color: #ad84ff; box-shadow: 0 0 0.7em color-mix(in srgb, #ad84ff 30%, transparent); }
+/* The coin on a gold plate needs no dark rim any more (the fill is dark). */
+:root:root .v2-b.gold img.v2-ico[src*='ico_coin'] { filter: none; }

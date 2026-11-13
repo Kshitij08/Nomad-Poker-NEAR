@@ -326,7 +326,7 @@ export class HudDepthCompositor {
         r.autoClear = true;
       });
       this.ctx.clearRect(0, 0, this.overlay.width, this.overlay.height);
-      this.ctx.drawImage(gl, 0, 0);
+      if (gl.width > 0 && gl.height > 0) this.ctx.drawImage(gl, 0, 0); // 0 × 0 while the stage is still hidden/sizing
       this.overlayEmpty = false;
     } finally {
       camera.layers.mask = layerMask;

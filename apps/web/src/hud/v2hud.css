@@ -16,151 +16,268 @@
 
 /* plate */
 .v2-seat [data-name='Name_bar'] {
-  background: rgba(14, 10, 48, 0.92); border: 14px solid var(--v2-line, #4b3fa6); border-radius: 170px;
+  background: color-mix(in srgb, var(--v2-shade) 92%, transparent); border: 14px solid var(--v2-line, var(--v2-line)); border-radius: 170px;
   box-shadow: 0 24px 50px rgba(0, 0, 0, 0.45); transition: border-color 0.2s, box-shadow 0.2s;
 }
-.v2-seat [data-name='Name_txt'] > .u-text { color: #d2ccf7 !important; font-weight: 800 !important; }
+.v2-seat [data-name='Name_txt'] > .u-text { color: var(--v2-ink2) !important; font-weight: 800 !important; }
+/* Long names / balances: clipped with an ellipsis inside the plate (auto-size shrinks them first, to a minimum). */
+.v2-seat :is([data-name='Name_txt'], [data-name='Amount_txt']) { overflow: hidden; }
+.v2-seat :is([data-name='Name_txt'], [data-name='Amount_txt']) > .u-text { overflow: hidden; }
+.v2-seat :is([data-name='Name_txt'], [data-name='Amount_txt']) > .u-text > span { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v2-seat [data-name='Amount_txt'] > .u-text { color: #fff !important; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
-.v2-seat.v2-turn [data-name='Name_bar'] { border-color: var(--v2-gold, #ffd54a); box-shadow: 0 0 0 12px rgba(255, 213, 74, 0.22), 0 0 90px rgba(255, 200, 60, 0.6); }
-.v2-seat.v2-win [data-name='Name_bar'] { border-color: var(--v2-gold, #ffd54a); box-shadow: 0 0 0 16px rgba(255, 194, 31, 0.3), 0 0 120px rgba(255, 194, 31, 0.8); }
-.v2-seat.v2-fold { opacity: 0.55; }
+.v2-seat.v2-turn [data-name='Name_bar'] { border-color: var(--v2-gold, var(--v2-gold)); box-shadow: 0 0 0 12px color-mix(in srgb, var(--v2-gold) 22%, transparent), 0 0 90px color-mix(in srgb, var(--v2-gold) 60%, transparent); }
+.v2-seat.v2-win [data-name='Name_bar'] { border-color: var(--v2-gold, var(--v2-gold)); box-shadow: 0 0 0 16px color-mix(in srgb, var(--v2-gold) 30%, transparent), 0 0 120px color-mix(in srgb, var(--v2-gold) 80%, transparent); }
+/* Folded: the whole seat (avatar, plate, chips) turns greyscale like its cards; it stays fully opaque. */
+.v2-seat.v2-fold { filter: grayscale(1) brightness(0.8); }
+
 
 /* avatar + turn ring */
-.v2-seat [data-name='U_Icon'] { border-radius: 50%; box-shadow: 0 0 0 22px var(--v2-line, #4b3fa6), 0 14px 40px rgba(0, 0, 0, 0.45); }
+.v2-seat [data-name='U_Icon'] { border-radius: 50%; box-shadow: 0 0 0 22px var(--v2-line, var(--v2-line)), 0 14px 40px rgba(0, 0, 0, 0.45); }
 .v2-seat [data-name='U_Icon'] > .u-gfx { border-radius: 50%; }
-.v2-seat.v2-turn [data-name='U_Icon'] { box-shadow: 0 0 0 22px var(--v2-gold, #ffd54a), 0 14px 40px rgba(0, 0, 0, 0.45); }
-.v2-timer { --p: 1; --tc: var(--v2-good, #2ee38a); }
-.v2-timer[data-tone='warn'] { --tc: var(--v2-gold, #ffd54a); }
-.v2-timer[data-tone='late'] { --tc: var(--v2-bad, #ff6b7f); }
+.v2-seat.v2-turn [data-name='U_Icon'] { box-shadow: 0 0 0 22px var(--v2-gold, var(--v2-gold)), 0 14px 40px rgba(0, 0, 0, 0.45); }
+.v2-timer { --p: 1; --tc: var(--v2-good, var(--v2-good)); }
+.v2-timer[data-tone='warn'] { --tc: var(--v2-gold, var(--v2-gold)); }
+.v2-timer[data-tone='late'] { --tc: var(--v2-bad, var(--v2-bad)); }
+/* The ring sits just outside the avatar's border: a dark track, the time left in the tone colour with a soft glow, and a
+   bright dot riding the edge as it runs down (clockwise from the top). */
+.v2-timer::before, .v2-timer::after { content: ''; position: absolute; inset: -78px; border-radius: 50%; pointer-events: none; }
 .v2-timer::before {
-  content: ''; position: absolute; inset: -58px; border-radius: 50%;
-  background: conic-gradient(var(--tc) calc(var(--p) * 360deg), rgba(255, 255, 255, 0.14) 0);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 30px), #000 calc(100% - 29px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 30px), #000 calc(100% - 29px));
+  background: conic-gradient(rgba(20, 8, 60, 0.72) calc((1 - var(--p)) * 360deg), var(--tc) 0);
+  /* Soft edges ~8 canvas units wide (about 1 screen px here): a 1-unit step aliased into a jagged, pixelated ring. */
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 36px), #000 calc(100% - 28px), #000 calc(100% - 7px), transparent 100%);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 36px), #000 calc(100% - 28px), #000 calc(100% - 7px), transparent 100%);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--tc) 55%, transparent);
 }
-.v2-timer.v2-pulse::before { animation: v2hud-pulse 0.6s ease-in-out infinite alternate; }
-@keyframes v2hud-pulse { to { opacity: 0.45; } }
+.v2-timer::after {
+  background: radial-gradient(circle at 50% 17px, #fff 0 9px, color-mix(in srgb, #fff 55%, var(--tc)) 15px, color-mix(in srgb, var(--tc) 60%, transparent) 21px, transparent 28px);
+  transform: rotate(calc((1 - var(--p)) * 360deg));
+}
+/* The last seconds: the ring beats (scale + glow) instead of just fading. */
+.v2-timer.v2-pulse::before, .v2-timer.v2-pulse::after { animation: v2hud-pulse 0.5s ease-in-out infinite alternate; }
+@keyframes v2hud-pulse { to { scale: 1.08; filter: brightness(1.3); } }
+@media (prefers-reduced-motion: reduce) { .v2-timer.v2-pulse::before, .v2-timer.v2-pulse::after { animation: none; } }
 
 /* dealer / blinds */
-.v2-seat [data-name='D_Token'] { background: #fff; border-radius: 100px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45); }
-.v2-seat [data-name='D_Token'] .u-text { color: #1c1450 !important; }
+.v2-seat [data-name='D_Token'] {
+  width: 230px !important; margin-left: 112px;
+  background: color-mix(in srgb, var(--v2-shade) 92%, transparent); border: 10px solid var(--v2-line); border-radius: 100px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+.v2-seat [data-name='D_Token'] .u-text { color: #fff !important; }
+/* Mirrored (right-hand) seats carry the token on the plate's left end: it goes fully left of the plate instead. */
+.v2-seat.v2-mirror [data-name='D_Token'] { margin-left: -255px; }
+/* Phone (stacked seat): the token sits beside the avatar instead (layout/portraitSeats.ts), a little narrower. */
+html[data-orient='portrait'] .v2-seat [data-name='D_Token'] { width: 200px !important; margin-left: 0; }
 .v2-seat [data-name='D_Token'][data-role='SB'],
-.v2-seat [data-name='D_Token'][data-role='BB'] { background: var(--v2-grad-violet, linear-gradient(#ad84ff, #6a35e0)); width: 230px !important; margin-left: -50px; border: 8px solid rgba(255, 255, 255, 0.55); }
+.v2-seat [data-name='D_Token'][data-role='BB'] { border-color: var(--v2-accent); }
 .v2-seat [data-name='D_Token'][data-role='SB'] .u-text,
-.v2-seat [data-name='D_Token'][data-role='BB'] .u-text { color: #fff !important; }
+.v2-seat [data-name='D_Token'][data-role='BB'] .u-text { color: var(--v2-ink2) !important; }
 
 /* status chip (Bottom_bar): hidden when empty */
 .v2-seat [data-name='Bottom_bar'][data-st=''],
 .v2-seat [data-name='Bottom_bar']:not([data-st]) { visibility: hidden; }
-.v2-seat [data-name='Bottom_bar'] .u-text { align-items: center; justify-content: flex-end !important; }
+/* The chip sits under the plate and never wraps: a showdown hand like "Three of a Kind, Tens" stays one line, centred
+   under the plate, instead of growing upward underneath it. */
+.v2-seat [data-name='Bottom_bar'] { overflow: visible !important; }
+.v2-seat [data-name='Bottom_bar'] .u-text { align-items: center; justify-content: center !important; overflow: visible !important; white-space: nowrap !important; }
 .v2-seat [data-name='Bottom_bar'] .u-text > span {
-  display: inline-block; padding: 8px 60px; border-radius: 120px; font-weight: 900; color: #fff;
-  background: rgba(14, 10, 48, 0.92); border: 8px solid var(--v2-line, #4b3fa6);
+  display: inline-block; padding: 8px 60px; border-radius: 120px; font-weight: 900; color: var(--v2-ink2); white-space: nowrap;
+  background: color-mix(in srgb, var(--v2-shade) 92%, transparent); border: 10px solid var(--v2-line);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
 }
-.v2-seat [data-st='fold'] .u-text > span { background: #4a4570; border-color: #6b6690; color: #e2defa; }
-.v2-seat [data-st='call'] .u-text > span { background: var(--v2-grad-blue, linear-gradient(#58b6ff, #2266e0)); border-color: rgba(255, 255, 255, 0.3); }
-.v2-seat [data-st='raise'] .u-text > span { background: var(--v2-grad-gold, linear-gradient(#ffe36b, #f5a915)); border-color: rgba(255, 255, 255, 0.4); color: #3a2200; }
-.v2-seat [data-st='allin'] .u-text > span { background: var(--v2-grad-hot, linear-gradient(135deg, #ff8ad8, #ff4fa3, #ff6a2b)); border-color: rgba(255, 255, 255, 0.45); }
+.v2-seat [data-st='fold'] .u-text > span { border-color: var(--v2-fold-line); color: var(--v2-mut); }
+.v2-seat [data-st='call'] .u-text > span { border-color: var(--tbl-call); color: var(--tbl-call); }
+.v2-seat [data-st='raise'] .u-text > span { border-color: var(--tbl-raise); color: var(--tbl-raise); }
+.v2-seat [data-st='allin'] .u-text > span { border-color: #ff4fa3; color: #ff8ad8; }
+.v2-seat [data-st='info'] .u-text > span { border-color: var(--v2-gold); color: var(--v2-gold); }
 
 /* hand-strength meter */
-.v2-seat [data-name='Hand'] { background: rgba(14, 10, 48, 0.9); border: 8px solid var(--v2-line, #4b3fa6); border-radius: 60px; }
-.v2-seat [data-name='Hand'] .u-text { color: #d8d3ff !important; }
+.v2-seat [data-name='Hand'] { background: color-mix(in srgb, var(--v2-shade) 90%, transparent); border: 8px solid var(--v2-line, var(--v2-line)); border-radius: 60px; }
+.v2-seat [data-name='Hand'] .u-text { color: var(--v2-ink2) !important; }
 .v2-seat [data-name='ProgressionBar'] { background: rgba(255, 255, 255, 0.15); border-radius: 40px; }
 .v2-seat [data-name='Handle'] > .u-gfx { border-radius: 40px; }
 
 /* winner "+amount" */
+/* One winner treatment: the plate pulses gold, and the amount pops up from the plate in gold (not over the cards). */
+/* Beside the plate, toward the table's centre (cards sit above the plate and the hand name below it): right of
+   left-hand seats, left of mirrored right-hand seats (clear of their D / blind token). Canvas units (≈0.14 px each). */
 .v2-winfloat {
-  position: absolute; left: 50%; top: -60px; transform: translate(-50%, 0); pointer-events: none; white-space: nowrap;
-  font-family: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif; font-size: 190px; color: var(--v2-good, #2ee38a);
-  text-shadow: 0 10px 0 rgba(0, 0, 0, 0.35), 0 0 60px rgba(46, 227, 138, 0.6); animation: v2hud-float 2.1s ease-out forwards;
+  position: absolute; left: calc(100% + 330px); top: 50%; transform: translate(0, -50%); pointer-events: none; white-space: nowrap; z-index: 3;
+  font-family: var(--v2-display); font-size: 200px; color: var(--v2-gold);
+  -webkit-text-stroke: 10px color-mix(in srgb, var(--v2-shade) 85%, #000); paint-order: stroke fill;
+  text-shadow: 0 12px 0 rgba(0, 0, 0, 0.35), 0 0 70px color-mix(in srgb, var(--v2-gold) 55%, transparent); animation: v2hud-float 2.4s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
 }
-@keyframes v2hud-float { 0% { opacity: 0; transform: translate(-50%, 40px) scale(0.8); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -220px); } }
+.v2-seat.v2-mirror .v2-winfloat { left: auto; right: calc(100% + 330px); }
+@keyframes v2hud-float { 0% { opacity: 0; transform: translate(0, -20%) scale(0.6); } 14% { opacity: 1; transform: translate(0, -70%) scale(1.12); } 24% { transform: translate(0, -60%) scale(1); } 80% { opacity: 1; transform: translate(0, -110%); } 100% { opacity: 0; transform: translate(0, -170%); } }
+.v2-seat.v2-win [data-name='Name_bar'] { animation: v2hud-winpulse 0.9s ease-in-out 3 alternate; }
+@keyframes v2hud-winpulse { to { box-shadow: 0 0 0 26px color-mix(in srgb, var(--v2-gold) 35%, transparent), 0 0 180px color-mix(in srgb, var(--v2-gold) 90%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .v2-seat.v2-win [data-name='Name_bar'] { animation: none; } }
 
 /* ---------------------------------------------------------------- pot */
 .v2-pot [data-name='bar'] > :is(.u-gfx, .u-slice) { display: none !important; }
-.v2-pot [data-name='bar'] { background: rgba(14, 10, 48, 0.9); border: 14px solid rgba(255, 194, 31, 0.6); border-radius: 200px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45); }
-.v2-pot [data-name='bar'] .u-text { color: var(--v2-gold, #ffd54a) !important; align-items: center; line-height: 1.05 !important; }
-.v2-pot [data-name='bar'] .u-text::before { content: 'POT'; font-family: 'Nunito', system-ui, sans-serif; font-weight: 900; font-size: 0.66em; letter-spacing: 0.12em; color: #a69fe0; }
+.v2-pot [data-name='bar'] { background: color-mix(in srgb, var(--v2-shade) 90%, transparent); border: 14px solid color-mix(in srgb, var(--v2-gold) 60%, transparent); border-radius: 200px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45); }
+.v2-pot [data-name='bar'] .u-text { color: var(--v2-gold, var(--v2-gold)) !important; align-items: center; line-height: 1.05 !important; }
+.v2-pot [data-name='bar'] .u-text::before { content: 'POT'; font-family: var(--v2-ui); font-weight: 900; font-size: 0.66em; letter-spacing: 0.12em; color: var(--v2-mut2); }
 .v2-pot.v2-empty { visibility: hidden; }
 /* Phone: the pot canvas is drawn small (~0.073 px/unit); scale the pill so the amount is ≥ 14 px and "POT" ≥ 11 px. */
 html[data-orient='portrait'] .v2-pot [data-name='bar'] { scale: 1.75; }
 
 /* ---------------------------------------------------------------- action row (screen canvas, 1920×1080 units) */
 [data-hud='betting'] [data-v2b] > :is(.u-gfx, .u-slice) { display: none !important; }
-[data-hud='betting'] [data-v2b] { border-radius: 200px; transition: filter 0.1s, opacity 0.15s; }
-[data-hud='betting'] [data-v2b] .u-text { font-family: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif !important; font-weight: 400 !important; letter-spacing: 0.03em; color: #fff !important; }
-[data-hud='betting'] [data-v2b='fold'] { background: var(--v2-grad-red, linear-gradient(#ff7d8a, #d8304a)); box-shadow: inset 0 -6px 0 rgba(110, 0, 20, 0.5); }
-[data-hud='betting'] [data-v2b='call'] { background: var(--v2-grad-blue, linear-gradient(#58b6ff, #2266e0)); box-shadow: inset 0 -6px 0 rgba(10, 40, 120, 0.5), 0 0 24px rgba(70, 170, 255, 0.35); }
-[data-hud='betting'] [data-v2b='raise'] { background: var(--v2-grad-gold, linear-gradient(#ffe36b, #f5a915)); box-shadow: inset 0 -6px 0 rgba(150, 80, 0, 0.45), 0 0 24px rgba(255, 200, 60, 0.35); }
-[data-hud='betting'] [data-v2b='raise'] .u-text { color: #3a2200 !important; }
-[data-hud='betting'] [data-v2b].v2-allin { background: var(--v2-grad-hot, linear-gradient(135deg, #ff8ad8, #ff4fa3, #ff6a2b)); }
-[data-hud='betting'] [data-v2b]:hover:not(.v2-dis) { filter: brightness(1.08); }
-[data-hud='betting'] [data-v2b].v2-dis { opacity: 0.45; box-shadow: none; filter: none; }
-/* Not your turn: readable ghost buttons, not dark text on a dark plate. */
-[data-hud='betting'].v2-off [data-v2b] { background: rgba(14, 10, 48, 0.8); box-shadow: none; outline: 4px solid var(--v2-line, #4b3fa6); outline-offset: -4px; opacity: 0.85; }
-[data-hud='betting'].v2-off [data-v2b] .u-text { color: #d8d3ff !important; }
+/* One style for the row on and off turn (the dark plate pill with a border, like the seats). On your turn the border
+   and label take the room's colours (--tbl-*, per room on <html data-room>): Fold danger, Call the room's secondary,
+   Raise the room's primary (tinted fill), All-in hot. */
+[data-hud='betting'] [data-v2b] {
+  border-radius: 200px; transition: filter 0.1s, opacity 0.15s, border-color 0.15s;
+  background: color-mix(in srgb, var(--v2-shade) 90%, transparent); border: 6px solid var(--v2-line);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+}
+[data-hud='betting'] [data-v2b] .u-text { font-family: var(--v2-display) !important; font-weight: var(--v2-display-weight) !important; letter-spacing: 0.03em; color: var(--v2-ink2) !important; }
+[data-hud='betting']:not(.v2-off) [data-v2b='fold'] { border-color: var(--tbl-fold); }
+[data-hud='betting']:not(.v2-off) [data-v2b='fold'] .u-text { color: var(--tbl-fold) !important; }
+[data-hud='betting']:not(.v2-off) [data-v2b='call'] { border-color: var(--tbl-call); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4), 0 0 26px color-mix(in srgb, var(--tbl-call) 30%, transparent); }
+[data-hud='betting']:not(.v2-off) [data-v2b='call'] .u-text { color: var(--tbl-call) !important; }
+[data-hud='betting']:not(.v2-off) [data-v2b='raise'] {
+  border-color: var(--tbl-raise); background: color-mix(in srgb, var(--tbl-raise) 22%, color-mix(in srgb, var(--v2-shade) 90%, transparent));
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4), 0 0 30px color-mix(in srgb, var(--tbl-raise) 35%, transparent);
+}
+[data-hud='betting']:not(.v2-off) [data-v2b='raise'] .u-text { color: var(--tbl-raise) !important; }
+[data-hud='betting'] [data-v2b].v2-allin { border-color: #ff4fa3 !important; background: color-mix(in srgb, #ff4fa3 22%, color-mix(in srgb, var(--v2-shade) 90%, transparent)) !important; }
+[data-hud='betting'] [data-v2b].v2-allin .u-text { color: #ff8ad8 !important; }
+[data-hud='betting'] [data-v2b]:hover:not(.v2-dis) { filter: brightness(1.12); }
+[data-hud='betting'] [data-v2b].v2-dis { opacity: 0.45; filter: none; }
+/* Not your turn (including right after you act): the row steps out of the way so it never reads as "press me". */
+[data-hud='betting'] [data-name='Buttons'], [data-hud='betting'] [data-v2b] { transition: opacity 0.18s ease-out, transform 0.18s ease-out, filter 0.1s; }
+[data-hud='betting'].v2-off [data-v2b] { opacity: 0; transform: translateY(18%); pointer-events: none !important; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { [data-hud='betting'] [data-v2b] { transition: none; } }
+/* Your last 5 seconds (seatHud.ts sets html[data-turn-late]; webAudio.ts beeps once a second): your plate and the action
+   row glow red with a heartbeat, so a timeout is hard to miss. */
+html[data-turn-late] [data-hud='betting']:not(.v2-off) [data-v2b] { animation: v2hud-late 0.5s ease-in-out infinite alternate; }
+@keyframes v2hud-late { to { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4), 0 0 60px color-mix(in srgb, var(--v2-bad) 75%, transparent); filter: brightness(1.15); } }
+html[data-turn-late] .v2-seat.v2-turn [data-name='Name_bar'] { border-color: var(--v2-bad) !important; animation: v2hud-late-plate 0.5s ease-in-out infinite alternate; }
+@keyframes v2hud-late-plate { from { box-shadow: 0 0 0 12px color-mix(in srgb, var(--v2-bad) 25%, transparent), 0 0 60px color-mix(in srgb, var(--v2-bad) 45%, transparent); } to { box-shadow: 0 0 0 22px color-mix(in srgb, var(--v2-bad) 40%, transparent), 0 0 130px color-mix(in srgb, var(--v2-bad) 85%, transparent); } }
+@media (prefers-reduced-motion: reduce) { html[data-turn-late] [data-hud='betting']:not(.v2-off) [data-v2b], html[data-turn-late] .v2-seat.v2-turn [data-name='Name_bar'] { animation: none; box-shadow: 0 0 40px var(--v2-bad); } }
+
+/* The game's colours on every table (style guide › Table HUD): Fold red, Call blue, Raise gold, All-in hot. These
+   tokens also colour the seat status chips and the raise sheet; rooms no longer tint them. */
+:root { --tbl-fold: #ff7d8a; --tbl-call: #58b6ff; --tbl-raise: #ffd54a; }
+
 /* The Unity raise panel keeps the logic; the v2 sheet (raiseSheet.ts) is what shows. */
 [data-hud='betting'] [data-name='Confirm_Panel'] { visibility: hidden !important; pointer-events: none !important; }
 [data-hud='betting'] [data-name='Confirm_Panel'] * { pointer-events: none !important; }
 
 /* ---------------------------------------------------------------- raise sheet */
 .v2hud-raise {
-  position: absolute; left: 50%; transform: translateX(-50%); z-index: 6; width: min(36em, calc(100% - 24px));
-  font-family: 'Nunito', system-ui, sans-serif; font-weight: 700; color: #fff; font-size: clamp(12px, min(1.05vw, 1.95vh), 17px);
-  background: var(--v2-dlg, #1c1450); border: 2px solid var(--v2-accent, #7c6bff); border-radius: 1.2em; padding: 0.9em 1em 1em;
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 12; width: min(36em, calc(100% - 24px));
+  font-family: var(--v2-ui); font-weight: 700; color: #fff; font-size: clamp(12px, min(1.05vw, 1.95vh), 17px);
+  background: var(--v2-dlg, var(--v2-dlg)); border: 2px solid var(--v2-accent, var(--v2-accent)); border-radius: 1.2em; padding: 0.9em 1em 1em;
   box-shadow: 0 1em 2.5em rgba(0, 0, 0, 0.55); display: flex; flex-direction: column; gap: 0.75em; pointer-events: auto;
   animation: v2hud-sheet 0.16s ease-out;
 }
-.v2hud-raise[hidden] { display: none; }
-@keyframes v2hud-sheet { from { opacity: 0; } }
+/* [hidden] must beat every display rule below (the phone .compact grid included), or the sheet never closes. */
+.v2hud-raise[hidden], .v2hud-raise.compact[hidden] { display: none !important; }
+/* Slides up from solid instead of fading in, so seats never show through it while it opens. */
+@keyframes v2hud-sheet { from { translate: 0 12px; } }
 @media (prefers-reduced-motion: reduce) { .v2hud-raise, .v2-winfloat, .v2-timer.v2-pulse::before { animation: none; } }
 .v2hud-raise *, .v2hud-raise *::before { box-sizing: border-box; }
 .v2hud-raise button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
 .v2hud-raise-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1em; }
-.v2hud-raise-title { font-family: 'Lilita One', system-ui, sans-serif; font-weight: 400; font-size: 1.45em; }
-.v2hud-raise-stack { color: var(--v2-mut, #b9b3e6); font-weight: 800; font-variant-numeric: tabular-nums; }
+.v2hud-raise-title { font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 1.45em; }
+.v2hud-raise-stack { color: var(--v2-mut, var(--v2-mut)); font-weight: 800; font-variant-numeric: tabular-nums; }
 .v2hud-raise-presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.4em; }
 .v2hud-chip {
   min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.05em;
-  background: rgba(14, 10, 48, 0.9) !important; border: 2px solid var(--v2-line, #4b3fa6) !important; border-radius: 0.8em; padding: 0.35em 0.2em !important;
+  background: color-mix(in srgb, var(--v2-shade) 90%, transparent) !important; border: 2px solid var(--v2-line, var(--v2-line)) !important; border-radius: 0.8em; padding: 0.35em 0.2em !important;
 }
-.v2hud-chip span { font-size: max(11px, 0.78em); color: var(--v2-mut, #b9b3e6); font-weight: 800; white-space: nowrap; }
+.v2hud-chip span { font-size: max(11px, 0.78em); color: var(--v2-mut, var(--v2-mut)); font-weight: 800; white-space: nowrap; }
 .v2hud-chip b { font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .v2hud-chip.hot span { color: #ff9ad8; }
-.v2hud-chip.on { border-color: var(--v2-gold, #ffd54a) !important; box-shadow: 0 0 0.8em rgba(255, 213, 74, 0.3); }
+.v2hud-chip.on { border-color: var(--tbl-raise) !important; box-shadow: 0 0 0.8em color-mix(in srgb, var(--v2-gold) 30%, transparent); }
 .v2hud-raise-amt { display: flex; align-items: center; gap: 0.7em; }
 .v2hud-raise-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 0.25em; }
-.v2hud-raise-val { font-family: 'Lilita One', system-ui, sans-serif; font-weight: 400; font-size: 1.9em; color: var(--v2-gold, #ffd54a); line-height: 1; font-variant-numeric: tabular-nums; }
+.v2hud-raise-val { font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 1.9em; color: var(--v2-gold, var(--v2-gold)); line-height: 1; font-variant-numeric: tabular-nums; }
 .v2hud-rnd svg { width: 1em; height: 1em; }
 .v2hud-rnd {
   width: max(44px, 2.8em); height: max(44px, 2.8em); flex: 0 0 auto; border-radius: 50% !important; font-size: 1.5em !important; font-weight: 900 !important;
-  background: var(--v2-grad-violet, linear-gradient(#ad84ff, #6a35e0)) !important; box-shadow: inset 0 -0.15em 0 rgba(50, 10, 120, 0.5);
+  background: linear-gradient(color-mix(in srgb, #ad84ff 30%, var(--v2-panel-solid)), color-mix(in srgb, #ad84ff 12%, var(--v2-panel-solid))) !important; border: 0.13em solid #ad84ff !important; box-shadow: 0 0 0.6em color-mix(in srgb, #ad84ff 30%, transparent);
   display: flex; align-items: center; justify-content: center; line-height: 1;
 }
 .v2hud-rnd:disabled { opacity: 0.4; cursor: default; }
 .v2hud-range { --fill: 0%; width: 100%; height: 44px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; touch-action: none; }
-.v2hud-range::-webkit-slider-runnable-track { height: 0.55em; border-radius: 1em; background: linear-gradient(90deg, var(--v2-gold, #ffd54a) var(--fill), rgba(173, 132, 255, 0.35) var(--fill)); }
-.v2hud-range::-moz-range-track { height: 0.55em; border-radius: 1em; background: linear-gradient(90deg, var(--v2-gold, #ffd54a) var(--fill), rgba(173, 132, 255, 0.35) var(--fill)); }
-.v2hud-range::-webkit-slider-thumb { -webkit-appearance: none; width: 1.6em; height: 1.6em; margin-top: -0.53em; border-radius: 50%; background: #fff; border: 0.28em solid #f5a915; box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.45); }
-.v2hud-range::-moz-range-thumb { width: 1.1em; height: 1.1em; border-radius: 50%; background: #fff; border: 0.28em solid #f5a915; }
+.v2hud-range::-webkit-slider-runnable-track { height: 0.55em; border-radius: 1em; background: linear-gradient(90deg, var(--v2-gold, var(--v2-gold)) var(--fill), color-mix(in srgb, var(--v2-accent) 35%, transparent) var(--fill)); }
+.v2hud-range::-moz-range-track { height: 0.55em; border-radius: 1em; background: linear-gradient(90deg, var(--v2-gold, var(--v2-gold)) var(--fill), color-mix(in srgb, var(--v2-accent) 35%, transparent) var(--fill)); }
+.v2hud-range::-webkit-slider-thumb { -webkit-appearance: none; width: 1.6em; height: 1.6em; margin-top: -0.53em; border-radius: 50%; background: #fff; border: 0.28em solid var(--v2-gold-deep); box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.45); }
+.v2hud-range::-moz-range-thumb { width: 1.1em; height: 1.1em; border-radius: 50%; background: #fff; border: 0.28em solid var(--v2-gold-deep); }
 .v2hud-raise-foot { display: flex; gap: 0.6em; }
 .v2hud-b {
   min-height: 44px; border-radius: 2em !important; padding: 0.5em 1.2em !important; font-weight: 800; white-space: nowrap;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.v2hud-b.ghost { flex: 0 0 auto; background: rgba(255, 255, 255, 0.08) !important; border: 2px solid #5a7cc8 !important; }
-.v2hud-b.gold, .v2hud-b.hot { flex: 1; font-family: 'Lilita One', system-ui, sans-serif; font-weight: 400; font-size: 1.25em; letter-spacing: 0.03em; }
-.v2hud-b.gold { background: var(--v2-grad-gold, linear-gradient(#ffe36b, #f5a915)) !important; color: #3a2200 !important; box-shadow: inset 0 -0.2em 0 rgba(150, 80, 0, 0.45); }
-.v2hud-b.hot { background: var(--v2-grad-hot, linear-gradient(135deg, #ff8ad8, #ff4fa3, #ff6a2b)) !important; color: #fff !important; }
+.v2hud-b.ghost { flex: 0 0 auto; background: rgba(255, 255, 255, 0.08) !important; border: 2px solid var(--v2-line) !important; }
+.v2hud-b.gold, .v2hud-b.hot { flex: 1; font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 1.25em; letter-spacing: 0.03em; }
+.v2hud-b.gold { background: linear-gradient(color-mix(in srgb, var(--v2-gold) 26%, var(--v2-panel-solid)), color-mix(in srgb, var(--v2-gold) 10%, var(--v2-panel-solid))) !important; color: var(--v2-gold) !important; border: 0.13em solid var(--v2-gold) !important; box-shadow: 0 0 0.7em color-mix(in srgb, var(--v2-gold) 32%, transparent); }
+.v2hud-b.hot { background: linear-gradient(color-mix(in srgb, #ff4fa3 26%, var(--v2-panel-solid)), color-mix(in srgb, #ff4fa3 10%, var(--v2-panel-solid))) !important; color: #ffd0ef !important; border: 0.13em solid #ff4fa3 !important; box-shadow: 0 0 0.7em color-mix(in srgb, #ff4fa3 32%, transparent); }
 .v2hud-b:hover:not(:disabled) { filter: brightness(1.08); }
 html[data-orient='portrait'] .v2hud-raise { width: calc(100% - 16px); font-size: clamp(12px, 3.5vw, 16px); }
-/* Phone: compact two rows over the action row (presets; − slider + · Cancel · Raise to N), under your seat. */
-.v2hud-raise.compact { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'p p' 'a f'; gap: 0.5em; padding: 0.6em; border-radius: 1em; }
-.v2hud-raise.compact .v2hud-raise-head, .v2hud-raise.compact .v2hud-raise-val { display: none; }
+/* Phone: compact rows over the action row — presets; − amount/slider + (full width); Cancel · Raise to N. */
+.v2hud-raise.compact { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: 'p' 'a' 'f'; gap: 0.5em; padding: 0.6em; border-radius: 1em; }
+.v2hud-raise.compact .v2hud-raise-head { display: none; }
+.v2hud-raise.compact .v2hud-raise-val { font-size: 1.5em; }
 .v2hud-raise.compact .v2hud-raise-presets { grid-area: p; gap: 0.3em; }
 .v2hud-raise.compact .v2hud-raise-amt { grid-area: a; gap: 0.35em; }
-.v2hud-raise.compact .v2hud-raise-foot { grid-area: f; gap: 0.35em; }
+.v2hud-raise.compact .v2hud-raise-foot { grid-area: f; gap: 0.5em; }
 .v2hud-raise.compact .v2hud-b.gold, .v2hud-raise.compact .v2hud-b.hot { font-size: 1em; padding: 0.4em 0.8em !important; }
 .v2hud-raise.compact .v2hud-b.ghost { padding: 0.4em 0.7em !important; }
 .v2hud-raise.compact .v2hud-rnd { width: 44px; height: 44px; font-size: 1.1em !important; }
 .v2hud-raise.compact .v2hud-chip b { font-size: 0.95em; }
+
+/* UI variations: money on the seats and the pot uses the variation's display face (the HUD sets the Lilita family
+   inline from seatHud/potHud; this wins over it). */
+.v2-seat [data-name='Amount_txt'] > .u-text, .v2-pot [data-name='bar'] .u-text { font-family: var(--v2-display) !important; font-weight: var(--v2-display-weight) !important; }
+
+/* ---------------------------------------------------------------- Action row (the game's plate style, polished)
+   A pill filled with a rich tint of the action's colour (Fold red, Call blue, Raise gold, All-in hot), a thin lighter
+   ring, a top highlight and a soft darker base, and a white label centred in the pill. Canvas units (1920 × 1080 ref). */
+[data-hud='betting'] [data-v2b] { --hue: var(--v2-line); border-width: 4px; }
+[data-hud='betting']:not(.v2-off) [data-v2b='fold'] { --hue: var(--tbl-fold); --base: #4a1230; }
+[data-hud='betting']:not(.v2-off) [data-v2b='call'] { --hue: var(--tbl-call); --base: #10286a; }
+[data-hud='betting']:not(.v2-off) [data-v2b='raise'] { --hue: var(--tbl-raise); --base: #6a3c00; }
+[data-hud='betting'] [data-v2b].v2-allin { --hue: #ff4fa3; --base: #5a0a3a; }
+[data-hud='betting']:not(.v2-off) [data-v2b] {
+  /* Each action mixes into its own dark shade (--base), so gold stays gold instead of going brown over violet. */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--hue) 70%, var(--base, #2a1670)) 0%, color-mix(in srgb, var(--hue) 38%, var(--base, #1a0e4c)) 100%) !important;
+  border-color: color-mix(in srgb, var(--hue) 70%, #fff) !important;
+  box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.22), inset 0 -7px 0 rgba(10, 4, 40, 0.28), 0 12px 26px rgba(10, 4, 40, 0.45), 0 0 30px color-mix(in srgb, var(--hue) 35%, transparent);
+}
+[data-hud='betting']:not(.v2-off) [data-v2b] .u-text { color: #fff !important; text-shadow: 0 3px 0 color-mix(in srgb, var(--base, #0a0428) 80%, transparent); }
+/* The label's node keeps Unity's box (offset and wider than the pill): fill the pill and centre the text in it. */
+[data-hud='betting'] [data-v2b] .u-node:has(> .u-text) { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; transform: none !important; }
+[data-hud='betting'] [data-v2b] .u-text { inset: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; line-height: 1 !important; padding: 0 !important; }
+/* raise sheet */
+.v2hud-b.ghost { background: color-mix(in srgb, var(--v2-shade) 70%, transparent) !important; }
+.v2hud-raise-title, .v2hud-raise-val, .v2hud-b.gold, .v2hud-b.hot { font-family: var(--v2-display) !important; }
+.v2hud-raise-val { color: var(--v2-gold) !important; }
+
+/* ---------------------------------------------------------------- "Show cards" (after a hand) */
+.v2hud-show {
+  position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(84px, 13vh, 130px)); transform: translateX(-50%);
+  z-index: 6; min-height: 44px; padding: 0.5em 1.4em; border-radius: 2em; cursor: pointer; pointer-events: auto;
+  font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: clamp(14px, 1.2vw, 18px); letter-spacing: 0.03em;
+  color: var(--tbl-raise); background: color-mix(in srgb, var(--v2-shade) 90%, transparent); border: 2px solid var(--tbl-raise);
+  box-shadow: 0 0.5em 1.4em rgba(0, 0, 0, 0.45); animation: v2hud-sheet 0.16s ease-out;
+}
+.v2hud-show[hidden] { display: none; }
+.v2hud-show:hover { filter: brightness(1.12); }
+.v2hud-show { background: linear-gradient(color-mix(in srgb, var(--v2-gold) 26%, var(--v2-panel-solid)), color-mix(in srgb, var(--v2-gold) 10%, var(--v2-panel-solid))); border-color: var(--v2-gold); color: var(--v2-gold); box-shadow: 0 0 0.7em color-mix(in srgb, var(--v2-gold) 32%, transparent), 0 0.5em 1.4em rgba(0, 0, 0, 0.45); }
+
+/* ---------------------------------------------------------------- seat details (owner review, round 2)
+   Canvas units: ≈0.15 screen px each at 1440 × 810. */
+/* D / SB / BB: the label's node keeps Unity's box while the pill was widened; let it fill the pill and centre. */
+.v2-seat [data-name='D_Token'] .u-node:has(> .u-text) { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; transform: none !important; }
+.v2-seat [data-name='D_Token'] .u-text { inset: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; line-height: 1 !important; padding: 0 !important; }
+.v2-seat [data-name='D_Token'] .u-text > span { line-height: 1; display: block; }
+/* Status chip (Check / Fold / Call…): a clear gap under the name plate instead of touching it. */
+.v2-seat [data-name='Bottom_bar'] .u-text > span { position: relative; top: 46px; }
+/* Avatar: a real border — white inner line, violet ring, dark outer edge — gold while it's this player's turn. */
+.v2-seat [data-name='U_Icon'] { box-shadow: 0 0 0 12px rgba(255, 255, 255, 0.95), 0 0 0 34px #7c4ff0, 0 0 0 42px rgba(20, 8, 60, 0.55), 0 14px 40px rgba(0, 0, 0, 0.45); }
+.v2-seat.v2-turn [data-name='U_Icon'] { box-shadow: 0 0 0 12px rgba(255, 255, 255, 0.95), 0 0 0 34px var(--v2-gold), 0 0 0 42px rgba(60, 30, 0, 0.55), 0 14px 40px rgba(0, 0, 0, 0.45); }

@@ -1,10 +1,11 @@
 /** Rewards: Weekly rewards (login streak) and Level & missions. Atlas: Redesign v2 › Rewards. */
-import { LevelRewardCatalog, LoginRewardCatalog, loginRewardSummary, MissionProgressMath, type LoginDayReward } from '@nomad/engine/retention';
+import { LevelRewardCatalog, LoginRewardCatalog, loginRewardSummary, MissionKind, MissionProgressMath, type LoginDayReward } from '@nomad/engine/retention';
 import { nomadGrants } from '../../retention/retentionService';
 import { RewardKind } from '../../app/services';
 import { btn, esc, fmt, tabs } from '../core';
 import { ico, coinStack } from '../icons';
-import { ui, app, S, topBar, avatar } from '../ctx';
+import { ui, app, S, topBar, avatar, sfx } from '../ctx';
+import { PokerSound } from '@nomad/engine';
 import type { ScreenDef } from '../install';
 import './rewards.css';
 
@@ -75,10 +76,10 @@ const weekly: ScreenDef & { busy: boolean } = {
 <div class="v2-body v2-scroll v2-wk">
   <div class="v2-wk-grid">${left}</div>
   <div class="v2-panel v2-grand${s7 === 'claim' ? ' today' : ''}">
-    <b class="v2-h" style="font-size:1.8em">${esc(d7.title)}</b><span class="v2-pill gold">GRAND PRIZE</span>
+    <b class="v2-h" style="font-size:1.8em">${esc(d7.title)}</b><span class="v2-pill gold v2-upper">Grand prize</span>
     <div class="v2-grand-art">${ico('chest', 10)}</div>
     <b style="font-size:1.4em">${esc(loginRewardSummary(d7).split(' + ')[0] ?? '')}</b>
-    ${d7.secondary ? `<b style="font-size:1.1em;color:#d38cff">+ ${esc(loginRewardSummary(d7).split(' + ').slice(1).join(' + '))}</b>` : ''}
+    ${d7.secondary ? `<b style="font-size:1.1em;color:var(--v2-xp-ink)">+ ${esc(loginRewardSummary(d7).split(' + ').slice(1).join(' + '))}</b>` : ''}
     ${s7 === 'claim' ? btn('Claim', 'claim', { h: 'green', c: 'w', dis: this.busy }) : s7 === 'claimed' ? `<span class="v2-pill ok">${ico('check', 1)} Claimed</span>` : `<span class="v2-pill">${ico('lock', 1)} ${daysLeft > 0 ? `Unlocks in ${daysLeft} day${daysLeft === 1 ? '' : 's'}` : 'Locked'}</span>`}
   </div>
 </div>`;
@@ -93,6 +94,7 @@ const weekly: ScreenDef & { busy: boolean } = {
         const res = await r.engagement.claimLogin();
         if (res?.canClaim) {
           const d = LoginRewardCatalog.Days[(res.day ?? 1) - 1];
+          sfx(PokerSound.ChipsToWinner);
           ui().toast(`Reward claimed · ${d ? loginRewardSummary(d) : 'your reward'} added`, 2600);
         } else if (res?.error) ui().message('Weekly rewards', esc(res.error));
       } catch (e) {
@@ -142,10 +144,19 @@ function milestoneCard(lv: number): string {
   const n = (Math.floor((lv + 1) / 10) + 1) * 10;
   const grants = LevelRewardCatalog.rewardsForLevel(n);
   if (!grants.length) return '';
-  return `<div class="v2-card v2-row v2-lv-mile">${avatar('', undefined, 'width:3.2em;height:3.2em;box-shadow:0 0 0 .25em #ffc21f')}<div class="v2-grow"><span class="v2-cap">Milestone · Level ${n}</span><div style="font-weight:800">${esc(milestoneText(grants))}</div></div></div>`;
+  return `<div class="v2-card v2-row v2-lv-mile">${avatar('', undefined, 'width:3.2em;height:3.2em;box-shadow:0 0 0 .25em var(--v2-gold)')}<div class="v2-grow"><span class="v2-cap">Milestone · Level ${n}</span><div style="font-weight:800">${esc(milestoneText(grants))}</div></div></div>`;
 }
 
-const MISSION_ICONS = ['clip', 'trophy', 'cards', 'podium', 'friends'];
+/** Icon per mission kind. */
+const MISSION_ICONS: Record<number, string> = {
+  [MissionKind.PlayHands]: 'mission-shuffle',
+  [MissionKind.WeeklyHands]: 'mission-shuffle',
+  [MissionKind.WinHands]: 'mission-hothand',
+  [MissionKind.PlayTables]: 'mission-tables',
+  [MissionKind.WinPairOrBetter]: 'mission-pair',
+  [MissionKind.WinTwoPairOrBetter]: 'mission-pair',
+  [MissionKind.PlayWithFriend]: 'friends',
+};
 
 const level: ScreenDef & { tab: string; busy: boolean } = {
   id: 'level',
@@ -166,8 +177,8 @@ const level: ScreenDef & { tab: string; busy: boolean } = {
     }).join('');
     const nowIdx = m.track.findIndex((t: { level: number }) => t.level === m.level);
     const trackDone = m.track.length > 1 && nowIdx >= 0 ? Math.round((nowIdx / (m.track.length - 1)) * 100) : 0;
-    const mission = (x: MissionRow, i: number) => `
-      <div class="v2-card v2-row v2-mis">${ico(MISSION_ICONS[i % MISSION_ICONS.length]!, 2.4)}
+    const mission = (x: MissionRow) => `
+      <div class="v2-card v2-row v2-mis">${ico(MISSION_ICONS[x.def.kind] ?? 'clip', 2.4)}
         <div class="v2-grow"><b class="v2-mis-t">${esc(x.def.title)}</b>
           <div class="v2-row v2-sm"><div class="v2-bar"><i style="width:${x.target > 0 ? Math.min(100, (x.progress / x.target) * 100) : 0}%"></i></div><b class="v2-num">${fmt(x.progress)}/${fmt(x.target)}</b></div>
           <div class="v2-xs v2-goldc">${esc(x.reward)}</div></div>
@@ -176,7 +187,7 @@ const level: ScreenDef & { tab: string; busy: boolean } = {
     return `${topBar('Missions')}
 <div class="v2-body v2-lv">
   <div class="v2-panel v2-lv-hero">
-    <div class="v2-lv-badge">${ico('hex', 8.5)}<b>${m.level}</b></div>
+    <div class="v2-lv-badge">${ico('level', 8.5)}<b>${m.level}</b></div>
     <b class="v2-h" style="font-size:1.8em">Level ${m.level}</b>
     <div class="v2-bar" style="height:.8em;width:100%;flex:none"><i style="width:${Math.round(m.progress01 * 100)}%"></i></div>
     <b class="v2-num">${esc(m.xpText)}</b><span class="v2-sm v2-mut">${esc(m.toNextText)}</span>
@@ -203,7 +214,10 @@ const level: ScreenDef & { tab: string; busy: boolean } = {
       try {
         const res = await r.progression.claimMission(id);
         if (!res.ok) ui().message('Missions', esc(res.message || 'Not yet.'));
-        else ui().toast(res.message || 'Mission complete: reward added.');
+        else {
+          sfx(PokerSound.ChipsToWinner);
+          ui().toast(res.message || 'Mission complete: reward added.');
+        }
       } finally {
         level.busy = false;
       }

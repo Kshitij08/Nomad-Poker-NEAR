@@ -12,7 +12,47 @@ import { ui, host, S, onchain, onchainApi, signedIn, needCoins } from '../ctx';
 import { ROOMS, bgArt, levelOf } from './play';
 import './rooms.css';
 
-export const rooms = { theme: 'Town' as Theme, animate: false };
+/**
+ * `animate` marks a room change; the change's motion classes then stay in the markup for the length of the slide
+ * (`until`), so a second render during it (the table theme, a coin tick) produces the same HTML and core leaves the
+ * DOM, and the animation, alone.
+ */
+export const rooms = { theme: 'Town' as Theme, animate: false, dir: 0, until: 0 };
+const SLIDE_MS = 320;
+
+const reducedMotion = (): boolean => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Carousel motion. The menu re-renders the whole stage on a room change, so the outgoing room is a snapshot: the old
+ * card is cloned before the render and laid back over the new stage (same box, same mid-animation transform / opacity
+ * when the player clicks quickly), where it slides out in the direction of travel and removes itself. The new card
+ * and the peeks slide in from the other side (`.in` + `data-dir`, rooms.css). Any ghost left from the last click is
+ * dropped by the re-render, so rapid clicks never pile up.
+ */
+function ghostOut(dir: number): void {
+  if (!dir || reducedMotion()) return;
+  const stage = ui().el.querySelector<HTMLElement>('.v2-rm-stage');
+  const card = stage?.querySelector<HTMLElement>('.v2-rm-card');
+  if (!stage || !card) return;
+  const cs = getComputedStyle(card);
+  const g = card.cloneNode(true) as HTMLElement;
+  g.classList.remove('in');
+  g.classList.add('v2-rm-ghost');
+  g.removeAttribute('data-dir');
+  g.setAttribute('aria-hidden', 'true');
+  g.setAttribute('inert', '');
+  for (const n of g.querySelectorAll('[data-a]')) n.removeAttribute('data-a');
+  for (const n of g.querySelectorAll('[aria-live]')) n.removeAttribute('aria-live');
+  // The card's layout box in the stage (its offset parent; the transform in flight is carried by --g-t).
+  g.style.cssText += `;left:${card.offsetLeft}px;top:${card.offsetTop}px;width:${card.offsetWidth}px;height:${card.offsetHeight}px;--g-t:${cs.transform === 'none' ? 'none' : cs.transform};--g-o:${cs.opacity};--d:${dir}`;
+  queueMicrotask(() => {
+    const st = ui().el.querySelector<HTMLElement>('.v2-rm-stage');
+    if (!st) return;
+    st.prepend(g);
+    g.addEventListener('animationend', () => g.remove(), { once: true });
+    window.setTimeout(() => g.remove(), 600);
+  });
+}
 
 /** Picks up the player's current stake when the menu opens. */
 export function syncRoom(): void {
@@ -27,6 +67,10 @@ export function syncRoom(): void {
   const tier = roomTier(rooms.theme);
   stakes.selectedMinBuyIn = tier.minBuyIn;
   stakes.selectedBuyInChips = tier.startingStack;
+  // The table skin follows the room shown here (as select() does), so Sit Down opens in this room from the first frame
+  // instead of showing the previous room until the session's stake skin arrives.
+  const th = S('theme') as { pack?: { theme?: string }; setTheme?: (t: Theme) => void } | undefined;
+  if (th?.pack?.theme !== rooms.theme) th?.setTheme?.(rooms.theme);
 }
 
 /**
@@ -41,10 +85,14 @@ export function roomTier(theme: Theme): StakeTier {
   return pick;
 }
 
-function select(theme: Theme): void {
+function select(theme: Theme, dir = 0): void {
   if (theme === rooms.theme) return;
+  // Dots: travel towards the picked room (forwards when it's further along the list).
+  const d = dir || Math.sign(levelOf(theme) - levelOf(rooms.theme));
+  ghostOut(d);
   rooms.theme = theme;
   rooms.animate = true;
+  rooms.dir = d;
   // The table theme and stake follow the room (like Choose your table), with the fixed buy-in.
   S('theme')?.setTheme?.(theme);
   const tier = roomTier(theme);
@@ -56,7 +104,7 @@ function select(theme: Theme): void {
 export function step(dir: number): void {
   const i = levelOf(rooms.theme);
   const n = (i + dir + ROOMS.length) % ROOMS.length;
-  select(ROOMS[n]!.theme);
+  select(ROOMS[n]!.theme, dir < 0 ? -1 : 1);
 }
 
 /** The room we'd suggest: the richest one whose buy-in the player covers (Solana when none). */
@@ -86,24 +134,28 @@ export function roomStage(): string {
   const stakeLine = chain ? `${esc(sol?.label.split(' ')[0] ?? tier.displayName)} stakes · ${esc(sol?.blinds ?? '')}` : `${esc(tier.displayName)} stakes · ${esc(tier.blindsLabel)}`;
   // One fixed buy-in per room, the same for every player.
   const buyLine = chain
-    ? `Buy-in ${esc(sol?.minBuyIn ?? '')} · on-chain (devnet)`
+    ? `Buy-in ${esc(sol?.minBuyIn ?? '')} · on-chain`
     : locked
       ? `Buy-in ${formatN0(tier.startingStack)} Coins · you have ${formatN0(stakes.coins)}`
       : `Buy-in ${formatN0(tier.startingStack)} Coins`;
-  const enter = rooms.animate ? ' in' : '';
+  if (rooms.animate) rooms.until = performance.now() + SLIDE_MS;
   rooms.animate = false;
+  const moving = performance.now() < rooms.until;
+  const enter = moving ? ' in' : '';
+  // Direction of travel for the slide (+1 next: content moves left; -1 previous; 0 a dot to the same side).
+  const dirAttr = moving && rooms.dir ? ` data-dir="${rooms.dir > 0 ? 'next' : 'prev'}"` : '';
   const dots = ROOMS.map((x, j) => `<button class="v2-rm-dot${j === i ? ' on' : ''}"${act('room-pick', x.theme)} aria-label="${esc(x.name)}"></button>`).join('');
   return `<section class="v2-rooms" aria-roledescription="carousel" aria-label="Rooms">
-  <div class="v2-rm-stage">
+  <div class="v2-rm-stage${enter}"${dirAttr}>
     ${peek(i - 1, 'prev')}
-    <div class="v2-rm-card${locked ? ' locked' : ''}${enter}" style="${bgArt(r.theme, r.color)}">
+    <div class="v2-rm-card${locked ? ' locked' : ''}${enter}"${dirAttr} style="${bgArt(r.theme, r.color)}">
       ${locked ? `<span class="v2-rm-lock">${ico('lock', 1.4)} Locked</span>` : !chain && rooms.theme === recommendedRoom() ? `<span class="v2-rm-lock v2-rm-rec">${ico('star', 1.2)} Recommended</span>` : ''}
       <button class="v2-rm-arrow prev"${act('room-step', -1)} aria-label="Previous room">${ico('back', 1.2)}</button>
       <button class="v2-rm-arrow next"${act('room-step', 1)} aria-label="Next room">${ico('back', 1.2, 'transform:scaleX(-1)')}</button>
       <div class="v2-rm-bar">
         <div class="v2-rm-info" aria-live="polite"><b class="v2-rm-name">${esc(r.name)}</b><span class="v2-rm-stake">${stakeLine}</span><span class="v2-rm-buy">${buyLine}</span></div>
         <div class="v2-rm-actions">
-          ${locked ? btn(`Get Coins ${ico('next', 0.8)}`, 'go', { h: 'green', c: 'lg v2-rm-sit', v: 'shop:coins' }) : btn(`Sit Down ${ico('next', 0.8)}`, 'room-sit', { h: 'gold', c: 'lg v2-rm-sit' })}
+          ${locked ? btn(`Get Coins ${ico('next', 0.8)}`, 'get-coins', { h: 'green', c: 'lg v2-rm-sit' }) : btn(`Sit Down ${ico('next', 0.8)}`, 'room-sit', { h: 'gold', c: 'lg v2-rm-sit' })}
           ${btn(`${ico('friends', 1.3)} Play with friends`, 'room-friends', { h: 'violet', c: 'v2-rm-friends' })}
         </div>
       </div>

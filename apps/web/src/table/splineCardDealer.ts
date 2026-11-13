@@ -39,6 +39,11 @@ export class SplineCardDealer {
   private readonly spawned: CardView[] = [];
   private holeViews: ({ card0: CardView | null; card1: CardView | null } | undefined)[] = [];
   readonly dealSpeed: number;
+  /**
+   * Catch-up (joining a hand already in progress): cards are placed where they already are instead of flying from
+   * the deck again — the deal animation is for a new deal only.
+   */
+  instant = false;
   readonly holeStagger: number;
   private readonly cardOptions: CardViewOptions;
 
@@ -56,14 +61,21 @@ export class SplineCardDealer {
     this.cardOptions = options.cardOptions ?? {};
   }
 
-  /** Deals a seat's two hole cards along its splines (face-up only for the human seat). */
-  dealHoleCards(seat: number, spline0: UnitySpline | null, spline1: UnitySpline | null, a: CardFace, b: CardFace, faceUp: boolean): void {
+  /**
+   * Deals a seat's two hole cards along its splines (face-up only for the human seat). `onDealt` runs once both
+   * cards have landed (straight away when there is nothing to fly); a card discarded mid-flight never calls it.
+   */
+  dealHoleCards(seat: number, spline0: UnitySpline | null, spline1: UnitySpline | null, a: CardFace, b: CardFace, faceUp: boolean, onDealt?: () => void): void {
     if (seat < 0) return;
     this.discardHoleCards(seat);
+    let left = 2;
+    const landed = onDealt ? () => { if (--left === 0) onDealt(); } : undefined;
     this.holeViews[seat] = {
-      card0: this.dealCard(spline0, a, faceUp, 0),
-      card1: this.dealCard(spline1, b, faceUp, this.holeStagger),
+      card0: this.dealCard(spline0, a, faceUp, 0, landed),
+      card1: this.dealCard(spline1, b, faceUp, this.holeStagger, landed),
     };
+    if (!spline0) landed?.();
+    if (!spline1) landed?.();
   }
 
   private discardHoleCards(seat: number): void {
@@ -156,7 +168,7 @@ export class SplineCardDealer {
     for (const slot of this.communitySlots) slot.refreshBack();
   }
 
-  private dealCard(spline: UnitySpline | null, card: CardFace, revealAtEnd: boolean, delay: number): CardView | null {
+  private dealCard(spline: UnitySpline | null, card: CardFace, revealAtEnd: boolean, delay: number, onArrive?: () => void): CardView | null {
     if (!spline) return null;
     const cv = new CardView(this.makeVisual(), this.cardOptions);
     this.dealtRoot.add(cv.transform);
@@ -164,10 +176,11 @@ export class SplineCardDealer {
     cv.pathProgress = 0;
     this.spawned.push(cv);
     cv.show(card, false);
+    const speed = this.instant ? 1e6 : this.dealSpeed;
     const go = () => {
-      if (cv.alive) cv.dealAlongSpline(spline, card, revealAtEnd, this.dealSpeed);
+      if (cv.alive) cv.dealAlongSpline(spline, card, revealAtEnd, speed, onArrive);
     };
-    if (delay > 0) ticker.delayedCall(delay, go).setLink(cv);
+    if (delay > 0 && !this.instant) ticker.delayedCall(delay, go).setLink(cv);
     else go();
     return cv;
   }

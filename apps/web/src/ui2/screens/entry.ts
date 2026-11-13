@@ -7,10 +7,11 @@ import type { AppContext, Screen } from '../../app/app';
 import { RewardKind, type RewardGrant } from '../../app/services';
 import type { NomadHost } from '../../menu/host';
 import { LevelRewardCatalog } from '@nomad/engine/retention';
+import { PokerSound } from '@nomad/engine';
 import { inviteToastView } from '../../economy/ui/friendsHud';
 import { btn, esc, fmt, act, type V2 } from '../core';
-import { ico, coinStack } from '../icons';
-import { ui, host, app, S, accountExtras, signedIn, topBar, playerName } from '../ctx';
+import { ico, coinStack, ui2Art } from '../icons';
+import { ui, host, app, S, accountExtras, signedIn, topBar, playerName, coins, holdShownCoins, friendlyError, sfx } from '../ctx';
 import type { ScreenDef } from '../install';
 import './entry.css';
 
@@ -30,11 +31,11 @@ const login: ScreenDef & { sending: boolean } = {
     const a = accountExtras(app());
     const inn = signedIn();
     const busy = !!a.busy || this.sending;
-    const err = !busy && a.lastError ? a.lastError : '';
+    const err = !busy && a.lastError ? friendlyError(a.lastError, "Sign-in didn't work. Check your connection and try again.") : '';
     const status = busy ? 'Signing in…' : err ? err : inn ? `Signed in as ${playerName()}` : 'Save your progress and play on any device.';
     const keep = a.keepSignedIn ?? true;
     return `<div class="v2-login" role="main">
-  <div class="v2-login-logo" aria-label="Nomad Poker">NOMAD<span>POKER</span></div>
+  <h1 class="v2-login-logo"><img src="${import.meta.env.BASE_URL ?? '/'}assets/menu/galaxy/nomad_poker_logo.webp" alt="Nomad Poker" draggable="false"></h1>
   <div class="v2-login-card">
     <div class="v2-login-status${err ? ' err' : ''}" role="status">${esc(status)}</div>
     ${inn
@@ -99,13 +100,13 @@ function sendLink(email: string): void {
   void a.signInWithEmail(email, '').then(
     (error) => {
       login.sending = false;
-      if (error) ui().message('Sign in with email', esc(error));
+      if (error) ui().message('Sign in with email', esc(friendlyError(error, "We couldn't send the sign-in email. Check the address and try again.")));
       else if (!signedIn()) ui().message('Check your email', `We sent a sign-in link to <b>${esc(email)}</b>. Open it on this device to continue.`);
       ui().render();
     },
     (e: unknown) => {
       login.sending = false;
-      ui().message('Sign in with email', esc(e instanceof Error ? e.message : String(e)));
+      ui().message('Sign in with email', esc(friendlyError(e, "We couldn't send the sign-in email. Check your connection and try again.")));
       ui().render();
     },
   );
@@ -113,8 +114,10 @@ function sendLink(email: string): void {
 
 // ------------------------------------------------------------------ Daily Spin
 
-const SYMBOLS = ['coin', 'xp', 'cards', 'bolt'];
-const symbol = (n: string, s = 4.6) => (n === 'coin' ? coinStack(2, s * 0.8) : ico(n, s));
+// Every spin pays Coins, so the reels show Coins piles (the shop's pack art), small to big.
+const SYMBOLS = ['shop_coins_5k', 'shop_coins_25k', 'shop_coins_60k', 'shop_coins_150k'];
+const symbol = (n: string, s = 4.6) =>
+  n.startsWith('shop_') ? `<img class="v2-ico" src="${ui2Art(`shop/${n}`)}" alt="" draggable="false" decoding="async" style="width:${s * 1.25}em;height:${s * 1.25}em">` : n === 'coin' ? coinStack(2, s * 0.8) : ico(n, s);
 
 /** Time until the next UTC day (when the daily spin resets), minute precision. */
 function untilNextUtcDay(): string {
@@ -131,7 +134,7 @@ const spin: ScreenDef & { state: 'idle' | 'spinning' | 'won' | 'miss'; prize: nu
   replaces: ['LuckySlot_Win', 'LuckySlot_Lost'],
   state: 'idle',
   prize: 0,
-  faces: ['coin', 'xp', 'cards'],
+  faces: ['shop_coins_5k', 'shop_coins_60k', 'shop_coins_25k'],
   message: '',
   open() {
     if (this.state === 'spinning') return;
@@ -147,7 +150,7 @@ const spin: ScreenDef & { state: 'idle' | 'spinning' | 'won' | 'miss'; prize: nu
         : `<div class="v2-reel-face${this.state === 'won' || this.state === 'miss' ? ' land' : ''}" style="animation-delay:${i * 0.12}s">${symbol(f)}</div>`}</div>`)
       .join('');
     const result = this.state === 'won'
-      ? `<div class="v2-spin-result" role="status">You won ${fmt(this.prize)} Coins</div>`
+      ? `<div class="v2-spin-result won" role="status"><span class="v2-spin-burst" aria-hidden="true">${[0, 1, 2, 3, 4, 5].map((i) => `<i style="--i:${i}">${ico('coin', 1.6)}</i>`).join('')}</span>You won ${fmt(this.prize)} Coins</div>`
       : this.state === 'miss'
         ? `<div class="v2-spin-result miss" role="status">${esc(this.message || 'No prize this time.')}</div>`
         : `<div class="v2-spin-result miss">${this.state === 'spinning' ? 'Spinning…' : can ? 'Your free spin is ready' : `Next free spin in ${untilNextUtcDay()}`}</div>`;
@@ -156,12 +159,10 @@ const spin: ScreenDef & { state: 'idle' | 'spinning' | 'won' | 'miss'; prize: nu
       : can
         ? btn('Spin', 'sp-spin', { h: 'gold', c: 'lg' })
         : btn('Back to menu', 'go', { h: 'ghost', v: 'main' });
-    return topBar('Daily Spin', { toggle: false }) + `<div class="v2-body v2-spin-body">
+    return topBar('Daily spin', { toggle: false }) + `<div class="v2-body v2-spin-body">
   <div class="v2-spin-card">
-    <div class="v2-spin-machine">
-      <div class="v2-spin-reels" aria-hidden="true">${reels}</div>
-      ${result}
-    </div>
+    <div class="v2-slot"><img class="v2-slot-art" src="${ui2Art('rewards/slot_machine')}" alt="" draggable="false"><div class="v2-spin-reels" aria-hidden="true">${reels}</div></div>
+    ${result}
     ${cta}
     <div class="v2-spin-note v2-sm">${esc(r?.spinNote?.() ?? 'One free spin a day.')}</div>
   </div>
@@ -177,17 +178,19 @@ async function doSpin(): Promise<void> {
   if (!signedIn()) return host().show('Login');
   if (!r || spin.state === 'spinning') return;
   if (!r.engagement.canSpin()) {
-    ui().message('Daily Spin', "You've had today's spin. Come back tomorrow for another.");
+    ui().message('Daily spin', "You've had today's spin. Come back tomorrow for another.");
     return;
   }
   spin.state = 'spinning';
+  // Keep the top bar on the old balance until the reels land (the server credits the prize straight away).
+  holdShownCoins(coins());
   ui().render(true);
   const started = performance.now();
   let result: { awarded: boolean; prize: { coins: number }; error?: string | null } | null = null;
   try {
     result = await r.engagement.spin();
   } catch (e) {
-    result = { awarded: false, prize: { coins: 0 }, error: e instanceof Error ? e.message : String(e) };
+    result = { awarded: false, prize: { coins: 0 }, error: friendlyError(e, "The spin didn't go through. Try again in a moment.") };
   }
   // Let the reels run for a moment before they land.
   const wait = Math.max(0, 1400 - (performance.now() - started));
@@ -195,12 +198,15 @@ async function doSpin(): Promise<void> {
   if (result?.awarded) {
     spin.state = 'won';
     spin.prize = result.prize.coins;
-    spin.faces = ['coin', 'coin', 'coin'];
+    const big = result.prize.coins >= 10_000 ? 'shop_coins_150k' : result.prize.coins >= 2_500 ? 'shop_coins_60k' : result.prize.coins >= 1_000 ? 'shop_coins_25k' : 'shop_coins_5k';
+    spin.faces = [big, big, big];
   } else {
     spin.state = 'miss';
     spin.message = result?.error || 'No spin left today. Come back tomorrow.';
-    spin.faces = ['xp', 'coin', 'cards'];
+    spin.faces = ['shop_coins_5k', 'shop_coins_60k', 'shop_coins_25k'];
   }
+  holdShownCoins(null);
+  if (spin.state === 'won') sfx(PokerSound.ChipsToWinner);
   if (ui().currentId === 'spin') ui().render(true);
   host().refreshSoon();
 }
@@ -208,7 +214,7 @@ async function doSpin(): Promise<void> {
 // ------------------------------------------------------------------ level-up (router overlay)
 
 const kindIcon = (k: RewardKind): string =>
-  k === RewardKind.Coins ? coinStack(2, 2.4) : k === RewardKind.Xp ? ico('xp', 2.6) : k === RewardKind.StreakToken ? ico('shield', 2.6) : k === RewardKind.Gems ? ico('hex', 2.6) : ico('crown', 2.4, 'color:var(--v2-gold)');
+  k === RewardKind.Coins ? coinStack(2, 2.4) : k === RewardKind.Xp ? ico('xp', 2.6) : k === RewardKind.StreakToken ? ico('shield', 2.6) : k === RewardKind.Gems ? ico('gem', 2.6) : ico('crown', 2.4, 'color:var(--v2-gold)');
 
 function rewardText(g: RewardGrant): string {
   switch (g.kind) {
@@ -221,9 +227,22 @@ function rewardText(g: RewardGrant): string {
   }
 }
 
+/** Levels reached while seated at a table: celebrated in full once the player is back on the menu. */
+const deferredLevels: number[] = [];
+
+/** Is the live table under this overlay? (Router screens are siblings in #screens; no HUD code involved.) */
+const tableOpen = (): boolean => !!document.querySelector('#screens > .screen[data-screen="table"]');
+
+/**
+ * Level-up (router 'level-up'). On the menu: the full celebration. At a table it never blocks play: a small toast
+ * ("Level 4 · 200 Coins") that ignores taps, auto-closes, and the full celebration waits for the menu.
+ */
 class LevelUpOverlay implements Screen {
   readonly overlay = true;
   private el: HTMLElement | null = null;
+  private root: HTMLElement | null = null;
+  private queue: number[] = [];
+  private timer = 0;
   private onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Enter' || e.key === 'Escape') {
       e.preventDefault();
@@ -235,6 +254,11 @@ class LevelUpOverlay implements Screen {
   mount(root: HTMLElement, params?: unknown): void {
     const svc = this.ctx.services.retention;
     if (svc) svc.levelUps.showing = true;
+    this.root = root;
+    const p = (params ?? {}) as { level?: number; levels?: number[] };
+    const first = Number(p.level ?? p.levels?.[0] ?? svc?.progression.level ?? 2) || 2;
+    this.queue = (p.levels ?? []).slice(p.level === undefined ? 1 : 0).filter((l) => l !== first);
+    if (tableOpen()) return this.toast(first);
     this.el = document.createElement('div');
     this.el.className = 'v2 v2-lvup';
     root.append(this.el);
@@ -242,8 +266,30 @@ class LevelUpOverlay implements Screen {
       if ((e.target as HTMLElement).closest('[data-a="lv-next"]')) this.next();
     });
     document.addEventListener('keydown', this.onKey);
-    const p = (params ?? {}) as { level?: number };
-    this.play(Number(p.level ?? svc?.progression.level ?? 2) || 2);
+    this.play(first);
+  }
+
+  /** At the table: a compact, non-blocking note; every level reached is kept for the full celebration later. */
+  private toast(level: number): void {
+    const svc = this.ctx.services.retention;
+    const levels = [level, ...this.queue];
+    for (let n = svc?.levelUps.next() ?? null; n !== null; n = svc?.levelUps.next() ?? null) levels.push(n);
+    for (const l of levels) if (!deferredLevels.includes(l)) deferredLevels.push(l);
+    const top = Math.max(...levels);
+    let rewards: RewardGrant[] = [];
+    try {
+      rewards = LevelRewardCatalog.rewardsForLevel(top) as RewardGrant[];
+    } catch {
+      rewards = [];
+    }
+    // The router's screen box covers the whole table: let every tap through to the game.
+    if (this.root) this.root.style.pointerEvents = 'none';
+    this.el = document.createElement('div');
+    this.el.className = 'v2 v2-lvup-toast';
+    this.el.setAttribute('role', 'status');
+    this.el.innerHTML = `<div class="v2-note gold">${ico('level', 2.2)}<div class="v2-note-txt"><b>Level ${top}!</b><small>${esc(rewards.length ? rewards.map(rewardText).join(' · ') : 'Keep playing to earn more XP.')}</small></div></div>`;
+    this.root?.append(this.el);
+    this.timer = window.setTimeout(() => this.closeOverlay(), 3500);
   }
 
   private play(level: number): void {
@@ -254,8 +300,9 @@ class LevelUpOverlay implements Screen {
     } catch {
       rewards = [];
     }
+    sfx(PokerSound.HandWon); // level-up fanfare
     this.el.innerHTML = `<div class="v2-lvup-card" role="dialog" aria-modal="true" aria-label="Level up">
-  <div class="v2-lvup-badge">${ico('hex', 8)}<b>${level}</b></div>
+  <div class="v2-lvup-badge">${ico('level', 8)}<b>${level}</b></div>
   <div class="v2-lvup-title">Level up!</div>
   <div class="v2-mut">You reached level ${level}.${rewards.length ? ' Your rewards are in your balance.' : ''}</div>
   ${rewards.length ? `<div class="v2-lvup-rewards">${rewards.map((g) => `<div class="v2-lvup-tile">${kindIcon(g.kind)}<b>${esc(rewardText(g))}</b></div>`).join('')}</div>` : ''}
@@ -265,18 +312,35 @@ class LevelUpOverlay implements Screen {
   }
 
   private next(): void {
-    const n = this.ctx.services.retention?.levelUps.next() ?? null;
+    const n = this.queue.shift() ?? this.ctx.services.retention?.levelUps.next() ?? null;
     if (n !== null) return this.play(n);
+    this.closeOverlay();
+  }
+
+  private closeOverlay(): void {
     if (this.ctx.router.current === 'level-up') this.ctx.router.back();
+    else this.unmount();
   }
 
   unmount(): void {
     const svc = this.ctx.services.retention;
     if (svc) svc.levelUps.showing = false;
+    window.clearTimeout(this.timer);
     document.removeEventListener('keydown', this.onKey);
     this.el?.remove();
     this.el = null;
+    if (this.root) this.root.style.pointerEvents = '';
   }
+}
+
+/** Back on the menu (no table under it): the full celebration for levels reached while playing. */
+function installDeferredLevelUps(ctx: AppContext): void {
+  const check = (): void => {
+    if (!deferredLevels.length || tableOpen() || ctx.router.current !== 'menu') return;
+    const levels = deferredLevels.splice(0).sort((a, b) => a - b);
+    void ctx.router.push('level-up', { levels });
+  };
+  ctx.events.on('router:changed', () => window.setTimeout(check, 300));
 }
 
 // ------------------------------------------------------------------ connecting cover
@@ -372,7 +436,7 @@ function installTournamentBanner(ctx: AppContext): void {
       el.querySelector('[data-a="n-tjoin"]')?.addEventListener('click', () => {
         setNote('tourney', null);
         void Promise.resolve(svc.join(ready)).then((err: unknown) => {
-          if (typeof err === 'string' && err) ui().message('Tournament', esc(err));
+          if (typeof err === 'string' && err) ui().message('Tournament', esc(friendlyError(err, "Couldn't join the tournament. Try again in a moment.")));
         });
       });
       el.querySelector('[data-a="n-tlater"]')?.addEventListener('click', () => {
@@ -400,6 +464,7 @@ export function installEntryOverlays(ctx: AppContext, h: NomadHost, _ui: V2): vo
     h.show('LuckySlot_Win');
   };
   ctx.router.register('level-up', (c) => new LevelUpOverlay(c));
+  installDeferredLevelUps(ctx);
   installConnecting(h);
   installInviteToast();
   installTournamentBanner(ctx);

@@ -10,6 +10,7 @@ import './ui2.css';
 import type { NomadHost } from '../menu/host';
 import { weeklyAutoPrompt } from '../menu/screens/mainMenu';
 import { V2, type V2Screen } from './core';
+import { PokerSound } from '@nomad/engine';
 import { installPortraitLock } from './portraitLock';
 import { takeOverDialogs } from './globalDialogs';
 import { setUi } from './ctx';
@@ -22,6 +23,7 @@ import { tournamentScreens } from './screens/tournaments';
 import { agentScreens } from './screens/agents';
 import { entryScreens, installEntryOverlays } from './screens/entry';
 import { solScreens, installSolOverlays } from './screens/sol';
+import { solTourneyScreens } from './screens/solTourneys';
 
 declare module '../app/app' {
   interface Services {
@@ -45,6 +47,7 @@ export function install(ctx: AppContext): void {
   // Every host dialog (errors, confirms, busy notes, table Settings / Leave) renders as a v2 dialog.
   takeOverDialogs(host.dialogs);
   const ui = new V2();
+  ui.onPress = (kind) => ctx.audio?.play(kind === 'start' ? PokerSound.ButtonStart : PokerSound.ButtonGeneric);
   ctx.services.ui2 = ui;
   setUi(ui, ctx, host);
   (window as unknown as Record<string, unknown>).__ui2 = ui;
@@ -59,6 +62,7 @@ export function install(ctx: AppContext): void {
     ...agentScreens(),
     ...entryScreens(),
     ...solScreens(),
+    ...solTourneyScreens(),
   ];
   const byUnity = new Map<string, string>();
   for (const d of defs) {

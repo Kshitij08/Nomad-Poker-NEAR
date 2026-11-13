@@ -18,9 +18,9 @@
   box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.35);
 }
 .v2t-ib:hover { border-color: var(--v2-accent); color: #fff; }
-.v2t-ib.on { background: var(--v2-grad-violet); border-color: #ad84ff; color: #fff; }
+.v2t-ib.on { background: var(--v2-grad-violet); border-color: var(--v2-violet-line); color: #fff; }
 .v2t-ib.sm { width: 2.2em; height: 2.2em; box-shadow: none; }
-.v2t-dot { position: absolute; top: -0.25em; right: -0.25em; min-width: 1.35em; height: 1.35em; padding: 0 0.3em; border-radius: 1em; background: #ff3355; border: 0.12em solid #fff; font-size: 0.72em; font-weight: 900; display: flex; align-items: center; justify-content: center; color: #fff; }
+.v2t-dot { position: absolute; top: -0.25em; right: -0.25em; min-width: 1.35em; height: 1.35em; padding: 0 0.3em; border-radius: 1em; background: var(--v2-badge); border: 0.12em solid #fff; font-size: 0.72em; font-weight: 900; display: flex; align-items: center; justify-content: center; color: #fff; }
 
 /* Chip button (Leave, room code, + Bot). */
 .v2t-chip {
@@ -33,7 +33,7 @@
 .v2t-chip.code { font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
 .v2t-chip.code small { font-size: 0.72em; color: var(--v2-mut2); letter-spacing: 0.1em; }
 .v2t-chip.code.static { cursor: default; }
-.v2t-chip.bot { background: var(--v2-grad-violet); border-color: #ad84ff; }
+.v2t-chip.bot { background: var(--v2-grad-violet); border-color: var(--v2-violet-line); }
 .v2t-chip[disabled] { opacity: 0.45; cursor: default; }
 
 /* Pre-game row: landscape bottom centre (the betting row hides meanwhile), portrait in the middle of the felt. */
@@ -44,7 +44,7 @@
 .v2t-pgrow:empty { display: none; }
 .v2t-pgrow-in { display: flex; align-items: center; gap: 0.8em; }
 .v2t-pgrow .v2t-b { pointer-events: auto; }
-.v2t-pgrow .v2t-b.lg { font-family: var(--v2-display); font-weight: 400; font-size: 1.5em; letter-spacing: 0.03em; padding: 0.5em 1.6em; min-width: 9em; }
+.v2t-pgrow .v2t-b.lg { font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 1.5em; letter-spacing: 0.03em; padding: 0.5em 1.6em; min-width: 9em; }
 .v2t-pgrow .v2t-b.violet { background: var(--v2-grad-violet); box-shadow: inset 0 -0.22em 0 rgba(50, 10, 120, 0.5); padding: 0.75em 1.3em; }
 .v2t-pgrow .v2t-cap { font-size: 0.85em; color: var(--v2-mut); background: var(--v2-deep); padding: 0.25em 0.8em; border-radius: 1em; }
 .v2t-b[disabled] { opacity: 0.45; cursor: default; filter: none; box-shadow: none; }
@@ -81,7 +81,7 @@ html[data-orient='portrait'] .v2t-pgrow-in { flex-direction: column-reverse; }
 .v2t-drawer-head small { color: var(--v2-mut2); font-weight: 800; }
 .v2t-chat-log {
   flex: 1 1 auto; min-height: 6em; max-height: 16em; overflow-y: auto; display: flex; flex-direction: column; gap: 0.35em;
-  background: rgba(5, 3, 25, 0.5); border-radius: var(--v2-r-md); padding: 0.55em 0.65em; scrollbar-width: thin; user-select: text; -webkit-user-select: text;
+  background: color-mix(in srgb, var(--v2-shade) 50%, transparent); border-radius: var(--v2-r-md); padding: 0.55em 0.65em; scrollbar-width: thin; user-select: text; -webkit-user-select: text;
 }
 .v2t-chat-row { line-height: 1.3; overflow-wrap: anywhere; white-space: pre-wrap; font-weight: 700; }
 .v2t-chat-row b { font-weight: 900; margin-right: 0.35em; }
@@ -92,16 +92,16 @@ html[data-orient='portrait'] .v2t-pgrow-in { flex-direction: column-reverse; }
 .v2t-pchip[disabled] { opacity: 0.45; cursor: default; }
 .v2t-chat-in { display: flex; gap: 0.45em; }
 .v2t-chat-in input {
-  flex: 1; min-width: 0; font: inherit; color: #fff; background: rgba(5, 3, 25, 0.6); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-md);
+  flex: 1; min-width: 0; font: inherit; color: #fff; background: color-mix(in srgb, var(--v2-shade) 60%, transparent); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-md);
   padding: 0.55em 0.8em; outline: 0; user-select: text; -webkit-user-select: text;
 }
 .v2t-chat-in input:focus { border-color: var(--v2-accent); }
-.v2t-chat-in input::placeholder { color: #8e86c9; }
+.v2t-chat-in input::placeholder { color: var(--v2-mut3); }
 .v2t-chat-in .v2t-b { padding: 0.5em 0.9em; min-width: 4.2em; }
 
 .v2t-react-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.4em; max-height: 15em; overflow-y: auto; scrollbar-width: thin; }
 .v2t-react { aspect-ratio: 1; border-radius: var(--v2-r-md); background: rgba(255, 255, 255, 0.05); border: 0.1em solid transparent; display: flex; align-items: center; justify-content: center; padding: 0.25em; }
-.v2t-react:hover:not([disabled]) { border-color: var(--v2-accent); background: rgba(124, 107, 255, 0.15); }
+.v2t-react:hover:not([disabled]) { border-color: var(--v2-accent); background: color-mix(in srgb, var(--v2-accent) 15%, transparent); }
 .v2t-react[disabled] { opacity: 0.4; cursor: default; }
 .v2t-react img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 
@@ -120,7 +120,7 @@ html[data-orient='portrait'] .v2t-pgrow-in { flex-direction: column-reverse; }
 .v2t-mc { width: 1.9em; height: 2.6em; border-radius: 0.25em; background: #fbf8ef; color: #141414; font-style: normal; font-weight: 900; font-size: 0.78em; display: flex; align-items: center; justify-content: center; box-shadow: 0 0.1em 0.2em rgba(0, 0, 0, 0.35); }
 .v2t-mc.r { color: #d3263a; }
 .v2t-buyin-amt { font-family: var(--v2-display); font-size: 2em; color: var(--v2-gold); text-align: center; font-variant-numeric: tabular-nums; }
-.v2t-buyin-range { width: 100%; accent-color: #f5a915; height: 2em; }
+.v2t-buyin-range { width: 100%; accent-color: var(--v2-gold-deep); height: 2em; }
 .v2t-buyin-ends { display: flex; justify-content: space-between; color: var(--v2-mut2); font-size: 0.85em; font-weight: 800; }
 .v2t-df .v2t-b.red { background: var(--v2-grad-red); box-shadow: inset 0 -0.22em 0 rgba(110, 0, 20, 0.5); }
 
@@ -154,3 +154,52 @@ html[data-orient='portrait'] .v2t-ib.sm { width: 3.1em; height: 3.1em; }
 html[data-orient='portrait'] .v2t-chip { height: 3.45em; }
 html[data-orient='portrait'] .v2t-cbar.left2 { top: calc(4.6em + env(safe-area-inset-top, 0px)); }
 html[data-orient='portrait'] .screen:has(.v2t:not([hidden]) > .v2t-ttitle) .v2t-ib.help { display: none; }
+/* Phones at a tournament table: the top row holds Leave and the reactions / chat / settings icons, so the tournament
+   title takes the second row (a tournament has no room code or + Bot there), its dropdown under it. */
+html[data-orient='portrait'] .v2t > .v2t-ttitle { left: calc(0.6em + env(safe-area-inset-left, 0px)); top: calc(4.6em + env(safe-area-inset-top, 0px)); max-width: calc(100% - 1.2em); }
+html[data-orient='portrait'] .v2t > .v2t-tinfo { top: calc(8.4em + env(safe-area-inset-top, 0px)); }
+
+/* ---------------------------------------------------------------- chat feed (stream-style pop-ups) */
+/* New messages stack bottom-up on the right, above the action row, and fade after a few seconds; tapping one opens
+   the chat. Independent of seat positions: it hugs the screen edge, narrow and translucent so seats show through. */
+.v2t-chat-feed {
+  position: absolute; right: calc(1em + env(safe-area-inset-right, 0px)); bottom: calc(6.4em + env(safe-area-inset-bottom, 0px));
+  width: 15em; display: flex; flex-direction: column; align-items: flex-end; gap: 0.35em; pointer-events: none; z-index: 3;
+}
+/* Desktop: at most 3 at once, so the stack stays below the lower-right seat used at 6+ players. */
+html:not([data-orient='portrait']) .v2t-feed-item:nth-last-child(n + 4) { display: none; }
+.v2t-chat-feed[hidden] { display: none; }
+.v2t-feed-item {
+  pointer-events: auto; max-width: 100%; text-align: left; font: inherit; color: var(--v2-ink); cursor: pointer;
+  padding: 0.4em 0.75em; border-radius: var(--v2-r-md); border: 0.1em solid var(--v2-line);
+  background: color-mix(in srgb, var(--v2-dlg) 82%, transparent); box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.35);
+  font-weight: 700; font-size: 0.95em; line-height: 1.3; overflow-wrap: anywhere; white-space: pre-wrap;
+  animation: v2t-feed-in 0.22s ease-out; transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.v2t-feed-item b { font-weight: 900; margin-right: 0.35em; }
+.v2t-feed-item:hover { border-color: var(--v2-accent); }
+.v2t-feed-item.out { opacity: 0; transform: translateX(0.8em); }
+@keyframes v2t-feed-in { from { opacity: 0; transform: translateX(1.2em); } }
+/* Phones: the strip right of your own seat (your plate and hand meter sit bottom-centre), newest 3, two lines each. */
+html[data-orient='portrait'] .v2t-chat-feed {
+  right: calc(0.4em + env(safe-area-inset-right, 0px)); bottom: calc(6em + env(safe-area-inset-bottom, 0px));
+  width: 33%; gap: 0.3em;
+}
+html[data-orient='portrait'] .v2t-feed-item {
+  font-size: 0.82em; padding: 0.3em 0.55em; white-space: normal; line-height: 1.25; max-height: calc(2.5em + 0.6em);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+html[data-orient='portrait'] .v2t-feed-item:nth-last-child(n + 4) { display: none; }
+@media (prefers-reduced-motion: reduce) { .v2t-feed-item { animation: none; transition: none; } }
+
+/* ---------------------------------------------------------------- bigger reaction stickers */
+.v2t-drawer.v2t-reactions { width: 26em; }
+.v2t-react-grid { grid-template-columns: repeat(4, 1fr); gap: 0.5em; max-height: 22em; }
+.v2t-react { padding: 0.15em; }
+html[data-orient='portrait'] .v2t-react-grid { grid-template-columns: repeat(4, 1fr); max-height: 55vh; }
+
+/* Bigger top-bar controls (Leave, room code, reactions, chat, help, settings): everything in the bars is em-based, so
+   the bar's font size scales the buttons, their icons and the second row's offset together. Phones grow a little
+   less (the first row has to fit Leave and four icons). */
+.v2t-cbar { font-size: 1.22em; }
+html[data-orient='portrait'] .v2t-cbar { font-size: 1.08em; }

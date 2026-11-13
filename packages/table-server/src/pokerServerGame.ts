@@ -25,6 +25,8 @@ import { HIDDEN_CARD, PokerEventCodec, pokerTokenHash, type WireEvent } from '@n
 import { ActionRouter, BotActionProvider, type ActionRequest, type IActionProvider } from '@nomad/engine/orchestration/actionProviders';
 import type { TableSettings } from '@nomad/engine/orchestration/tableSettings';
 import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
+import { HandEvaluator } from '@nomad/engine/evaluation/handEvaluator';
+import type { Card } from '@nomad/engine/cards/card';
 import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
 import { BettingRound, PlayerStatus } from '@nomad/engine/state/state';
 import { PokerChatRateLimiter } from './chat';
@@ -180,6 +182,11 @@ export class PokerServerGame implements IPokerTableServer {
   /** This hand's pot winners and showdown categories, by seat (for onHandSettled). */
   private readonly handWinners = new Set<number>();
   private readonly handShowdown = new Map<number, number>();
+  /** "Show cards" after a hand: each seat's hole cards and the board of the last hand, who has shown, and the window. */
+  private readonly showHole = new Map<number, [Card, Card]>();
+  private showBoard: Card[] = [];
+  private readonly shownSeats = new Set<number>();
+  private showOpen = false;
 
   private readonly verifiedPlayers = new Map<PlayerRef, string>();
   private readonly avatarsByPlayer = new Map<PlayerRef, number>();
@@ -736,6 +743,35 @@ export class PokerServerGame implements IPokerTableServer {
     if (seat < 0) return;
     if (!this.limiter(this.reactionLimiters, source, ReactionBurst, ReactionRefillSeconds).tryConsume(this.clock.now())) return;
     this.replicate({ type: 'Reaction', seat, reactionId: reactionId & 0xff });
+  }
+
+  /**
+   * "Show cards": once the hand is decided (pot awarded) and until the next hand starts, a player who held cards this
+   * hand and wasn't shown at showdown may reveal them. Replicated as a one-seat Showdown (no new wire type), so every
+   * client — old ones included — draws it with the existing showdown path. Once per seat per hand.
+   */
+  onShowCards(source: PlayerRef): void {
+    const seat = this.seatOf(source);
+    if (seat < 0 || !this.showOpen || this.shownSeats.has(seat)) return;
+    const hole = this.showHole.get(seat);
+    if (!hole) return;
+    this.shownSeats.add(seat);
+    const board = this.showBoard;
+    let description = 'Shows';
+    let value: ReturnType<typeof HandEvaluator.evaluateHand> | null = null;
+    try {
+      if (board.length >= 3) {
+        value = HandEvaluator.evaluateHand(hole, board);
+        description = `Shows · ${value.describe()}`;
+      }
+    } catch {
+      /* fall back to plain "Shows" */
+    }
+    this.replicate({
+      type: 'Showdown',
+      entries: [{ seat, card0: hole[0], card1: hole[1], value: value as never, description }],
+      board: [...board],
+    });
   }
 
   /** A client reporting its own microphone; unchanged reports cost nothing, changes are rate limited. */
@@ -1642,6 +1678,10 @@ export class PokerServerGame implements IPokerTableServer {
         case 'HandStarted':
           this.handWinners.clear();
           this.handShowdown.clear();
+          this.showHole.clear();
+          this.showBoard = [];
+          this.shownSeats.clear();
+          this.showOpen = false;
           this.replicate(e);
           break;
         case 'ActionRequested':
@@ -1650,6 +1690,7 @@ export class PokerServerGame implements IPokerTableServer {
         case 'HoleCardsDealt': {
           const agent = this.agentAt(e.seat);
           if (agent) agent.holeCards = `${e.card0.short} ${e.card1.short}`;
+          this.showHole.set(e.seat, [e.card0, e.card1]);
           this.replicateHoleCards(e);
           this.renderBudget += this.settings.dealDelay;
           break;
@@ -1666,6 +1707,7 @@ export class PokerServerGame implements IPokerTableServer {
           break;
         case 'CommunityDealt':
           if (this.agents.length > 0) this.agentBoardCards = e.board.map((c) => c.short).join(' ');
+          this.showBoard = [...e.board];
           this.replicate(e);
           this.renderBudget += this.settings.dealSettleDelay;
           break;
@@ -1676,6 +1718,7 @@ export class PokerServerGame implements IPokerTableServer {
           break;
         case 'Showdown':
           for (const entry of e.entries) this.handShowdown.set(entry.seat, entry.value.category);
+          for (const entry of e.entries) this.shownSeats.add(entry.seat);
           for (const entry of e.entries) {
             const shown = this.agentAt(entry.seat);
             if (shown) shown.wentToShowdown = true;
@@ -1684,6 +1727,7 @@ export class PokerServerGame implements IPokerTableServer {
           this.renderBudget += this.settings.showdownDelay;
           break;
         case 'PotAwarded': {
+          this.showOpen = true; // the hand is decided: players may now show their cards
           if (e.amount > 0) this.handWinners.add(e.seat);
           const winner = this.agentAt(e.seat);
           if (winner) winner.handPotWon += e.amount;

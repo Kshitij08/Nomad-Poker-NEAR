@@ -16,9 +16,41 @@
 .v2-wl-links a { text-decoration: none; }
 
 .v2-bi-cap { color: var(--v2-mut); margin: 0 0 var(--v2-s3); }
-.v2-bi-amt { font-family: var(--v2-display); font-weight: 400; font-size: 2.2em; color: var(--v2-gold); text-align: center; font-variant-numeric: tabular-nums; }
-.v2-bi-range { width: 100%; accent-color: #f5a915; height: 2.2em; margin: var(--v2-s2) 0; }
+.v2-bi-amt { font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 2.2em; color: var(--v2-gold); text-align: center; font-variant-numeric: tabular-nums; }
+.v2-bi-range { width: 100%; flex: none; margin: var(--v2-s2) 0; }
 .v2-bi-ends { display: flex; gap: var(--v2-s2); justify-content: center; }
 .v2-bi-short { color: var(--v2-bad); text-align: center; margin: 0; }
 
 html[data-orient='portrait'] .v2-wl { max-height: 55vh; }
+
+/* SOL amounts: the SOL icon, then the game's $ figure (solKit.ts solAmt) */
+.v2-solamt { display: inline-flex; align-items: center; gap: 0.3em; white-space: nowrap; font-weight: 900; }
+.v2-solamt .v2-num { font-weight: 900; }
+
+/* SOL tournaments (solTourneys.ts) */
+.v2-stl { gap: 0.7em; }
+.v2-stl-top { flex: 0 0 auto; gap: 0.5em; padding: 0 2.6em; }
+.v2-stl-code { width: 9em; text-transform: uppercase; }
+.v2-stl-code::placeholder { text-transform: none; }
+.v2-stl-ready { flex: 0 0 auto; margin: 0 2.6em; gap: 0.8em; border-color: var(--v2-good); }
+.v2-stl-panel { flex: 1; min-height: 0; gap: 0.5em; margin: 0 2.6em; padding: 0.7em 1em; }
+.v2-stt { flex: 0 0 auto; gap: 0.4em; }
+.v2-stt.ready { border-color: var(--v2-good); }
+.v2-stt1 { gap: 0.5em; }
+.v2-stt-n { font-size: 1.2em; font-weight: 900; min-width: 0; }
+.v2-stt2 { gap: 1em; align-items: center; }
+.v2-stt-act { flex: 0 0 auto; gap: 0.4em; margin-left: auto; }
+.v2-sth .v2-hl { width: 7.5em; }
+
+/* SOL Agent (solAgent.ts) */
+.v2-sa-setup { gap: 0.55em; }
+.v2-sa-grp { gap: 0.25em; }
+
+html[data-orient='portrait'] .v2-stl-top, html[data-orient='portrait'] .v2-stl-ready, html[data-orient='portrait'] .v2-stl-panel { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+html[data-orient='portrait'] .v2-stl-panel { padding: 0.6em 0.7em; }
+html[data-orient='portrait'] .v2-stl-top > .v2-grow { display: none; }
+html[data-orient='portrait'] .v2-stl-code { flex: 1 1 8em; }
+html[data-orient='portrait'] .v2-stt2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4em 0.8em; }
+html[data-orient='portrait'] .v2-stt-act { grid-column: 1 / -1; margin-left: 0; }
+html[data-orient='portrait'] .v2-stt-act > .v2-b { flex: 1; }
+html[data-orient='portrait'] .v2-page[data-screen^='sol-'] .v2-b, html[data-orient='portrait'] .v2-page[data-screen^='sol-'] .v2-chip, html[data-orient='portrait'] .v2-sa-setup .v2-chip { min-height: 40px; }

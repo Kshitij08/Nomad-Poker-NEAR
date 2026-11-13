@@ -196,7 +196,9 @@ export interface HandFacts {
 /** One hand a human was dealt into: XP and mission progress. Idempotent per (table, hand). Returns levels paid. */
 export async function recordHand(db: D1Database, playerId: string, f: HandFacts, now = Date.now()): Promise<number[]> {
   const day = today(now);
-  const xp = XP_PER_HAND_PLAYED + (f.won ? XP_PER_HAND_WON : 0);
+  // A shop XP boost (shop_boosts, packages/db/src/shop.ts) doubles a hand's XP while it runs.
+  const boost = await db.prepare('SELECT 1 FROM shop_boosts WHERE player_id = ?1 AND xp_until > ?2').bind(playerId, now).first();
+  const xp = (XP_PER_HAND_PLAYED + (f.won ? XP_PER_HAND_WON : 0)) * (boost ? 2 : 1);
   const key = `xp:${f.tableId}:${f.hand}`;
   // A replayed hand (the table retrying its bookkeeping) changes nothing: its XP entry already exists.
   if (await db.prepare('SELECT 1 FROM ledger_entries WHERE player_id = ?1 AND idempotency_key = ?2').bind(playerId, key).first()) return [];

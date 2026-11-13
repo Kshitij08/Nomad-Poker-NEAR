@@ -2,15 +2,16 @@
  * The web3 module's router screens and table hooks. Screen ids:
  *  - 'wallet-login'   Auth/WalletLoginUI.cs runtime panel (SIWS sign-in + email capture)          [walletLogin.ts]
  *  - 'wallet-picker'  the SDK's WalletAdapterUI picker (WalletAdapterPopup.cs)                     [walletPicker.ts]
- *  - 'private-tables' Per/Unity/PerLobbyPanel.cs (+ host / tournaments / agent tabs)               [lobby*.ts]
  *  - 'private-buy-in' Net/PrivateBuyInPrompt.cs                                                    [buyInPrompt.ts]
+ *
+ * The private SOL tables, tournaments and Agent are Redesign v2 pages (src/ui2/screens: play.ts, solTourneys.ts,
+ * solAgent.ts) built on the actions in lobby.ts, lobbyHost.ts, lobbyTourney.ts and lobbyAgent.ts.
  */
 import type { AppContext } from '../../app/app';
 import { tableLeaveHooks } from '../../menu/table/nomadTableHud';
 import { WalletLoginScreen } from './walletLogin';
 import { WalletPickerScreen, type WalletPickerParams } from './walletPicker';
 import { PrivateBuyInScreen } from './buyInPrompt';
-import { LazyPanelScreen } from './lazy';
 import { w3 } from '../services';
 
 export function installWeb3Screens(ctx: AppContext): void {
@@ -19,12 +20,6 @@ export function installWeb3Screens(ctx: AppContext): void {
   w3(ctx).solana.picker = (wallets) =>
     new Promise((resolve) => void ctx.router.push('wallet-picker', { wallets, resolve } satisfies WalletPickerParams));
   ctx.router.register('private-buy-in', (c) => new PrivateBuyInScreen(c));
-  // The private-table panels need @solana/web3.js: their code loads on first open (with w3(ctx).per).
-  ctx.router.register('private-tables', (c) => new LazyPanelScreen(c, async () => (await import('./lobby')).lobbyPanel));
-  ctx.router.register('private-host', (c) => new LazyPanelScreen(c, async () => (await import('./lobbyHost')).hostPanel));
-  ctx.router.register('private-tourneys', (c) => new LazyPanelScreen(c, async () => (await import('./lobbyTourney')).tourneyPanel));
-  ctx.router.register('private-tourney-host', (c) => new LazyPanelScreen(c, async () => (await import('./lobbyTourney')).tourneyHostPanel));
-  ctx.router.register('private-agent', (c) => new LazyPanelScreen(c, async () => (await import('./lobbyAgent')).agentPanel));
   // The menu's leave dialog words a tournament table differently (PerTableController.IsTournament). The controller
   // module is lazy: until a private table has been opened there is nothing to ask.
   const prev = tableLeaveHooks.isTournament;

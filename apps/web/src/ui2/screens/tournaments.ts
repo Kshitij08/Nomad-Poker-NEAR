@@ -1,16 +1,16 @@
 /**
  * Tournaments (atlas: Redesign v2 › Tournaments): Browse, My Tournaments, Host, Join by Code, with the Register and
  * Share dialogs. Same data and rules as the Unity screens (tournaments/menu/nomadTournaments.ts): register / join,
- * leave / cancel, host form options, join by code. Coins tournaments only; SOL tournaments stay in the SOL lobby.
+ * leave / cancel, host form options, join by code. Coins tournaments only; SOL tournaments are solTourneys.ts.
  */
 import { NomadHost } from '../../menu/host';
 import { isDemo, isMine as isMineOf, isOpen, isRegistered, type MineResult, type TournamentInfo } from '../../tournaments/api/tournamentInfo';
 import { N0, blindsText, payout, speedShort, startLabel } from '../../tournaments/format';
 import { HOST_FEES, HOST_MAX, HOST_PRIZES, HOST_SPEEDS, HOST_STARTS } from '../../tournaments/menu/nomadTournaments';
 import { BlindSchedule } from '@nomad/engine/tournament/blindSchedule';
-import { btn, chips, esc, input, tabs, act } from '../core';
+import { btn, chips, esc, input, tabs, act, seg } from '../core';
 import { ico } from '../icons';
-import { ui, host, app, S, onchain, topBar, setMode, signedIn, coins, copy, openUrl, run } from '../ctx';
+import { ui, host, S, onchain, topBar, setMode, signedIn, coins, copy, openUrl, run } from '../ctx';
 import type { ScreenDef } from '../install';
 import './tournaments.css';
 
@@ -244,7 +244,7 @@ function tRow(x: TournamentInfo, o: { action?: string; pill?: string } = {}): st
   const fill = x.maxPlayers > 0 ? Math.round((x.players / x.maxPlayers) * 100) : 0;
   const action = o.action ?? (() => {
     if (isRegistered(x)) return x.serverReady ? btn('Join table', 't-reg', { h: 'gold', v: x.id }) : btn('Registered', 't-reg', { h: 'ghost', v: x.id });
-    return isOpen(x) ? btn('Register', 't-reg', { h: 'gold', v: x.id }) : btn('Closed', 't-reg', { h: 'ghost', c: 'dis', v: x.id });
+    return isOpen(x) ? btn('Register', 't-reg', { h: 'gold', v: x.id }) : btn('Closed', 't-reg', { h: 'ghost', dis: true, v: x.id });
   })();
   const d = new Date(x.startsAtUnix * 1000);
   const date = `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
@@ -273,10 +273,10 @@ function tRow(x: TournamentInfo, o: { action?: string; pill?: string } = {}): st
 
 function head(on: string): string {
   const chain = onchain();
-  return topBar('Tournaments') + tabs([['t-browse', 'Browse', 'spade'], ['t-mine', 'My tournaments', 'trophy'], ['t-host', 'Host', 'cal2'], ['t-code', 'Join by code', 'code']], on, 'tab', 'v2-ttabs') +
+  return topBar('Tournaments') + tabs([['t-browse', 'Browse', 'tourn-browse'], ['t-mine', 'My tournaments', 'trophy'], ['t-host', 'Host', 'tourn-host'], ['t-code', 'Join by code', 'tourn-code']], on, 'tab', 'v2-ttabs') +
     // Offline the list is the practice backend's example data (some already "registered" or "hosted"): say so.
     (!chain && T.list?.length && T.list.every(isDemo) ? `<div class="v2-card v2-row v2-tnote">${ico('trophy', 1.8)}<span class="v2-grow">Practice tournaments: example events to try the flow while the tournament server is offline.</span></div>` : '') +
-    (chain ? `<div class="v2-card v2-row v2-tnote">${ico('sol', 1.8)}<span class="v2-grow">These are Coins tournaments. SOL tournaments are in the private SOL lobby.</span>${btn('SOL tournaments', 't-sol', { h: 'violet', c: 'sm' })}</div>` : '');
+    (chain ? `<div class="v2-card v2-row v2-tnote">${ico('sol', 1.8)}<span class="v2-grow">These are Coins tournaments. SOL tournaments, paid from your game balance, have their own list.</span>${btn('SOL tournaments', 't-sol', { h: 'violet', c: 'sm' })}</div>` : '');
 }
 
 const empty = (icon: string, text: string): string => `<div class="v2-empty">${ico(icon, 6)}<span>${text}</span></div>`;
@@ -293,7 +293,7 @@ const common: Record<string, (v: string) => void | Promise<void>> = {
   't-exp': (v) => {
     T.expanded = T.expanded === v ? '' : v;
   },
-  't-sol': () => void app().router.push('private-tourneys'),
+  't-sol': () => ui().show('sol-tourneys'),
 };
 
 // ------------------------------------------------------------------ screens
@@ -378,7 +378,7 @@ const mine: ScreenDef = {
             : l.map(rowFor).join('');
     return `${head('t-mine')}
 <div class="v2-panel v2-tpanel">
-  <div class="v2-row v2-wrap v2-thead"><b class="v2-h v2-grow">My tournaments</b><div class="v2-row v2-tchips">${chips([['joined', 'Joined'], ['hosting', 'Hosting'], ['past', 'Past']], T.mineTab, 't-mtab')}</div></div>
+  <div class="v2-row v2-wrap v2-thead"><b class="v2-h v2-grow">My tournaments</b>${seg([['joined', 'Joined'], ['hosting', 'Hosting'], ['past', 'Past']], T.mineTab, 't-mtab')}</div>
   <div class="v2-tlist v2-scroll">${body}</div>
 </div>`;
   },
@@ -464,8 +464,13 @@ const CODE_LEN = 6;
 const codeScreen: ScreenDef = {
   id: 't-code',
   replaces: ['Tournaments_JoinByCode'],
-  open() {
+  open(arg) {
     T.found = null;
+    // A shared tournament link opens here with its code filled in and looked up (never registers by itself).
+    if (typeof arg === 'string' && arg) {
+      T.code = arg.replace(/s+/g, '').toUpperCase().slice(0, CODE_LEN);
+      findByCode();
+    }
   },
   render() {
     const chars = T.code.toUpperCase().padEnd(CODE_LEN, ' ').slice(0, CODE_LEN).split('');

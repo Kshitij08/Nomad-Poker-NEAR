@@ -1,15 +1,18 @@
-/** Play: Choose your table, Party, Host a SOL table. Atlas: Redesign v2 › Play. */
+/** Play: Choose your table (Public and, On-chain, Private SOL tables), Party, Host a SOL table. Atlas: Redesign v2 › Play. */
 import { StakeCatalog, formatN0, type StakeTier } from '@nomad/engine';
 import { joinFreePlay } from '../../menu/screens/mainMenu';
 import { StakeTableSkin, type Theme } from '../../menu/stakes';
 import { MENU_DATA } from '../../menu/data';
 import { assetUrl } from '../../hud/unityUi';
 import { startParty } from '../../economy/nomad/social';
-import { STAKES as SOL_STAKES, sol, stakeMinBuyIn, stakeMaxBuyIn } from '../../web3/per/money';
+import { STAKES as SOL_STAKES, PerBuyIn, sol, stakeMinBuyIn, stakeMaxBuyIn } from '../../web3/per/money';
+import type { PerRuntime } from '../../web3/per/service';
+import type { HostedRow, LobbyRead } from '../../web3/ui/lobby';
 import { w3 } from '../../web3/services';
-import { btn, esc, act, tabs, chips, input } from '../core';
+import { btn, esc, act, tabs, chips, input, type Action } from '../core';
 import { ico } from '../icons';
-import { ui, host, app, S, onchain, onchainApi, topBar, signedIn, needCoins } from '../ctx';
+import { ui, host, app, S, onchain, onchainApi, topBar, signedIn, needCoins, getCoinsRoute, copy } from '../ctx';
+import { perRt, shortAddr, solAmt, solError, solTask } from './solKit';
 import type { ScreenDef } from '../install';
 import './play.css';
 
@@ -22,8 +25,22 @@ export const ROOMS: { theme: Theme; name: string; color: string }[] = [
   { theme: 'Neon_City', name: 'Neon City', color: '#ff4fa3' },
 ];
 
+/**
+ * Sharper copies of the room art: the menu export is 1541×578 and looked soft on the big room cards (and upscaled 2-3×
+ * on phones). These are the same scenes at 2048×768 (theming/) and 2880×1080 (Solana, 3d/).
+ */
+const ROOM_ART_HI: Partial<Record<Theme, string>> = {
+  Default: 'assets/3d/BG.webp',
+  Forest: 'assets/theming/Forest/Forest_bg.webp',
+  Town: 'assets/theming/Town/Town_bg.webp',
+  Desert: 'assets/theming/Desert/Desert_bg.webp',
+  Neon_City: 'assets/theming/Neon_City/Neon_City_bg.webp',
+};
+
 /** The room's table background art (the scene the table plays in), or null. */
 function roomArt(theme: Theme): string | null {
+  const hi = ROOM_ART_HI[theme];
+  if (hi) return assetUrl(hi);
   try {
     const pack = MENU_DATA.themes.find((t) => t.theme === theme);
     const sp = pack?.tableBackground ? MENU_DATA.sprites[pack.tableBackground] : null;
@@ -35,37 +52,259 @@ function roomArt(theme: Theme): string | null {
 
 export const bgArt = (theme: Theme, color: string): string => {
   const url = roomArt(theme);
-  return `background:${url ? `linear-gradient(180deg,rgba(26,15,74,0) 40%,rgba(26,15,74,.85)),url('${esc(url)}') center/cover no-repeat,` : ''}linear-gradient(160deg,${color},#1a0f4a)`;
+  return `background:${url ? `linear-gradient(180deg,transparent 55%,color-mix(in srgb,var(--v2-shade) 55%,transparent)),url('${esc(url)}') center/cover no-repeat,` : ''}linear-gradient(160deg,${color},var(--v2-bg-top))`;
 };
 
 // ------------------------------------------------------------------ Choose your table
 
-interface PrivRow {
-  address: string;
-  blinds: string;
-  host: string;
-  seated: string;
-  access: string;
-  buyIn: string;
-  mine: boolean;
-  join: () => Promise<void>;
+
+// ------------------------------------------------------------------ Private SOL tables (Tables › Private tables)
+
+/** The lobby actions (src/web3/ui/lobby.ts): loaded with @solana/web3.js on first use. */
+const lobbyMod = () => import('../../web3/ui/lobby');
+const walletNow = (): string | null => onchainApi.walletAddress?.() ?? null;
+const findHosted = (v: string): HostedRow | null => tables.priv.data?.hosted.find((h) => h.address === v) ?? null;
+const reloadPrivate = (): void => void loadPrivate(tables);
+
+async function loadPrivate(t: typeof tables): Promise<void> {
+  const wallet = walletNow();
+  t.priv = { ...t.priv, loading: true, loaded: true, error: null, wallet };
+  ui().render();
+  try {
+    const [per, { readLobby }] = await Promise.all([perRt(), lobbyMod()]);
+    t.priv = { loading: false, loaded: true, error: null, data: await readLobby(per), wallet };
+  } catch (e) {
+    console.error('[ui2] private tables', e);
+    t.priv = { loading: false, loaded: true, error: solError(e, "Couldn't load the private tables. Check your connection and try again."), data: null, wallet };
+  }
+  ui().render();
+}
+
+function walletStrip(): string {
+  const addr = walletNow();
+  if (!addr)
+    return `<div class="v2-card v2-row v2-wrap v2-priv-wallet">${ico('sol', 2.2)}<div class="v2-grow"><b>Connect a wallet to play SOL tables</b><div class="v2-xs v2-mut">They run on the Solana test network, with test SOL.</div></div>${btn('Connect wallet', 'priv-connect', { h: 'gold' })}</div>`;
+  const [main = '', note = ''] = (onchainApi.balanceText?.() ?? '').split(' · ');
+  const amount = /^Tap/.test(main) || !main
+    ? btn('Show balance', 'priv-balance', { h: 'ghost', c: 'sm' })
+    : `<button class="v2-solamt v2-priv-bal"${act('priv-balance')} aria-label="Game balance, tap to refresh">${ico('sol', 1.1)}<b class="v2-num">${esc(main.split(' (')[0])}</b></button>`;
+  return `<div class="v2-card v2-row v2-wrap v2-priv-wallet">
+    <div class="v2-col v2-priv-kv"><span class="v2-cap">Wallet</span><b class="v2-num">${esc(shortAddr(addr))}</b></div>
+    ${btn('Copy address', 'priv-copy', { h: 'blue', c: 'sm' })}
+    <div class="v2-col v2-priv-kv"><span class="v2-cap">Game balance</span>${amount}${note ? `<span class="v2-xs v2-mut">${esc(note)}</span>` : ''}</div>
+    <span class="v2-grow"></span>
+    <div class="v2-row v2-priv-money">${btn('Deposit', 'priv-deposit', { h: 'gold', c: 'sm' })}${btn('Withdraw', 'priv-withdraw', { h: 'blue', c: 'sm' })}<button class="v2-b ghost sm"${act('priv-more')} aria-label="More wallet options" title="More">${ico('more', 1)}</button></div>
+  </div>`;
+}
+
+function hostedRow(h: HostedRow): string {
+  const deposit = `${ico('sol', 1)} about 0.013 SOL`;
+  let pill: string;
+  let detail: string;
+  let buttons = '';
+  switch (h.state) {
+    case 'old-list':
+      pill = '<span class="v2-pill">Closed</span>';
+      detail = `Its old invite list still holds a deposit (${deposit})`;
+      buttons = btn('Get deposit back', 'h-oldlist', { h: 'gold', c: 'sm', v: h.address });
+      break;
+    case 'closed':
+      pill = '<span class="v2-pill">Closed</span>';
+      detail = `Its deposit (${deposit}) can come back to your wallet`;
+      buttons = btn('Get deposit back', 'h-reclaim', { h: 'gold', c: 'sm', v: h.address });
+      break;
+    case 'open':
+      pill = '<span class="v2-pill ok">Open</span>';
+      detail = `${h.seated} / ${h.maxSeats} seated${h.links ? ' · invite link' : ''}`;
+      if (h.links) buttons += (h.link ? btn('Copy invite link', 'h-copy', { h: 'blue', c: 'sm', v: h.address }) : '') + btn(h.link ? 'New link' : 'Make a link', 'h-newlink', { h: h.link ? 'ghost' : 'blue', c: 'sm', v: h.address });
+      buttons += btn('Close table', 'h-close', { h: 'red', c: 'sm', v: h.address, dis: h.seated > 0, title: h.seated > 0 ? 'You can close it once everyone has left' : 'Close this table' });
+      break;
+    case 'unlisted':
+      pill = '<span class="v2-pill ok">Open</span>';
+      detail = 'It shows in the list within a minute';
+      buttons = btn(`Join ${ico('sol', 0.9)} ${esc(sol(h.buyIn))}`, 'h-join', { h: 'gold', c: 'sm', v: h.address });
+      break;
+    case 'not-open':
+      pill = '<span class="v2-pill gold">Not open yet</span>';
+      detail = 'Created, but not open for players yet';
+      buttons = btn('Open it', 'h-open', { h: 'gold', c: 'sm', v: h.address });
+      break;
+    default:
+      pill = `<span class="v2-pill">${esc(h.pending)}</span>`;
+      detail = 'This takes a few seconds';
+  }
+  return `<div class="v2-card v2-row v2-wrap v2-priv-host">${pill}<span class="v2-grow v2-sm"><b class="v2-num">${esc(shortAddr(h.address))}</b> · ${detail}</span><div class="v2-row v2-wrap v2-priv-hbtns">${buttons}</div></div>`;
+}
+
+function privatePanel(t: typeof tables): string {
+  const p = t.priv;
+  const wallet = walletNow();
+  // The wallet changed (connected, switched): read "Your tables" again.
+  if (p.loaded && !p.loading && wallet !== p.wallet) queueMicrotask(reloadPrivate);
+  const grid = 'v2-ptgrid';
+  const d = p.data;
+  let body: string;
+  if (!d && (p.loading || !p.loaded)) body = `<div class="v2-empty"><i class="v2-spin" aria-hidden="true"></i><span>Loading private tables…</span></div>`;
+  else if (!d) body = `<div class="v2-empty">${ico('sol', 4)}<span>${esc(p.error ?? '')}</span>${btn('Try again', 'priv-refresh', { h: 'blue' })}</div>`;
+  else {
+    const notes = d.linkedClosed ? `<div class="v2-card v2-row v2-sm">${ico('lock', 1.6)}<span class="v2-grow">The table in your invite link (${esc(shortAddr(d.linkedClosed))}) isn't open right now. Ask the host to open it again.</span></div>` : '';
+    const hosted = d.hosted.length ? `<span class="v2-cap">Your tables</span>${d.hosted.map(hostedRow).join('')}<span class="v2-cap">Open tables</span>` : '';
+    const rows = d.tables.length === 0
+      ? `<div class="v2-empty">${ico('sol', 4)}<span>No private SOL tables are open right now.<br>Host one, or join a friend's table by code.</span></div>`
+      : `<div class="${grid} v2-pthdr"><span>Blinds</span><span>Host</span><span>Seated</span><span>Who can join</span><span>Buy-in</span><span></span></div>${d.tables
+          .map((r) => {
+            const buyIn = PerBuyIn.for(r.minBuyIn, r.maxBuyIn, r.bigBlind);
+            const access = r.mine ? '<span class="v2-pill gold">Yours</span>' : r.inviteOnly ? (r.haveLink ? '<span class="v2-pill ok">Invited</span>' : '<span class="v2-pill">Invite-only</span>') : '<span class="v2-pill">Anyone</span>';
+            return `<div class="${grid} v2-ptrow"><b class="v2-solamt">${ico('sol', 1)}<span class="v2-num">${esc(sol(r.smallBlind))} / ${esc(sol(r.bigBlind))}</span></b><span class="v2-ellip">${esc(r.mine ? 'You' : shortAddr(r.creator) || '—')}</span><span>${r.seated} / ${r.maxSeats}</span><span>${access}</span>${solAmt(buyIn)}${btn('Join', 'priv-join', { h: 'gold', c: 'sm', v: r.address, title: r.inviteOnly && !r.haveLink && !r.mine ? 'Invite-only: you can sit if the host invited your wallet' : undefined })}</div>`;
+          })
+          .join('')}`;
+    body = `<div class="v2-scroll v2-col v2-priv-list">${notes}${hosted}${rows}</div>`;
+  }
+  const buyIn = `<div class="v2-row v2-wrap v2-priv-buy"><span class="v2-sm v2-mut">Your buy-in</span>${chips(PerBuyIn.labels.map((l, i) => [String(i), l] as [string, string]), String(PerBuyIn.choice), 'priv-buyin')}</div>`;
+  return `<div class="v2-panel v2-col v2-priv" style="flex:1;min-height:0">
+  <div class="v2-row v2-wrap v2-priv-top"><b class="v2-h v2-grow">Private SOL tables</b>${input('code', t.input?.code ?? '', 'Table code', { max: 44, cls: 'v2-priv-code' })}<button class="v2-b blue" data-a="priv-code" data-enter="code">Join by code</button>${d && !p.loading ? btn('Refresh', 'priv-refresh', { h: 'ghost' }) : ''}${btn(`${ico('plus', 1)} Host a table`, 'priv-host', { h: 'gold' })}</div>
+  ${walletStrip()}
+  ${buyIn}
+  ${body}
+  <div class="v2-xs v2-mut">Only you can see your cards, and every hand can be verified. SOL tables run on the Solana test network.</div>
+</div>`;
+}
+
+/** Runs a hosted-table action with the progress dialog, then reads the lobby again. */
+function hostedTask(v: string, title: string, fallback: string, op: (per: PerRuntime, lobby: typeof import('../../web3/ui/lobby'), h: HostedRow, st: (s: string) => void) => Promise<string | void | null>): void {
+  const h = findHosted(v);
+  if (!h) return;
+  void solTask(title, fallback, async (st) => {
+    const [per, lobby] = await Promise.all([perRt(), lobbyMod()]);
+    return op(per, lobby, h, st);
+  }, reloadPrivate);
+}
+
+async function connectWallet(): Promise<boolean> {
+  try {
+    if (onchainApi.connectWallet) return await onchainApi.connectWallet();
+    return await w3(app()).solana.connect();
+  } catch (e) {
+    ui().message('Connect a wallet', esc(solError(e, "Couldn't connect your wallet. Try again.")));
+    return false;
+  }
+}
+
+const privActions: Record<string, Action> = {
+  'priv-refresh': () => reloadPrivate(),
+  'priv-code': () => {
+    const code = (tables.input?.code ?? '').trim();
+    if (!code) return ui().message('Join by code', 'Enter the table code your friend shared.');
+    void onchainApi.partyJoin?.(code);
+  },
+  'priv-host': () => {
+    if (!signedIn()) return host().show('Login');
+    tables.stayPriv = true;
+    ui().show('sol-host');
+  },
+  'priv-connect': async () => {
+    await connectWallet();
+    reloadPrivate();
+  },
+  'priv-copy': () => {
+    const a = walletNow();
+    if (a) copy(a, 'Wallet address copied');
+  },
+  'priv-balance': () => void onchainApi.refreshSol?.(),
+  'priv-deposit': () => void onchainApi.deposit?.(),
+  'priv-withdraw': () => void onchainApi.withdraw?.(),
+  'priv-more': () =>
+    ui().openDialog({
+      title: 'Your wallet',
+      body: `<p>Each device you play SOL tables on keeps a key your wallet approved, so hands don't need a wallet prompt.</p><p style="margin-top:.6em">Lost a device, or played on a shared computer? Log out all devices. Each one then asks your wallet once before it plays again. Your game balance stays yours.</p>`,
+      buttons: btn('Close', 'pm-close', { h: 'ghost' }) + btn('Log out all devices', 'pm-revoke', { h: 'red' }),
+      actions: {
+        'pm-close': () => ui().closeDialog(),
+        'pm-revoke': () => {
+          ui().closeDialog();
+          void solTask('Log out all devices', "Couldn't log out your devices. Try again in a moment.", async (st) => {
+            if (!(await connectWallet())) return null;
+            const per = await perRt();
+            await per.gameWallet.revokePlayKeys(st);
+            return 'Done. Every device asks your wallet once before it plays SOL tables again.';
+          }, reloadPrivate);
+        },
+      },
+    }),
+  'priv-buyin': (v) => {
+    PerBuyIn.choice = Number(v);
+  },
+  'priv-join': (v) => {
+    const r = tables.priv.data?.tables.find((x) => x.address === v);
+    if (!r) return;
+    if (!signedIn()) return host().show('Login');
+    const buyIn = PerBuyIn.for(r.minBuyIn, r.maxBuyIn, r.bigBlind);
+    void solTask('Join table', "Couldn't join the table. Try again in a moment.", async (st) => {
+      const [per, { joinAndGo }] = await Promise.all([perRt(), lobbyMod()]);
+      await joinAndGo(app(), per, r.address, buyIn, st, { smallBlind: r.smallBlind, bigBlind: r.bigBlind, minBuyIn: r.minBuyIn, maxBuyIn: r.maxBuyIn });
+    });
+  },
+  'h-join': (v) =>
+    hostedTask(v, 'Join table', "Couldn't join the table. Try again in a moment.", async (per, l, h, st) => {
+      await l.joinAndGo(app(), per, h.table, h.buyIn, st);
+    }),
+  'h-open': (v) => hostedTask(v, 'Open your table', "Couldn't open the table. Try again in a minute.", async (per, l, h, st) => void (await l.openHosted(per, h.table, st))),
+  'h-copy': (v) => {
+    const link = findHosted(v)?.link;
+    if (link) copy(link, 'Invite link copied');
+  },
+  'h-newlink': (v) =>
+    hostedTask(v, 'New invite link', "Couldn't make a new link. Try again in a moment.", async (per, l, h, st) => {
+      await l.newInviteLink(per, h.table, st);
+      return 'Your new invite link is ready, and older links no longer work. Tap Copy invite link to share it.';
+    }),
+  'h-close': (v) =>
+    ui().message('Close this table?', `Players can't join it after this. Its deposit (${ico('sol', 1)} about 0.013 SOL) can come back to your wallet a minute later.`, 'Close table', () =>
+      hostedTask(v, 'Close your table', "Couldn't close the table. Try again in a moment.", async (per, l, h, st) => {
+        await l.closeHosted(per, h.table, st);
+        return 'Closed. In a minute, tap Get deposit back to take its deposit back.';
+      }), 'Keep it', undefined, 'red'),
+  'h-reclaim': (v) =>
+    hostedTask(v, 'Get deposit back', "Couldn't get the deposit back yet. Try again in a minute.", async (per, l, h, st) => {
+      await l.reclaimHosted(per, h.table, h.id, st);
+      return "The table's deposit is back in your wallet.";
+    }),
+  'h-oldlist': (v) =>
+    hostedTask(v, 'Get deposit back', "Couldn't get the deposit back yet. Try again in a minute.", async (per, l, h, st) => {
+      await l.closeOldInvites(per, h.id, st);
+      return "The invite list's deposit is back in your wallet.";
+    }),
+};
+/** The private SOL tables tab: the lobby read (src/web3/ui/lobby.ts) and the wallet it was read for. */
+interface PrivState {
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+  data: LobbyRead | null;
+  /** The wallet the data was read for (a wallet change reads again). */
+  wallet: string | null;
 }
 
 const tables: ScreenDef & {
   theme: Theme;
   tab: 'pub' | 'priv';
-  priv: { loading: boolean; rows: PrivRow[]; error: string | null; loaded: boolean };
+  /** Come back to Private tables (after Host a SOL table). */
+  stayPriv: boolean;
+  priv: PrivState;
 } = {
   id: 'tables',
   replaces: ['TableSelect_TownLobby'],
   theme: 'Town',
   tab: 'pub',
-  priv: { loading: false, rows: [], error: null, loaded: false },
+  stayPriv: false,
+  priv: { loading: false, loaded: false, error: null, data: null, wallet: null },
   input: { code: '' },
-  open() {
+  open(arg) {
     this.theme = StakeTableSkin.themeFor(host().stakes.resolve().minBuyIn);
-    this.tab = 'pub';
+    this.tab = arg === 'priv' || (arg === undefined && this.stayPriv) ? 'priv' : 'pub';
+    this.stayPriv = false;
     this.priv.loaded = false;
+    if (this.tab === 'priv' && onchain()) void loadPrivate(this);
   },
   render() {
     const chain = onchain();
@@ -137,26 +376,15 @@ const tables: ScreenDef & {
       if (!h.stakes.canSit(tier)) {
         ui().openDialog({
           title: 'Not enough Coins',
-          body: `${esc(tier.displayName)} tables need ${formatN0(tier.minBuyIn)} Coins to sit. Pick a lower table, or get Coins in the Shop.`,
-          buttons: btn('Shop', 'nec-shop', { h: 'green' }) + btn('OK', 'nec-ok', { h: 'gold' }),
-          actions: { 'nec-shop': () => ui().show('shop', 'coins'), 'nec-ok': () => ui().closeDialog() },
+          body: `${esc(tier.displayName)} tables need ${formatN0(tier.minBuyIn)} Coins to sit. Pick a lower table. ${esc(getCoinsRoute().hint)}`,
+          buttons: btn('Not now', 'nec-ok', { h: 'ghost' }) + btn(esc(getCoinsRoute().label), 'nec-get', { h: 'green' }),
+          actions: { 'nec-get': () => { ui().closeDialog(); getCoinsRoute().go(); }, 'nec-ok': () => ui().closeDialog() },
         });
         return;
       }
       void joinFreePlay(h, tier, h.stakes.selectedBuyInChips, 'join');
     },
-    'priv-refresh': () => loadPrivate(tables),
-    'priv-code': () => {
-      const code = (tables.input?.code ?? '').trim();
-      if (!code) return ui().message('Join by code', 'Enter the table code your friend shared.');
-      void onchainApi.partyJoin?.(code);
-    },
-    'priv-host': () => ui().show('sol-host'),
-    'priv-lobby': () => onchainApi.openPrivateTables?.(),
-    'priv-join': (v) => {
-      const row = tables.priv.rows.find((r) => r.address === v);
-      if (row) void row.join();
-    },
+    ...privActions,
   },
 };
 
@@ -168,68 +396,6 @@ export function selectedTier(theme: Theme): StakeTier {
   const chosen = stakes.selectedMinBuyIn;
   const tier = chosen > 0 ? StakeCatalog.get(chosen) : stakes.resolve();
   return StakeTableSkin.themeFor(tier.minBuyIn) === theme ? tier : StakeTableSkin.stakesFor(theme)[0]!;
-}
-
-function privatePanel(t: typeof tables): string {
-  const p = t.priv;
-  const grid = 'v2-ptgrid';
-  const body = p.loading
-    ? `<div class="v2-empty">Loading private tables…</div>`
-    : p.error
-      ? `<div class="v2-empty">${ico('sol', 4)}<span>Couldn't load the private tables: ${esc(p.error)}</span><div class="v2-row">${btn('Try again', 'priv-refresh', { h: 'blue' })}${btn('Open the SOL lobby', 'priv-lobby', { h: 'ghost' })}</div></div>`
-      : p.rows.length === 0
-        ? `<div class="v2-empty">${ico('sol', 4)}<span>No private SOL tables are open right now.<br>Host one, or join a friend's table by code.</span></div>`
-        : `<div class="${grid} v2-pthdr"><span>Blinds</span><span>Host</span><span>Seated</span><span>Access</span><span>Buy-in</span><span></span></div>
-           <div class="v2-scroll v2-col" style="gap:.4em;flex:1;min-height:0">${p.rows
-             .map((r) => `<div class="${grid} v2-ptrow"><b>${esc(r.blinds)}</b><span class="v2-ellip">${esc(r.mine ? 'You' : r.host)}</span><span>${esc(r.seated)}</span><span><span class="v2-pill">${esc(r.access)}</span></span><b class="v2-num">${esc(r.buyIn)}</b>${btn(r.mine ? 'Open' : 'Join', 'priv-join', { h: r.mine ? 'violet' : 'gold', c: 'sm', v: r.address })}</div>`)
-             .join('')}</div>`;
-  return `<div class="v2-panel v2-col v2-priv" style="flex:1;min-height:0">
-  <div class="v2-row v2-wrap v2-priv-top"><b class="v2-h v2-grow">Private SOL tables</b>${input('code', t.input?.code ?? '', 'Table code', { max: 44, cls: 'v2-priv-code' })}${btn('Join by code', 'priv-code', { h: 'blue' })}${p.loaded && !p.loading && !p.error ? btn('Refresh', 'priv-refresh', { h: 'ghost' }) : ''}${btn('+ Host a table', 'priv-host', { h: 'gold' })}</div>
-  ${body}
-  <div class="v2-xs v2-mut">Cards are readable only by your own table key (MagicBlock TEE, devnet).</div>
-</div>`;
-}
-
-async function loadPrivate(t: typeof tables): Promise<void> {
-  t.priv = { loading: true, rows: [], error: null, loaded: true };
-  ui().render();
-  try {
-    const per = await w3(app()).per.get();
-    const list = await per.listTables();
-    const me = per.gameWallet.address?.toBase58() ?? null;
-    const u64 = (v: unknown): bigint => {
-      try {
-        return typeof v === 'bigint' ? v : BigInt(typeof v === 'number' ? Math.trunc(v) : String(v ?? '0').trim() || '0');
-      } catch {
-        return 0n;
-      }
-    };
-    const rows: PrivRow[] = [];
-    for (const r of list) {
-      if (Number(r.maxSeats ?? 0) > 8) continue;
-      const min = u64(r.minBuyIn), max = u64(r.maxBuyIn), sb = u64(r.smallBlind), bb = u64(r.bigBlind);
-      const address = String(r.address ?? '');
-      const creator = String(r.creator ?? '');
-      const buyIn = per.buyIn.for(min, max, bb);
-      rows.push({
-        address,
-        blinds: `${sol(sb)} / ${sol(bb)}`,
-        host: creator ? `${creator.slice(0, 4)}…${creator.slice(-4)}` : '—',
-        seated: `${Number(r.seated ?? 0)} / ${Number(r.maxSeats ?? 0)}`,
-        access: r.inviteOnly === true ? 'Invite-only' : 'Anyone',
-        buyIn: sol(buyIn),
-        mine: me !== null && me === creator,
-        join: async () => {
-          const { joinAndGo } = await import('../../web3/ui/lobby');
-          await joinAndGo(app(), per, address, buyIn, (s) => ui().toast(s, 3000), { smallBlind: sb, bigBlind: bb, minBuyIn: min, maxBuyIn: max });
-        },
-      });
-    }
-    t.priv = { loading: false, rows, error: null, loaded: true };
-  } catch (e) {
-    t.priv = { loading: false, rows: [], error: e instanceof Error ? e.message : String(e), loaded: true };
-  }
-  ui().render();
 }
 
 // ------------------------------------------------------------------ Party
@@ -287,7 +453,7 @@ const solHost: ScreenDef & { stake: number; seats: number; access: Access; invit
     const blinds = SOL_STAKES.map((s, i) => {
       const r = ROOMS[i] ?? ROOMS[0]!;
       const name = StakeCatalog.Tiers[i]?.displayName ?? s.label;
-      return `<button class="v2-stc${i === this.stake ? ' on' : ''}"${act('sh-stake', i)}><div class="v2-stc-art v2-center" style="background:linear-gradient(${r.color},#1a0f4a)">${ico('sol', 2)}</div><b>${esc(name)}</b><small>${sol(s.small)} / ${sol(s.big)}</small></button>`;
+      return `<button class="v2-stc${i === this.stake ? ' on' : ''}"${act('sh-stake', i)}><div class="v2-stc-art v2-center" style="background:linear-gradient(${r.color},var(--v2-bg-top))">${ico('sol', 2)}</div><b>${esc(name)}</b><small>${sol(s.small)} / ${sol(s.big)}</small></button>`;
     }).join('');
     const seats: [string, string][] = [2, 3, 4, 5, 6, 7, 8].map((n) => [String(n), String(n)]);
     const name = StakeCatalog.Tiers[this.stake]?.displayName ?? st.label;
@@ -297,15 +463,15 @@ const solHost: ScreenDef & { stake: number; seats: number; access: Access; invit
     <div class="v2-sh-blinds">${blinds}</div>
     <b class="v2-h">Seats</b><div class="v2-row v2-wrap">${chips(seats, String(this.seats), 'sh-seats', true)}</div>
     <b class="v2-h">Who can join</b><div class="v2-row v2-wrap">${chips([['anyone', 'Anyone'], ['link', 'Link only'], ['invite', 'Invite-only']], this.access, 'sh-access', true)}</div>
-    ${this.access === 'invite' ? `<div class="v2-row">${input('wallet', this.input?.wallet ?? '', 'Invitee wallet address (up to 15)', { max: 44, cls: 'v2-grow' })}<button class="v2-b blue" data-a="sh-add" data-enter="wallet">+ Add</button></div>
+    ${this.access === 'invite' ? `<div class="v2-row">${input('wallet', this.input?.wallet ?? '', 'Invitee wallet address (up to 15)', { max: 44, cls: 'v2-grow' })}<button class="v2-b blue" data-a="sh-add" data-enter="wallet">${ico('plus', 0.9)} Add</button></div>
     <div class="v2-row v2-wrap v2-sm">${this.invitees.length ? this.invitees.map((w) => `<button class="v2-pill"${act('sh-del', w)} aria-label="Remove ${esc(w)}">${esc(w.slice(0, 4))}…${esc(w.slice(-3))} ${ico('close', 0.8)}</button>`).join('') : '<span class="v2-mut">Only you and wallets you add (plus the invite link) can sit.</span>'}</div>` : `<div class="v2-sm v2-mut">${this.access === 'link' ? 'Only people with the invite link can sit. You get the link in Your tables.' : 'Anyone can find and join this table.'}</div>`}
   </div>
   <div class="v2-panel v2-col v2-sh-sum">
     <b class="v2-h">Summary</b>
     <div class="v2-sh-felt v2-center"><span class="v2-pill">${esc(name)} ${sol(st.small)} / ${sol(st.big)} · ${this.seats} seats</span></div>
     <div class="v2-kv"><span>Buy-in</span><b>${sol(stakeMinBuyIn(this.stake))} – ${sol(stakeMaxBuyIn(this.stake))}</b></div>
-    <div class="v2-kv"><span>Open cost</span><b>≈ ◎ 0.03</b></div>
-    <div class="v2-kv"><span>Back on close</span><b>≈ ◎ 0.013</b></div>
+    <div class="v2-kv"><span>Open cost</span><b>≈ ${ico('sol', 1)} 0.03 SOL</b></div>
+    <div class="v2-kv"><span>Back on close</span><b>≈ ${ico('sol', 1)} 0.013 SOL</b></div>
     <div class="v2-kv"><span>Rake</span><b>5% of buy-ins</b></div>
     <div class="v2-kv"><span>Auto-close</span><b>6 h empty</b></div>
     <div class="v2-grow"></div>
@@ -337,7 +503,7 @@ async function createSolTable(): Promise<void> {
   solHost.busy = true;
   let status = 'Getting ready…';
   const dlg = (): void =>
-    ui().openDialog({ title: 'Host a SOL table', body: () => `<div class="v2-row">${ico('sol', 2.4)}<span>${esc(status)}</span></div>`, buttons: btn('Hide', 'sh-hide', { h: 'ghost' }), actions: { 'sh-hide': () => ui().closeDialog() }, dismiss: false });
+    ui().openDialog({ title: 'Host a SOL table', body: () => `<div class="v2-row" style="gap:.9em"><i class="v2-spin" aria-hidden="true"></i><span>${esc(status)}</span></div>`, buttons: btn('Hide', 'sh-hide', { h: 'ghost' }), actions: { 'sh-hide': () => ui().closeDialog() }, dismiss: false });
   dlg();
   try {
     const per = await w3(app()).per.get();
@@ -350,7 +516,7 @@ async function createSolTable(): Promise<void> {
     ui().closeDialog();
   } catch (e) {
     ui().closeDialog();
-    ui().message("Couldn't host", esc(e instanceof Error ? e.message : String(e)));
+    ui().message("Couldn't host", esc(solError(e, "The table couldn't be opened. Nothing was charged. Try again in a moment.")));
   } finally {
     solHost.busy = false;
     ui().render();

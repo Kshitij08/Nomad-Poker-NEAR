@@ -24,6 +24,7 @@ import { animatorOnEnable, uiClip } from './uiClips';
 import { buildNode, HUD_DATA, UNode, type RGBA } from './unityUi';
 import { overlayScale } from '../layout/portraitRects';
 import { RaiseSheet } from './raiseSheet';
+import { nudgeRaise, snapRaise } from './raiseMath';
 import { portraitBettingRects } from '../layout/portraitHud';
 
 // ---------------------------------------------------------------- Selectable transitions
@@ -272,7 +273,7 @@ export class BettingPanelView implements BettingPanelPort {
     // v2: the Confirm_Panel art stays as the logic's state holder (hidden by v2hud.css); the raise sheet is DOM.
     this.sheet = new RaiseSheet(parent, {
       preset: (p) => this.legal && this.setAmount(presetAmount(p, this.legal, this.myCurrentBet)),
-      set: (v) => this.setAmount(v),
+      set: (v) => this.setAmount(snapRaise(v, this.sliderMin, this.sliderMax, this.step)),
       nudge: (d) => this.nudge(d),
       confirm: () => this.confirm.submit(),
       close: () => this.close.submit(),
@@ -326,6 +327,7 @@ export class BettingPanelView implements BettingPanelPort {
     this.onChosen = onChosen;
     this.showing = true;
     this.panel.setActive(false); // opens on Bet/Raise
+    this.sheet.hide(); // a new turn never inherits a sheet (or its amounts / stack) from an earlier one
 
     const s = bettingPanelState(legal, myCurrentBet);
     this.state = s;
@@ -367,6 +369,10 @@ export class BettingPanelView implements BettingPanelPort {
     this.plus.setInteractable(false);
     this.minus.setInteractable(false);
     this.panel.setActive(false);
+    // Explicit: a turn that ends without a choice (timeout auto-fold, hand over, leave) must close the sheet too.
+    this.sheet.hide();
+    this.legal = null;
+    this.state = null;
     this.fold.setInteractable(false);
     this.checkCall.setInteractable(false);
     this.betRaise.setInteractable(false);
@@ -417,7 +423,8 @@ export class BettingPanelView implements BettingPanelPort {
 
   private nudge(dir: number): void {
     if (!this.state) return;
-    this.setAmount(this.value + dir * this.step);
+    // One min-raise increment on the slider's grid (min raise-to + k·step), all-in at the far end.
+    this.setAmount(nudgeRaise(this.value, dir, this.sliderMin, this.sliderMax, this.step));
   }
 
   /** Slider: Fill Area anchorMax.x and Handle anchors.x = normalized value. */
@@ -438,7 +445,7 @@ export class BettingPanelView implements BettingPanelPort {
     const valueAt = (clientX: number) => {
       const r = this.handleArea.el.getBoundingClientRect();
       const n = Math.min(1, Math.max(0, (clientX - offset - r.left) / (r.width || 1)));
-      return Math.round(this.sliderMin + n * (this.sliderMax - this.sliderMin));
+      return snapRaise(this.sliderMin + n * (this.sliderMax - this.sliderMin), this.sliderMin, this.sliderMax, this.step);
     };
     el.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !this.showing || !this.state?.betRaiseEnabled) return;
@@ -521,6 +528,9 @@ export class BettingPanelView implements BettingPanelPort {
     this.onChosen = null;
     if (!cb) return; // stale click while it is not our turn
     this.panel.setActive(false);
+    // Feedback the moment you act: the row steps back right away instead of looking pressable until the server answers.
+    this.root.el.classList.add('v2-off');
+    this.sheet.hide();
     cb(action);
   }
 }

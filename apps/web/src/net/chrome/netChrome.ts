@@ -11,6 +11,10 @@
  *  - PrivateBuyInPrompt → the web3 module's 'private-buy-in' screen, else a v2 sheet (500–1,000 Coins)
  *  - PokerSeatMic on the local seat (voice on only with ?voice=1, as Unity ships voice off)
  *
+ * A table with no server behind it (the offline engine, the practice tournament: TableSession.localPlayerSeated) gets
+ * the same chat and reactions, kept on this screen: your messages go to your own log (LocalChat) and your reaction
+ * pops over your seat (LocalReactions). Live tournament tables are net sessions and use the server path.
+ *
  * Leaving the table is the menu's Leave / Settings (NomadTableHud) → host.leave() → NetTableSession.stop(), which is
  * TableDisconnectButton's sequence (leave RPC, 0.75 s, shut the runner down).
  */
@@ -18,13 +22,14 @@ import type { AppContext } from '../../app/app';
 import { PokerSound } from '@nomad/engine/orchestration/pokerSound';
 import { TablePhase } from '@nomad/engine/events/pokerEvent';
 import { assetUrl, HUD_DATA, type NodeData } from '../../hud/unityUi';
-import type { TableChrome } from '../../table/tableScreen';
+import type { TableChrome, TableSessionHost } from '../../table/tableScreen';
 import type { ClientGame } from '../clientGame';
 import type { NetService, NetTableSession } from '../netService';
-import { PokerChatText } from '@nomad/table-server/chat';
+import { PokerChatRateLimiter, PokerChatSettings, PokerChatText } from '@nomad/table-server/chat';
 import { ChainTableMode, StakeSessionNames } from '@nomad/table-server/sessions';
 import { TableChat, ChatLinkState, type PokerChatRow } from '../tableChat';
 import { VoiceLinkState } from '../voice/tableVoice';
+import { ReactionBubbles, LOCAL_PERSPECTIVE_SLOT } from '../netTableView';
 import '../../ui2/table.css'; // v2 pre-game row rule (html.v2t-pregame)
 import { v2tEl } from '../../ui2/tableKit';
 import { isPortrait } from '../../layout/orientation';
@@ -34,12 +39,21 @@ const SCREEN = HUD_DATA.canvases.find((c) => c.role === 'screen-hud')!;
 const child = (name: string): NodeData | undefined => SCREEN.root.children?.find((c) => c.name === name);
 type Fields = Record<string, unknown>;
 const fieldsOf = (d: NodeData | undefined): Fields => ((d?.components as { other?: { fields?: Fields }[] } | undefined)?.other?.[0]?.fields ?? {}) as Fields;
+/** Chat feed: at most this many messages on screen, each up for this long. */
+const FEED_MAX = 4;
+const FEED_SECONDS = 7;
 const REACTIONS = (HUD_DATA as unknown as { reactions: { entries: { id: number; sprite: string }[] } }).reactions;
 /** Sender name colours (PokerChatPanel.senderPalette, re-picked to read on the v2 purple). */
 const NAME_COLORS = ['#ffd54a', '#6af0a0', '#7fd0ff', '#ff9ad5', '#c3a6ff', '#ffb36b', '#9ef0ff', '#ff8a9a'];
 const n0 = (v: number): string => v.toLocaleString('en-US');
 
 type Audio = { play(s: PokerSound): void };
+const nowSeconds = (): number => performance.now() / 1000;
+
+/** What the chat drawer reads: the table socket's TableChat, or LocalChat at a table with no server. */
+type ChatPort = Pick<TableChat, 'state' | 'isAvailable' | 'canSend' | 'sendCooldownRemaining' | 'log' | 'send' | 'messageAdded' | 'logCleared' | 'stateChanged'>;
+/** What the reaction tray reads: the ClientGame, or LocalReactions at a table with no server. */
+type ReactionPort = Pick<ClientGame, 'localSeat' | 'canReact' | 'reactionCooldownRemaining' | 'sendReaction'>;
 
 export function netTableChrome(ctx: AppContext, service: NetService): TableChrome {
   return (host, layer) => {
@@ -54,6 +68,8 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
     banner.hidden = true;
 
     let session: NetTableSession | null = null;
+    /** Chat and reactions for a table with no server (made on first need, kept for this visit). */
+    let local: { chat: LocalChat; reactions: LocalReactions } | null = null;
     let offGame: (() => void) | null = null;
     let boundGame: ClientGame | null = null;
     const bind = (s: NetTableSession | null) => {
@@ -65,9 +81,13 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       offGame = null;
       session = s;
       boundGame = s?.game ?? null;
-      chat.bind(s?.chat ?? null);
+      chat.bind(s?.chat ?? local?.chat ?? null);
       if (s?.game) {
-        offGame = s.game.onChange(() => refresh());
+        const game = s.game;
+        offGame = game.onChange((what) => {
+          if (what === 'joinError') showJoinError(game);
+          refresh();
+        });
         s.game.privateBuyInPrompt = (g) => openPrivateBuyIn(slots, g, service, ctx);
         service.privateBuyInPrompt = s.game.privateBuyInPrompt;
         bindSeatMic(s);
@@ -75,7 +95,30 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       refresh();
     };
 
+    // A sit-down that failed must reach the player (table messages aren't drawn): a v2 dialog via the host's
+    // message box (the global v2 dialog layer), else a toast.
+    const showJoinError = (game: ClientGame) => {
+      const err = game.joinError;
+      game.joinError = null;
+      if (!err) return;
+      const nomad = ctx.services.nomad;
+      if (nomad) nomad.message(err.title, err.message);
+      else tableToast(slots.layer, err.message);
+    };
+
     const refresh = () => {
+      if (!session && host.session?.localPlayerSeated) {
+        if (!local) {
+          local = { chat: new LocalChat(() => service.identity.playerName), reactions: new LocalReactions(host) };
+          chat.bind(local.chat);
+        }
+        chat.setLive(true);
+        reactions.render(local.reactions);
+        lobby.render(null);
+        chat.render();
+        banner.hidden = true;
+        return;
+      }
       const g = session?.game ?? null;
       const live = !!session && session.status !== 'closed';
       chat.setLive(live);
@@ -92,7 +135,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
         reactions.render(session.status !== 'closed' ? session.game : null);
         lobby.render(session.status !== 'closed' ? session.game : null);
         chat.render();
-      }
+      } else refresh(); // no net session (yet): a table with no server, or one still connecting
     }, 200);
     bind(service.current);
 
@@ -103,6 +146,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       chat.bind(null);
       chat.dispose();
       reactions.dispose();
+      local?.reactions.dispose();
       lobby.dispose();
       banner.remove();
       setPregame(false);
@@ -122,7 +166,9 @@ class ChatView {
   private readonly presets: HTMLButtonElement[] = [];
   private readonly input: HTMLInputElement;
   private readonly sendBtn: HTMLButtonElement;
-  private chat: TableChat | null = null;
+  /** Live feed: new messages pop up on the right like a stream chat, then fade (tap one to open the chat). */
+  private readonly feed: HTMLElement;
+  private chat: ChatPort | null = null;
   private off: (() => void)[] = [];
   private open = false;
   private unread = 0;
@@ -187,8 +233,31 @@ class ChatView {
     this.input.addEventListener('keyup', (e) => e.stopPropagation());
     this.input.addEventListener('focus', () => (TableChat.isTyping = true));
     this.input.addEventListener('blur', () => (TableChat.isTyping = false));
+    this.feed = v2tEl('div', 'v2t-chat-feed', slots.layer);
+    this.feed.setAttribute('aria-hidden', 'true'); // the drawer's log is the accessible record
     window.addEventListener('keydown', this.onKey, true);
     this.setOpen(false); // startCollapsed
+  }
+
+  /** Pops one message into the feed (closed drawer only); the oldest drops off past FEED_MAX. */
+  private pushFeed(row: PokerChatRow): void {
+    if (this.open || !this.live) return;
+    const item = v2tEl('button', 'v2t-feed-item', this.feed);
+    item.type = 'button';
+    item.tabIndex = -1;
+    const name = v2tEl('b', '', item, row.name); // text nodes only: never markup
+    name.style.color = row.isLocal ? 'var(--v2-mut)' : NAME_COLORS[row.colorIndex % NAME_COLORS.length]!;
+    item.append(document.createTextNode(row.body));
+    item.addEventListener('click', () => {
+      this.audio.play(PokerSound.ButtonGeneric);
+      this.setOpen(true);
+    });
+    while (this.feed.childElementCount > FEED_MAX) this.feed.firstElementChild?.remove();
+    // Fades out after FEED_SECONDS (CSS animation), then leaves the DOM.
+    window.setTimeout(() => {
+      item.classList.add('out');
+      window.setTimeout(() => item.remove(), 450);
+    }, FEED_SECONDS * 1000);
   }
 
   get isOpen(): boolean {
@@ -208,9 +277,10 @@ class ChatView {
     TableChat.isTyping = false;
     this.toggle.remove();
     this.drawer.remove();
+    this.feed.remove();
   }
 
-  bind(chat: TableChat | null): void {
+  bind(chat: ChatPort | null): void {
     for (const f of this.off.splice(0)) f();
     this.chat = chat;
     this.unread = 0;
@@ -237,6 +307,8 @@ class ChatView {
       this.onOpen?.();
     }
     this.drawer.hidden = !open;
+    this.feed.hidden = open; // the full log replaces the feed while the drawer is open
+    if (open) this.feed.replaceChildren();
     this.toggle.classList.toggle('on', open);
     this.toggle.setAttribute('aria-expanded', String(open));
     this.renderUnread();
@@ -261,6 +333,7 @@ class ChatView {
 
   private onMessageAdded(row: PokerChatRow): void {
     if (!row.isLocal) this.audio.play(PokerSound.ChatMessage);
+    this.pushFeed(row);
     const atBottom = this.logEl.scrollTop + this.logEl.clientHeight >= this.logEl.scrollHeight - 4;
     this.rebuild();
     if (row.isLocal || (this.open && atBottom)) this.scrollToBottom();
@@ -295,8 +368,8 @@ class ChatView {
     this.toggle.hidden = !available;
     if (!available && this.open) this.setOpen(false);
     const state = c?.state;
-    this.status.textContent =
-      state === ChatLinkState.Connecting || state === ChatLinkState.Subscribing ? 'Connecting…' : state === ChatLinkState.Retrying ? 'Reconnecting…' : state === ChatLinkState.Unavailable ? 'Offline' : '';
+    this.status.textContent = c instanceof LocalChat ? 'Offline'
+      : state === ChatLinkState.Connecting || state === ChatLinkState.Subscribing ? 'Connecting…' : state === ChatLinkState.Retrying ? 'Reconnecting…' : state === ChatLinkState.Unavailable ? 'Offline' : '';
     this.renderUnread();
     const canSend = !!c && c.canSend;
     this.sendBtn.disabled = !canSend;
@@ -322,7 +395,7 @@ class ReactionView {
   private readonly status: HTMLElement;
   private readonly buttons: HTMLButtonElement[] = [];
   private open = false;
-  private game: ClientGame | null = null;
+  private game: ReactionPort | null = null;
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape' && this.open) {
       e.stopImmediatePropagation();
@@ -385,7 +458,7 @@ class ReactionView {
     this.toggle.setAttribute('aria-expanded', String(this.open));
   }
 
-  render(game: ClientGame | null): void {
+  render(game: ReactionPort | null): void {
     this.game = game;
     const usable = !!game && game.localSeat >= 0;
     this.toggle.hidden = !usable;
@@ -397,6 +470,89 @@ class ReactionView {
     for (const b of this.buttons) b.disabled = !can;
     const cd = game!.reactionCooldownRemaining;
     this.status.textContent = cd > 0 ? `Wait ${Math.ceil(cd)}s` : '';
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------- no server
+
+/**
+ * TableChat's surface for a table with no server (offline, practice tournament): nobody else is there, so a message
+ * goes straight into your own log. Same sanitising, 10 s duplicate drop, rate limit and log cap as the socket chat.
+ */
+class LocalChat implements ChatPort {
+  private readonly limiter = new PokerChatRateLimiter();
+  private readonly rows: PokerChatRow[] = [];
+  private lastSentBody: string | null = null;
+  private lastSentAt = -Infinity;
+  readonly state = ChatLinkState.Subscribed;
+  readonly isAvailable = true;
+  readonly messageAdded = new Set<(row: PokerChatRow) => void>();
+  readonly stateChanged = new Set<() => void>();
+  readonly logCleared = new Set<() => void>();
+
+  constructor(private readonly displayName: () => string) {}
+
+  get canSend(): boolean {
+    return this.limiter.secondsUntilNextToken(nowSeconds()) <= 0;
+  }
+
+  get sendCooldownRemaining(): number {
+    return this.limiter.secondsUntilNextToken(nowSeconds());
+  }
+
+  get log(): readonly PokerChatRow[] {
+    return this.rows;
+  }
+
+  send(body: string): boolean {
+    const clean = PokerChatText.sanitize(body);
+    if (!clean) return false;
+    const t = nowSeconds();
+    if (clean === this.lastSentBody && t - this.lastSentAt < 10) return false;
+    if (!this.limiter.tryConsume(t)) return false;
+    this.lastSentBody = clean;
+    this.lastSentAt = t;
+    const [name] = PokerChatText.encode(this.displayName() || 'You', clean);
+    const row: PokerChatRow = { userId: 'local', name, body: clean, isLocal: true, colorIndex: 0 };
+    this.rows.push(row);
+    while (this.rows.length > PokerChatSettings.LogCapacity) this.rows.shift();
+    for (const fn of [...this.messageAdded]) fn(row);
+    for (const fn of [...this.stateChanged]) fn();
+    return true;
+  }
+}
+
+/**
+ * Reactions at a table with no server: your reaction pops over your own seat (the near HUD slot, where the offline
+ * engine and the practice tournament draw you), with the net table's bubble and cooldown.
+ */
+class LocalReactions implements ReactionPort {
+  private readonly limiter = new PokerChatRateLimiter(4, 1.5); // ClientGame.reactionLimiter
+  private readonly bubbles = new ReactionBubbles();
+
+  constructor(private readonly host: TableSessionHost) {}
+
+  get localSeat(): number {
+    return this.host.session?.localPlayerSeated?.() ? LOCAL_PERSPECTIVE_SLOT : -1;
+  }
+
+  get canReact(): boolean {
+    return this.localSeat >= 0 && this.limiter.secondsUntilNextToken(nowSeconds()) <= 0;
+  }
+
+  get reactionCooldownRemaining(): number {
+    return this.limiter.secondsUntilNextToken(nowSeconds());
+  }
+
+  sendReaction(reactionId: number): boolean {
+    if (this.localSeat < 0) return false;
+    const hud = this.host.stage.hud.seats[LOCAL_PERSPECTIVE_SLOT];
+    if (!hud?.visible || !this.limiter.tryConsume(nowSeconds())) return false;
+    return this.bubbles.show(LOCAL_PERSPECTIVE_SLOT, hud, reactionId & 0xff);
+  }
+
+  dispose(): void {
+    this.bubbles.dispose();
   }
 }
 
@@ -500,10 +656,11 @@ class LobbyView {
     const codeSlot = isPortrait() ? this.slots.left2 : this.slots.left;
     if (this.code.parentElement !== codeSlot) codeSlot.append(this.code);
 
-    // SetRoomCode: "Quick Play" on a shared pool table, else the party code (tap to copy).
+    // SetRoomCode: the party code (tap to copy). A shared Quick Play pool has no code worth showing: the chip used to
+    // say "Quick Play" as a disabled button, which read as a broken control, so it is hidden there.
     const code = game.roomCode;
     const shared = StakeSessionNames.isPool(code);
-    this.code.hidden = !(code.length > 0 && !game.isTournament);
+    this.code.hidden = shared || !(code.length > 0 && !game.isTournament);
     this.code.classList.toggle('static', shared);
     this.code.disabled = shared;
     const html = shared ? '<span>Quick Play</span>' : `<small>CODE</small><span>${code.replace(/[<&>]/g, '')}</span>${tIcon('copy', 1.1)}`;

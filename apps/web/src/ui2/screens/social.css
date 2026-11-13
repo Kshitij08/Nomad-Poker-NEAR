@@ -11,21 +11,23 @@
   position: absolute; right: -0.2em; top: -0.2em; width: 2em; height: 2em; border-radius: 50%; background: var(--v2-grad-gold);
   color: var(--v2-on-gold); display: flex; align-items: center; justify-content: center; font-weight: 900; border: 0.12em solid #fff;
 }
+/* A 40 px tap target round the small badge (phones). */
+.v2-fr-av .v2-editb::after { content: ''; position: absolute; inset: min(0px, calc((2em - 40px) / 2)); border-radius: 50%; }
 .v2-fr-lv { position: absolute; left: 50%; bottom: -0.6em; transform: translateX(-50%); }
 .v2-fr-name { margin-top: 0.6em; justify-content: center; max-width: 100%; }
 .v2-fr-name b { font-size: 1.35em; }
 .v2-fr-stat { align-items: center; gap: 0; padding: 0.5em; }
 .v2-fr-stat b { font-size: 1.5em; }
 .v2-fr-head { gap: 0.8em; }
-.v2-fr-tabs { width: 34em; flex: 0 0 auto; }
-.v2-fr-search { max-width: 20em; }
+.v2-fr-tabs { width: 22em; flex: 0 1 auto; min-width: 0; }
+.v2-fr-search { max-width: 20em; min-width: 9em; }
 .v2-fr-list { gap: 0.5em; padding-right: 0.3em; }
 .v2-fr-row { padding: 0.45em 0.8em; gap: 0.8em; }
 .v2-more { padding: 0.35em 0.7em; font-size: 1em; }
 .v2-fr-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.55em; width: 100%; flex: 1; min-height: 0; align-content: start; padding: 0.3em; }
 .v2-fr-tile { border-radius: 50%; display: block; }
 .v2-fr-tile .v2-av { border-width: 0.14em; }
-.v2-fr-tile.on .v2-av { box-shadow: 0 0 0 0.25em #ffc21f; }
+.v2-fr-tile.on .v2-av { box-shadow: 0 0 0 0.25em var(--v2-gold); }
 
 /* ---------------------------------------------------------------- Leaderboard */
 .v2-body.v2-lb { padding: 0 12.6em; }
@@ -36,13 +38,13 @@
   background: rgba(255, 255, 255, 0.04); font-size: 1.12em; font-weight: 700; border: 0.1em solid transparent; flex: 0 0 auto;
 }
 .v2-lbr.hdr { background: none; font-size: 0.9em; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-mut2); padding: 0.2em 1em; }
-.v2-lbr.g1 { background: linear-gradient(90deg, rgba(255, 194, 31, 0.38), rgba(255, 194, 31, 0.08)); border-color: rgba(255, 194, 31, 0.6); }
+.v2-lbr.g1 { background: linear-gradient(90deg, color-mix(in srgb, var(--v2-gold) 38%, transparent), color-mix(in srgb, var(--v2-gold) 8%, transparent)); border-color: color-mix(in srgb, var(--v2-gold) 60%, transparent); }
 .v2-lbr.g2 { background: linear-gradient(90deg, rgba(214, 221, 232, 0.32), rgba(214, 221, 232, 0.06)); border-color: rgba(214, 221, 232, 0.55); }
 .v2-lbr.g3 { background: linear-gradient(90deg, rgba(224, 154, 90, 0.36), rgba(224, 154, 90, 0.07)); border-color: rgba(224, 154, 90, 0.6); }
-.v2-lbr.you { background: rgba(124, 107, 255, 0.28); border: 0.12em solid #a98bff; }
+.v2-lbr.you { background: color-mix(in srgb, var(--v2-accent) 28%, transparent); border: 0.12em solid var(--v2-accent); }
 .v2-lb-rank { display: flex; align-items: center; }
 .v2-lbdiv { display: flex; align-items: center; gap: 0.8em; margin: 0.15em 0; font-weight: 900; font-size: 0.85em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--v2-mut2); flex: 0 0 auto; }
-.v2-lbdiv::before, .v2-lbdiv::after { content: ''; flex: 1; height: 0.1em; background: rgba(124, 107, 255, 0.4); }
+.v2-lbdiv::before, .v2-lbdiv::after { content: ''; flex: 1; height: 0.1em; background: color-mix(in srgb, var(--v2-accent) 40%, transparent); }
 .v2-lbdiv:empty { gap: 0; }
 /* The period note sits centred under the divider. */
 .v2-lbnote { text-align: center; font-size: max(0.8em, 11px); font-weight: 700; color: var(--v2-mut2); margin: -0.2em 0 0.2em; flex: 0 0 auto; }
@@ -63,8 +65,11 @@ html[data-orient='portrait'] .v2-fr-head { flex-direction: column; align-items: 
 html[data-orient='portrait'] .v2-fr-tabs { width: 100%; }
 html[data-orient='portrait'] .v2-fr-search { max-width: none; }
 html[data-orient='portrait'] .v2-fr-row { flex-wrap: wrap; padding: 0.5em 0.6em; gap: 0.5em; }
-html[data-orient='portrait'] .v2-fr-row .v2-b.sm { font-size: 0.78em; }
+html[data-orient='portrait'] .v2-fr-row .v2-b.sm { font-size: max(0.78em, 12px); }
 html[data-orient='portrait'] .v2-fr-grid { grid-template-columns: repeat(5, 1fr); }
 html[data-orient='portrait'] .v2-body.v2-lb { padding: 0; }
 html[data-orient='portrait'] .v2-lbr { grid-template-columns: 3.8em 1fr auto; font-size: 0.95em; padding: 0.4em 0.6em; gap: 0.4em; }
 html[data-orient='portrait'] .v2-lbr.hdr { font-size: max(0.75em, 11px); }
+
+/* Leaderboard: a hint under a near-empty board. */
+.v2-lb-hint { padding: 1.4em 0 0.4em; gap: 0.8em; }

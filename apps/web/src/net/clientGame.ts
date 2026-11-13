@@ -38,6 +38,14 @@ export interface NetTableViewPort extends TableViewPort {
   clearTable(): void;
   /** The HUD slot the local player is always drawn at (PokerClientGame.localPerspectiveSeat → Name_Canvas = 0). */
   readonly localSlot: number;
+  /** Catch-up painting: deal cards in place (no flight from the deck) while true. */
+  setInstantDeals?(on: boolean): void;
+  /** Who is seated: seats are spread evenly round the table (re-planned between hands). True = seats moved. */
+  setOccupancy?(seats: readonly number[]): boolean;
+  /** A new session or table: forget where players sat, so the next plan spreads afresh (seat numbers are reused). */
+  resetSeatPlan?(): void;
+  /** "Show cards" after a hand (null hides it). */
+  offerShowCards?(onShow: (() => void) | null): void;
 }
 
 /** PokerClientIdentity + the hello's buy-in. */
@@ -82,7 +90,14 @@ interface QueuedEvent {
   catchUp: boolean;
 }
 
-export type ClientGameChange = 'lobby' | 'roster' | 'seat' | 'economy' | 'joining' | 'turn' | 'message' | 'closed';
+export type ClientGameChange = 'lobby' | 'roster' | 'seat' | 'economy' | 'joining' | 'turn' | 'message' | 'closed' | 'joinError';
+
+/** Why a sit-down failed, for the chrome to show the player (table messages aren't drawn in the v2 HUD). */
+export interface JoinError {
+  kind: 'duplicate' | 'refused' | 'timeout' | 'funds' | 'unavailable';
+  title: string;
+  message: string;
+}
 
 export class ClientGame {
   private readonly view: NetTableViewPort;
@@ -219,6 +234,25 @@ export class ClientGame {
     return this._roster?.[this._localSeat]?.stack ?? 0;
   }
 
+  /** The last sit-down failure (set with a 'joinError' change; the chrome shows it once and clears it). */
+  joinError: JoinError | null = null;
+  /** A buy-in was sent and not yet confirmed: the server can hand out a chair first and take it back if the ledger
+   *  refuses (e.g. this account is already seated in another tab), so losing the seat now means "refused". */
+  private awaitingFunding = false;
+
+  private joinFailed(kind: JoinError['kind'], message: string, title = "Couldn't take a seat"): void {
+    this.showMessage(message);
+    this.joinError = { kind, title, message };
+    this.changed('joinError');
+  }
+
+  /** True when another connected seat already carries this player's name (the same account in a second tab). */
+  private seatedElsewhere(): boolean {
+    const me = this.identity.playerName?.trim().toLowerCase();
+    if (!me) return false;
+    return (this._roster ?? []).some((s, i) => i !== this._localSeat && !!s?.isOccupied && !s.isBot && !s.isAgent && (s.name ?? '').trim().toLowerCase() === me);
+  }
+
   onChange(fn: (what: ClientGameChange) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -260,11 +294,11 @@ export class ClientGame {
 
   requestBuyIn(): void {
     if (!this.isChipTable) {
-      this.showMessage('This table has no Coins ledger — cannot sit.');
+      this.joinFailed('unavailable', "This table can't take a seat right now. Leave and try another table.");
       return;
     }
     if (this._tableEconomy!.halted) {
-      this.showMessage('Table halted — leave to return your Coins.');
+      this.joinFailed('unavailable', 'This table has stopped dealing. Leave to get your Coins back.', 'Table stopped');
       this.requestLeaveTable();
       return;
     }
@@ -277,10 +311,13 @@ export class ClientGame {
   requestJoinTable(): void {
     if (this._joining) return;
     if (!this.isChipTable) {
-      this.showMessage('Waiting for Coins table…');
+      this.joinFailed('unavailable', "The table isn't ready for players yet. Try again in a moment.");
       return;
     }
-    if (!this.canJoinTable) return;
+    if (!this.canJoinTable) {
+      if (this.seatedElsewhere()) this.joinFailed('duplicate', "You're already seated at this table — open it in your other tab or leave there first.", 'Already at this table');
+      return;
+    }
     if (this.isPrivateTable) {
       if (this.privateBuyInPrompt) this.privateBuyInPrompt(this);
       else this.confirmPrivateBuyIn(ChainTableMode.PrivateMaxBuyIn);
@@ -297,7 +334,7 @@ export class ClientGame {
     let buyIn = Math.min(amount, cap);
     if (buyIn < ChainTableMode.PrivateMinBuyIn) buyIn = ChainTableMode.PrivateMinBuyIn;
     if (coins < buyIn) {
-      this.showMessage(`Private tables buy in for ${ChainTableMode.PrivateMinBuyIn.toLocaleString('en-US')}–${ChainTableMode.PrivateMaxBuyIn.toLocaleString('en-US')} Coins. You have ${coins.toLocaleString('en-US')}.`);
+      this.joinFailed('funds', `Private tables buy in for ${ChainTableMode.PrivateMinBuyIn.toLocaleString('en-US')}–${ChainTableMode.PrivateMaxBuyIn.toLocaleString('en-US')} Coins. You have ${coins.toLocaleString('en-US')}.`, 'Not enough Coins');
       cap = 0;
       return;
     }
@@ -317,6 +354,7 @@ export class ClientGame {
   private sitWithBuyIn(buyIn: number): void {
     this.applyOptimisticBuyInDebit(buyIn);
     this._joining = true;
+    this.awaitingFunding = true;
     this.changed('joining');
     this.showMessage('Taking a seat…');
     this.conn.send({ t: 'buyIn', name: this.identity.playerName, token: this.identity.token, buyIn });
@@ -330,8 +368,9 @@ export class ClientGame {
         this.opts.wallet.adopt(this.opts.wallet.coins + this.optimisticBuyInDebit);
         this.optimisticBuyInDebit = 0;
       }
-      this.showMessage('No seat came free — try again in a moment.');
       this.changed('joining');
+      if (this.seatedElsewhere()) this.joinFailed('duplicate', "You're already seated at this table — open it in your other tab or leave there first.", 'Already at this table');
+      else this.joinFailed('timeout', 'No seat came free — try again in a moment.');
     }, 6000);
   }
 
@@ -358,6 +397,7 @@ export class ClientGame {
 
   /** Activate: the connection has joined a session. Clears the felt, says hello and starts the pump. */
   start(): void {
+    this.view.resetSeatPlan?.();
     this.view.clearTable();
     this.view.hideAllSeats();
     this.view.betting?.hide();
@@ -380,6 +420,7 @@ export class ClientGame {
     this.cancelLocalPrompt();
     this.opts.audio.stopTurnTimer();
     this.view.betting?.hide();
+    this.view.offerShowCards?.(null);
     for (const f of this.off.splice(0)) f();
     if (this.joinTimer) clearTimeout(this.joinTimer);
     const w = this.queueWaiter;
@@ -393,6 +434,7 @@ export class ClientGame {
         this.onSeatAssigned(m.seat);
         break;
       case 'walletBalance':
+        this.awaitingFunding = false; // the ledger took the buy-in
         this.optimisticBuyInDebit = 0;
         this.opts.wallet?.adopt(m.balance);
         break;
@@ -425,10 +467,21 @@ export class ClientGame {
       if (this.optimisticBuyInDebit <= 0) this.applyOptimisticBuyInDebit(this.tableBuyInChips());
     } else {
       this.view.betting?.hide(); // a panel left open would submit for a seat we no longer own
-      if (this._joining && this.isPrivateTable)
-        this.showMessage(`Couldn't take the seat. Private tables need ${ChainTableMode.PrivateMinBuyIn.toLocaleString('en-US')}–${ChainTableMode.PrivateMaxBuyIn.toLocaleString('en-US')} Coins.`);
+      const refused = this._joining || this.awaitingFunding;
+      this.awaitingFunding = false;
+      // A refused sit-down never took the Coins: put the optimistic debit back.
+      if (refused && this.optimisticBuyInDebit > 0 && this.opts.wallet) {
+        this.opts.wallet.adopt(this.opts.wallet.coins + this.optimisticBuyInDebit);
+        this.optimisticBuyInDebit = 0;
+      }
+      // The server answers a refused sit-down with seat −1 and no reason: work out the likely one for the player.
+      if (refused && this.seatedElsewhere())
+        this.joinFailed('duplicate', "You're already seated at this table — open it in your other tab or leave there first.", 'Already at this table');
+      else if (refused && this.isPrivateTable)
+        this.joinFailed('refused', `Couldn't take the seat. Private tables need ${ChainTableMode.PrivateMinBuyIn.toLocaleString('en-US')}–${ChainTableMode.PrivateMaxBuyIn.toLocaleString('en-US')} Coins.`);
+      else if (refused) this.joinFailed('refused', "The table didn't give you a seat. It may be full — try again in a moment.");
       else this.showMessage('Watching the table.');
-      this.applyOptimisticCashOutCredit(stackAtRelease);
+      if (!refused) this.applyOptimisticCashOutCredit(stackAtRelease); // an unfunded chair held no chips
     }
     this._joining = false;
     this.changed('seat');
@@ -489,6 +542,8 @@ export class ClientGame {
       // Catch-up paints a hand already on the felt in one go, silently.
       const paced = !q.catchUp;
       this.presenter.silent = q.catchUp;
+      // A hand already on the felt (joining mid-hand) is painted in place: no deal animation replayed.
+      this.view.setInstantDeals?.(q.catchUp);
       try {
         const e = q.event;
         switch (e.type) {
@@ -501,6 +556,7 @@ export class ClientGame {
             if (paced) await this.pause(this.pacing.dealDelay);
             break;
           case 'HoleCardsDealt':
+            if (e.seat === this._localSeat && !q.catchUp) this.dealtThisHand = true;
             this.presenter.onHoleCardsDealt(e);
             if (paced) await this.pause(this.pacing.dealDelay);
             break;
@@ -537,6 +593,7 @@ export class ClientGame {
         this.log('error', `[PokerClient] Presenting ${q.event.type} failed: ${(ex as Error)?.stack ?? ex}`);
       }
       this.presenter.silent = false;
+      this.view.setInstantDeals?.(false);
       try {
         this.opts.onPresented?.(q.event, q.catchUp);
       } catch (ex) {
@@ -586,6 +643,9 @@ export class ClientGame {
   private applyRosterHud(): void {
     const roster = this._roster;
     if (!roster) return;
+    // Spread the seated players evenly round the table (between hands); if the plates moved, every seat re-binds.
+    const occupied = roster.map((s, i) => (s?.isOccupied ? i : -1)).filter((i) => i >= 0);
+    if (this.view.setOccupancy?.(occupied)) this.lobbyStacks.clear();
     for (let seat = 0; seat < roster.length && seat < this.view.seatCount; seat++) {
       const s = roster[seat];
       if (s && s.isOccupied) {
@@ -614,7 +674,19 @@ export class ClientGame {
     this.changed('lobby');
   }
 
+  /** "Show cards": the local seat held cards this hand and they weren't shown at showdown. */
+  private dealtThisHand = false;
+  private shownThisHand = false;
+
+  /** Reveal my hole cards to the table (after a hand; the server checks the window and replicates a Showdown). */
+  showCards(): void {
+    this.conn.send({ t: 'show' });
+  }
+
   private onHandStarted(e: HandStartedEvent): void {
+    this.dealtThisHand = false;
+    this.shownThisHand = false;
+    this.view.offerShowCards?.(null);
     e.seats.forEach((s, seat) => {
       if (s?.isOccupied) this.rememberStack(seat, s.stack);
     });
@@ -660,10 +732,16 @@ export class ClientGame {
   }
 
   private onShowdown(e: ShowdownEvent): void {
+    if (e.entries.some((x) => x.seat === this._localSeat)) {
+      this.shownThisHand = true;
+      this.view.offerShowCards?.(null);
+    }
     this.presenter.onShowdown(e);
   }
 
   private onPotAwarded(e: PotAwardedEvent): void {
+    // The hand is decided: a player whose cards weren't shown may show them until the next hand.
+    if (this.dealtThisHand && !this.shownThisHand && this._localSeat >= 0 && !this.isTournament) this.view.offerShowCards?.(() => this.showCards());
     this.rememberStack(e.seat, e.stackAfter);
     this.presenter.onPotAwarded(e);
   }
@@ -679,6 +757,7 @@ export class ClientGame {
     this.cancelLocalPrompt();
     this.clearTurnIndicator();
     this.view.betting?.hide();
+    this.view.resetSeatPlan?.(); // a tournament table move: different people in the same seat numbers
     this.view.clearTable();
     this.view.hideAllSeats();
     this._roster = null;
@@ -727,6 +806,8 @@ export class ClientGame {
       (action) => {
         if (ac.signal.aborted) return;
         this.promptAbort = null;
+        // Silence the timer bed and its last-seconds beeps now, not when the server moves the turn on.
+        this.opts.audio.stopTurnTimer();
         this.submitAction(seat, action);
       },
       ac.signal,

@@ -28,7 +28,7 @@ export const PORTRAIT_LAYOUT = {
     { avatar: [-3.25, -5.2], cards: [-1.68, -5.2] }, // 1 bottom-left
     { avatar: [-3.25, -1.0], cards: [-1.68, -1.0] }, // 2 left
     { avatar: [-3.25, 5.2], cards: [-3.25, 1.92] }, // 3 top-left
-    { avatar: [0, 6.15], cards: [0, 2.85] }, // 4 top
+    { avatar: [0, 6.15], cards: [0, 2.88] }, // 4 top
     { avatar: [3.25, 5.2], cards: [3.25, 1.92] }, // 5 top-right
     { avatar: [3.25, -1.0], cards: [1.68, -1.0] }, // 6 right
     { avatar: [3.25, -5.2], cards: [1.68, -5.2] }, // 7 bottom-right
@@ -37,7 +37,12 @@ export const PORTRAIT_LAYOUT = {
   board: { x: 0, y: 0.55, spacing: 1.05, scale: 1.05 },
   /** Pot pill (Pot_UI canvas, drawn at `scale` × the 3D zoom) and the chip piles (Token Parents) beside it. */
   pot: { x: 0.35, y: 1.75, scale: 0.85 },
-  tokens: { x: -1.5, y: 1.75 },
+  tokens: { x: -2.45, y: 1.75 },
+  /**
+   * The deck spot the portrait deal paths start from; the shoe (three/tableScene.ts) covers where they rise through the
+   * felt (SHOE below): top-left of the pot, between the top-left seat and the top seat's cards. `scale` sizes the shoe.
+   */
+  shoe: { x: -1.43, y: 2.67, scale: 0.75 },
   /** Seat HUD canvases are drawn this much larger than the 3D projection. */
   hudScale: 1.55,
   /** Card 1's centre minus card 0's, along x (the fan); your cards are larger, so they spread further. */
@@ -66,8 +71,10 @@ export const STACKED_SEAT_PARTS = {
 
 /** Measured on the fitted table: the pot pill per unit of `pot.scale`, and the chip piles, which draw 0.23 right of
  * their root. */
-const POT_PILL = { w: 2.88, h: 0.61 };
+const POT_PILL = { w: 5.02, h: 1.1 };
 const TOKENS = { w: 0.68, h: 0.68, dx: 0.23 };
+/** The shoe at `shoe.scale` 1 (measured), and where it lands relative to the deck spot (the paths rise just past it). */
+const SHOE = { w: 1.15, h: 0.57, dx: 0.19, dy: -0.2 };
 
 export interface Box {
   name: string;
@@ -116,6 +123,7 @@ export function portraitBoxes(): Box[] {
   out.push({ name: 'board', x0: L.board.x - 2 * L.board.spacing - bw / 2, x1: L.board.x + 2 * L.board.spacing + bw / 2, y0: L.board.y - bh / 2, y1: L.board.y + bh / 2 });
   out.push(box('pot', L.pot.x, L.pot.y, POT_PILL.w * L.pot.scale, POT_PILL.h * L.pot.scale));
   out.push(box('tokens', L.tokens.x + TOKENS.dx, L.tokens.y, TOKENS.w, TOKENS.h));
+  out.push(box('shoe', L.shoe.x + SHOE.dx, L.shoe.y + SHOE.dy, SHOE.w * L.shoe.scale, SHOE.h * L.shoe.scale));
   return out;
 }
 

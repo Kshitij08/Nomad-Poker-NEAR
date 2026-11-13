@@ -57,7 +57,7 @@ td.n{color:var(--ink2);font-size:12.5px}
   <header>
     <h1>Nomad Poker Redesign v2 Tracker</h1>
     <p class="sub">Applying the Redesign v2 skin from the <a href="https://claude.ai/artifact/WV2up5hgYGzAM4D66vHzni#main-menu">Screen Atlas</a> to the web game in <code>apps/web</code>, on desktop (16:9) and phones (portrait only). Each screen is built, then checked by an independent agent against the atlas at both sizes.</p>
-    <p class="upd" id="upd">Updated 13 Nov 2026 · phase 2 done: old UI replaced, one style, table HUD in v2 · checked by independent agents · typecheck, 219 tests and build pass · not committed</p>
+    <p class="upd" id="upd">Updated 13 Nov 2026 · phase 4 on staging (web, API, game server) · 650 tests pass · waiting on: font/button pick, devnet SOL for the test wallet · not committed</p>
   </header>
 
   <section class="strip" id="strip"></section>
@@ -157,6 +157,43 @@ const G = [
  ]],
  ['Phase 2 · Coherence', [
   ['Button casing, titles, tabs, icons, sizes','done','done','ok','Per style guide'],
+ ]],
+ ['Phase 3 · Table', [
+  ['Per-seat bet chips','done','done','ok','Slide into the pot each street; phone placement avoids other seats'],
+  ['Clear status chips each street','done','done','ok','Fold and All-in stay; re-raises read Raise'],
+ ]],
+ ['Phase 3 · Shop', [
+  ['Coins purchases (server ledger)','done','done','ok','Live on staging API'],
+  ['SOL purchases (devnet)','done','done','todo','API deployed with RPC; live run needs a funded wallet'],
+  ['Real-money packs','na','na','na','Coming soon: needs App Store / Play / Stripe accounts'],
+ ]],
+ ['Phase 3 · SOL live test', [
+  ['Localhost-only devnet test wallet','done','na','ok','Not in production bundle (checked)'],
+  ['Every SOL flow on devnet','done','done','bad','First funded wallet key was lost; new durable test wallet GQqd…DtDA needs devnet SOL'],
+ ]],
+  ['Phase 3 · UI design (Galaxy only)', [
+  ['Galaxy only; other styles removed','done','done','ok',''],
+  ['Real logo + Unity splash background (logo painted out)','done','done','ok',''],
+  ['Design options: 5 fonts × bordered/solid buttons','done','done','ok','Pill on dev/staging; pick one to lock in'],
+  ['Centred titles, aligned header, icons, dock labels removed','done','done','ok',''],
+ ]],
+ ['Phase 4 · Table', [
+  ['Seats spread evenly for the player count','done','done','ok','Phone keeps its 8 even spots'],
+  ['Chip stacks near players, fly to pot','done','done','ok',''],
+  ['Fold/Call/Raise in the room colours; coherent chips/tokens','done','done','ok',''],
+  ['Clockwise timer, steady strength strip, raise steps','done','done','ok',''],
+  ['Show cards after a hand (online + offline)','done','done','ok','Game server deployed'],
+  ['Dealer shoe, deal does not replay on join, even card reveal','done','done','ok',''],
+  ['Folded seats greyscale, names fit, showdown text clear','done','done','ok',''],
+  ['Raise sheet softlock / phone sheet stuck','done','done','ok','Test added'],
+  ['Chat pop-ups like stream chat; bigger stickers','done','done','ok',''],
+  ['Level-up toast at the table instead of a blocking card','done','done','ok',''],
+  ['Join refusals explained (e.g. already seated)','done','done','ok','Server test added'],
+ ]],
+ ['Phase 4 · Music & shop', [
+  ['Own music for each room','done','na','ok','Synthesised loops; needs a listen'],
+  ['Free card back: Nomad purple + faint mark','done','done','ok',''],
+  ['Coins packs for SOL in On-chain mode','done','done','todo','API deployed; live purchase needs a funded wallet'],
  ]],
 ];
 const L={todo:'To do',wip:'Building',done:'Built',ok:'Verified',bad:'Issues found',na:'Not needed'};

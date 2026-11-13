@@ -110,13 +110,24 @@ export function install(ctx: AppContext): void {
       url.searchParams.delete('emailToken');
       history.replaceState(history.state, '', url);
       await session.emailVerify(emailToken);
+      // The player lands on the v2 menu with a confirmation, not the developer account overlay (that stays behind
+      // ?account=1). The v2 UI is optional (?ui=unity), so it is loaded lazily and only told when it is up.
+      const ok = session.signedIn && !session.error;
+      void import('../ui2/ctx')
+        .then(({ ui }) => {
+          const v2 = ui();
+          if (!v2) return;
+          if (ok) v2.toast('Signed in');
+          else v2.message('Sign-in link expired', 'That sign-in link has expired or was already used. Sign in with email again to get a new one.');
+        })
+        .catch(() => {});
     }
     // Everyone plays on a server account: a guest until they sign in (a guest keeps its progress when it links one).
     if (!session.signedIn) await session.guest();
     await progress.refresh();
     if (session.signedIn) VirtualEconomy.setProvider(serverWallet);
   })();
-  if (emailToken || ctx.params.get('account') === '1') {
+  if (ctx.params.get('account') === '1') {
     // Once main.ts has opened the first screen (navigate() clears the stack, so pushing earlier would be lost).
     const off = ctx.events.on('router:changed', () => {
       off();

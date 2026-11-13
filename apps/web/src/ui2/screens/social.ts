@@ -11,7 +11,7 @@ import { FriendInvites } from '../../economy/social/friendInvites';
 import { Friends, friendLabel, type FriendEntry } from '../../economy/social/friends';
 import { act, btn, esc, input, tabs } from '../core';
 import { ico } from '../icons';
-import { ui, app, S, onchain, onchainApi, avatar, avatarUrl, level, playerName, accountExtras, topBar, run, prompt, copy, setMode } from '../ctx';
+import { ui, app, host, S, onchain, onchainApi, avatar, avatarUrl, level, playerName, accountExtras, topBar, run, prompt, copy, setMode } from '../ctx';
 import type { ScreenDef } from '../install';
 import './social.css';
 
@@ -111,7 +111,8 @@ const friends: FriendsScreen = {
   <div class="v2-panel v2-fr-left">${this.mode === 'edit' ? this.pickerHtml() : this.profileHtml(list.length, online, requests.length)}</div>
   <div class="v2-panel v2-col v2-fr-right">
     <div class="v2-row v2-fr-head">
-      ${tabs([['friends', 'Friends'], ['requests', requests.length ? `Requests (${requests.length})` : 'Requests'], ['add', 'Add friend']], this.tab, 'f-tab', 'v2-fr-tabs')}
+      ${tabs([['friends', 'Friends'], ['requests', requests.length ? `Requests (${requests.length})` : 'Requests']], this.tab, 'f-tab', 'v2-fr-tabs')}
+      ${btn(`${ico('plus', 0.9)} Add friend`, 'f-add', { h: 'violet' })}
       ${input('search', this.input?.search ?? '', 'Search friends', { cls: 'v2-grow v2-fr-search' })}
     </div>
     ${Friends.lastError && !all.length ? `<div class="v2-xs v2-badc">${esc(Friends.lastError)}</div>` : ''}
@@ -134,7 +135,7 @@ const friends: FriendsScreen = {
 
     const rows = shown.length === 0
       ? `<div class="v2-empty">${ico('friends', 6)}${
-          this.tab === 'requests' ? 'No friend requests.' : q ? 'No friends match that name.' : 'No friends yet.<br>Tap Add Friend and enter their friend ID or name.'
+          this.tab === 'requests' ? 'No friend requests.' : q ? 'No friends match that name.' : 'No friends yet.<br>Tap Add friend and enter their friend ID or name.'
         }</div>`
       : shown.map((f) => {
           const label = friendLabel(f);
@@ -152,9 +153,10 @@ const friends: FriendsScreen = {
   },
   actions: {
     'f-tab': (v) => {
-      if (v === 'add') return addFriend();
       friends.tab = v as FTab;
     },
+    'f-add': () => addFriend(),
+    'f-signin': () => host().show('Login'),
     'f-profile': () => {
       friends.showProfile = !friends.showProfile;
     },
@@ -249,8 +251,10 @@ const friends: FriendsScreen = {
   <div class="v2-fr-av">${avatar('', avatarUrl(), 'width:7em;height:7em')}<span class="v2-lvb v2-fr-lv">LV ${lv.level}</span><button class="v2-editb"${act('f-edit')} aria-label="Edit picture">${ico('edit', 1)}</button></div>
   ${nameRow}
   <span class="v2-sm v2-mut">${(accountExtras(app()).isGuest ?? PokerClientIdentity.isGuest) ? 'Guest account' : 'Signed in'}</span>
-  <div class="v2-card v2-row" style="width:100%"><div class="v2-grow" style="text-align:left"><small class="v2-cap">Friend ID</small><div class="v2-num" style="font-weight:900">${esc(myFriendId())}</div></div>${btn('Copy', 'f-copy', { h: 'blue', c: 'sm' })}</div>
-  ${btn('Share invite link', 'f-share', { h: 'violet', c: 'w' })}
+  ${myFriendId() !== '—'
+    ? `<div class="v2-card v2-row" style="width:100%"><div class="v2-grow" style="text-align:left"><small class="v2-cap">Friend ID</small><div class="v2-num" style="font-weight:900">${esc(myFriendId())}</div></div>${btn('Copy', 'f-copy', { h: 'blue', c: 'sm' })}</div>
+  ${btn('Share invite link', 'f-share', { h: 'violet', c: 'w' })}`
+    : `<div class="v2-card v2-col" style="width:100%;gap:.5em;text-align:left"><small class="v2-cap">Friend ID</small><span class="v2-sm v2-mut">Sign in to get a friend ID, so friends can add you and you can invite them.</span>${btn('Sign in', 'f-signin', { h: 'blue', c: 'w' })}</div>`}
   <div class="v2-row" style="width:100%;gap:.5em">${[[nFriends, 'Friends'], [nOnline, 'Online'], [nReq, 'Requests']].map(([n, l]) => `<div class="v2-card v2-grow v2-col v2-fr-stat"><b>${n}</b><small class="v2-mut">${l}</small></div>`).join('')}</div>
 </div>`;
   },
@@ -329,7 +333,7 @@ const leaderboard: ScreenDef & { tab: string; board: LeaderboardSnapshot | null;
     if (onchain()) {
       const addr = onchainApi.walletAddress?.();
       body = !addr
-        ? `<div class="v2-empty">${ico('sol', 6)}<b class="v2-h" style="font-size:1.6em;color:var(--v2-ink)">Connect your wallet</b><span>The on-chain leaderboard ranks players by SOL won.<br>Connect a Solana wallet (devnet) to see it and your rank.</span>${btn('Connect Wallet', 'lb-connect', { h: 'gold', c: 'lg' })}</div>`
+        ? `<div class="v2-empty">${ico('sol', 6)}<b class="v2-h" style="font-size:1.6em;color:var(--v2-ink)">Connect your wallet</b><span>The on-chain leaderboard ranks players by SOL won.<br>Connect a Solana wallet to see it and your rank.</span>${btn('Connect Wallet', 'lb-connect', { h: 'gold', c: 'lg' })}</div>`
         : `<div class="v2-empty">${ico('sol', 6)}<b class="v2-h" style="font-size:1.6em;color:var(--v2-ink)">On-chain rankings are coming</b><span>SOL winnings aren't ranked yet. Switch to Demo for the Coins leaderboard.</span>${btn('Show Demo', 'mode', { h: 'violet', v: 'demo' })}</div>`;
     } else {
       const b = this.board && this.board.kind === kind ? this.board : null;
@@ -342,9 +346,13 @@ const leaderboard: ScreenDef & { tab: string; board: LeaderboardSnapshot | null;
             return `<div class="v2-lbr${g}${r.isLocal ? ' you' : ''}"><span class="v2-lb-rank">${rank}</span><span class="v2-row" style="gap:.6em;min-width:0">${avatar('xs', r.isLocal ? avatarUrl() : avatarFor(r.displayName))}<span class="v2-ellip">${esc(r.displayName)}</span>${r.isLocal ? '<span class="v2-pill gold">You</span>' : ''}</span><b class="v2-num" style="text-align:right">${formatN0(r.score)}</b></div>`;
           }).join('')
         : `<div class="v2-empty">${ico('podium', 5)}${this.loading ? 'Loading…' : kind === LeaderboardKind.FriendsWeekly ? 'Add friends to see how you rank against them.' : 'No scores yet this period.'}</div>`;
+      // A near-empty board says how to climb it instead of leaving a big empty panel.
+      const hint = rows.length > 0 && rows.length < 3 && !this.loading
+        ? `<div class="v2-empty v2-lb-hint">${kind === LeaderboardKind.FriendsWeekly ? 'Add friends to see how you rank against them.' : hands ? 'Win hands this week to climb the board.' : 'Win Coins at the tables this week to climb the board.'}${kind === LeaderboardKind.FriendsWeekly ? btn('Add friends', 'go', { h: 'violet', v: 'friends' }) : btn('Play a hand', 'go', { h: 'gold', v: 'main' })}</div>`
+        : '';
       const rank = b?.localRank ?? 0;
       body = `<div class="v2-lbr hdr"><span>Rank</span><span>Player</span><span style="text-align:right">${esc(col)}</span></div>
-<div class="v2-col v2-scroll v2-grow v2-lb-list">${list}</div>
+<div class="v2-col v2-scroll v2-grow v2-lb-list">${list}${hint}</div>
 ${rows.some((r) => r.isLocal) ? `<div class="v2-lbdiv"></div><div class="v2-lbnote">${kind === LeaderboardKind.SeasonEarnings ? 'Season standings' : 'Resets every Monday (UTC)'}</div>` : `<div class="v2-lbdiv"><span>Your rank</span></div><div class="v2-lbnote">${kind === LeaderboardKind.SeasonEarnings ? 'Season standings' : 'Resets every Monday (UTC)'}</div>
 <div class="v2-lbr you"><span class="v2-lb-rank"><b>${rank > 0 ? rank : '–'}</b></span><span class="v2-row" style="gap:.6em;min-width:0">${avatar('xs')}<span class="v2-ellip">${esc(playerName())}</span><span class="v2-pill gold">You</span></span><b class="v2-num" style="text-align:right">${formatN0(FreePlayLeaderboard.localScore(kind))}</b></div>`}`;
     }
