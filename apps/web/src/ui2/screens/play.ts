@@ -12,6 +12,7 @@ import { ico } from '../icons';
 import { ui, host, app, S, onchain, onchainApi, topBar, signedIn, needCoins, getCoinsRoute, copy } from '../ctx';
 import { shortAddr, solAmt, solError, solTask } from './solKit';
 import type { ScreenDef } from '../install';
+import { nearTablesScreen } from './nearTables';
 import './play.css';
 
 /** The five rooms (Unity TableSelect cards), cheapest first; index = SOL stake level. */
@@ -602,5 +603,5 @@ async function createSolTable(): Promise<void> {
 }
 
 export function playScreens(): ScreenDef[] {
-  return [tables, party, solHost, watch];
+  return [tables, party, solHost, watch, nearTablesScreen];
 }

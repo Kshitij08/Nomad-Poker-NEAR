@@ -196,6 +196,7 @@ export function roomStage(): string {
     ${peek(i - 1, 'prev')}
     <div class="v2-rm-card${locked ? ' locked' : ''}" style="${bgArt(r.theme, r.color)}">
       ${locked ? `<span class="v2-rm-lock">${ico('lock', 1.4)} Locked</span>` : !chain && rooms.theme === recommendedRoom() ? `<span class="v2-rm-lock v2-rm-rec">${ico('star', 1.2)} Recommended</span>` : ''}
+      ${btn(`Play for NEAR ${ico('next', 0.7)}`, 'go', { h: 'blue', c: 'sm v2-rm-near', v: 'near-tables', title: 'Real stakes on NEAR testnet' })}
       <button class="v2-rm-arrow prev"${act('room-step', -1)} aria-label="Previous room">${ico('back', 1.2)}</button>
       <button class="v2-rm-arrow next"${act('room-step', 1)} aria-label="Next room">${ico('back', 1.2, 'transform:scaleX(-1)')}</button>
       <div class="v2-rm-bar">
