@@ -5,6 +5,7 @@ import { canonicalSession } from './roomSpec';
 import { agentRoute, sweepAgents } from './agentRoutes';
 import { tournamentTick } from '@nomad/db/tournaments';
 import { reconcile } from '@nomad/db/reconcile';
+import { reconcileMail, sendAlert } from './alerts';
 
 export { TableRoom } from './tableRoom';
 
@@ -125,16 +126,26 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    // Hourly: the ledger reconciliation. A warning in the logs is the alert (search "[reconcile]").
-    if (new Date(controller.scheduledTime).getUTCMinutes() === 7) {
+    // Hourly: the ledger reconciliation, logged (search "[reconcile]") and mailed to the owner on production: problems
+    // every hour they last, an all-clear once a day (src/alerts.ts).
+    const at = new Date(controller.scheduledTime);
+    if (at.getUTCMinutes() === 7) {
       ctx.waitUntil(
         reconcile(env.DB).then(
-          (r) => {
+          async (r) => {
             const bad = r.checks.filter((c) => !c.ok);
             if (bad.length) console.warn(`[reconcile] PROBLEMS: ${JSON.stringify(bad)}`);
             else console.log(`[reconcile] ok (${r.checks.map((c) => `${c.name}: ${c.checked}`).join('; ')})`);
+            const mail = reconcileMail(r, at.getUTCHours());
+            if (mail) await sendAlert(env, mail.subject, mail.text);
           },
-          (e) => console.error('[reconcile] failed', e),
+          async (e) => {
+            console.error('[reconcile] failed', e);
+            await sendAlert(env, 'Ledger check could not run', `The hourly reconciliation failed to run:
+
+${(e as Error)?.stack ?? String(e)}
+`);
+          },
         ),
       );
     }

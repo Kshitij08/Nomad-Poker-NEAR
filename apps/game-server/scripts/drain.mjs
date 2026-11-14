@@ -22,21 +22,28 @@ if (!existsSync(file)) {
 }
 const { DRAIN_TOKEN } = JSON.parse(readFileSync(file, 'utf8'));
 
-try {
-  const health = await fetch(`${base}/v1/health`, { signal: AbortSignal.timeout(10_000) });
-  if (!health.ok) {
-    console.log(`[drain] ${base} is not serving yet (${health.status}); nothing to drain.`);
-    process.exit(0);
+// No process.exit() after a fetch: on Windows, Node's forced exit while a just-used socket is still closing aborts with
+// "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)", which made `npm run deploy:*` stop after the drain. Set the
+// exit code and let the script end on its own instead.
+async function drain() {
+  try {
+    const health = await fetch(`${base}/v1/health`, { signal: AbortSignal.timeout(10_000) });
+    if (!health.ok) {
+      console.log(`[drain] ${base} is not serving yet (${health.status}); nothing to drain.`);
+      return 0;
+    }
+  } catch {
+    console.log(`[drain] ${base} is not reachable; nothing to drain.`);
+    return 0;
   }
-} catch {
-  console.log(`[drain] ${base} is not reachable; nothing to drain.`);
-  process.exit(0);
+  const res = await fetch(`${base}/v1/admin/drain`, { method: 'POST', headers: { authorization: `Bearer ${DRAIN_TOKEN}` }, signal: AbortSignal.timeout(150_000) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error(`[drain] failed: ${res.status} ${JSON.stringify(body)}`);
+    return 1;
+  }
+  console.log(`[drain] closed ${body.drained?.length ?? 0} table(s): ${(body.drained ?? []).join(', ') || 'none open'}`);
+  return 0;
 }
 
-const res = await fetch(`${base}/v1/admin/drain`, { method: 'POST', headers: { authorization: `Bearer ${DRAIN_TOKEN}` }, signal: AbortSignal.timeout(150_000) });
-const body = await res.json().catch(() => ({}));
-if (!res.ok) {
-  console.error(`[drain] failed: ${res.status} ${JSON.stringify(body)}`);
-  process.exit(1);
-}
-console.log(`[drain] closed ${body.drained?.length ?? 0} table(s): ${(body.drained ?? []).join(', ') || 'none open'}`);
+process.exitCode = await drain();

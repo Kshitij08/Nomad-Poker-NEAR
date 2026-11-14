@@ -22,4 +22,8 @@ export interface Env {
   DRAIN_TOKEN?: string;
   /** Spawns, overflow lookups and Agent starts per address. Optional so tests can leave it out. */
   HTTP_LIMITER?: RateLimit;
+  /** Operator alerts (src/alerts.ts): Email Service binding, sender and the owner's inbox (a secret). Production only. */
+  ALERT_EMAIL?: SendEmail;
+  ALERT_FROM?: string;
+  ALERT_TO?: string;
 }

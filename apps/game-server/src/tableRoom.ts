@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { TableAlerts } from './alerts';
 import { realClock } from '@nomad/table-server/clock';
 import type { AgentRow } from '@nomad/db/agents';
 import type { Env } from './env';
@@ -75,7 +76,11 @@ export class TableRoom extends DurableObject<Env> {
     if (this.slot) return this.slot;
     if (!session) return null;
     const env = this.env;
-    const log: LogFn = (level, m) => console[level === 'info' ? 'log' : level](`[${session}] ${m}`);
+    const alerts = new TableAlerts(env, session);
+    const log: LogFn = (level, m) => {
+      console[level === 'info' ? 'log' : level](`[${session}] ${m}`);
+      alerts.onLog(level, m, (p) => this.ctx.waitUntil(p));
+    };
     this.slot = new TableSlot({
       session,
       isSpawned: async () => (await this.ctx.storage.get<boolean>('spawned')) === true,
