@@ -4,13 +4,14 @@ import { Room, type RoomSpec } from '@nomad/table-server/rooms';
 import { TournamentTableServer } from '@nomad/table-server/tournament/tournamentTableServer';
 import type { StandingBody, TournamentBackend, TournamentPacing, TournamentRoster, VerifiedPlayer } from '@nomad/table-server/tournament/wire';
 import { RoomHost, type LogFn } from './roomHost';
+import { syncTournamentEscrow, type TournamentEscrowLink } from './tournamentEscrow';
 
 /**
  * The tournament room's side of the tournament records, straight on D1 (it was the backend's /internal/tournaments/:id
  * routes, called with an internal API key). Every call resolves; a failure is null / false / 0 and the runtime retries.
  */
 export class D1TournamentBackend implements TournamentBackend {
-  constructor(private readonly db: D1Database, readonly tournamentId: string, private readonly log: LogFn) {}
+  constructor(private readonly db: D1Database, readonly tournamentId: string, private readonly log: LogFn, private readonly near?: TournamentEscrowLink) {}
 
   private async attempt<T>(what: string, fn: () => Promise<T>, failed: T): Promise<T> {
     try {
@@ -47,6 +48,8 @@ export class D1TournamentBackend implements TournamentBackend {
     return this.attempt('result', async () => {
       const r = await postResult(this.db, this.tournamentId, { championId, standings });
       if (r.error) this.log('warn', `[Tournament] result refused (${r.status}): ${r.error}`);
+      // A NEAR tournament's prizes are paid on the escrow: settle it now (a no-op for coins; the cron retries a failure).
+      if (r.status === 200 && this.near) await syncTournamentEscrow(this.db, this.near, this.tournamentId, this.log);
       return r.status;
     }, 0);
   }
@@ -59,6 +62,8 @@ export interface TournamentHostOptions {
   clock: ServerClock;
   log: LogFn;
   pacing?: Partial<TournamentPacing>;
+  /** The escrow this server operates, for NEAR tournaments (settled when the result is posted). */
+  near?: TournamentEscrowLink;
 }
 
 /**
@@ -74,7 +79,7 @@ export class TournamentHost extends RoomHost {
     super(opts.spec);
     this.server = new TournamentTableServer({
       clock: opts.clock,
-      backend: new D1TournamentBackend(opts.db, opts.tournamentId, opts.log),
+      backend: new D1TournamentBackend(opts.db, opts.tournamentId, opts.log, opts.near),
       pacing: opts.pacing,
       log: (m) => opts.log('info', m),
       onQuit: () => {

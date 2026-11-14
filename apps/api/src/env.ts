@@ -24,6 +24,11 @@ export interface Env {
    * not_configured.
    */
   NEAR_RPC_URL?: string;
+  /**
+   * The escrow contract holding NEAR tournament stakes (e.g. nomad-escrow.testnet); the API reads it over NEAR_RPC_URL to
+   * check a tournament was created there and who registered. Unset (or no NEAR_RPC_URL): NEAR tournaments are off.
+   */
+  NEAR_ESCROW?: string;
   /** Comma-separated Google OAuth client ids (web, Android, iOS). Unset: Google sign-in answers not_configured. */
   GOOGLE_CLIENT_IDS?: string;
   /** '1' on staging and dev: email sign-in returns the link instead of mailing it. */

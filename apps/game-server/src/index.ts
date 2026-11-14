@@ -8,6 +8,8 @@ import { reconcile } from '@nomad/db/reconcile';
 import { reconcileMail, sendAlert } from './alerts';
 
 export { TableRoom } from './tableRoom';
+import { nearOperatorFor } from './tableRoom';
+import { sweepTournamentEscrow } from './tournamentEscrow';
 
 /**
  * The game server Worker: routes table sockets to their Durable Object and answers the session-layer requests the
@@ -22,7 +24,8 @@ export { TableRoom } from './tableRoom';
  *   /v1/agents/*              the owner's Agent sessions (agentRoutes.ts)
  *
  * Every minute (cron): queued Agents get another try at a seat, and Agents on a table that died are paid back; the
- * tournament clock locks or cancels at start times, aborts tournaments no room ran, and opens the rooms about to start.
+ * tournament clock locks or cancels at start times, aborts tournaments no room ran, and opens the rooms about to start;
+ * NEAR tournaments that ended are settled or refunded on the escrow (tournamentEscrow.ts).
  */
 
 const VERSION = '0.1.0';
@@ -228,5 +231,11 @@ ${(e as Error)?.stack ?? String(e)}
         (e) => console.error('[cron] tournament tick failed', e),
       ),
     );
+    // NEAR tournaments that ended (finished, cancelled, aborted) but aren't settled or refunded on the escrow yet.
+    const near = nearOperatorFor(env);
+    if (near) {
+      const log = (level: 'info' | 'warn' | 'error', m: string) => console[level === 'info' ? 'log' : level](`[cron] ${m}`);
+      ctx.waitUntil(sweepTournamentEscrow(env.DB, near, log).catch((e) => console.error('[cron] escrow sweep failed', e)));
+    }
   },
 } satisfies ExportedHandler<Env>;

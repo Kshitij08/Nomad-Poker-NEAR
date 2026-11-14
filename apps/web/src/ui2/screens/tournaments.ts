@@ -1,7 +1,8 @@
 /**
  * Tournaments (atlas: Redesign v2 › Tournaments): Browse, My Tournaments, Host, Join by Code, with the Register and
  * Share dialogs. Same data and rules as the Unity screens (tournaments/menu/nomadTournaments.ts): register / join,
- * leave / cancel, host form options, join by code. Coins tournaments only; SOL tournaments are solTourneys.ts.
+ * leave / cancel, host form options, join by code. Coins or NEAR stakes (near/tournaments.ts: the host's and players'
+ * wallets pay the escrow, then the API checks it); SOL tournaments are solTourneys.ts.
  */
 import { NomadHost } from '../../menu/host';
 import { isDemo, isMine as isMineOf, isOpen, isRegistered, type MineResult, type TournamentInfo } from '../../tournaments/api/tournamentInfo';
@@ -10,7 +11,9 @@ import { HOST_FEES, HOST_MAX, HOST_PRIZES, HOST_SPEEDS, HOST_STARTS } from '../.
 import { BlindSchedule } from '@nomad/engine/tournament/blindSchedule';
 import { btn, chips, esc, input, tabs, act, seg } from '../core';
 import { ico } from '../icons';
-import { ui, host, S, onchain, topBar, setMode, signedIn, coins, copy, openUrl, run } from '../ctx';
+import { ui, host, S, onchain, topBar, setMode, signedIn, coins, copy, openUrl, run, app, friendlyError } from '../ctx';
+import { alreadyDone, chipsNear, escrowCancel, escrowCreate, escrowLeave, escrowRegister, isNearTournament } from '../../near/tournaments';
+import { nearAccount, nearSigner } from '../../near/wallet';
 import type { ScreenDef } from '../install';
 import './tournaments.css';
 
@@ -40,6 +43,7 @@ const T = {
   hPrize: 0,
   hSpeed: 0,
   hPrivate: false,
+  hNear: false,
   hName: '',
   // join by code
   code: '',
@@ -80,6 +84,66 @@ const past = (x: TournamentInfo): boolean => x.status === 'finished' || x.status
 const until = (x: TournamentInfo): string => NomadHost.until(x.startsAtUnix).replace(/^Starts in /, '');
 const coinsText = (n: number): string => (n === 0 ? 'Free' : N0(n));
 
+// ------------------------------------------------------------------ NEAR stakes
+
+/** NEAR host options in chips (0.001 NEAR): the same positions as HOST_FEES / HOST_PRIZES. */
+const NEAR_FEES = [0, 10, 50, 100, 500];
+const NEAR_PRIZES = [0, 50, 100, 500];
+const nearText = (chips: number): string => `${chipsNear(chips)} NEAR`;
+/** An amount in the tournament's currency, as text. */
+const amountText = (x: TournamentInfo | null, n: number): string => (isNearTournament(x) ? nearText(n) : `${N0(n)} Coins`);
+
+/** Your Nomad account's linked NEAR account, or null (not signed in with NEAR). */
+function nearIdentity(): string | null {
+  const me = S('nomadApi')?.me as { identities?: { provider: string; label: string }[] } | null | undefined;
+  return me?.identities?.find((i) => i.provider === 'near')?.label ?? null;
+}
+
+function continueWithNear(why: string): void {
+  const acc = app().services.account as unknown as { signInWithNear?: () => Promise<void> };
+  if (!acc.signInWithNear) return ui().message('NEAR tournaments', 'NEAR sign-in needs the Nomad server, which this build does not set.');
+  ui().message('Continue with NEAR', esc(why), 'Continue with NEAR', () =>
+    void acc.signInWithNear!().then(() => ui().render(), (e) => ui().message('Continue with NEAR', esc(friendlyError(e, "Couldn't sign in with NEAR. Try again.")))), 'Not now');
+}
+
+const walletCancelled = (e: unknown): boolean => /cancel|reject|closed|denied/i.test(String((e as Error)?.message ?? e));
+
+/**
+ * A wallet step for a NEAR tournament, then the API step. The wallet must be the NEAR account you're signed in with
+ * (the escrow pays and checks that one). A wallet error saying the escrow already did it (a retry) goes on to the API.
+ * Resolves to an error to show, '' for nothing to show (you backed out), or null when both went through.
+ */
+async function nearStep(wallet: () => Promise<void>, api: () => Promise<{ error: string | null }>): Promise<string | null> {
+  const account = nearIdentity();
+  if (!account) return 'Sign in with NEAR first.';
+  const connected = (await nearAccount()) ?? (await nearSigner.connect().catch(() => null));
+  if (!connected) return '';
+  if (connected !== account) return `Your wallet is connected as ${connected}, but you're signed in as ${account}. Switch the wallet to ${account}.`;
+  try {
+    await wallet();
+  } catch (e) {
+    if (walletCancelled(e)) return '';
+    if (!alreadyDone(e)) return friendlyError(e, "The wallet couldn't send it. Try again.");
+  }
+  return (await api()).error;
+}
+
+/** run() for nearStep: '' (backed out) shows nothing. */
+function runNear(op: () => Promise<string | null>, onOk: () => void, title?: string): void {
+  void run(async () => {
+    const err = await op();
+    return err === '' ? null : err;
+  }, onOk, title);
+}
+
+/** The host's wallet puts a created NEAR tournament on the escrow, then the API shows it. */
+function finishOnNear(x: TournamentInfo, after?: () => void): void {
+  runNear(() => nearStep(() => escrowCreate(x), () => svc().confirmEscrow(x.id)), () => {
+    void loadMine();
+    after?.();
+  }, 'Put it on NEAR');
+}
+
 function findAny(id: string): TournamentInfo | null {
   const all = [...(T.list ?? []), ...(T.mine?.entries ?? []), ...(T.mine?.hosted ?? []), ...(T.found ? [T.found] : [])];
   return all.find((x) => x.id === id) ?? null;
@@ -115,6 +179,16 @@ function registerOrJoin(x: TournamentInfo | null): void {
     return;
   }
   if (!isOpen(x)) return ui().message(esc(x.name), 'Registration is closed.');
+  if (isNearTournament(x)) {
+    if (!nearIdentity()) return continueWithNear('This tournament is played for NEAR. Sign in with your NEAR account to enter; your wallet pays the entry fee.');
+    const nfee = x.entryFee === 0 ? "It's free to enter." : `Entry fee: <b>${nearText(x.entryFee)}</b> (${N0(x.entryFee)} chips), paid from your wallet to the escrow.`;
+    return ui().message(esc(x.name), `${nfee} Register?`, 'Register', () =>
+      runNear(() => nearStep(() => escrowRegister(x), () => svc().register(x.id)), () => {
+        void loadList();
+        void loadMine();
+        ui().toast(`Registered for ${x.name} · ${NomadHost.until(x.startsAtUnix)}`, 2600);
+      }), 'Cancel', undefined);
+  }
   const fee = x.entryFee === 0 ? "It's free to enter." : `Entry fee: ${N0(x.entryFee)} Coins.`;
   ui().message(esc(x.name), `${fee} Register?`, 'Register', () =>
     void run(async () => (await svc().register(x.id)).error, () => {
@@ -127,6 +201,13 @@ function registerOrJoin(x: TournamentInfo | null): void {
 function leaveOrCancel(x: TournamentInfo | null): void {
   if (!x) return;
   if (!isMine(x) && x.serverReady) return registerOrJoin(x);
+  if (isNearTournament(x)) {
+    if (isMine(x))
+      return ui().message(esc(x.name), 'Cancel this tournament? Your wallet cancels it on the escrow: every entry fee and your prize go back to game balances there.', 'Cancel it',
+        () => runNear(async () => (x.escrowReady ? nearStep(() => escrowCancel(x.id), () => svc().cancel(x.id)) : (await svc().cancel(x.id)).error), () => void loadMine()), 'Keep it', undefined, 'red');
+    return ui().message(esc(x.name), 'Leave this tournament? Your wallet leaves it on the escrow, and your entry fee goes back to your game balance there.', 'Leave',
+      () => runNear(() => nearStep(() => escrowLeave(x.id), () => svc().unregister(x.id)), () => void loadMine()), 'Stay', undefined, 'red');
+  }
   if (isMine(x))
     ui().message(esc(x.name), 'Cancel this tournament? Everyone who registered gets their entry fee back.', 'Cancel it',
       () => void run(async () => (await svc().cancel(x.id)).error, () => void loadMine()), 'Keep it', undefined, 'red');
@@ -175,6 +256,7 @@ function createTournament(confirmed = false): void {
   const name = T.hName.trim();
   if (name.length === 0) return ui().message('Host a tournament', 'Give your tournament a name.');
   if (name.length > 40) return ui().message('Host a tournament', 'Keep the name to 40 characters.');
+  if (T.hNear) return createNear(name, confirmed);
   const prize = HOST_PRIZES[T.hPrize]!;
   if (prize > coins()) return ui().message('Not enough Coins', `Your prize of ${N0(prize)} Coins is more than you have.`);
   if (prize > 0 && !confirmed)
@@ -201,6 +283,28 @@ function createTournament(confirmed = false): void {
   });
 }
 
+/** A NEAR tournament: the API creates it (hidden), your wallet puts it on the escrow with your prize, the API shows it. */
+function createNear(name: string, confirmed: boolean): void {
+  if (!nearIdentity()) return continueWithNear('NEAR tournaments are hosted from your NEAR account. Sign in with it to create one; your wallet pays the prize.');
+  const prize = NEAR_PRIZES[T.hPrize]!;
+  if (!confirmed)
+    return ui().message('Host a NEAR tournament', `Your wallet creates ${esc(name)} on the escrow${prize > 0 ? ` and pays your <b>${nearText(prize)}</b> prize` : ''}. Entry fees go to the escrow too; it pays 1st and 2nd (5% of entries is the platform fee).`, 'Create', () => createTournament(true), 'Cancel');
+  const startMinutes = HOST_STARTS[T.hStart]!;
+  const req = {
+    name, hostPrize: prize, entryFee: NEAR_FEES[T.hFee]!, maxPlayers: HOST_MAX[T.hMax]!, speed: HOST_SPEEDS[T.hSpeed]!, currency: 'near',
+    visibility: T.hPrivate ? 'private' : 'public', startsAtUnix: (svc()?.api?.serverNowUnix ?? Math.floor(Date.now() / 1000)) + startMinutes * 60,
+  };
+  void run(async () => {
+    const r = await svc().create(req);
+    if (r.error) return r.error;
+    T.hName = '';
+    T.mineTab = 'hosting';
+    ui().show('t-mine', undefined, false);
+    finishOnNear(r.value as TournamentInfo, () => ui().message('Tournament created', `${esc(name)} is on NEAR and ${esc(startLabel(startMinutes).toLowerCase())}.`));
+    return null;
+  });
+}
+
 function findByCode(): void {
   const code = T.code.replace(/\s+/g, '').toUpperCase();
   if (code.length === 0) return ui().message('Join by code', 'Enter the code the host shared.');
@@ -224,12 +328,14 @@ function findByCode(): void {
 const SPEED_CLS: Record<string, string> = { turbo: 'blue', regular: 'violet', slow: 'teal' };
 const FORMAT: Record<string, string> = { single: 'One table', two_tables: 'Two tables · top 2 advance', four_tables: 'Four tables · top 2 advance' };
 
-function money(n: number): string {
-  return n === 0 ? '<b class="v2-good">Free</b>' : `<b>${ico('coin', 1.2)} ${N0(n)}</b>`;
+function money(n: number, x?: TournamentInfo): string {
+  if (n === 0) return '<b class="v2-good">Free</b>';
+  return isNearTournament(x) ? `<b>${nearText(n)}</b>` : `<b>${ico('coin', 1.2)} ${N0(n)}</b>`;
 }
 /** Prize amounts: 0 is "—", not "Free" (that word is for entry fees). */
-function prizeMoney(n: number): string {
-  return n === 0 ? '<b class="v2-mut">—</b>' : `<b>${ico('coin', 1.2)} ${N0(n)}</b>`;
+function prizeMoney(n: number, x?: TournamentInfo): string {
+  if (n === 0) return '<b class="v2-mut">—</b>';
+  return isNearTournament(x) ? `<b>${nearText(n)}</b>` : `<b>${ico('coin', 1.2)} ${N0(n)}</b>`;
 }
 /** The first blind levels (the same schedule every speed; the speed sets the level length). */
 const BLIND_STEPS = [1, 2, 3].map((l) => {
@@ -258,13 +364,13 @@ function tRow(x: TournamentInfo, o: { action?: string; pill?: string } = {}): st
   const when = past(x) ? `<div class="v2-tc v2-twhen"><small>STATUS</small><b>${x.status === 'cancelled' ? 'Cancelled' : 'Finished'}</b></div>`
     : `<div class="v2-tc v2-twhen"><small>STARTS IN</small><b class="v2-tcd${playing ? ' on' : soon ? ' warm' : ''}"><i></i>${esc(playing ? 'Playing now' : until(x))}</b></div>`;
   return `<div class="v2-trow sp-${SPEED_CLS[x.speed] ?? 'violet'}${state}${exp ? ' exp' : ''}">
-  <div class="v2-tr1"><b class="v2-tn v2-ellip">${esc(x.name)}</b><span class="v2-rtag ${SPEED_CLS[x.speed] ?? 'violet'}">${speedShort(x.speed)}</span>${x.entryFee === 0 ? '<span class="v2-rtag free">Freeroll</span>' : ''}${x.visibility === 'private' ? '<span class="v2-rtag">Private</span>' : ''}${o.pill ?? ''}
+  <div class="v2-tr1"><b class="v2-tn v2-ellip">${esc(x.name)}</b><span class="v2-rtag ${SPEED_CLS[x.speed] ?? 'violet'}">${speedShort(x.speed)}</span>${x.entryFee === 0 ? '<span class="v2-rtag free">Freeroll</span>' : ''}${x.visibility === 'private' ? '<span class="v2-rtag">Private</span>' : ''}${isNearTournament(x) ? '<span class="v2-rtag">NEAR</span>' : ''}${o.pill ?? ''}
     <span class="v2-grow"></span><span class="v2-tdate">${ico('cal2', 1.3)} ${esc(date)}</span>
     <button class="v2-ticon"${act('t-share', x.id)} aria-label="Share ${esc(x.name)}">${ico('share', 1.25)}</button>
     <button class="v2-ticon"${act('t-exp', x.id)} aria-label="${exp ? 'Hide' : 'Show'} details" aria-expanded="${exp}">${ico(exp ? 'chevup' : 'chev', 1.3)}</button></div>
   <div class="v2-tr2">
-    <div class="v2-tc v2-tfee"><small>ENTRY FEE</small>${money(x.entryFee)}</div>
-    <div class="v2-tc v2-tprize"><small>PRIZE POOL</small>${prizeMoney(x.prizePool)}</div>
+    <div class="v2-tc v2-tfee"><small>ENTRY FEE</small>${money(x.entryFee, x)}</div>
+    <div class="v2-tc v2-tprize"><small>PRIZE POOL</small>${prizeMoney(x.prizePool, x)}</div>
     <div class="v2-tc v2-tplr"><small>PLAYERS</small><b>${x.players}<span class="v2-tof"> / ${x.maxPlayers}</span></b><div class="v2-bar v2-tbar${fill >= 100 ? ' full' : ''}"><i style="width:${fill}%"></i></div></div>
     ${when}
     <div class="v2-tc v2-tbl"><small>BLINDS</small><b>${blindsText(x.speed)}</b></div>
@@ -367,7 +473,10 @@ const mine: ScreenDef = {
       let pill: string;
       if (T.mineTab === 'past') {
         action = btn('Results', 't-results', { h: 'ghost', v: x.id });
-        pill = x.status === 'cancelled' ? '<span class="v2-pill">Cancelled</span>' : x.myPlace > 0 ? `<span class="v2-pill gold">Finished #${x.myPlace}${x.myPrize > 0 ? ` · won ${N0(x.myPrize)}` : ''}</span>` : '<span class="v2-pill">Finished</span>';
+        pill = x.status === 'cancelled' ? '<span class="v2-pill">Cancelled</span>' : x.myPlace > 0 ? `<span class="v2-pill gold">Finished #${x.myPlace}${x.myPrize > 0 ? ` · won ${isNearTournament(x) ? nearText(x.myPrize) : N0(x.myPrize)}` : ''}</span>` : '<span class="v2-pill">Finished</span>';
+      } else if (mineX && isNearTournament(x) && !x.escrowReady) {
+        action = btn('Put it on NEAR', 't-finish', { h: 'gold', v: x.id }) + btn('Cancel', 't-leave', { h: 'ghost', v: x.id });
+        pill = '<span class="v2-pill">Not on NEAR yet: only you can see it</span>';
       } else if (mineX) {
         action = btn('Cancel', 't-leave', { h: 'red', v: x.id });
         pill = `<span class="v2-pill gold">Hosting${x.visibility === 'private' && x.joinCode ? ` · code ${esc(x.joinCode)}` : ''}</span>`;
@@ -398,11 +507,15 @@ const mine: ScreenDef = {
       T.mineTab = v as MineTab;
     },
     't-leave': (v) => leaveOrCancel(findAny(v)),
+    't-finish': (v) => {
+      const x = findAny(v);
+      if (x) finishOnNear(x);
+    },
     't-results': (v) => {
       const x = findAny(v);
       if (!x) return;
       const body = x.status === 'cancelled' ? `Cancelled${x.cancelReason ? `: ${esc(reasonText(x.cancelReason))}` : ''}.`
-        : `${esc(payout(x))}.${x.myPlace > 0 ? `<br>You finished #${x.myPlace}${x.myPrize > 0 ? ` and won <b>${N0(x.myPrize)}</b> Coins` : ''}.` : ''}`;
+        : `${esc(payout(x))}.${x.myPlace > 0 ? `<br>You finished #${x.myPlace}${x.myPrize > 0 ? ` and won <b>${amountText(x, x.myPrize)}</b>${isNearTournament(x) ? ' (in your escrow game balance)' : ''}` : ''}.` : ''}`;
       ui().message(esc(x.name), body);
     },
   },
@@ -422,8 +535,10 @@ const hostScreen: ScreenDef = {
   id: 't-host',
   replaces: ['Tournaments_Host'],
   render() {
-    const fee = HOST_FEES[T.hFee]!;
-    const prize = HOST_PRIZES[T.hPrize]!;
+    const nearT = T.hNear;
+    const fee = (nearT ? NEAR_FEES : HOST_FEES)[T.hFee]!;
+    const prize = (nearT ? NEAR_PRIZES : HOST_PRIZES)[T.hPrize]!;
+    const amt = (n: number): string => (nearT ? `${nearText(n)} (${N0(n)} chips)` : `${N0(n)} Coins`);
     const max = HOST_MAX[T.hMax]!;
     const speed = HOST_SPEEDS[T.hSpeed]!;
     const name = T.hName.trim();
@@ -432,23 +547,26 @@ const hostScreen: ScreenDef = {
   <div class="v2-panel v2-col v2-hform v2-scroll"><b class="v2-h">Host a tournament</b>
     <div class="v2-hrow"><span class="v2-hl">Name</span>${input('tname', T.hName, 'Name your tournament', { cls: 'v2-grow', max: 40 })}</div>
     ${optRow('Starts', HOST_STARTS.map((m) => startLabel(m).replace('Tomorrow, same time', 'Tomorrow')), T.hStart, 'h-start')}
-    ${optRow('Entry fee', HOST_FEES.map((f) => coinsText(f)), T.hFee, 'h-fee')}
+    ${optRow('Stakes', ['Coins', 'NEAR'], nearT ? 1 : 0, 'h-cur')}
+    ${optRow('Entry fee', nearT ? NEAR_FEES.map((f) => (f === 0 ? 'Free' : nearText(f))) : HOST_FEES.map((f) => coinsText(f)), T.hFee, 'h-fee')}
     ${optRow('Max players', HOST_MAX.map(String), T.hMax, 'h-max')}
-    ${optRow('Your prize', HOST_PRIZES.map((p) => (p === 0 ? 'None' : `+${N0(p)}`)), T.hPrize, 'h-prize')}
+    ${optRow('Your prize', nearT ? NEAR_PRIZES.map((p) => (p === 0 ? 'None' : `+${nearText(p)}`)) : HOST_PRIZES.map((p) => (p === 0 ? 'None' : `+${N0(p)}`)), T.hPrize, 'h-prize')}
     ${optRowIdx('Speed', SPEED_ORDER.map((i) => [i, `${speedShort(HOST_SPEEDS[i]!)} · ${blindsText(HOST_SPEEDS[i]!).replace(' levels', '')}`] as [number, string]), T.hSpeed, 'h-speed')}
     ${optRow('Visibility', ['Public', 'Private (code)'], T.hPrivate ? 1 : 0, 'h-vis')}
   </div>
   <div class="v2-panel v2-col v2-hsum"><b class="v2-h">Summary</b>
     <div class="v2-kv"><span>Name</span><b class="v2-ellip" data-tname-out>${esc(name || 'Your tournament')}</b></div>
     <div class="v2-kv"><span>Starts</span><b>${esc(startLabel(HOST_STARTS[T.hStart]!))}</b></div>
-    <div class="v2-kv"><span>Entry</span><b>${fee === 0 ? 'Free' : `${N0(fee)} Coins`}</b></div>
+    <div class="v2-kv"><span>Stakes</span><b>${nearT ? 'NEAR (escrow)' : 'Coins'}</b></div>
+    <div class="v2-kv"><span>Entry</span><b>${fee === 0 ? 'Free' : amt(fee)}</b></div>
     <div class="v2-kv"><span>Players</span><b>up to ${max}</b></div>
-    <div class="v2-kv"><span>Prize if full</span><b>${N0(prize + fee * max)} Coins</b></div>
-    <div class="v2-kv"><span>Payout</span><b>1st 60% · 2nd 40%</b></div>
+    <div class="v2-kv"><span>Prize if full</span><b>${amt(nearT ? prize + fee * max - Math.floor((fee * max) / 20) : prize + fee * max)}</b></div>
+    <div class="v2-kv"><span>Payout</span><b>1st 60% · 2nd 40%${nearT ? ' · 5% of entries fee' : ''}</b></div>
     <div class="v2-kv"><span>Speed</span><b>${speedShort(speed)} · ${blindsText(speed)}</b></div>
     <div class="v2-kv"><span>Visibility</span><b>${T.hPrivate ? 'Private (code)' : 'Public'}</b></div>
     <div class="v2-grow"></div>
-    ${prize > 0 ? `<div class="v2-xs v2-mut">Your ${N0(prize)} Coins prize is taken from your balance.</div>` : ''}
+    ${nearT ? `<div class="v2-xs v2-mut">${nearIdentity() ? `Hosted as ${esc(nearIdentity()!)}: your wallet creates it on the escrow${prize > 0 ? ' and pays your prize' : ''}.` : 'Sign in with NEAR to host a NEAR tournament.'}</div>`
+      : prize > 0 ? `<div class="v2-xs v2-mut">Your ${N0(prize)} Coins prize is taken from your balance.</div>` : ''}
     <div class="v2-hcta-d">${btn('Create Tournament', 'h-create', { h: 'gold', c: 'lg w' })}</div>
   </div>
   <div class="v2-hcta-p">${btn('Create Tournament', 'h-create', { h: 'gold', c: 'lg w' })}</div>
@@ -462,6 +580,7 @@ const hostScreen: ScreenDef = {
     'h-prize': (v) => void (T.hPrize = Number(v)),
     'h-speed': (v) => void (T.hSpeed = Number(v)),
     'h-vis': (v) => void (T.hPrivate = v === '1'),
+    'h-cur': (v) => void (T.hNear = v === '1'),
     'h-create': () => {
       T.hName = hostScreen.input?.tname ?? T.hName;
       createTournament();

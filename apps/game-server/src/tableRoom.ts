@@ -12,7 +12,7 @@ import { TableSlot } from './tableSlot';
 import { NearOperator } from './nearOperator';
 
 /** The NEAR escrow operator, when this stage has one configured (all four NEAR_* settings). */
-function nearOperatorFor(env: Env): { operator: NearOperator; escrow: string } | null {
+export function nearOperatorFor(env: Env): { operator: NearOperator; escrow: string } | null {
   if (!env.NEAR_RPC_URL || !env.NEAR_ESCROW || !env.NEAR_OPERATOR_ACCOUNT || !env.NEAR_OPERATOR_KEY) return null;
   try {
     return { operator: new NearOperator({ rpcUrl: env.NEAR_RPC_URL, accountId: env.NEAR_OPERATOR_ACCOUNT, secretKey: env.NEAR_OPERATOR_KEY }), escrow: env.NEAR_ESCROW };
@@ -113,7 +113,7 @@ export class TableRoom extends DurableObject<Env> {
         if (spec.kind === 'tournament') {
           const t = await tournamentBySession(env.DB, spec.name);
           if (!t) throw new Error(`Tournament '${spec.name}' was not found.`);
-          return new TournamentHost({ spec, db: env.DB, tournamentId: t.id, clock: realClock(speed), log });
+          return new TournamentHost({ spec, db: env.DB, tournamentId: t.id, clock: realClock(speed), log, near: near ?? undefined });
         }
         return new TableHost({
           spec,
