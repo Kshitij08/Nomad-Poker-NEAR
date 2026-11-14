@@ -15,7 +15,7 @@ The hackathon work is the NEAR build in [`near/`](near/README.md), started at th
 - **Live on testnet:** contract `table.nomad-poker.testnet`, dealer `nomad-poker.testnet/nomad-dealer` on OutLayer.
 - **Libraries and tools:** near-sdk, cargo-near, the OutLayer SDK and CLI, NEAR Connect, and the pre-hackathon
   Nomad Poker web client and engine (baseline). Parts of the code were written with AI coding assistants.
-- **License:** MIT, see [LICENSE](LICENSE).
+- **License:** All rights reserved. The code may be read, built and run to evaluate the project; see [LICENSE](LICENSE).
 
 The web-first Nomad Poker platform: the browser game (a faithful port of the Unity client), its game server, and
 the on-chain programs. Carved out of `X2C-fun/Poker` (the live Unity stack, now maintenance-only) with the history of
