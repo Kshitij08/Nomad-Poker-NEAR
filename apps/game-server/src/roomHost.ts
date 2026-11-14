@@ -61,7 +61,16 @@ export abstract class RoomHost {
   }
 
   get playerCount(): number {
-    return this.room.players.size;
+    return this.room.playingCount;
+  }
+
+  get watcherCount(): number {
+    return this.room.watchers.size;
+  }
+
+  /** Seats in play (people, Agents, bots); tables override it. */
+  get seatedCount(): number {
+    return this.room.playingCount;
   }
 
   get isFull(): boolean {
@@ -99,7 +108,7 @@ export abstract class RoomHost {
         peer.sendJson({ t: 'pong', t0: m.t0 });
         return;
       case 'join':
-        this.join(peer, m.session, m.appVersion);
+        this.join(peer, m.session, m.appVersion, !!m.watch);
         return;
       case 'spawnRoom':
       case 'requestOverflow':
@@ -128,14 +137,14 @@ export abstract class RoomHost {
     if (peer?.room) peer.room.remove(peer);
   }
 
-  private join(peer: Peer, session: string, appVersion: string): void {
+  private join(peer: Peer, session: string, appVersion: string, watch = false): void {
     const fail = (reason: 'GameIsFull' | 'GameNotFound' | 'GameClosed', message: string) => peer.sendJson({ t: 'joinFailed', reason, message });
     if (appVersion && appVersion !== LOCAL_APP_VERSION) return fail('GameNotFound', `No session '${session}' in universe '${appVersion}'.`);
     if (canonicalSession(session) !== this.spec.name) return fail('GameNotFound', `This connection is for '${this.spec.name}'.`);
     if (this.closed || this.draining) return fail('GameClosed', 'This table is closing; try again in a moment.');
     if (peer.room) return; // already joined on this socket
-    if (this.room.isFull) return fail('GameIsFull', `Session '${session}' is full.`);
-    this.room.admit(peer);
+    if (watch ? !this.room.canWatch : this.room.isFull) return fail('GameIsFull', watch ? `Session '${session}' has too many spectators.` : `Session '${session}' is full.`);
+    this.room.admit(peer, watch);
     peer.sendJson({
       t: 'joined',
       session: this.room.sessionName,

@@ -171,3 +171,5 @@ export const LOCAL_APP_VERSION = '1.0-web-local';
 
 /** Fusion session size: PokerMenuConnection.TableSeats (connections, spectators included). */
 export const MAX_PLAYERS_PER_SESSION = 8;
+/** Spectators a table takes on top of its players (they never take a seat). */
+export const MAX_WATCHERS_PER_SESSION = 24;

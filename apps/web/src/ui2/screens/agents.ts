@@ -155,7 +155,7 @@ const overview: ScreenDef = {
   </div>
   <div class="v2-card v2-col v2-ag-setup"><div class="v2-cap">Session setup</div>
     ${field('bankroll', 'Bankroll (Coins)')}${field('maxHands', 'Max hands')}${field('maxMinutes', 'Max minutes')}${field('stopLoss', 'Stop loss')}${field('profitTarget', 'Profit target')}
-    <div class="v2-xs v2-mut">Plays Coins tables from your Coins (you have ${fmt(coins())}). Stop it any time; its stack comes back to your Coins. 0 = off.</div>
+    <div class="v2-xs v2-mut">Plays Coins tables from your Coins (you have ${fmt(coins())}). Stop it any time; its stack comes back to your Coins. 0 = off. Limits are checked after each hand, so one big pot can go past the stop loss or target. Up to 5,000 hands and 24 hours.</div>
     <div class="v2-grow"></div>
     ${st.active ? btn(st.pill === 'Stopping' ? 'Stopping…' : 'Stop Agent', 'ag-deploy', { h: 'red', c: 'lg w', dis: st.pill === 'Stopping' }) : btn('Review &amp; Deploy', 'ag-deploy', { h: 'gold', c: 'lg w' })}
   </div></div>`;
@@ -393,7 +393,7 @@ const history: ScreenDef = {
       .filter(({ x }) => histFilter === 'all' || (histFilter === 'p' ? x.NetPnl >= 0 : x.NetPnl < 0))
       .map(({ x, i }) => {
         const { label } = stopReasonLabel(x.StopReason);
-        const cls = label === 'Completed' ? 'ok' : label === 'Target hit' ? 'gold' : 'bad';
+        const cls = label === 'Completed' || label === 'Hand limit' || label === 'Time limit' ? 'ok' : label === 'Target hit' ? 'gold' : 'bad';
         return `<button class="v2-ag-gt v2-ag-row"${act('hist-open', i)}><b><span class="v2-ag-k">Session </span>#${total - i}</b><span class="v2-num"><span class="v2-ag-k">Start </span>${fmt(x.StartingBankroll)}</span><span class="v2-num"><span class="v2-ag-k">End </span>${fmt(x.EndingStack)}</span><span class="v2-num"><span class="v2-ag-k">Hands </span>${x.HandsPlayed}</span><span><span class="v2-ag-k">Time </span>${duration(x.RuntimeSeconds)}</span><b class="v2-num ${tone(x.NetPnl)}">${signed(x.NetPnl)}</b><span><span class="v2-pill ${cls}">${esc(label)}</span></span></button>`;
       })
       .join('');

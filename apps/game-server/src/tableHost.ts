@@ -136,6 +136,10 @@ export class TableHost extends RoomHost {
   }
 
   /** Owned Agents seated here or waiting for a seat. */
+  override get seatedCount(): number {
+    return this.game.seatedPlayers;
+  }
+
   override get agentCount(): number {
     return this.game.agentCount;
   }

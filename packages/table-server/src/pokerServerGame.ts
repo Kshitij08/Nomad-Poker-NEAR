@@ -1961,6 +1961,17 @@ export class PokerServerGame implements IPokerTableServer {
     return snapshot({ name: occ.name, stack: occ.buyInChips, isOccupied: true, isPendingNextHand: true });
   }
 
+  /** A spectator (joined with `watch`): the table as a watcher sees it, never a seat. */
+  onWatch(player: PlayerRef): void {
+    if (this.disposed) return;
+    this.spectateJoiner(player);
+  }
+
+  /** Seats in play (people, Agents and bots), for the public table list. */
+  get seatedPlayers(): number {
+    return this.seatedCount();
+  }
+
   /** A newcomer in the room without a chair: they see who is sitting; Join Table claims a seat. */
   private spectateJoiner(player: PlayerRef): void {
     if (this.economy) this.announceEconomy();

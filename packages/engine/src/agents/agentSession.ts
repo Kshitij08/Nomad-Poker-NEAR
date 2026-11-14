@@ -115,14 +115,16 @@ export class AgentSession {
 
     if (this.ownerStopRequested) return AgentStopReasons.OwnerStop;
 
-    const runtime = this.runtimeSeconds;
-    if (this.handsPlayed >= this.config.MaxHands) return AgentStopReasons.MaxHands;
-    if (runtime >= this.config.MaxRuntimeSeconds) return AgentStopReasons.MaxRuntime;
+    // What happened to the money on the last hand wins over a limit it also reached: busting, or crossing the stop
+    // loss or the profit target, on the final allowed hand is reported as that (not as "hand limit"). Unity checked the
+    // limits first, which filed a bust on hand 100 of 100 as a normal finish.
     if (agentStack <= 0) return AgentStopReasons.Bust;
-
     const net = agentStack - this.startingBankroll;
     if (this.config.StopLoss > 0 && net <= -this.config.StopLoss) return AgentStopReasons.StopLoss;
     if (this.config.ProfitTarget > 0 && net >= this.config.ProfitTarget) return AgentStopReasons.ProfitTarget;
+
+    if (this.handsPlayed >= this.config.MaxHands) return AgentStopReasons.MaxHands;
+    if (this.runtimeSeconds >= this.config.MaxRuntimeSeconds) return AgentStopReasons.MaxRuntime;
     return null;
   }
 

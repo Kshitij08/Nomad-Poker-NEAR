@@ -267,6 +267,8 @@ export const SocialRoutes = {
   remove: '/v1/friends/remove',
   invite: '/v1/invites/send',
   dismiss: '/v1/invites/dismiss',
+  /** `?q=` (2+ characters): players whose display name starts with it, for Add friend. */
+  search: '/v1/players/search',
   profile: '/v1/me/profile',
   /** + `/<kind>?page=` (LeaderboardKind number). */
   leaderboards: '/v1/leaderboards',
@@ -349,6 +351,21 @@ export interface FriendInfo {
   online: boolean;
   /** The table (session) they are seated at; friends only. */
   table: string | null;
+}
+
+/** One Add-friend suggestion (GET SocialRoutes.search). */
+export interface PlayerSearchResult {
+  /** Their Friend ID. */
+  id: string;
+  name: string;
+  avatar: number;
+  /** Your relation to them, null when none. */
+  relation: FriendRelationName | null;
+  online: boolean;
+}
+
+export interface PlayerSearchResponse {
+  players: PlayerSearchResult[];
 }
 
 export interface TableInviteInfo {

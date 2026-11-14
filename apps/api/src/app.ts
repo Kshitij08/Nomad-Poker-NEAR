@@ -12,6 +12,7 @@ import {
   TournamentRoutes,
   AdminRoutes,
   type ProfileUpdateRequest,
+  type PlayerSearchResponse,
   Routes,
   walletSignInMessage,
   type ApiErrorBody,
@@ -373,6 +374,12 @@ export function createApp(): Hono<AppEnv> {
   app.post(SocialRoutes.invite, requirePlayer, async (c) => {
     const b = await body(c);
     return c.json(await socialDb.sendInvite(c.env.DB, c.get('player'), String(b.friendId ?? ''), String(b.session ?? ''), b.money === true));
+  });
+  app.get(SocialRoutes.search, requirePlayer, async (c) => {
+    // Reads, but a name search can enumerate players: it shares the per-session write limit.
+    const { success } = (await c.env.WRITE_LIMITER?.limit({ key: c.get('player').id })) ?? { success: true };
+    if (!success) fail(429, 'rate_limited', 'Slow down a little and try again in a minute.');
+    return c.json<PlayerSearchResponse>({ players: await socialDb.searchPlayers(c.env.DB, c.get('player'), c.req.query('q') ?? '') });
   });
   app.post(SocialRoutes.dismiss, requirePlayer, async (c) => c.json(await socialDb.dismissInvite(c.env.DB, c.get('player'), String((await body(c)).fromId ?? ''))));
 

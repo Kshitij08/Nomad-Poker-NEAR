@@ -20,7 +20,9 @@ export interface ConnectResult {
 export type ConnectRoute =
   | { kind: 'quick'; minBuyIn: number }
   | { kind: 'create' }
-  | { kind: 'join'; code: string };
+  | { kind: 'join'; code: string }
+  /** Spectate: join a table (pool name or party code) without ever taking a seat. */
+  | { kind: 'watch'; code: string };
 
 /** Unity: 3 primary tries 1.5 s apart, then up to 4 overflow tables; named joins retry 4 times. */
 const PrimaryTries = 3;
@@ -107,11 +109,12 @@ export async function connectTable(route: ConnectRoute, opts: ConnectOptions): P
     if (!session) return fail('Enter a room code.');
   }
 
-  let r = await conn.join(session);
+  const watch = route.kind === 'watch';
+  let r = await conn.join(session, undefined, watch);
   for (let attempt = 0; attempt < 4 && !r.ok && r.reason !== 'GameNotFound'; attempt++) {
     if (cancelled()) return cancel();
     await delay(RetryDelayMs);
-    r = await conn.join(session);
+    r = await conn.join(session, undefined, watch);
   }
   if (!r.ok) return fail(r.reason === 'GameNotFound' ? `Room ${session} was not found.` : r.message || `Could not join ${session}.`);
   return { ok: true, conn, session };

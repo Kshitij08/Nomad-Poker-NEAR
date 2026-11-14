@@ -9,6 +9,9 @@ import { PokerClientIdentity } from '../../economy/identity';
 import { FreePlayLeaderboard, type LeaderboardSnapshot } from '../../economy/leaderboards/freePlayLeaderboard';
 import { FriendInvites } from '../../economy/social/friendInvites';
 import { Friends, friendLabel, type FriendEntry } from '../../economy/social/friends';
+import { NomadLink } from '../../economy/nomadLink';
+import { StakeSessionNames } from '@nomad/table-server/sessions';
+import { SocialRoutes, type PlayerSearchResponse, type PlayerSearchResult } from '@nomad/contract';
 import { act, btn, esc, input, tabs } from '../core';
 import { ico } from '../icons';
 import { ui, app, host, S, onchain, onchainApi, avatar, avatarUrl, level, playerName, accountExtras, topBar, run, prompt, copy, setMode } from '../ctx';
@@ -36,7 +39,45 @@ const myFriendId = (): string => {
 
 // ------------------------------------------------------------------ Friends
 
-type FTab = 'friends' | 'requests';
+type FTab = 'friends' | 'requests' | 'add';
+
+/** Add friend: suggestions for what's typed (null while nothing has been searched), and the search state. */
+const finder = { query: '', results: null as PlayerSearchResult[] | null, busy: false, error: '', timer: 0 as ReturnType<typeof setTimeout> | 0, seq: 0 };
+
+function searchPlayers(q: string, repaint: () => void): void {
+  finder.query = q;
+  if (finder.timer) clearTimeout(finder.timer);
+  const query = q.trim();
+  if (query.length < 2 || FriendCode.tryParse(query)) {
+    finder.results = null;
+    finder.busy = false;
+    repaint();
+    return;
+  }
+  finder.busy = true;
+  repaint();
+  const seq = ++finder.seq;
+  finder.timer = setTimeout(() => {
+    void NomadLink.call<PlayerSearchResponse>('GET', `${SocialRoutes.search}?q=${encodeURIComponent(query)}`)
+      .then(
+        (r) => {
+          if (seq !== finder.seq) return;
+          finder.results = r.players;
+          finder.error = '';
+        },
+        (e) => {
+          if (seq !== finder.seq) return;
+          finder.results = [];
+          finder.error = (e as Error)?.message || "Couldn't search right now.";
+        },
+      )
+      .finally(() => {
+        if (seq !== finder.seq) return;
+        finder.busy = false;
+        repaint();
+      });
+  }, 250);
+}
 
 type FriendsScreen = ScreenDef & {
   tab: FTab;
@@ -78,8 +119,12 @@ const friends: FriendsScreen = {
       const el = e.target as HTMLInputElement;
       if (el.dataset?.in !== 'search') return;
       (this.input ??= {}).search = el.value;
-      const listEl = ui().el.querySelector<HTMLElement>('.v2-fr-list');
-      if (listEl) listEl.innerHTML = this.rowsHtml();
+      const repaint = () => {
+        const listEl = ui().el.querySelector<HTMLElement>('.v2-fr-list');
+        if (listEl) listEl.innerHTML = this.rowsHtml();
+      };
+      if (this.tab === 'add') searchPlayers(el.value, repaint);
+      else repaint();
     };
     ui().el.addEventListener('input', onSearch);
     this.offs.push(() => ui().el.removeEventListener('input', onSearch));
@@ -111,9 +156,9 @@ const friends: FriendsScreen = {
   <div class="v2-panel v2-fr-left">${this.mode === 'edit' ? this.pickerHtml() : this.profileHtml(list.length, online, requests.length)}</div>
   <div class="v2-panel v2-col v2-fr-right">
     <div class="v2-row v2-fr-head">
-      ${tabs([['friends', 'Friends'], ['requests', requests.length ? `Requests (${requests.length})` : 'Requests']], this.tab, 'f-tab', 'v2-fr-tabs')}
-      ${btn(`${ico('plus', 0.9)} Add friend`, 'f-add', { h: 'violet' })}
-      ${input('search', this.input?.search ?? '', 'Search friends', { cls: 'v2-grow v2-fr-search' })}
+      ${tabs([['friends', 'Friends'], ['requests', requests.length ? `Requests (${requests.length})` : 'Requests']], this.tab === 'add' ? '' : this.tab, 'f-tab', 'v2-fr-tabs')}
+      ${btn(`${ico('plus', 0.9)} Add friend`, 'f-add', { h: this.tab === 'add' ? 'gold' : 'violet' })}
+      ${input('search', this.input?.search ?? '', this.tab === 'add' ? 'Type a name or paste a Friend ID' : 'Search friends', { cls: 'v2-grow v2-fr-search', max: 40 })}
     </div>
     ${Friends.lastError && !all.length ? `<div class="v2-xs v2-badc">${esc(Friends.lastError)}</div>` : ''}
     <div class="v2-col v2-scroll v2-grow v2-fr-list">${this.rowsHtml()}</div>
@@ -121,6 +166,7 @@ const friends: FriendsScreen = {
 </div>`;
   },
   rowsHtml() {
+    if (this.tab === 'add') return addRowsHtml();
     const list: FriendEntry[] = [];
     const requests: FriendEntry[] = [];
     for (const f of Friends.all) {
@@ -143,10 +189,14 @@ const friends: FriendsScreen = {
           const invite = FriendInvites.inbox.find((i) => i.fromId === f.id) ?? null;
           if (this.tab === 'requests')
             return `<div class="v2-card v2-row v2-fr-row">${avatar('s', avatarFor(label, f.avatar))}<div class="v2-grow"><b class="v2-ellip">${esc(label)}</b><div class="v2-xs v2-mut">Wants to be friends</div></div>${btn('Accept', 'f-accept', { h: 'gold', c: 'sm', v: f.id })}${btn('Decline', 'f-decline', { h: 'ghost', c: 'sm', v: f.id })}</div>`;
-          const where = invite ? 'Invited you to a table' : f.table ? 'At a table' : f.lastLogin !== null ? `Last seen ${seenDate(f.lastLogin)}` : '';
+          // A friend at a public (pool) table can be joined straight away; a private table needs their invite.
+          const publicTable = !invite && !!f.table && StakeSessionNames.isPool(f.table) && f.table !== FriendInvites.currentTable?.session;
+          const where = invite ? 'Invited you to a table' : f.table ? (publicTable ? 'Playing at a public table' : 'At a private table') : f.lastLogin !== null ? `Last seen ${seenDate(f.lastLogin)}` : '';
           const action = invite
             ? btn('Join', 'f-join', { h: 'gold', c: 'sm', v: f.id })
-            : btn('Invite', 'f-invite', { h: 'blue', c: `sm${atTable ? '' : ' dis'}`, v: f.id, title: atTable ? 'Invite to your table' : 'Enabled only while you are at a table' });
+            : publicTable
+              ? btn('Join table', 'f-jointable', { h: 'gold', c: 'sm', v: f.id, title: 'Sit at the same table' })
+              : btn('Invite', 'f-invite', { h: 'blue', c: `sm${atTable ? '' : ' dis'}`, v: f.id, title: atTable ? 'Invite to your table' : 'Enabled only while you are at a table' });
           return `<div class="v2-card v2-row v2-fr-row">${avatar('s', avatarFor(label, f.avatar))}<div class="v2-grow"><div class="v2-row" style="gap:.5em"><b class="v2-ellip" style="font-size:1.05em">${esc(label)}</b><span class="v2-pill ${on ? 'ok' : ''}">${on ? 'Online' : 'Offline'}</span></div><div class="v2-xs v2-mut v2-ellip">${esc(where)}</div></div>${action}<button class="v2-pill v2-more"${act('f-more', f.id)} aria-label="More for ${esc(label)}">${ico('more', 1)}</button></div>`;
         }).join('');
     return rows;
@@ -154,8 +204,24 @@ const friends: FriendsScreen = {
   actions: {
     'f-tab': (v) => {
       friends.tab = v as FTab;
+      friends.input = { ...friends.input, search: '' };
     },
-    'f-add': () => addFriend(),
+    'f-add': () => {
+      if (!NomadLink.signedIn) return addFriend();
+      friends.tab = 'add';
+      friends.input = { ...friends.input, search: '' };
+      finder.results = null;
+      finder.query = '';
+      setTimeout(() => ui().el.querySelector<HTMLInputElement>('[data-in="search"]')?.focus(), 0);
+    },
+    'f-noop': () => {},
+    'f-req': (v) => void run(async () => {
+      const r = await Friends.sendRequestAsync(v);
+      if (!r.success) return r.error;
+      const hit = finder.results?.find((p) => p.id === v);
+      if (hit) hit.relation = 'pending_out';
+      return null;
+    }, () => ui().toast('Friend request sent')),
     'f-signin': () => host().show('Login'),
     'f-profile': () => {
       friends.showProfile = !friends.showProfile;
@@ -232,6 +298,14 @@ const friends: FriendsScreen = {
       const invite = FriendInvites.inbox.find((i) => i.fromId === v);
       if (invite) void run(() => FriendInvites.acceptAsync(invite));
     },
+    'f-jointable': (v) => {
+      const f = Friends.find(v);
+      const session = f?.table;
+      if (!f || !session || !StakeSessionNames.isPool(session)) return ui().toast("They're not at a public table any more");
+      const join = FriendInvites.joinHandler;
+      if (!join) return ui().toast('Go back to the main menu to join');
+      void run(() => join({ fromId: f.id, fromName: friendLabel(f), session, money: false, sentAtUnix: Math.floor(Date.now() / 1000) }));
+    },
     'f-invite': (v) => {
       const f = Friends.find(v);
       if (!f || !FriendInvites.currentTable) return ui().toast('Sit at a table to invite friends');
@@ -267,6 +341,33 @@ const friends: FriendsScreen = {
     return `<b class="v2-h">Choose your picture</b><div class="v2-fr-grid v2-scroll">${tiles}</div><div class="v2-row" style="width:100%">${btn('Cancel', 'f-pick-cancel', { h: 'ghost', c: 'v2-grow' })}${btn('Save', 'f-pick-save', { h: 'gold', c: 'v2-grow' })}</div>`;
   },
 };
+
+/** The Add friend list: a Friend ID typed in full, or the players whose name starts with what's typed. */
+function addRowsHtml(): string {
+  const q = finder.query.trim();
+  const hint = (text: string) => `<div class="v2-empty">${ico('friends', 6)}${text}</div>`;
+  const code = FriendCode.tryParse(q);
+  if (code)
+    return `<div class="v2-card v2-row v2-fr-row"><div class="v2-grow"><b>Friend ID ${esc(q)}</b><div class="v2-xs v2-mut">Send them a friend request</div></div>${btn('Send request', 'f-req', { h: 'gold', c: 'sm', v: q })}</div>`;
+  if (q.length < 2) return hint('Type at least 2 letters of their name,<br>or paste their Friend ID.');
+  if (finder.busy && !finder.results) return hint('Searching…');
+  if (finder.error) return hint(esc(finder.error));
+  const found = finder.results ?? [];
+  if (!found.length) return hint(`No players named “${esc(q)}…”.<br>Check the spelling, or ask for their Friend ID.`);
+  return found
+    .map((p) => {
+      const action =
+        p.relation === 'friend'
+          ? btn('Friends', 'f-noop', { h: 'ghost', c: 'sm dis' })
+          : p.relation === 'pending_out'
+            ? btn('Requested', 'f-noop', { h: 'ghost', c: 'sm dis' })
+            : p.relation === 'pending_in'
+              ? btn('Accept', 'f-accept', { h: 'gold', c: 'sm', v: p.id })
+              : btn('Add', 'f-req', { h: 'blue', c: 'sm', v: p.id });
+      return `<div class="v2-card v2-row v2-fr-row">${avatar('s', avatarFor(p.name, p.avatar))}<div class="v2-grow"><div class="v2-row" style="gap:.5em"><b class="v2-ellip" style="font-size:1.05em">${esc(p.name)}</b><span class="v2-pill ${p.online ? 'ok' : ''}">${p.online ? 'Online' : 'Offline'}</span></div><div class="v2-xs v2-mut v2-ellip">Friend ID ${esc(FriendCode.format(p.id))}</div></div>${action}</div>`;
+    })
+    .join('');
+}
 
 function addFriend(): void {
   prompt('Add a friend', 'Enter their friend ID or name.', 'Friend ID or name', '', 'Send request', (id) => {

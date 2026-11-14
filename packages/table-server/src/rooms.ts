@@ -15,7 +15,7 @@
 import { PlayerAction } from '@nomad/engine/actions/actions';
 import { PokerChatRateLimiter, PokerChatText } from './chat';
 import { encodeMessage, type ClientMessage, type JoinFailReason, type ServerMessage } from './protocol';
-import { ChainTableMode, MAX_PLAYERS_PER_SESSION, PartyCodes, StakeSessionNames } from './sessions';
+import { ChainTableMode, MAX_PLAYERS_PER_SESSION, MAX_WATCHERS_PER_SESSION, PartyCodes, StakeSessionNames } from './sessions';
 import type { ServerClock } from './clock';
 import type { LogFn } from './chipTableSession';
 import { PLAYER_NONE, type IPokerTableServer, type PlayerRef, type TableNet } from './tableNet';
@@ -77,8 +77,21 @@ export class Room implements TableNet {
     return this.spec.properties;
   }
 
+  /** Connections that only watch (joined with `watch`): never seated, not counted against the seats. */
+  readonly watchers = new Set<PlayerRef>();
+
   get isFull(): boolean {
-    return this.players.size >= (this.spec.maxPlayers ?? MAX_PLAYERS_PER_SESSION);
+    return this.players.size - this.watchers.size >= (this.spec.maxPlayers ?? MAX_PLAYERS_PER_SESSION);
+  }
+
+  /** Room for one more spectator. */
+  get canWatch(): boolean {
+    return this.watchers.size < MAX_WATCHERS_PER_SESSION;
+  }
+
+  /** Connections that play (not watchers). */
+  get playingCount(): number {
+    return this.players.size - this.watchers.size;
   }
 
   activePlayers(): PlayerRef[] {
@@ -116,9 +129,10 @@ export class Room implements TableNet {
 
   // ---- Membership ------------------------------------------------------------------------------
 
-  admit(peer: Peer): PlayerRef {
+  admit(peer: Peer, watch = false): PlayerRef {
     const player = this.nextPlayer++;
     this.players.set(player, peer);
+    if (watch) this.watchers.add(player);
     peer.room = this;
     peer.player = player;
     this.everHadPlayer = true;
@@ -130,6 +144,7 @@ export class Room implements TableNet {
     const player = peer.player;
     if (!this.players.has(player)) return;
     this.players.delete(player);
+    this.watchers.delete(player);
     this.chatLimiters.delete(player);
     this.tokens.delete(player);
     peer.room = null;
@@ -166,6 +181,11 @@ export class Room implements TableNet {
   handle(peer: Peer, m: ClientMessage): void {
     const p = peer.player;
     const s = this.server;
+    // A spectator only watches: their hello shows them the table; anything that would seat or act is ignored.
+    if (this.watchers.has(p)) {
+      if (m.t === 'hello') s.onWatch?.(p);
+      return;
+    }
     try {
       switch (m.t) {
         case 'hello':
@@ -312,7 +332,7 @@ export class RoomRegistry {
   }
 
   /** NetworkRunner.StartGame(Client, session): Quick Play pools exist on demand; everything else must be spawned first. */
-  join(peer: Peer, session: string, appVersion: string): { ok: true; room: Room } | { ok: false; reason: JoinFailReason; message: string } {
+  join(peer: Peer, session: string, appVersion: string, watch = false): { ok: true; room: Room } | { ok: false; reason: JoinFailReason; message: string } {
     if (appVersion && appVersion !== this.opts.appVersion)
       return { ok: false, reason: 'GameNotFound', message: `No session '${session}' in universe '${appVersion}'.` };
     if (!session || session.length > 64) return { ok: false, reason: 'InvalidArguments', message: 'Bad session name.' };
@@ -329,8 +349,8 @@ export class RoomRegistry {
         });
       else return { ok: false, reason: 'GameNotFound', message: `Room '${session}' was not found.` };
     }
-    if (room.isFull) return { ok: false, reason: 'GameIsFull', message: `Session '${session}' is full.` };
-    room.admit(peer);
+    if (watch ? !room.canWatch : room.isFull) return { ok: false, reason: 'GameIsFull', message: watch ? `Session '${session}' has too many spectators.` : `Session '${session}' is full.` };
+    room.admit(peer, watch);
     return { ok: true, room };
   }
 
@@ -390,7 +410,7 @@ export function routeMessage(registry: RoomRegistry, peer: Peer, m: ClientMessag
       return;
     case 'join': {
       if (peer.room) peer.room.remove(peer); // one runner per peer: a new StartGame shuts the old one down
-      const r = registry.join(peer, m.session, m.appVersion);
+      const r = registry.join(peer, m.session, m.appVersion, !!m.watch);
       if (!r.ok) peer.sendJson({ t: 'joinFailed', reason: r.reason, message: r.message });
       else peer.sendJson({ t: 'joined', session: r.room.sessionName, player: peer.player, kind: r.room.spec.kind, region: ChainTableMode.DedicatedRegion, properties: { ...r.room.spec.properties } });
       return;
