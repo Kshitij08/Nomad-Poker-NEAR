@@ -6,7 +6,7 @@ import { HandEvaluator } from '../evaluation/handEvaluator';
 import { HandValue } from '../evaluation/handValue';
 import type { BettingRound } from '../state/state';
 import type {
-  PokerEvent, SeatSnapshot, ShowdownEntry, TablePhase,
+  HandStartedEvent, PokerEvent, SeatSnapshot, ShowdownEntry, TablePhase,
 } from './pokerEvent';
 import { BinaryReader, BinaryWriter } from './binaryIO';
 import type {
@@ -48,6 +48,9 @@ const TypeTableEconomy = 18;
 const TypeTournamentStatus = 19;
 const TypeTournamentView = 20;
 const TypeTournamentResult = 21;
+
+/** HandStarted's optional trailing field: a deck commitment follows (committed tables only). */
+const HandStartedTagDeckCommitment = 1;
 
 /** Card.HiddenWire: "a card exists but its value is hidden from you". */
 export const HIDDEN_WIRE = 255;
@@ -106,6 +109,11 @@ export const PokerEventCodec = {
         w.writeByte(e.smallBlindSeat);
         w.writeByte(e.bigBlindSeat);
         writeSeats(w, e.seats);
+        // Optional tail (older peers stop reading after the seats): [tag 1][32-byte deck commitment].
+        if (e.deckCommitment) {
+          w.writeByte(HandStartedTagDeckCommitment);
+          for (const b of hexToBytes32(e.deckCommitment)) w.writeByte(b);
+        }
         break;
       case 'BlindPosted':
         w.writeByte(TypeBlindPosted);
@@ -296,8 +304,8 @@ export const PokerEventCodec = {
 
 function decodeBody(r: BinaryReader, type: number): WireEvent | null {
   switch (type) {
-    case TypeHandStarted:
-      return {
+    case TypeHandStarted: {
+      const e: HandStartedEvent = {
         type: 'HandStarted',
         handNumber: r.readInt32(),
         buttonSeat: r.readByte(),
@@ -305,6 +313,9 @@ function decodeBody(r: BinaryReader, type: number): WireEvent | null {
         bigBlindSeat: r.readByte(),
         seats: readSeats(r),
       };
+      if (r.remaining >= 33 && r.readByte() === HandStartedTagDeckCommitment) e.deckCommitment = readHex32(r);
+      return e;
+    }
     case TypeBlindPosted:
       return {
         type: 'BlindPosted',
@@ -577,4 +588,18 @@ export function pokerTokenHash(token: string | null | undefined): string {
   }
   const signed = BigInt.asIntN(64, hash);
   return signed === 0n ? '1' : signed.toString();
+}
+
+/** A 32-byte value given as 64 hex chars (a deck commitment). */
+function hexToBytes32(hex: string): Uint8Array {
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) throw new RangeError('A deck commitment is 64 hex characters.');
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) out[i] = parseInt(hex.substring(2 * i, 2 * i + 2), 16);
+  return out;
+}
+
+function readHex32(r: BinaryReader): string {
+  let s = '';
+  for (let i = 0; i < 32; i++) s += r.readByte().toString(16).padStart(2, '0');
+  return s;
 }

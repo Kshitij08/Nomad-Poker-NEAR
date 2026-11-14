@@ -102,6 +102,11 @@ export class BinaryReader {
     this.view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   }
 
+  /** Bytes not yet read (trailing, optional fields an older peer does not send). */
+  get remaining(): number {
+    return this.data.byteLength - this.pos;
+  }
+
   private need(n: number): void {
     if (this.pos + n > this.data.byteLength) throw new EndOfStreamError();
   }

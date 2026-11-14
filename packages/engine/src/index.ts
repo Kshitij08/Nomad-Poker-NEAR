@@ -9,6 +9,7 @@ export * from './cards/suit';
 export * from './cards/card';
 export * from './cards/random';
 export * from './cards/deck';
+export * from './cards/deckCommitment';
 export * from './evaluation/handCategory';
 export * from './evaluation/handValue';
 export * from './evaluation/handEvaluator';

@@ -35,6 +35,11 @@ export interface HandStartedEvent {
   bigBlindSeat: number;
   /** indexed by seat, one entry per seat at the table */
   seats: SeatSnapshot[];
+  /**
+   * Network-only, committed tables: SHA-256 commitment (64 hex chars) to this hand's deck seed, revealed after the
+   * hand (see cards/deckCommitment.ts). Absent on ordinary tables. The engine never sets it.
+   */
+  deckCommitment?: string;
 }
 
 export interface BlindPostedEvent {

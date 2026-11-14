@@ -20,7 +20,15 @@ export const LedgerResult = {
   insufficientFunds: (balance: number): LedgerResult => ({ success: false, error: 'Not enough chips.', balance }),
 };
 
-/** Everything the authoritative server is allowed to do to a player's chips (IChipLedger). */
+/**
+ * Everything the authoritative server is allowed to do to a player's chips (IChipLedger).
+ *
+ * NEAR stakes: a NEAR money ledger plugs in here (buy-in = escrow deposit, checkpoint = the escrow's view of the
+ * stack, cash-out = escrow withdrawal), next to a PokerServerGame HandGate that opens and settles each hand in the
+ * escrow. Such tables must run with deck commitments on (PokerServerGameOptions.deckCommitments, implied by a
+ * handGate): the escrow records each hand's commitment before the deal and can check the seed reveal
+ * (SettledHand.deck, verifyDeck in @nomad/engine/cards/deckCommitment) before paying out. Not built yet.
+ */
 export interface ChipLedger {
   /** The PlayFabId behind a session ticket, or null when it does not check out (or has expired). */
   authenticateAsync(sessionTicket: string): Promise<string | null>;
