@@ -21,6 +21,7 @@ import { ui, host, app, S, onchain, topBar, setMode, signedIn, coins, prompt, fr
 import type { ScreenDef } from '../install';
 import { solAgentActions, solAgentClose, solAgentHistory, solAgentOpen, solAgentOverview, solAgentStatus } from './solAgent';
 import { startWatch } from '../../economy/nomad/social';
+import { backingScreen } from './backing';
 import './agents.css';
 
 type J = Record<string, unknown>;
@@ -42,7 +43,7 @@ function duration(seconds: number): string {
 /** One tab row for every Agents page (no tabs inside tabs): the Agent's own pages, then Twin, Marketplace, Coach. */
 const MAIN_TABS: [string, string][] = [
   ['ag-overview', 'Overview'], ['ag-strategy', 'Strategy'], ['ag-history', 'History'],
-  ['ag-twin', 'My twin'], ['ag-market', 'Marketplace'], ['ag-coach', 'Coach'],
+  ['ag-twin', 'My twin'], ['ag-market', 'Marketplace'], ['ag-back', 'Back a pro'], ['ag-coach', 'Coach'],
 ];
 
 function agMain(on: string): string {
@@ -751,7 +752,7 @@ const coach: ScreenDef = {
 };
 
 export function agentScreens(): ScreenDef[] {
-  const all: V2Screen[] = [overview, strategy, history, twin, market, coach];
+  const all: V2Screen[] = [overview, strategy, history, twin, market, backingScreen(agMain), coach];
   for (const s of all) s.back ??= 'main';
   return all as ScreenDef[];
 }

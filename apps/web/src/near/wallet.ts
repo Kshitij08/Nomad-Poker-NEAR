@@ -51,6 +51,16 @@ export const nearSigner: NearSigner = {
   },
 };
 
+/** Calls a contract method through the player's wallet (connecting first if needed). `deposit` is in yoctoNEAR. */
+export async function nearCall(contractId: string, methodName: string, args: Record<string, unknown>, deposit = 0n, tgas = 50n): Promise<void> {
+  const c = await load();
+  const w = await c.wallet().catch(() => c.connect());
+  await w.signAndSendTransaction({
+    receiverId: contractId,
+    actions: [{ type: 'FunctionCall', params: { methodName, args, gas: String(tgas * 10n ** 12n), deposit: String(deposit) } }],
+  });
+}
+
 export async function nearSignOut(): Promise<void> {
   if (!connector) return;
   try {
