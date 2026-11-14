@@ -1,24 +1,20 @@
 /**
  * SOL tournaments (On-chain): 'sol-tourneys' (the list, Register / Leave / Cancel, a private tournament's code, "Go to
- * your table") and 'sol-tourney-host' (Host a SOL tournament). Opened from Tournaments' SOL note. The chain actions are
- * src/web3/ui/lobbyTourney.ts (Per/Unity/PerTourneyPanel.cs); they load with @solana/web3.js on first open.
+ * your table") and 'sol-tourney-host' (Host a SOL tournament). Opened from Tournaments' SOL note. The chain actions go
+ * through the chain seam (src/chain), which loads the chain's code on first open.
  */
-import type { PerRuntime } from '../../web3/per/service';
-import type { SolTourney } from '../../web3/ui/lobbyTourney';
+import { chain, chainMoney, ordinal, type ChainService, type Tourney } from '../../chain';
 import { btn, chips, esc, input } from '../core';
 import { ico } from '../icons';
-import { ui, host, app, onchain, topBar, signedIn, copy, prompt } from '../ctx';
+import { ui, host, onchain, topBar, signedIn, copy, prompt } from '../ctx';
 import type { ScreenDef } from '../install';
-import { perRt, solAmt, solError, solTask } from './solKit';
+import { solAmt, solError, solTask } from './solKit';
 import './sol.css';
 
-type Mod = typeof import('../../web3/ui/lobbyTourney');
-
 const ST = {
-  per: null as PerRuntime | null,
-  mod: null as Mod | null,
+  c: null as ChainService | null,
   loadErr: '',
-  list: null as SolTourney[] | null,
+  list: null as Tourney[] | null,
   listErr: '',
   timer: 0,
   // host form
@@ -33,12 +29,10 @@ const ST = {
 
 /** Loads the runtime and the tournament module (once). */
 async function ready(): Promise<boolean> {
-  if (ST.per && ST.mod) return true;
+  if (ST.c) return true;
   try {
-    const [per, mod] = await Promise.all([perRt(), import('../../web3/ui/lobbyTourney')]);
-    ST.per = per;
-    ST.mod = mod;
-    if (ST.speed < 0) ST.speed = per.tourney.TURBO;
+    ST.c = await chain();
+    if (ST.speed < 0) ST.speed = ST.c.tourneys.choices.TURBO;
     ST.loadErr = '';
     return true;
   } catch (e) {
@@ -53,7 +47,7 @@ async function ready(): Promise<boolean> {
 async function loadList(): Promise<void> {
   if (!(await ready())) return;
   try {
-    ST.list = await ST.mod!.readTourneys(app(), ST.per!);
+    ST.list = await ST.c!.tourneys.read();
     ST.listErr = '';
   } catch (e) {
     console.error('[ui2] SOL tournaments list', e);
@@ -69,12 +63,12 @@ const loadingBox = (what: string): string => `<div class="v2-empty"><i class="v2
 
 // ------------------------------------------------------------------ list
 
-function row(t: SolTourney): string {
+function row(t: Tourney): string {
   const phasePill = t.phase === 'running' ? '<span class="v2-pill ok">Playing now</span>' : t.phase === 'cancelled' ? '<span class="v2-pill">Cancelled</span>' : t.phase === 'finished' ? '<span class="v2-pill">Finished</span>' : '';
-  const you = t.you === 'out' && t.place > 0 ? `<span class="v2-pill gold">You finished ${ST.mod!.ordinal(t.place)}</span>` : t.you === 'in' && t.phase !== 'cancelled' && t.phase !== 'finished' ? '<span class="v2-pill ok">Registered</span>' : '';
+  const you = t.you === 'out' && t.place > 0 ? `<span class="v2-pill gold">You finished ${ordinal(t.place)}</span>` : t.you === 'in' && t.phase !== 'cancelled' && t.phase !== 'finished' ? '<span class="v2-pill ok">Registered</span>' : '';
   let actions = '';
   if (t.table >= 0) actions += btn('Go to your table', 'st-go', { h: 'gold', v: t.address });
-  if (t.canRegister) actions += btn(`Register ${t.fee === 0n ? '· Free' : `${ico('sol', 0.9)} ${esc(ST.per!.format.sol(t.fee))}`}`, 'st-reg', { h: 'gold', v: t.address });
+  if (t.canRegister) actions += btn(`Register ${t.fee === 0n ? '· Free' : `${ico('sol', 0.9)} ${esc(chainMoney().format(t.fee))}`}`, 'st-reg', { h: 'gold', v: t.address });
   if (t.phase === 'registering' && t.you === 'in') actions += btn('Leave', 'st-leave', { h: 'red', v: t.address });
   if (t.phase === 'registering' && t.host) actions += btn('Cancel', 'st-cancel', { h: 'red', v: t.address });
   const fill = t.max > 0 ? Math.round((t.count / t.max) * 100) : 0;
@@ -111,7 +105,7 @@ const list: ScreenDef = {
     const top = topBar('SOL Tournaments');
     if (!onchain()) return top + chainOnly();
     const l = ST.list;
-    const body = ST.loadErr && !ST.per ? `<div class="v2-empty">${ico('sol', 4)}<span>${esc(ST.loadErr)}</span>${btn('Try again', 'st-reload', { h: 'blue' })}</div>`
+    const body = ST.loadErr && !ST.c ? `<div class="v2-empty">${ico('sol', 4)}<span>${esc(ST.loadErr)}</span>${btn('Try again', 'st-reload', { h: 'blue' })}</div>`
       : ST.listErr && !l ? `<div class="v2-empty">${ico('sol', 4)}<span>${esc(ST.listErr)}</span>${btn('Try again', 'st-reload', { h: 'blue' })}</div>`
         : !l ? loadingBox('Loading SOL tournaments…')
           : l.length === 0 ? `<div class="v2-empty">${ico('trophy', 6)}<span>No SOL tournaments are open right now.<br>Host one, or enter a private tournament's code.</span></div>`
@@ -136,7 +130,7 @@ const list: ScreenDef = {
       const t = ST.list?.find((x) => x.address === v);
       if (!t) return;
       if (!signedIn()) return host().show('Login');
-      const fee = t.fee === 0n ? "It's free to enter." : `The ${esc(ST.per!.format.sol(t.fee))} entry fee comes from your game balance.`;
+      const fee = t.fee === 0n ? "It's free to enter." : `The ${esc(chainMoney().format(t.fee))} entry fee comes from your game balance.`;
       const go = (code: string | null) => register(t.address, code, t.name);
       if (t.isPrivate) return prompt(`Register for ${t.name}`, `This tournament is private. ${fee}`, 'Tournament code', '', 'Register', (c) => (c ? go(c) : undefined), 6);
       ui().message(`Register for ${esc(t.name)}?`, `${fee} You can leave before it starts and get it back.`, 'Register', () => go(null), 'Cancel');
@@ -149,7 +143,7 @@ const list: ScreenDef = {
       const t = ST.list?.find((x) => x.address === v);
       if (!t || t.table < 0) return;
       void solTask('Go to your table', "Couldn't open your table. Try again in a moment.", async (st) => {
-        await ST.mod!.goToTourneyTable(app(), ST.per!, t.address, t.table, st);
+        await ST.c!.tourneys.goToTable(t.address, t.table, st);
       });
     },
     'st-code': () => {
@@ -159,9 +153,9 @@ const list: ScreenDef = {
       void solTask('Private tournament', "Couldn't look up that code. Try again in a moment.", async (st) => {
         if (!(await ready())) throw new Error(ST.loadErr);
         st('Looking for the tournament…');
-        const address = await ST.mod!.findTourneyByCode(ST.per!, code);
+        const address = await ST.c!.tourneys.findByCode(code);
         if (!address) return 'No open tournament has that code. Check it with the host.';
-        await ST.mod!.registerTourney(app(), ST.per!, address, code, st);
+        await ST.c!.tourneys.register(address, code, st);
         list.input = { code: '' };
         return "You're registered. Come back at the start time and the game takes you to your table.";
       }, () => void loadList());
@@ -171,14 +165,14 @@ const list: ScreenDef = {
 
 function register(address: string, code: string | null, name: string): void {
   void solTask(`Register for ${name}`, "Couldn't register. Check your game balance and try again.", async (st) => {
-    await ST.mod!.registerTourney(app(), ST.per!, address, code, st);
+    await ST.c!.tourneys.register(address, code, st);
     return "You're registered. Come back at the start time and the game takes you to your table.";
   }, () => void loadList());
 }
 
 function leaveOrCancel(address: string, cancel: boolean): void {
   void solTask(cancel ? 'Cancel tournament' : 'Leave tournament', cancel ? "Couldn't cancel it. Try again in a moment." : "Couldn't leave. Try again in a moment.", async (st) => {
-    await ST.mod!.leaveOrCancelTourney(ST.per!, address, cancel, st);
+    await ST.c!.tourneys.leaveOrCancel(address, cancel, st);
     return cancel ? 'Cancelled. Everyone who registered gets their entry fee back.' : 'You left. Your entry fee is back in your game balance.';
   }, () => void loadList());
 }
@@ -201,11 +195,11 @@ const hostPage: ScreenDef = {
   render() {
     const top = topBar('Host a SOL Tournament');
     if (!onchain()) return top + chainOnly();
-    if (!ST.per || !ST.mod)
+    if (!ST.c)
       return top + `<div class="v2-panel v2-col" style="flex:1">${ST.loadErr ? `<div class="v2-empty">${ico('sol', 4)}<span>${esc(ST.loadErr)}</span>${btn('Try again', 'sth-retry', { h: 'blue' })}</div>` : loadingBox('Getting ready…')}</div>`;
-    const { PLAYERS, FEES, PRIZES, START_MINUTES } = ST.mod;
-    const sol = ST.per.format.sol;
-    const speeds = [...ST.per.tourney.SPEED_LABELS];
+    const { PLAYERS, FEES, PRIZES, START_MINUTES } = ST.c.tourneys.choices;
+    const sol = (units: bigint): string => chainMoney().format(units);
+    const speeds = [...ST.c.tourneys.choices.SPEED_LABELS];
     const fee = FEES[ST.fee]!;
     const prize = PRIZES[ST.prize]!;
     const name = (hostPage.input?.stname ?? ST.name).trim();
@@ -250,7 +244,7 @@ const hostPage: ScreenDef = {
       ST.name = name.slice(0, 40);
       let code: string | null = null;
       void solTask('Host a SOL tournament', "Couldn't create the tournament. Nothing was charged. Try again in a moment.", async (st) => {
-        code = await ST.mod!.createSolTourney(app(), ST.per!, { name: ST.name, speed: ST.speed, players: ST.players, fee: ST.fee, prize: ST.prize, start: ST.start, isPrivate: ST.isPrivate }, st);
+        code = await ST.c!.tourneys.create({ name: ST.name, speed: ST.speed, players: ST.players, fee: ST.fee, prize: ST.prize, start: ST.start, isPrivate: ST.isPrivate }, st);
         return null;
       }).then((ok) => {
         if (!ok || ui().currentId !== 'sol-tourney-host') return;

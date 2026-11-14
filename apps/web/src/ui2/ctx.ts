@@ -3,8 +3,7 @@ import type { AppContext } from '../app/app';
 import { PokerSound } from '@nomad/engine';
 import type { NomadHost } from '../menu/host';
 import { svc, progressionOf, canSpin, canClaimLogin, accountExtras } from '../menu/deps';
-import { onchainApi } from '../web3/nomad/onchainPartial';
-import { NomadPlayMode } from '../web3/solana/identity';
+import { NomadPlayMode, onchainApi } from '../chain/menu';
 import { esc, fmt, btn, type V2 } from './core';
 import { ico } from './icons';
 

@@ -15,6 +15,8 @@ import type { LazyService } from './services';
 export { w3, type LazyService, type Web3Services } from './services';
 import { installWeb3Screens } from './ui/screens';
 import { registerOnchainPartial } from './nomad/onchainPartial';
+import { registerChain } from '../chain';
+import { loadSolanaChain, solanaMoney } from './chainSolana';
 
 function lazy<T>(load: () => Promise<T>): LazyService<T> {
   let p: Promise<T> | null = null;
@@ -38,6 +40,8 @@ export function install(ctx: AppContext): void {
   ctx.services.web3Config = config;
   ctx.services.solana = solana;
   ctx.services.per = lazy(async () => new (await import('./per/service')).PerRuntime(config, http, solana));
+  // The On-chain screens reach Solana only through the chain seam (src/chain); NEAR registers the same way.
+  registerChain(solanaMoney, () => loadSolanaChain(ctx));
   installWeb3Screens(ctx);
   // DEV ONLY: a devnet test wallet on localhost with ?testwallet=1 (dev/testWallet.ts). The dynamic import sits
   // inside the DEV check, so production builds don't contain it.

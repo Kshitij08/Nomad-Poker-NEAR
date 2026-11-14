@@ -27,7 +27,7 @@ import { parseSol, PerBuyIn, sol, STAKES, stakeMaxBuyIn, stakeMinBuyIn } from '.
 import type { PerRuntime } from '../per/service';
 import type { PlayKey } from '../per/vault';
 import type { Stakes } from '../per/entry';
-import { NomadPlayMode } from '../solana/identity';
+import { NomadPlayMode, onchainApi, type OnchainApi } from '../../chain/menu';
 import { w3 } from '../services';
 import { copyText, friendlyError } from '../ui/perUi';
 import { marketOnchain, marketState, solProfile, type AgentStrategyLike } from '../../menu/screens/market';
@@ -50,27 +50,8 @@ export function friendly(e: unknown): string {
   return friendlyError(m);
 }
 
-/** ONCHAIN actions for screens outside the Unity tree (Redesign v2, src/ui2). Filled when the partial binds. */
-export interface OnchainApi {
-  toggleMode(): Promise<void>;
-  connectWallet(): Promise<boolean>;
-  refreshSol(): Promise<void>;
-  deposit(): Promise<void>;
-  withdraw(): Promise<void>;
-  copyWallet(): void;
-  /** "◎0.5 ($50.00)", "Not connected", plus a withdrawal note. */
-  balanceText(): string;
-  walletAddress(): string | null;
-  quickPlay(level: number, buyIn?: bigint): Promise<void>;
-  partyCreate(): Promise<void>;
-  partyJoin(code: string): Promise<void>;
-  openPrivateTables(): void;
-  tableStakes(level: number): { blinds: string; minBuyIn: string; buyIn: string; label: string };
-  stepBuyIn(level: number, dir: number): unknown;
-  setBuyInEnd(level: number, end: 'min' | 'max' | 'double'): unknown;
-  joinTable(level: number): unknown;
-}
-export const onchainApi: Partial<OnchainApi> = {};
+// The hooks the v2 screens call live in src/chain/menu.ts (chain-neutral); this partial fills them for Solana.
+export { onchainApi, type OnchainApi };
 
 /** The one-time "Connect a wallet?" offer after the first guest sign-in (off in Redesign v2: offered on On-chain). */
 export const walletOfferAfterGuest = { enabled: false };

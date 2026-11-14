@@ -6,14 +6,11 @@ import { MENU_DATA } from '../../menu/data';
 import { assetUrl } from '../../hud/unityUi';
 import { startParty, startWatch } from '../../economy/nomad/social';
 import { cloudGameServer } from '../../net/serverUrl';
-import { STAKES as SOL_STAKES, PerBuyIn, sol, stakeMinBuyIn, stakeMaxBuyIn } from '../../web3/per/money';
-import type { PerRuntime } from '../../web3/per/service';
-import type { HostedRow, LobbyRead } from '../../web3/ui/lobby';
-import { w3 } from '../../web3/services';
+import { chain, chainMoney, type ChainService, type HostedRow, type LobbyRead } from '../../chain';
 import { btn, esc, act, tabs, chips, input, type Action } from '../core';
 import { ico } from '../icons';
 import { ui, host, app, S, onchain, onchainApi, topBar, signedIn, needCoins, getCoinsRoute, copy } from '../ctx';
-import { perRt, shortAddr, solAmt, solError, solTask } from './solKit';
+import { shortAddr, solAmt, solError, solTask } from './solKit';
 import type { ScreenDef } from '../install';
 import './play.css';
 
@@ -61,8 +58,8 @@ export const bgArt = (theme: Theme, color: string): string => {
 
 // ------------------------------------------------------------------ Private SOL tables (Tables › Private tables)
 
-/** The lobby actions (src/web3/ui/lobby.ts): loaded with @solana/web3.js on first use. */
-const lobbyMod = () => import('../../web3/ui/lobby');
+/** An on-chain amount for display. Lobby actions go through the chain seam (src/chain), loaded on first use. */
+const sol = (units: bigint | number): string => chainMoney().format(units);
 const walletNow = (): string | null => onchainApi.walletAddress?.() ?? null;
 const findHosted = (v: string): HostedRow | null => tables.priv.data?.hosted.find((h) => h.address === v) ?? null;
 const reloadPrivate = (): void => void loadPrivate(tables);
@@ -72,8 +69,8 @@ async function loadPrivate(t: typeof tables): Promise<void> {
   t.priv = { ...t.priv, loading: true, loaded: true, error: null, wallet };
   ui().render();
   try {
-    const [per, { readLobby }] = await Promise.all([perRt(), lobbyMod()]);
-    t.priv = { loading: false, loaded: true, error: null, data: await readLobby(per), wallet };
+    const c = await chain();
+    t.priv = { loading: false, loaded: true, error: null, data: await c.lobby.read(), wallet };
   } catch (e) {
     console.error('[ui2] private tables', e);
     t.priv = { loading: false, loaded: true, error: solError(e, "Couldn't load the private tables. Check your connection and try again."), data: null, wallet };
@@ -154,14 +151,14 @@ function privatePanel(t: typeof tables): string {
       ? `<div class="v2-empty">${ico('sol', 4)}<span>No private SOL tables are open right now.<br>Host one, or join a friend's table by code.</span></div>`
       : `<div class="${grid} v2-pthdr"><span>Blinds</span><span>Host</span><span>Seated</span><span>Who can join</span><span>Buy-in</span><span></span></div>${d.tables
           .map((r) => {
-            const buyIn = PerBuyIn.for(r.minBuyIn, r.maxBuyIn, r.bigBlind);
+            const buyIn = chainMoney().buyIn.for(r.minBuyIn, r.maxBuyIn, r.bigBlind);
             const access = r.mine ? '<span class="v2-pill gold">Yours</span>' : r.inviteOnly ? (r.haveLink ? '<span class="v2-pill ok">Invited</span>' : '<span class="v2-pill">Invite-only</span>') : '<span class="v2-pill">Anyone</span>';
             return `<div class="${grid} v2-ptrow"><b class="v2-solamt">${ico('sol', 1)}<span class="v2-num">${esc(sol(r.smallBlind))} / ${esc(sol(r.bigBlind))}</span></b><span class="v2-ellip">${esc(r.mine ? 'You' : shortAddr(r.creator) || '—')}</span><span>${r.seated} / ${r.maxSeats}</span><span>${access}</span>${solAmt(buyIn)}${btn('Join', 'priv-join', { h: 'gold', c: 'sm', v: r.address, title: r.inviteOnly && !r.haveLink && !r.mine ? 'Invite-only: you can sit if the host invited your wallet' : undefined })}</div>`;
           })
           .join('')}`;
     body = `<div class="v2-scroll v2-col v2-priv-list">${notes}${hosted}${rows}</div>`;
   }
-  const buyIn = `<div class="v2-row v2-wrap v2-priv-buy"><span class="v2-sm v2-mut">Your buy-in</span>${chips(PerBuyIn.labels.map((l, i) => [String(i), l] as [string, string]), String(PerBuyIn.choice), 'priv-buyin')}</div>`;
+  const buyIn = `<div class="v2-row v2-wrap v2-priv-buy"><span class="v2-sm v2-mut">Your buy-in</span>${chips(chainMoney().buyIn.labels.map((l, i) => [String(i), l] as [string, string]), String(chainMoney().buyIn.choice), 'priv-buyin')}</div>`;
   return `<div class="v2-panel v2-col v2-priv" style="flex:1;min-height:0">
   <div class="v2-row v2-wrap v2-priv-top"><b class="v2-h v2-grow">Private SOL tables</b>${input('code', t.input?.code ?? '', 'Table code', { max: 44, cls: 'v2-priv-code' })}<button class="v2-b blue" data-a="priv-code" data-enter="code">Join by code</button>${d && !p.loading ? btn('Refresh', 'priv-refresh', { h: 'ghost' }) : ''}${btn(`${ico('plus', 1)} Host a table`, 'priv-host', { h: 'gold' })}</div>
   ${walletStrip()}
@@ -172,19 +169,16 @@ function privatePanel(t: typeof tables): string {
 }
 
 /** Runs a hosted-table action with the progress dialog, then reads the lobby again. */
-function hostedTask(v: string, title: string, fallback: string, op: (per: PerRuntime, lobby: typeof import('../../web3/ui/lobby'), h: HostedRow, st: (s: string) => void) => Promise<string | void | null>): void {
+function hostedTask(v: string, title: string, fallback: string, op: (c: ChainService, h: HostedRow, st: (s: string) => void) => Promise<string | void | null>): void {
   const h = findHosted(v);
   if (!h) return;
-  void solTask(title, fallback, async (st) => {
-    const [per, lobby] = await Promise.all([perRt(), lobbyMod()]);
-    return op(per, lobby, h, st);
-  }, reloadPrivate);
+  void solTask(title, fallback, async (st) => op(await chain(), h, st), reloadPrivate);
 }
 
 async function connectWallet(): Promise<boolean> {
   try {
     if (onchainApi.connectWallet) return await onchainApi.connectWallet();
-    return await w3(app()).solana.connect();
+    return await (await chain()).connectWallet();
   } catch (e) {
     ui().message('Connect a wallet', esc(solError(e, "Couldn't connect your wallet. Try again.")));
     return false;
@@ -225,58 +219,56 @@ const privActions: Record<string, Action> = {
           ui().closeDialog();
           void solTask('Log out all devices', "Couldn't log out your devices. Try again in a moment.", async (st) => {
             if (!(await connectWallet())) return null;
-            const per = await perRt();
-            await per.gameWallet.revokePlayKeys(st);
+            await (await chain()).lobby.revokeSessions(st);
             return 'Done. Every device asks your wallet once before it plays SOL tables again.';
           }, reloadPrivate);
         },
       },
     }),
   'priv-buyin': (v) => {
-    PerBuyIn.choice = Number(v);
+    chainMoney().buyIn.choice = Number(v);
   },
   'priv-join': (v) => {
     const r = tables.priv.data?.tables.find((x) => x.address === v);
     if (!r) return;
     if (!signedIn()) return host().show('Login');
-    const buyIn = PerBuyIn.for(r.minBuyIn, r.maxBuyIn, r.bigBlind);
+    const buyIn = chainMoney().buyIn.for(r.minBuyIn, r.maxBuyIn, r.bigBlind);
     void solTask('Join table', "Couldn't join the table. Try again in a moment.", async (st) => {
-      const [per, { joinAndGo }] = await Promise.all([perRt(), lobbyMod()]);
-      await joinAndGo(app(), per, r.address, buyIn, st, { smallBlind: r.smallBlind, bigBlind: r.bigBlind, minBuyIn: r.minBuyIn, maxBuyIn: r.maxBuyIn });
+      await (await chain()).lobby.join(r.address, buyIn, st, { smallBlind: r.smallBlind, bigBlind: r.bigBlind, minBuyIn: r.minBuyIn, maxBuyIn: r.maxBuyIn });
     });
   },
   'h-join': (v) =>
-    hostedTask(v, 'Join table', "Couldn't join the table. Try again in a moment.", async (per, l, h, st) => {
-      await l.joinAndGo(app(), per, h.table, h.buyIn, st);
+    hostedTask(v, 'Join table', "Couldn't join the table. Try again in a moment.", async (c, h, st) => {
+      await c.lobby.join(h.address, h.buyIn, st);
     }),
-  'h-open': (v) => hostedTask(v, 'Open your table', "Couldn't open the table. Try again in a minute.", async (per, l, h, st) => void (await l.openHosted(per, h.table, st))),
+  'h-open': (v) => hostedTask(v, 'Open your table', "Couldn't open the table. Try again in a minute.", async (c, h, st) => void (await c.lobby.open(h, st))),
   'h-copy': (v) => {
     const link = findHosted(v)?.link;
     if (link) copy(link, 'Invite link copied');
   },
   'h-newlink': (v) =>
-    hostedTask(v, 'New invite link', "Couldn't make a new link. Try again in a moment.", async (per, l, h, st) => {
-      await l.newInviteLink(per, h.table, st);
+    hostedTask(v, 'New invite link', "Couldn't make a new link. Try again in a moment.", async (c, h, st) => {
+      await c.lobby.newInviteLink(h, st);
       return 'Your new invite link is ready, and older links no longer work. Tap Copy invite link to share it.';
     }),
   'h-close': (v) =>
     ui().message('Close this table?', `Players can't join it after this. Its deposit (${ico('sol', 1)} about 0.013 SOL) can come back to your wallet a minute later.`, 'Close table', () =>
-      hostedTask(v, 'Close your table', "Couldn't close the table. Try again in a moment.", async (per, l, h, st) => {
-        await l.closeHosted(per, h.table, st);
+      hostedTask(v, 'Close your table', "Couldn't close the table. Try again in a moment.", async (c, h, st) => {
+        await c.lobby.close(h, st);
         return 'Closed. In a minute, tap Get deposit back to take its deposit back.';
       }), 'Keep it', undefined, 'red'),
   'h-reclaim': (v) =>
-    hostedTask(v, 'Get deposit back', "Couldn't get the deposit back yet. Try again in a minute.", async (per, l, h, st) => {
-      await l.reclaimHosted(per, h.table, h.id, st);
+    hostedTask(v, 'Get deposit back', "Couldn't get the deposit back yet. Try again in a minute.", async (c, h, st) => {
+      await c.lobby.reclaim(h, st);
       return "The table's deposit is back in your wallet.";
     }),
   'h-oldlist': (v) =>
-    hostedTask(v, 'Get deposit back', "Couldn't get the deposit back yet. Try again in a minute.", async (per, l, h, st) => {
-      await l.closeOldInvites(per, h.id, st);
+    hostedTask(v, 'Get deposit back', "Couldn't get the deposit back yet. Try again in a minute.", async (c, h, st) => {
+      await c.lobby.closeOldInvites(h.id, st);
       return "The invite list's deposit is back in your wallet.";
     }),
 };
-/** The private SOL tables tab: the lobby read (src/web3/ui/lobby.ts) and the wallet it was read for. */
+/** The private tables tab: the lobby read (through the chain seam) and the wallet it was read for. */
 interface PrivState {
   loading: boolean;
   loaded: boolean;
@@ -536,8 +528,8 @@ const solHost: ScreenDef & { stake: number; seats: number; access: Access; invit
   busy: false,
   input: { wallet: '' },
   render() {
-    const st = SOL_STAKES[this.stake]!;
-    const blinds = SOL_STAKES.map((s, i) => {
+    const st = chainMoney().stakes[this.stake]!;
+    const blinds = chainMoney().stakes.map((s, i) => {
       const r = ROOMS[i] ?? ROOMS[0]!;
       const name = StakeCatalog.Tiers[i]?.displayName ?? s.label;
       return `<button class="v2-stc${i === this.stake ? ' on' : ''}"${act('sh-stake', i)}><div class="v2-stc-art v2-center" style="background:linear-gradient(${r.color},var(--v2-bg-top))">${ico('sol', 2)}</div><b>${esc(name)}</b><small>${sol(s.small)} / ${sol(s.big)}</small></button>`;
@@ -556,7 +548,7 @@ const solHost: ScreenDef & { stake: number; seats: number; access: Access; invit
   <div class="v2-panel v2-col v2-sh-sum">
     <b class="v2-h">Summary</b>
     <div class="v2-sh-felt v2-center"><span class="v2-pill">${esc(name)} ${sol(st.small)} / ${sol(st.big)} · ${this.seats} seats</span></div>
-    <div class="v2-kv"><span>Buy-in</span><b>${sol(stakeMinBuyIn(this.stake))} – ${sol(stakeMaxBuyIn(this.stake))}</b></div>
+    <div class="v2-kv"><span>Buy-in</span><b>${sol(chainMoney().minBuyIn(this.stake))} – ${sol(chainMoney().maxBuyIn(this.stake))}</b></div>
     <div class="v2-kv"><span>Open cost</span><b>≈ ${ico('sol', 1)} 0.03 SOL</b></div>
     <div class="v2-kv"><span>Back on close</span><b>≈ ${ico('sol', 1)} 0.013 SOL</b></div>
     <div class="v2-kv"><span>Rake</span><b>5% of buy-ins</b></div>
@@ -571,10 +563,10 @@ const solHost: ScreenDef & { stake: number; seats: number; access: Access; invit
     'sh-stake': (v) => void (solHost.stake = Number(v)),
     'sh-seats': (v) => void (solHost.seats = Number(v)),
     'sh-access': (v) => void (solHost.access = v as Access),
-    'sh-add': () => {
+    'sh-add': async () => {
       const w = (solHost.input?.wallet ?? '').trim();
       if (!w) return;
-      if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w)) return ui().message('Invite a wallet', "That isn't a Solana wallet address.");
+      if (!(await chain()).lobby.isAccount(w)) return ui().message('Invite a wallet', "That isn't a wallet address on this network.");
       if (solHost.invitees.length >= 15) return ui().message('Invite a wallet', 'Up to 15 wallets besides you.');
       if (!solHost.invitees.includes(w)) solHost.invitees.push(w);
       solHost.input = { wallet: '' };
@@ -593,10 +585,9 @@ async function createSolTable(): Promise<void> {
     ui().openDialog({ title: 'Host a SOL table', body: () => `<div class="v2-row" style="gap:.9em"><i class="v2-spin" aria-hidden="true"></i><span>${esc(status)}</span></div>`, buttons: btn('Hide', 'sh-hide', { h: 'ghost' }), actions: { 'sh-hide': () => ui().closeDialog() }, dismiss: false });
   dlg();
   try {
-    const per = await w3(app()).per.get();
-    const [{ hostSolTable }, { PublicKey }] = await Promise.all([import('../../web3/ui/lobbyHost'), import('@solana/web3.js')]);
-    const invitees = solHost.access === 'invite' ? solHost.invitees.map((w) => new PublicKey(w)) : [];
-    await hostSolTable(app(), per, { stake: solHost.stake, seats: solHost.seats, inviteOnly: solHost.access !== 'anyone', invitees }, (s) => {
+    const c = await chain();
+    const invitees = solHost.access === 'invite' ? [...solHost.invitees] : [];
+    await c.lobby.host({ stake: solHost.stake, seats: solHost.seats, inviteOnly: solHost.access !== 'anyone', invitees }, (s) => {
       status = s;
       ui().render();
     });

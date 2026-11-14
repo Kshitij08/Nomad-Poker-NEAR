@@ -10,7 +10,6 @@ const SESSION_PREF = 'Poker.SessionJwt';
 const PROVIDER_PREF = 'Poker.WalletProvider';
 const EMAIL_PROMPT_PREF = 'Poker.EmailPromptDismissed';
 const CHAIN_LOBBY_PREF = 'Poker.ChainLobby';
-const NOMAD_MODE_PREF = 'Nomad.PlayMode';
 
 const setOrDelete = (key: string, value: string) => (value ? PlayerPrefs.setString(key, value) : PlayerPrefs.deleteKey(key));
 
@@ -99,12 +98,5 @@ export const ChainTableMode = {
   },
 };
 
-/** NomadUiHost.Onchain `Onchain`: the Nomad menu's DEMO (Coins) / ONCHAIN (private SOL tables) switch. */
-export const NomadPlayMode = {
-  get onchain(): boolean {
-    return PlayerPrefs.getInt(NOMAD_MODE_PREF, 0) === 1;
-  },
-  set onchain(v: boolean) {
-    PlayerPrefs.setInt(NOMAD_MODE_PREF, v ? 1 : 0);
-  },
-};
+/** The Nomad menu's Demo / On-chain switch: chain-neutral, now in src/chain/menu.ts. */
+export { NomadPlayMode } from '../../chain/menu';
