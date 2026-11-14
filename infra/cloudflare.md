@@ -10,6 +10,8 @@ Worker is described by `apps/api/cloudflare.config.ts` (no Wrangler config). Pri
 | D1 (players, sessions, ledger, seat locks) | `nomad-poker-staging` · `c9570cef-7f57-4845-b503-03da7893d36d` · migrations `0001`–`0005` applied (`0005_agents_tournaments` on 2026-11-09) | `nomad-poker-production` · `e630e086-697c-47c7-84c3-8ad467005c34` · migrations `0001`–`0012` applied 14 Nov 2026 |
 | R2 (hand histories, replays) | `nomad-poker-hands-staging` | `nomad-poker-hands-production` |
 | Rate limiter (sign-in, 30/min per IP) | namespace `7102` | namespace `7103` |
+| DNS zone `nomadpoker.fun` | — | Active on Cloudflare since 14 Nov 2026 (nameservers moved from Hostinger). Apex A `216.150.1.1` and `www` CNAME `cname.vercel-dns.com`, both DNS only (Vercel serves the site) |
+| Email | Staging echoes sign-in links (`EMAIL_DEV_ECHO`) | Email Service sends sign-in links from `no-reply@nomadpoker.fun` (API binding `EMAIL`), 1,000/day quota to start. Email Routing forwards `support@nomadpoker.fun` to the owner's Gmail |
 | Cron trigger on the game server (Agents sweep, tournament clock) | `* * * * *` | `* * * * *` (when deployed) |
 
 `cf dev` (mode `development`, namespace `7101`) uses local D1/R2 simulations, not the resources above.

@@ -8,6 +8,9 @@ import * as entrypoint from './src/index.ts' with { type: 'cf-worker' };
  */
 
 const ACCOUNT_ID = 'a5e26389a89c0c84a7b4939e38574714';
+/** Google OAuth client ids (public values): the web client (www.nomadpoker.fun, localhost:5180). */
+const GOOGLE_CLIENT_IDS = ['114523122703-ps6fj6q10ofb9pkft4g1dd4rrnv9k01r.apps.googleusercontent.com'];
+const EMAIL_SENDER = 'no-reply@nomadpoker.fun';
 
 const STAGES = {
   development: {
@@ -75,6 +78,13 @@ export default defineConfig(({ mode }) => {
         ALLOWED_ORIGINS: bindings.text(s.origins.join(',')),
         WALLET_CHAIN_ID: bindings.text('devnet'),
         EMAIL_DEV_ECHO: bindings.text(s.emailDevEcho),
+        // Google sign-in: the web client id (public). Android / iOS client ids join this list when those apps get one.
+        GOOGLE_CLIENT_IDS: bindings.text(GOOGLE_CLIENT_IDS.join(',')),
+        // Production mails the email sign-in links through Cloudflare Email Service (nomadpoker.fun is onboarded as a
+        // sending domain); staging and dev hand the link back instead (EMAIL_DEV_ECHO).
+        ...(stage === 'production'
+          ? { EMAIL: bindings.sendEmail({ allowedSenderAddresses: [EMAIL_SENDER] }), EMAIL_FROM: bindings.text(`Nomad Poker <${EMAIL_SENDER}>`) }
+          : {}),
         SPIN_SECRET: bindings.secret(),
         TOURNAMENT_MIN_LEAD_SECONDS: bindings.text(s.tournamentMinLead),
         LISTING_MIN_HANDS: bindings.text(s.listingMinHands),

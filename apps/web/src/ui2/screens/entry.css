@@ -11,6 +11,8 @@
 .v2-login-tag { text-align: center; color: var(--v2-mut); margin-top: calc(-1 * var(--v2-s2)); }
 .v2-login-card { background: var(--v2-panel); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-lg); padding: var(--v2-s4); display: flex; flex-direction: column; gap: var(--v2-s2); }
 .v2-login-card .v2-b { width: 100%; }
+.v2-login-legal { margin: 0.2em 0 0; text-align: center; font-size: 0.78em; color: var(--v2-ink2); }
+.v2-login-legal a { color: var(--v2-gold); }
 .v2-login-or { display: flex; align-items: center; gap: var(--v2-s2); color: var(--v2-mut2); font-size: 0.8em; font-weight: 800; }
 .v2-login-or::before, .v2-login-or::after { content: ''; flex: 1; height: 0.08em; background: var(--v2-line2); }
 .v2-login-status { text-align: center; font-size: 0.9em; min-height: 1.3em; color: var(--v2-mut); }

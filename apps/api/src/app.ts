@@ -58,6 +58,29 @@ import { ApiError, base58Decode, fail, iso, randomId, readJson, requireString, s
 export const VERSION = '0.1.0';
 const WALLET_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const EMAIL_LINK_TTL_MS = 15 * 60 * 1000;
+const EMAIL_RESEND_MS = 60 * 1000;
+
+/** The sign-in email: a plain message with one button (the link works once, for 15 minutes). */
+function signInEmail(link: string): { html: string; text: string } {
+  const safe = link.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const text = `Sign in to Nomad Poker
+
+Open this link to sign in. It works once and expires in 15 minutes:
+${link}
+
+If you didn't ask for this, ignore this email: nobody can sign in without the link.
+`;
+  const html = `<!doctype html><html><body style="margin:0;background:#f4f1fb;font-family:Arial,Helvetica,sans-serif;color:#1d1832">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:12px">
+<tr><td style="padding:28px 28px 8px;font-size:22px;font-weight:bold;color:#3a208e">Nomad Poker</td></tr>
+<tr><td style="padding:8px 28px;font-size:16px;line-height:1.5">Tap the button to sign in. The link works once and expires in 15 minutes.</td></tr>
+<tr><td style="padding:16px 28px"><a href="${safe}" style="display:inline-block;background:#5a35d6;color:#ffffff;text-decoration:none;font-weight:bold;font-size:16px;padding:12px 24px;border-radius:999px">Sign in to Nomad Poker</a></td></tr>
+<tr><td style="padding:8px 28px 4px;font-size:13px;color:#605a78;line-height:1.5">Or paste this address into your browser:<br><span style="word-break:break-all">${safe}</span></td></tr>
+<tr><td style="padding:12px 28px 28px;font-size:13px;color:#605a78;line-height:1.5">If you didn't ask for this, ignore this email: nobody can sign in without the link.</td></tr>
+</table></td></tr></table></body></html>`;
+  return { html, text };
+}
 
 const allowedOrigins = (env: Env): string[] =>
   env.ALLOWED_ORIGINS.split(',')
@@ -222,9 +245,18 @@ export function createApp(): Hono<AppEnv> {
     const body = await readJson<EmailStartRequest>(c.req.raw);
     const email = requireString(body.email, 'email', 254).trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail(400, 'bad_request', 'Not an email address.');
-    if (c.env.EMAIL_DEV_ECHO !== '1') fail(501, 'not_configured', 'Email sign-in is not set up on this server yet.');
+    const echo = c.env.EMAIL_DEV_ECHO === '1';
+    const mailer = !echo && c.env.EMAIL && c.env.EMAIL_FROM ? { send: c.env.EMAIL, from: c.env.EMAIL_FROM } : null;
+    if (!echo && !mailer) fail(501, 'not_configured', 'Email sign-in is not set up on this server yet.');
     const returnTo = appOrigin(c, body.returnTo);
     const now = Date.now();
+    if (mailer) {
+      // One link a minute per address: nobody can use the form to flood someone's inbox.
+      const recent = await c.env.DB.prepare("SELECT 1 FROM auth_challenges WHERE kind = 'email' AND subject = ?1 AND created_at > ?2 LIMIT 1")
+        .bind(email, now - EMAIL_RESEND_MS)
+        .first();
+      if (recent) fail(429, 'rate_limited', 'We just sent a link to that address. Check your inbox, or try again in a minute.');
+    }
     const token = randomId('ne_', 32);
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM auth_challenges WHERE expires_at < ?1').bind(now),
@@ -237,8 +269,18 @@ export function createApp(): Hono<AppEnv> {
       ),
     ]);
     const link = `${returnTo}/?emailToken=${encodeURIComponent(token)}`;
-    // No mail provider yet: staging hands the link back (EMAIL_DEV_ECHO). Production answers not_configured above.
-    return c.json<EmailStartResponse>({ sent: false, devLink: link });
+    // Staging and dev hand the link back (EMAIL_DEV_ECHO); production mails it.
+    if (!mailer) return c.json<EmailStartResponse>({ sent: false, devLink: link });
+    try {
+      await mailer.send.send({ to: email, from: mailer.from, subject: 'Your Nomad Poker sign-in link', ...signInEmail(link) });
+    } catch (e) {
+      const code = (e as { code?: string }).code ?? '';
+      console.error('[email] send failed', code, (e as Error).message);
+      if (code === 'E_RECIPIENT_SUPPRESSED') fail(400, 'bad_request', 'Mail to that address keeps bouncing. Check the address or use another sign-in.');
+      if (code === 'E_RATE_LIMIT_EXCEEDED' || code === 'E_DAILY_LIMIT_EXCEEDED') fail(429, 'rate_limited', 'Too many sign-in emails right now; try again in a few minutes.');
+      fail(502, 'internal', "Couldn't send the sign-in email. Try again, or play as a guest.");
+    }
+    return c.json<EmailStartResponse>({ sent: true });
   });
 
   app.post(Routes.emailVerify, async (c) => {

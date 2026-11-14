@@ -18,6 +18,7 @@ export function securityHeaders(stage) {
     'https://api.devnet.solana.com',
     'wss://api.devnet.solana.com',
     'https://devnet-tee.magicblock.app',
+    'https://accounts.google.com/gsi/',
     'wss://devnet-tee.magicblock.app',
     ...(stage.extraConnect ?? []),
   ];
@@ -25,15 +26,16 @@ export function securityHeaders(stage) {
     "default-src 'self'",
     // Vite emits module scripts only (no inline script). No WebAssembly: its only user was the TEE badge's verifier,
     // removed 9 Nov 2026.
-    "script-src 'self'",
+    // Google Identity Services (Sign in with Google): its script, its button frame and its stylesheet.
+    "script-src 'self' https://accounts.google.com/gsi/client",
     // The UI sets element styles from script; style attributes need 'unsafe-inline'.
-    "style-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
     "img-src 'self' data: blob:",
     "media-src 'self' data: blob:",
     "font-src 'self' data:",
     `connect-src ${connect.join(' ')}`,
     "worker-src 'self' blob:",
-    "frame-src 'none'",
+    "frame-src https://accounts.google.com/gsi/",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
