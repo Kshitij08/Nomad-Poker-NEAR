@@ -12,8 +12,8 @@
     "build:production": "cf-vite build --mode production",
     "deploy:staging": "node ../../infra/check-migrations.mjs staging && npm run build:staging && cf deploy --prebuilt --mode staging --secrets-file .secrets.staging.json",
     "deploy:production": "node ../../infra/check-migrations.mjs production && npm run build:production && cf deploy --prebuilt --mode production --secrets-file .secrets.production.json",
-    "db:migrate:local": "cf d1 migrations apply --dir ../../packages/db/migrations 50f75a10-aabe-4ffc-874a-30e2565d2934 --local --persist-to .cloudflare/state",
-    "db:migrate:staging": "cf d1 migrations apply --dir ../../packages/db/migrations 50f75a10-aabe-4ffc-874a-30e2565d2934",
+    "db:migrate:local": "cf d1 migrations apply --mode development --dir ../../packages/db/migrations 50f75a10-aabe-4ffc-874a-30e2565d2934 --local --persist-to .cloudflare/state",
+    "db:migrate:staging": "cf d1 migrations apply --mode staging --dir ../../packages/db/migrations 50f75a10-aabe-4ffc-874a-30e2565d2934",
     "db:migrate:production": "cf d1 migrations apply --dir ../../packages/db/migrations no-near-production-db-yet"
   },
   "dependencies": {

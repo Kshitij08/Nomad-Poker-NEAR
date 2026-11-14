@@ -179,6 +179,7 @@ export function openSettings(): void {
   const rows: [string, () => void][] = [];
   const h = host();
   if (signedIn() && (acc.isGuest ?? true)) {
+    if (acc.signInWithNear) rows.push(['Save with NEAR', () => void acc.signInWithNear!()]);
     if (acc.signInWithGoogle) rows.push(['Save with Google', () => void acc.signInWithGoogle!()]);
     if (acc.addRecoveryLogin)
       rows.push(['Save with email', () => prompt('Save your account', 'We send a one-time sign-in link to this email.', 'Email', '', 'Save', (email) => {
@@ -195,7 +196,7 @@ export function openSettings(): void {
       saves.forEach(([, fn], i) => (a[`so-save${i}`] = () => { ui().closeDialog(); fn(); }));
       ui().openDialog({
         title: 'Sign out?',
-        body: "You'll lose this guest account, with its Coins and progress. Save it with Google or email first to keep them.",
+        body: "You'll lose this guest account, with its Coins and progress. Save it with NEAR, Google or email first to keep them.",
         buttons: `<div class="v2-btn-grid">${saves.map(([l], i) => btn(esc(l), `so-save${i}`, { h: 'blue' })).join('')}${btn('Cancel', 'so-cancel', { h: 'ghost' })}${btn('Sign out', 'so-out', { h: 'red' })}</div>`,
         actions: a,
       });

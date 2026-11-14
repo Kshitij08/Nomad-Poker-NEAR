@@ -219,6 +219,24 @@ export class EconomyAccount implements AccountService {
     await this.continueWithGoogle();
   }
 
+  /**
+   * Continue with NEAR: the player's NEAR wallet (NEAR Connect) signs the server's challenge. A guest signed in on this
+   * browser keeps its coins: NEAR is linked to it.
+   */
+  async continueWithNear(): Promise<string | null> {
+    const s = NomadLink.session;
+    if (!s) return this.fail('NEAR sign-in needs the Nomad server. Play as Guest instead.');
+    this.setBusy(true, 'Connecting your NEAR wallet…');
+    const { nearSigner } = await import('../near/wallet');
+    await s.near(nearSigner);
+    this.setBusy(false, s.signedIn ? null : s.error);
+    this.changed();
+    return s.signedIn ? null : (s.error ?? 'NEAR sign-in failed.');
+  }
+  async signInWithNear(): Promise<void> {
+    await this.continueWithNear();
+  }
+
   /** The ticket a table server verifies: the Nomad session token ('' offline). */
   get playFabSessionTicket(): string {
     return NomadLink.session?.token ?? '';

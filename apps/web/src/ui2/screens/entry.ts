@@ -42,6 +42,7 @@ const login: ScreenDef & { sending: boolean } = {
       ? btn('Continue', 'lg-continue', { h: 'gold', c: 'lg' })
       : btn('Play as Guest', 'lg-guest', { h: 'gold', c: 'lg', dis: busy })}
     ${!inn ? `<div class="v2-login-or">or sign in</div>
+    ${a.signInWithNear ? btn('Continue with NEAR', 'lg-near', { h: 'gold', dis: busy }) : ''}
     ${a.signInWithGoogle ? btn(`${GOOGLE_G} Continue with Google`, 'lg-google', { h: 'blue', dis: busy }) : ''}
     ${btn('Sign in with email', 'lg-email', { h: 'ghost', dis: busy })}` : ''}
     <button class="v2-switch${keep ? ' on' : ''}" role="switch" aria-checked="${keep}"${act('lg-keep')}><i></i>Keep me signed in on this device</button>
@@ -60,6 +61,11 @@ const login: ScreenDef & { sending: boolean } = {
       const a = accountExtras(app());
       if (a.signInWithGoogle) void a.signInWithGoogle();
       else ui().message('Google sign-in', "Google sign-in isn't available in this version. Play as Guest instead.");
+    },
+    'lg-near': () => {
+      const a = accountExtras(app());
+      if (a.signInWithNear) void a.signInWithNear();
+      else ui().message('NEAR sign-in', "NEAR sign-in isn't available in this version. Play as Guest instead.");
     },
     'lg-email': () => emailSignIn(),
     'lg-keep': () => {

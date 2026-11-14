@@ -19,7 +19,7 @@ const STAGES = {
     worker: 'nomad-poker-near-api-dev',
     d1: { id: '50f75a10-aabe-4ffc-874a-30e2565d2934', name: 'nomad-poker-near-staging' },
     r2: 'nomad-poker-near-hands-staging',
-    origins: ['http://localhost:5180', 'http://127.0.0.1:5180'],
+    origins: ['http://localhost:5180', 'http://127.0.0.1:5180', 'http://localhost:5183'],
     limiterNamespace: '7201',
     writeLimiterNamespace: '7204',
     emailDevEcho: '1',
@@ -29,6 +29,7 @@ const STAGES = {
     listingMinDays: '0',
     // Local SOL shop tests pay the same devnet treasury as staging, read through Solana's public devnet RPC.
     shopTreasury: 'GV5LYvyakPHtjNWENbFKnfyG2NuMLkL6xYPxo6YyEcJw',
+    nearRpc: 'https://test.rpc.fastnear.com',
   },
   staging: {
     worker: 'nomad-poker-near-api-staging',
@@ -43,6 +44,7 @@ const STAGES = {
     listingMinDays: '0',
     // SOL shop purchases (devnet) pay the PER keeper key, a devnet key the project controls (apps/per health shows it).
     shopTreasury: 'GV5LYvyakPHtjNWENbFKnfyG2NuMLkL6xYPxo6YyEcJw',
+    nearRpc: 'https://test.rpc.fastnear.com',
   },
   production: {
     // Not set up yet: create the database and bucket, put the database id here and list the production web origin.
@@ -58,6 +60,7 @@ const STAGES = {
     listingMinHands: '',
     listingMinDays: '',
     shopTreasury: '',
+    nearRpc: '',
   },
 } as const;
 
@@ -81,6 +84,8 @@ export default defineConfig(({ mode }) => {
         STAGE: bindings.text(stage),
         ALLOWED_ORIGINS: bindings.text(s.origins.join(',')),
         WALLET_CHAIN_ID: bindings.text('devnet'),
+        // NEAR sign-in checks the signing key against this RPC (testnet in this fork; empty: not configured).
+        NEAR_RPC_URL: bindings.text(s.nearRpc),
         EMAIL_DEV_ECHO: bindings.text(s.emailDevEcho),
         // Google sign-in: the web client id (public). Android / iOS client ids join this list when those apps get one.
         GOOGLE_CLIENT_IDS: bindings.text(GOOGLE_CLIENT_IDS.join(',')),

@@ -11,9 +11,11 @@ import {
   type EmailStartResponse,
   type LedgerResponse,
   type MeResponse,
+  type NearChallengeResponse,
   type SessionResponse,
   type WalletChallengeResponse,
 } from '@nomad/contract';
+import type { NearSigner } from '../near/wallet';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -135,6 +137,23 @@ export class NomadSession {
       const ch = await this.request<WalletChallengeResponse>('POST', Routes.walletChallenge, { address });
       const signature = await signer.signMessage(new TextEncoder().encode(ch.message));
       await this.adopt(await this.request<SessionResponse>('POST', Routes.walletVerify, { address, nonce: ch.nonce, signature: base58(signature) }));
+    });
+  }
+
+  /**
+   * NEAR sign-in: the API's challenge is signed by the wallet as a NEP-413 message, and the API checks the key is a
+   * full-access key of the account. A guest signed in on this browser keeps its account: NEAR is linked to it.
+   */
+  near(signer: NearSigner): Promise<void> {
+    return this.run(async () => {
+      const accountId = await signer.connect();
+      if (!accountId) throw new ApiRequestError(0, 'cancelled', 'Wallet connection cancelled.');
+      const ch = await this.request<NearChallengeResponse>('POST', Routes.nearChallenge, { accountId });
+      const nonce = Uint8Array.from(atob(ch.nonce), (c) => c.charCodeAt(0));
+      const signed = await signer.signMessage({ message: ch.message, recipient: ch.recipient, nonce });
+      await this.adopt(
+        await this.request<SessionResponse>('POST', Routes.nearVerify, { accountId: signed.accountId, publicKey: signed.publicKey, signature: signed.signature, nonce: ch.nonce }),
+      );
     });
   }
 
