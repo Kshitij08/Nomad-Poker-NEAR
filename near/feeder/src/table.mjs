@@ -29,6 +29,23 @@ export class TableClient {
     });
   }
 
+  /**
+   * Opens a backed session: each seat is an agent bought in from its backer's position. Returns the dealer request
+   * the contract recorded (stacks and the agents' profiles), which must be sent to the dealer unchanged.
+   */
+  async openBackedSession({ sessionId, seats, buyIn, button, sb, bb, hands }) {
+    return this.owner.callFunction({
+      contractId: this.contractId,
+      methodName: "open_backed_session",
+      args: { session_id: sessionId, seats, buy_in_chips: String(buyIn), button, sb: String(sb), bb: String(bb), hands },
+      gas: teraToGas("100"),
+    });
+  }
+
+  async getPosition(backer, agentId) {
+    return this.provider.callFunction({ contractId: this.contractId, method: "get_position", args: { backer, agent_id: agentId } });
+  }
+
   /** Settles a session with the dealer's answer. The contract re-deals and replays every hand before accepting. */
   async submitSession({ sessionId, alpha, signature_hex, actions }) {
     const out = await this.settler.callFunction({

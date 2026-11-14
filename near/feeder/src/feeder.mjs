@@ -66,11 +66,14 @@ export class SessionFeeder extends EventEmitter {
    * @param o.poker      { replay }                                     (loadPoker())
    * @param o.pace       hand -> milliseconds of playback
    */
-  constructor({ tableId, seats, sb = 1, bb = 2, hands = 50, ahead = 1, dealer, table, poker, store = new MemoryStore(), pace = humanPace, retryMs = 5000 }) {
+  constructor({ tableId, seats, backed = null, sb = 1, bb = 2, hands = 50, ahead = 1, dealer, table, poker, store = new MemoryStore(), pace = humanPace, retryMs = 5000 }) {
     super();
+    // Backed tables: every seat is an agent bought in from its backer's position on the table contract, and every
+    // session cashes out, so stacks do not carry over. `backed = { seats: [{ backer, agent_id }], buyIn }`.
+    if (backed) seats = backed.seats.map(() => ({ stack: backed.buyIn }));
     if (seats.length < 2 || seats.length > 9) throw new Error("2 to 9 seats");
     sessionId(tableId, 0);
-    Object.assign(this, { tableId, seats, sb, bb, hands, ahead, dealer, table, poker, store, pace, retryMs });
+    Object.assign(this, { tableId, seats, backed, sb, bb, hands, ahead, dealer, table, poker, store, pace, retryMs });
     this.ready = [];
     this.wake = null;
   }
@@ -95,13 +98,12 @@ export class SessionFeeder extends EventEmitter {
   async prepare(signal) {
     const st = await this.#state();
     const id = sessionId(this.tableId, st.index);
-    const req = { stacks: st.stacks, button: st.button, sb: this.sb, bb: this.bb, hands: this.hands };
-    const profiles = this.seats.map((s) => s.profile);
+    const stacks = this.backed ? this.backed.seats.map(() => this.backed.buyIn) : st.stacks;
+    const req = { stacks, button: st.button, sb: this.sb, bb: this.bb, hands: this.hands };
     const t0 = Date.now();
-    this.emit("fetching", { id, index: st.index, stacks: st.stacks });
+    this.emit("fetching", { id, index: st.index, stacks });
 
-    const [, answer] = await Promise.all([
-      this.#retry(`open ${id}`, () => this.table.openSession({ sessionId: id, profiles, ...req }), signal),
+    const askDealer = (profiles) =>
       this.#retry(
         `dealer ${id}`,
         async () => {
@@ -110,8 +112,20 @@ export class SessionFeeder extends EventEmitter {
           return a;
         },
         signal,
-      ),
-    ]);
+      );
+    let answer;
+    if (this.backed) {
+      // The contract locks each buy-in and records the agents' profiles; the dealer gets exactly that request.
+      const recorded = await this.#retry(
+        `open ${id}`,
+        () => this.table.openBackedSession({ sessionId: id, seats: this.backed.seats, buyIn: this.backed.buyIn, button: req.button, sb: req.sb, bb: req.bb, hands: req.hands }),
+        signal,
+      );
+      answer = await askDealer(recorded.profiles);
+    } else {
+      const profiles = this.seats.map((s) => s.profile);
+      [, answer] = await Promise.all([this.#retry(`open ${id}`, () => this.table.openSession({ sessionId: id, profiles, ...req }), signal), askDealer(profiles)]);
+    }
     const fetchedMs = Date.now() - t0;
     const { alpha, signature_hex, actions } = answer.output;
 
@@ -136,17 +150,19 @@ export class SessionFeeder extends EventEmitter {
       throw new Error(`session ${id}: contract recorded ${settled.stacks}, replay gives ${detail.stacks}`);
     }
     const rebuys = [];
-    const next = detail.stacks.map((s, i) => {
-      if (s > 0) return s;
-      rebuys.push({ seat: i, amount: this.seats[i].stack });
-      return this.seats[i].stack;
-    });
+    const next = this.backed
+      ? stacks
+      : detail.stacks.map((s, i) => {
+          if (s > 0) return s;
+          rebuys.push({ seat: i, amount: this.seats[i].stack });
+          return this.seats[i].stack;
+        });
     // Busted seats sat out the rest of this session; they rebuy before the next. The next session's button is the
     // seat after the last hand's button.
     const lastButton = detail.hands.at(-1)?.button ?? st.button;
     await this.store.save({ index: st.index + 1, stacks: next, button: (lastButton + 1) % this.seats.length });
 
-    const session = { id, index: st.index, hands: detail.hands, startStacks: st.stacks, endStacks: detail.stacks, rebuys, alpha, signature_hex, fetchedMs, runMs: answer.runMs, cost: answer.cost, settleMs, readyAt: Date.now() };
+    const session = { id, index: st.index, hands: detail.hands, startStacks: stacks, endStacks: detail.stacks, rebuys, payouts: settled.payouts ?? null, alpha, signature_hex, fetchedMs, runMs: answer.runMs, cost: answer.cost, settleMs, readyAt: Date.now() };
     this.emit("ready", session);
     return session;
   }
