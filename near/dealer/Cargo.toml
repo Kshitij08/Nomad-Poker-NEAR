@@ -1,0 +1,21 @@
+[package]
+name = "nomad-dealer"
+version = "0.1.0"
+edition = "2021"
+description = "Test dealer for Nomad Poker: runs on OutLayer (Intel TDX), deals from verifiable randomness and keeps the deck sealed until showdown"
+
+[[bin]]
+name = "nomad-dealer"
+path = "src/main.rs"
+
+[dependencies]
+outlayer = "0.2"
+poker-core = { path = "../poker-core", features = ["seal", "agent"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hex = "0.4"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
