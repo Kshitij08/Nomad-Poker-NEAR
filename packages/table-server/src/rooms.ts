@@ -56,6 +56,8 @@ export class Room implements TableNet {
   private readonly voice = new Set<PlayerRef>();
   private readonly chatLimiters = new Map<PlayerRef, PokerChatRateLimiter>();
   private readonly reactionLimiters = new Map<PlayerRef, PokerChatRateLimiter>();
+  /** Members' profile picture keys (the `picture` message), sent to newcomers on admit. */
+  private readonly pictures = new Map<PlayerRef, string>();
   private readonly tokens = new Map<PlayerRef, string>();
   closed = false;
 
@@ -137,6 +139,7 @@ export class Room implements TableNet {
     peer.room = this;
     peer.player = player;
     this.everHadPlayer = true;
+    for (const [who, key] of this.pictures) peer.sendJson({ t: 'picture', player: who, seat: this.server.seatOf(who), key });
     return player;
   }
 
@@ -148,6 +151,7 @@ export class Room implements TableNet {
     this.watchers.delete(player);
     this.chatLimiters.delete(player);
     this.reactionLimiters.delete(player);
+    this.pictures.delete(player);
     this.tokens.delete(player);
     peer.room = null;
     peer.player = PLAYER_NONE;
@@ -233,6 +237,14 @@ export class Room implements TableNet {
         case 'chat':
           this.relayChat(peer, m.name, m.body);
           break;
+        case 'picture': {
+          const key = typeof m.key === 'string' && /^[A-Za-z0-9_-]{0,48}$/.test(m.key) ? m.key : '';
+          if (key) this.pictures.set(p, key);
+          else this.pictures.delete(p);
+          const msg = { t: 'picture' as const, player: p, seat: s.seatOf(p), key };
+          for (const other of this.players.values()) other.sendJson(msg);
+          break;
+        }
         case 'sideReaction': {
           // Side channels only (a table played elsewhere): 4 at once, one more every 1.5 s, like table reactions.
           let lim = this.reactionLimiters.get(p);

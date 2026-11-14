@@ -407,6 +407,38 @@ describe('social over HTTP (two accounts)', () => {
   });
 });
 
+describe('profile pictures', () => {
+  it('uploads a checked image, serves it by key, shows it on the profile, and removes it', async () => {
+    const store = new Map<string, Uint8Array>();
+    env.HANDS = {
+      put: async (k: string, v: Uint8Array) => void store.set(k, v),
+      get: async (k: string) => (store.has(k) ? { body: store.get(k), httpMetadata: { contentType: 'image/png' } } : null),
+      delete: async (k: string) => void store.delete(k),
+    } as unknown as R2Bucket;
+    const me = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Pic' });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const up = (bytes: Uint8Array, type: string) =>
+      app.request('/v1/me/picture', { method: 'POST', headers: { origin: ORIGIN, authorization: `Bearer ${me.body.token}`, 'content-type': type }, body: bytes }, env);
+
+    expect((await up(png, 'image/svg+xml')).status).toBe(400);
+    expect((await up(new TextEncoder().encode('<html>'), 'image/png')).status).toBe(400); // not really a PNG
+    const r = await up(png, 'image/png');
+    expect(r.status).toBe(200);
+    const { picture } = (await r.json()) as { picture: string };
+    expect(picture).toMatch(/^[A-Za-z0-9_-]{6,48}$/);
+    expect((await call<MeResponse>('GET', Routes.me, undefined, me.body.token)).body.player.picture).toBe(picture);
+
+    const served = await app.request(`/v1/pictures/${picture}.webp`, { method: 'GET' }, env);
+    expect(served.status).toBe(200);
+    expect(served.headers.get('cache-control')).toContain('immutable');
+    expect((await app.request('/v1/pictures/..%2Fsecret.webp', { method: 'GET' }, env)).status).toBe(404);
+
+    expect((await call('DELETE', '/v1/me/picture', undefined, me.body.token)).status).toBe(200);
+    expect(store.size).toBe(0);
+    expect((await call<MeResponse>('GET', Routes.me, undefined, me.body.token)).body.player.picture).toBeNull();
+  });
+});
+
 describe('tournaments and the strategies market over HTTP', () => {
   it('hosts, registers by join code, takes fees through the ledger, and shows my tournaments', async () => {
     env.TOURNAMENT_MIN_LEAD_SECONDS = '60';

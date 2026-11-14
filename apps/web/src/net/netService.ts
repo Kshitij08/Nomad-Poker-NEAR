@@ -93,6 +93,14 @@ export class NetTableSession implements TableSession {
     this.game.onChange((what) => {
       if (what === 'seat') this.onSeatChanged();
     });
+    // Profile pictures: everyone's, as the room reports them, on their seats.
+    this.offPictures?.();
+    this.offPictures = conn.onMessage((m) => {
+      if (m.t !== 'picture') return;
+      const base = this.pictureBase();
+      this.view.setSeatPicture(m.seat, m.key && base ? `${base}/${m.key}.webp` : null);
+    });
+    this.sendPicture();
     this.game.privateBuyInPrompt = this.service.privateBuyInPrompt;
     this.chat.join(conn.session ?? '', conn.region);
     this.offClose?.();
@@ -143,9 +151,28 @@ export class NetTableSession implements TableSession {
   }
 
   /** PokerClientGame.OnSeatAssigned side effects other modules hang off (retention progress, the stake skin). */
+  private offPictures: (() => void) | null = null;
+
+  /** The API's pictures address (uploaded pictures are served there), or null without an account service. */
+  private pictureBase(): string | null {
+    const api = this.host.ctx.services.nomadApi as unknown as { base?: string } | null | undefined;
+    return api?.base ? `${api.base.replace(/\/+$/, '')}/v1/pictures` : null;
+  }
+
+  /** Tells the room your uploaded picture (again after a seat change: the room reports it with your seat). */
+  private sendPicture(): void {
+    const key = (this.host.ctx.services.nomadApi as unknown as { me?: { player?: { picture?: string | null } } } | null)?.me?.player?.picture ?? '';
+    if (this.conn.isOpen && (key || this.sentPicture)) {
+      this.conn.send({ t: 'picture', key });
+      this.sentPicture = !!key;
+    }
+  }
+  private sentPicture = false;
+
   private onSeatChanged(): void {
     const seat = this.game.localSeat;
     if (seat === this.lastSeat) return;
+    this.sendPicture();
     const ctx = this.host.ctx;
     const wasSeated = this.lastSeat >= 0;
     this.lastSeat = seat;

@@ -48,6 +48,8 @@
   color: var(--v2-ink);
   font-size: 28px;
   cursor: pointer;
+  /* Above the body, which fills the whole panel and was taking the close button's clicks. */
+  z-index: 2;
 }
 
 .agent-panel-body {

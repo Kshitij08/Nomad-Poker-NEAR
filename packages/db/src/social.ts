@@ -138,12 +138,12 @@ export async function social(db: D1Database, me: PlayerRow, now = Date.now()): P
   const [friends, invites] = await Promise.all([
     db
       .prepare(
-        `SELECT p.friend_code, p.display_name, f.relation, p.last_seen_at, p.avatar, s.room
+        `SELECT p.friend_code, p.display_name, f.relation, p.last_seen_at, p.avatar, p.picture, s.room
          FROM friendships f JOIN players p ON p.id = f.friend_id LEFT JOIN seat_locks s ON s.player_id = p.id
          WHERE f.player_id = ?1 ORDER BY p.display_name COLLATE NOCASE`,
       )
       .bind(me.id)
-      .all<{ friend_code: string; display_name: string; relation: FriendRelationName; last_seen_at: number; avatar: number; room: string | null }>(),
+      .all<{ friend_code: string; display_name: string; relation: FriendRelationName; last_seen_at: number; avatar: number; picture: string | null; room: string | null }>(),
     db
       .prepare(
         `SELECT p.friend_code, p.display_name, i.session, i.money, i.created_at
@@ -164,6 +164,7 @@ export async function social(db: D1Database, me: PlayerRow, now = Date.now()): P
         avatar: r.avatar,
         online: now - r.last_seen_at < ONLINE_WINDOW_MS,
         table: r.relation === 'friend' ? r.room : null,
+        picture: r.picture ?? null,
       }),
     ),
     invites: invites.results.map(
@@ -184,20 +185,21 @@ export async function searchPlayers(db: D1Database, me: PlayerRow, query: string
   const pattern = q.replace(/[!%_]/g, (c) => `!${c}`) + '%';
   const rows = await db
     .prepare(
-      `SELECT p.friend_code, p.display_name, p.avatar, p.last_seen_at, f.relation
+      `SELECT p.friend_code, p.display_name, p.avatar, p.picture, p.last_seen_at, f.relation
        FROM players p LEFT JOIN friendships f ON f.player_id = ?1 AND f.friend_id = p.id
        WHERE p.id <> ?1 AND p.friend_code IS NOT NULL AND p.display_name LIKE ?2 ESCAPE '!'
        ORDER BY (p.kind = 'guest'), (p.display_name = ?3 COLLATE NOCASE) DESC, p.last_seen_at DESC
        LIMIT ?4`,
     )
     .bind(me.id, pattern, q, Math.max(1, Math.min(20, limit)))
-    .all<{ friend_code: string; display_name: string; avatar: number; last_seen_at: number; relation: FriendRelationName | null }>();
+    .all<{ friend_code: string; display_name: string; avatar: number; picture: string | null; last_seen_at: number; relation: FriendRelationName | null }>();
   return rows.results.map((r) => ({
     id: r.friend_code,
     name: r.display_name,
     avatar: r.avatar,
     relation: r.relation ?? null,
     online: now - (r.last_seen_at ?? 0) < ONLINE_WINDOW_MS,
+    picture: r.picture ?? null,
   }));
 }
 
@@ -219,4 +221,11 @@ export async function updateProfile(db: D1Database, me: PlayerRow, req: ProfileU
   }
   if (sets.length) await db.prepare(`UPDATE players SET ${sets.join(', ')} WHERE id = ?1`).bind(...args).run();
   return { ok: true };
+}
+
+/** Points the player at a new uploaded picture (null: back to their avatar). Returns the key it replaced. */
+export async function setPicture(db: D1Database, playerId: string, key: string | null): Promise<string | null> {
+  const old = await db.prepare('SELECT picture FROM players WHERE id = ?1').bind(playerId).first<string | null>('picture');
+  await db.prepare('UPDATE players SET picture = ?2 WHERE id = ?1').bind(playerId, key).run();
+  return old ?? null;
 }

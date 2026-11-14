@@ -54,19 +54,24 @@ export const PlayerLevelMath = {
   },
 };
 
+/** What one Gem of the Unity reward tables is paid as (Gems are gone from the web game). */
+export const GEM_COINS = 250;
+
 export const LevelRewardCatalog = {
-  /** Coins for every level-up; Gems every 5 levels; a cosmetic id every 10 levels. */
+  /**
+   * Coins for every level-up, with a bonus every 5 levels and a cosmetic id every 10. (Unity also gave Gems every 5
+   * levels; the web game has no use for Gems, so they are paid as Coins at 1 Gem = 250 Coins.)
+   */
   rewardsForLevel(level: number): RewardGrant[] {
     if (level <= 1) return [];
     const coins = 100 + (level - 1) * 25;
     if (level % 10 === 0) {
       return [
-        RewardGrant.coins(coins * 2, 'level_up'),
-        RewardGrant.gems(5, 'level_up'),
+        RewardGrant.coins(coins * 2 + 5 * GEM_COINS, 'level_up'),
         RewardGrant.cosmetic('frame_lv' + level, 'level_up'),
       ];
     }
-    if (level % 5 === 0) return [RewardGrant.coins(coins, 'level_up'), RewardGrant.gems(2, 'level_up')];
+    if (level % 5 === 0) return [RewardGrant.coins(coins + 2 * GEM_COINS, 'level_up')];
     return [RewardGrant.coins(coins, 'level_up')];
   },
 };

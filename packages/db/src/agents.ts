@@ -139,11 +139,12 @@ export async function startAgent(
   const now = opts.now ?? Date.now();
   const id = String(input.session ?? '');
   if (!AGENT_SESSION.test(id)) fail(400, 'bad_request', 'Invalid agent session code.');
-  const stake = Math.trunc(num(input.stake)) || StakeCatalog.DefaultMinBuyIn;
-  // Only real stake tiers: the strategies market scores hands in big blinds from the stake (security review, 9 Nov).
-  if (!StakeCatalog.isKnown(stake)) fail(400, 'bad_request', 'Unknown stake.');
   const bankroll = Math.trunc(num(input.bankroll)) || 5000;
-  if (bankroll < stake || bankroll > MAX_AGENT_BANKROLL) fail(400, 'bad_request', `The bankroll must be between ${stake} and ${MAX_AGENT_BANKROLL}.`);
+  const lowest = StakeCatalog.Lowest.minBuyIn;
+  if (bankroll < lowest || bankroll > MAX_AGENT_BANKROLL) fail(400, 'bad_request', `The bankroll must be between ${lowest} and ${MAX_AGENT_BANKROLL}.`);
+  // The table is sized to the bankroll (a tenth of it at most as the table's minimum buy-in), whatever stake the
+  // client asked for: an Agent sits with its whole bankroll, so a deep stack at a small table survives a bad hand.
+  const stake = StakeCatalog.forAgentBankroll(bankroll).minBuyIn;
   const strategy: AgentStrategy = opts.strategy ?? {
     hasCustom: !!input.hasCustom,
     foldBelow: num(input.foldBelow),

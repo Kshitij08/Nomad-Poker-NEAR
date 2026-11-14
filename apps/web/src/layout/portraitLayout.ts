@@ -23,36 +23,38 @@ export interface PortraitSeatSpot {
 }
 
 export const PORTRAIT_LAYOUT = {
+  // Every seat: the avatar, its name plate under it, and its two cards just up and to the right of the avatar (the
+  // left column's cards face into the table, the right column's sit by the edge); the table's mobile mockup, 14 Nov.
   seats: [
-    { avatar: [0, -5.5], cards: [0, -3.25] }, // 0 you (bottom)
-    { avatar: [-3.25, -5.2], cards: [-1.63, -5.2] }, // 1 bottom-left
-    { avatar: [-3.25, -1.0], cards: [-1.63, -1.0] }, // 2 left
-    { avatar: [-3.25, 5.2], cards: [-3.25, 1.92] }, // 3 top-left
-    { avatar: [0, 6.15], cards: [0, 2.88] }, // 4 top
-    { avatar: [3.25, 5.2], cards: [3.25, 1.92] }, // 5 top-right
-    { avatar: [3.25, -1.0], cards: [1.63, -1.0] }, // 6 right
-    { avatar: [3.25, -5.2], cards: [1.63, -5.2] }, // 7 bottom-right
+    { avatar: [-0.95, -6.9], cards: [1.1, -6.55] }, // 0 you (bottom): your large pair beside your avatar
+    { avatar: [-3.9, -3.0], cards: [-2.3, -2.65] }, // 1 bottom-left
+    { avatar: [-3.9, 0.5], cards: [-2.3, 0.85] }, // 2 left
+    { avatar: [-3.9, 4.0], cards: [-2.3, 4.35] }, // 3 top-left
+    { avatar: [-0.1, 6.0], cards: [1.5, 6.35] }, // 4 top
+    { avatar: [2.5, 4.0], cards: [4.1, 4.35] }, // 5 top-right
+    { avatar: [2.5, 0.5], cards: [4.1, 0.85] }, // 6 right
+    { avatar: [2.5, -3.0], cards: [4.1, -2.65] }, // 7 bottom-right
   ] as PortraitSeatSpot[],
-  /** Community row: centre, spacing and size (landscape spacing is ~1.0). */
-  board: { x: 0, y: 0.55, spacing: 1.05, scale: 1.05 },
+  /** Community cards: the flop in one row and the turn and river centred under it (`rows`); centre, spacing, size. */
+  board: { x: 0, y: -0.175, spacing: 1.05, scale: 1.05, rows: true, rowGap: 1.55 },
   /** Pot pill (Pot_UI canvas, drawn at `scale` × the 3D zoom) and the chip piles (Token Parents) beside it. */
-  pot: { x: 0.35, y: 1.75, scale: 0.85 },
-  tokens: { x: -2.4, y: 1.75 },
+  pot: { x: -0.65, y: 2.4, scale: 0.7 },
+  tokens: { x: 0.3, y: 1.65 },
   /**
    * The deck spot the portrait deal paths start from; the shoe (three/tableScene.ts) covers where they rise through the
-   * felt (SHOE below): top-left of the pot, between the top-left seat and the top seat's cards. `scale` sizes the shoe.
+   * felt (SHOE below): beside the pot.
    */
-  shoe: { x: -1.43, y: 2.67, scale: 0.75 },
+  shoe: { x: -0.3, y: 3.3, scale: 0.6 },
   /** Seat HUD canvases are drawn this much larger than the 3D projection. */
-  hudScale: 1.55,
+  hudScale: 1.45,
   /** Card 1's centre minus card 0's, along x (the fan); your cards are larger, so they spread further. */
   fan: 0.5,
-  ownFan: 0.8,
+  ownFan: 0.85,
   /** Each card leans this many degrees away from the fan's middle (card 0 left, card 1 right). */
   lean: 4,
-  ownLean: 5,
+  ownLean: 6,
   /** Your hole cards grow to this size as they land. */
-  ownCardScale: 1.7,
+  ownCardScale: 1.6,
 };
 
 /** One card lying upright at scale 1 (measured from the card mesh on the fitted table). */
@@ -85,6 +87,13 @@ export interface Box {
 }
 
 const box = (name: string, cx: number, cy: number, w: number, h: number): Box => ({ name, x0: cx - w / 2, x1: cx + w / 2, y0: cy - h / 2, y1: cy + h / 2 });
+
+/** Community card i's centre: the flop (0–2) in a row, the turn and river (3, 4) centred under it. */
+export function portraitBoardSpot(i: number): XY {
+  const B = PORTRAIT_LAYOUT.board;
+  if (!B.rows) return [B.x + (i - 2) * B.spacing, B.y];
+  return i < 3 ? [B.x + (i - 1) * B.spacing, B.y + B.rowGap / 2] : [B.x + (i - 3.5) * B.spacing, B.y - B.rowGap / 2];
+}
 
 /** Card k's centre for a seat (card 0 left of the pair's centre, card 1 right). */
 export function portraitCardSpot(seat: number, k: number): XY {
@@ -120,7 +129,10 @@ export function portraitBoxes(): Box[] {
   });
   const bw = PORTRAIT_CARD.w * L.board.scale;
   const bh = PORTRAIT_CARD.h * L.board.scale;
-  out.push({ name: 'board', x0: L.board.x - 2 * L.board.spacing - bw / 2, x1: L.board.x + 2 * L.board.spacing + bw / 2, y0: L.board.y - bh / 2, y1: L.board.y + bh / 2 });
+  for (let i = 0; i < 5; i++) {
+    const [x, y] = portraitBoardSpot(i);
+    out.push({ name: i < 3 ? 'board' : `board${i}`, x0: x - bw / 2, x1: x + bw / 2, y0: y - bh / 2, y1: y + bh / 2 });
+  }
   out.push(box('pot', L.pot.x, L.pot.y, POT_PILL.w * L.pot.scale, POT_PILL.h * L.pot.scale));
   out.push(box('tokens', L.tokens.x + TOKENS.dx, L.tokens.y, TOKENS.w, TOKENS.h));
   out.push(box('shoe', L.shoe.x + SHOE.dx, L.shoe.y + SHOE.dy, SHOE.w * L.shoe.scale, SHOE.h * L.shoe.scale));

@@ -48,7 +48,24 @@ export function playerName(): string {
 }
 
 /** Avatar image URL for a player (current player when omitted). */
+/** An uploaded picture's address (served by the Nomad API), or null. */
+export function pictureUrl(key: string | null | undefined): string | null {
+  const api = _ctx?.services.nomadApi as unknown as { pictureUrl?: (k: string | null | undefined) => string | null } | null | undefined;
+  return key && api?.pictureUrl ? api.pictureUrl(key) : null;
+}
+
+/** Your uploaded picture's key, or null. */
+export function myPicture(): string | null {
+  const api = _ctx?.services.nomadApi as unknown as { me?: { player?: { picture?: string | null } } } | null | undefined;
+  return api?.me?.player?.picture ?? null;
+}
+
 export function avatarUrl(avatar?: number, name?: string): string | null {
+  // Yours: the uploaded picture, when there is one.
+  if (avatar === undefined && name === undefined) {
+    const mine = pictureUrl(myPicture());
+    if (mine) return mine;
+  }
   const av = S('avatars');
   // With no picture chosen, show the same name-based default the table shows (not a blank placeholder).
   if (avatar === undefined && name === undefined) name = playerName();

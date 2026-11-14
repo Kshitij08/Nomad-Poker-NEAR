@@ -22,6 +22,8 @@ export interface LeaderboardEntry {
   /** Agents board: whose Agent it is and the hands it played this week. */
   ownerName?: string;
   hands?: number;
+  /** Uploaded picture key (the player's, or the Agent owner's). */
+  picture?: string | null;
 }
 
 export interface LeaderboardSnapshot {

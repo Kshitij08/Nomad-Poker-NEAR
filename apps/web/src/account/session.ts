@@ -201,6 +201,34 @@ export class NomadSession {
   }
 
   /** An authenticated API call (throws ApiRequestError). For the other account services (progress, rewards). */
+  /** An uploaded picture's address (served by this API), or null for none. */
+  pictureUrl(key: string | null | undefined): string | null {
+    return key ? `${this.base.replace(/\/+$/, '')}/v1/pictures/${key}.webp` : null;
+  }
+
+  /** Sets your profile picture (an image the caller already cropped and shrunk). */
+  async uploadPicture(image: Blob): Promise<void> {
+    await this.run(async () => {
+      const token = this.store.get();
+      const res = await this.fetchImpl(`${this.base}/v1/me/picture`, {
+        method: 'POST',
+        headers: { 'content-type': image.type || 'image/webp', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: image,
+      });
+      const json = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
+      if (!res.ok) throw new ApiRequestError(res.status, (json?.error?.code as never) ?? 'internal', json?.error?.message ?? `Server error (${res.status}).`);
+      await this.refreshMe();
+    });
+  }
+
+  /** Back to the chosen avatar. */
+  removePicture(): Promise<void> {
+    return this.run(async () => {
+      await this.request('DELETE', '/v1/me/picture');
+      await this.refreshMe();
+    });
+  }
+
   call<T>(method: string, path: string, body?: unknown): Promise<T> {
     return this.request<T>(method, path, body);
   }
