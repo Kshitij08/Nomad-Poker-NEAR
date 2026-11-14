@@ -213,6 +213,8 @@ export class V2 {
         if (again && !(again as HTMLButtonElement).disabled) again.focus({ preventScroll: true });
       }
       this.lastHtml = html;
+      // The page's nodes are new: screens that run DOM-side motion (the main menu rooms) re-attach it here.
+      this.el.dispatchEvent(new CustomEvent('v2:rendered', { detail: s.id }));
     }
     const dlg = this.dialog ? this.dialogHtml(this.dialog) : '';
     if (force || dlg !== this.lastDlg) {

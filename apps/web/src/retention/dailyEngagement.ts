@@ -11,6 +11,16 @@ import {
 } from '@nomad/engine/retention';
 import type { RetentionBackend } from './backend';
 
+/**
+ * Local testing: unlimited daily spins on a dev server (localhost / 127.0.0.1 with a port, so the store apps, which
+ * serve from https://localhost with no port, never match). Offline the spin is local anyway; with a Nomad server
+ * the API also has to allow it, which it does only in its `development` stage (apps/api, progress.spin `unlimited`).
+ */
+export function devUnlimitedSpins(): boolean {
+  if (typeof location === 'undefined') return false;
+  return (location.hostname === 'localhost' || location.hostname === '127.0.0.1') && location.port !== '';
+}
+
 /** The PlayerPrefs surface retention needs (app/services PlayerPrefs, or an in-memory map in tests). */
 export interface PrefsLike {
   getString(key: string, fallback?: string): string;
@@ -89,6 +99,7 @@ export class DailyEngagement {
   }
 
   canSpin(): boolean {
+    if (devUnlimitedSpins()) return true;
     if (this.backend) return this.backend.snapshot?.spin.canSpin ?? false;
     return DailySpinMath.canSpin(this.load().lastSpinDay, this.todayDay());
   }
@@ -125,7 +136,7 @@ export class DailyEngagement {
   trySpin(): DailySpinResult {
     const state = this.load();
     const today = this.todayDay();
-    if (!DailySpinMath.canSpin(state.lastSpinDay, today)) return DailySpinResult.alreadySpun();
+    if (!devUnlimitedSpins() && !DailySpinMath.canSpin(state.lastSpinDay, today)) return DailySpinResult.alreadySpun();
     const prize = DailySpinMath.pickPrize(this.env.roll());
     // Do not mark the day spun unless the wallet accepted the credit.
     const wallet = this.env.wallet();

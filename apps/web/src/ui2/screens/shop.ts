@@ -53,6 +53,25 @@ const SHOP_ART: Record<string, string> = {
 };
 
 /** The item's picture, or null when it has none (an id the server added later). */
+/**
+ * Each item's colour: the halo behind its art and the tint of its card's rim. Coins are gold, XP items pink / violet,
+ * card backs their room's colour.
+ */
+const DECK_GLOW: Partial<Record<string, string>> = { Default: '#a46bff', Forest: '#3fd38a', Town: '#ffa94a', Desert: '#ffc861', Neon_City: '#ff4fa3', free: '#7fb2ff' };
+function glowOf(it: { id: string; effect?: ShopItemInfo['effect'] }): string {
+  const e = it.effect;
+  if (e?.kind === 'card_back') return DECK_GLOW[String(e.theme)] ?? '#b69bff';
+  if (e?.kind === 'coins' || it.id.startsWith('coins-')) return '#ffd54a';
+  if (e?.kind === 'xp_boost') return '#ff7ad9';
+  return '#c18bff';
+}
+
+/** The card's clipped layer: the background art and the corner ribbon (the card itself lets its art break out). */
+const cardBg = (ribbon = ''): string => `<div class="v2-sclip"><div class="v2-sbg"></div>${ribbon}</div>`;
+
+/** The item's art over its halo. */
+const artBox = (inner: string, cls = 'v2-sart'): string => `<div class="${cls}"><i class="v2-shalo" aria-hidden="true"></i><div class="v2-sart-in">${inner}</div></div>`;
+
 function shopArt(id: string): string | null {
   const file = SHOP_ART[id];
   return file ? `<img class="v2-ico v2-sh-art" src="${ui2Art(`shop/${file}`)}" alt="" draggable="false" decoding="async" style="width:7.5em;height:7.5em">` : null;
@@ -86,7 +105,7 @@ function action(it: ShopItemInfo, wide = true): string {
   const price = chain ? it.priceLamports : it.priceCoins;
   if (price === null) return btn('Not sold here', 'noop', { h: 'ghost', c: `${wide ? 'w ' : ''}dis`, dis: true });
   const label = chain ? solPrice(price) : `${ico('coin', 1.1)} ${fmtCoins(price)}`;
-  return btn(label, 'buy', { h: 'gold', c: wide ? 'w' : '', v: it.id });
+  return btn(label, 'buy', { h: 'gold', c: `v2-sh-buy${wide ? ' w' : ''}`, v: it.id });
 }
 
 /** The item's subtitle; Coins packs always say Coins (an older server copy said "Chips"). */
@@ -94,7 +113,7 @@ const blurbOf = (it: ShopItemInfo): string => (it.effect.kind === 'coins' ? 'Coi
 
 function card(it: ShopItemInfo): string {
   const owned = shopClient(app()).owns(it.id);
-  return `<div class="v2-scard${owned ? ' v2-sh-owned' : ''}"><div class="v2-rays"></div>${owned ? '<span class="v2-ribbon v2-sh-ownedtag">OWNED</span>' : it.ribbon ? `<span class="v2-ribbon">${esc(it.ribbon)}</span>` : ''}<div class="v2-sart">${art(it)}</div><b class="v2-sname">${esc(it.name)}</b><small>${esc(blurbOf(it))}</small>${action(it)}</div>`;
+  return `<div class="v2-scard${owned ? ' v2-sh-owned' : ''}" style="--glow:${glowOf(it)}">${cardBg(owned ? '<span class="v2-ribbon v2-sh-ownedtag">OWNED</span>' : it.ribbon ? `<span class="v2-ribbon">${esc(it.ribbon)}</span>` : '')}${artBox(art(it))}<b class="v2-sname">${esc(it.name)}</b><small>${esc(blurbOf(it))}</small>${action(it)}</div>`;
 }
 
 /** The free Nomad back every player has: worn whenever no owned deck is. */
@@ -102,11 +121,11 @@ function freeDeckCard(): string {
   const wearing = !equippedCardBack();
   const src = cardBackPreview('free');
   const deck = `<div class="v2-sh-deck">${[-14, 0, 14].map((r) => `<span style="transform:rotate(${r}deg)">${src ? `<img src="${esc(src)}" alt="" draggable="false">` : ''}</span>`).join('')}</div>`;
-  return `<div class="v2-scard"><div class="v2-rays"></div><span class="v2-ribbon v2-sh-ownedtag">FREE</span><div class="v2-sart">${deck}</div><b class="v2-sname">Nomad deck</b><small>Default · Free</small>${btn(wearing ? `${ico('check', 1.1)} Wearing` : 'Wear at tables', wearing ? 'noop' : 'unwear', { h: wearing ? 'ghost' : 'blue', c: 'w' })}</div>`;
+  return `<div class="v2-scard" style="--glow:${DECK_GLOW.free}">${cardBg('<span class="v2-ribbon v2-sh-ownedtag">FREE</span>')}${artBox(deck)}<b class="v2-sname">Nomad deck</b><small>Default · Free</small>${btn(wearing ? `${ico('check', 1.1)} Wearing` : 'Wear at tables', wearing ? 'noop' : 'unwear', { h: wearing ? 'ghost' : 'blue', c: 'w v2-sh-buy' })}</div>`;
 }
 
 function packCard(p: (typeof COIN_PACKS)[number]): string {
-  return `<div class="v2-scard"><div class="v2-rays"></div>${p.ribbon ? `<span class="v2-ribbon">${esc(p.ribbon)}</span>` : ''}<div class="v2-sart">${shopArt(p.id) ?? coinStack(p.stack + 1, 3.6)}</div><b class="v2-sname">${esc(p.name)}</b><small>${esc(p.blurb)} · ${esc(p.demo)}</small>${btn('Coming soon', 'soon', { h: 'ghost', c: 'w v2-sh-soon' })}</div>`;
+  return `<div class="v2-scard" style="--glow:${glowOf(p)}">${cardBg(p.ribbon ? `<span class="v2-ribbon">${esc(p.ribbon)}</span>` : '')}${artBox(shopArt(p.id) ?? coinStack(p.stack + 1, 3.6))}<b class="v2-sname">${esc(p.name)}</b><small>${esc(p.blurb)} · ${esc(p.demo)}</small>${btn('Coming soon', 'soon', { h: 'ghost', c: 'w v2-sh-buy v2-sh-soon' })}</div>`;
 }
 
 function boostNote(): string {
@@ -152,10 +171,10 @@ const shop: ScreenDef & { cat: ShopCategory; busy: string | null } = {
       const hero = items().find((i) => i.id === 'xp-boost-24h') ?? byCat('xp')[0]!;
       const side = [items().find((i) => i.id === 'deck:Neon_City'), items().find((i) => i.id === 'xp-pack')].filter(Boolean) as ShopItemInfo[];
       body = `<div class="v2-sh-feat">
-  <div class="v2-scard v2-sfeat"><div class="v2-rays"></div>${hero.ribbon ? `<span class="v2-ribbon">${esc(hero.ribbon)}</span>` : ''}
-    <div class="v2-sfeat-in"><div class="v2-col v2-sfeat-art">${art(hero)}</div>
+  <div class="v2-scard v2-sfeat" style="--glow:${glowOf(hero)}">${cardBg(hero.ribbon ? `<span class="v2-ribbon">${esc(hero.ribbon)}</span>` : '')}
+    <div class="v2-sfeat-in">${artBox(art(hero), 'v2-sart v2-sfeat-art')}
     <div class="v2-col v2-sfeat-txt"><span class="v2-pill gold" style="width:max-content">Double XP</span><b class="v2-sfeat-big">${esc(hero.name)}</b><span class="v2-sfeat-lines">${esc(hero.blurb)}.<br>Stacks with a running boost.</span>${action(hero, false)}</div></div></div>
-  <div class="v2-col v2-sh-side">${side.map((it) => `<div class="v2-scard v2-scard-row"><div class="v2-rays"></div><div class="v2-sart">${art(it)}</div><div class="v2-col v2-grow" style="gap:.3em;align-items:flex-start"><b class="v2-sname">${esc(it.name)}</b><small>${esc(it.blurb)}</small>${action(it, false)}</div></div>`).join('')}</div>
+  <div class="v2-col v2-sh-side">${side.map((it) => `<div class="v2-scard v2-scard-row" style="--glow:${glowOf(it)}">${cardBg()}${artBox(art(it))}<div class="v2-col v2-grow" style="gap:.3em;align-items:flex-start"><b class="v2-sname">${esc(it.name)}</b><small>${esc(it.blurb)}</small>${action(it, false)}</div></div>`).join('')}</div>
 </div>`;
     } else if (cat === 'coins') {
       // One state at a time: the notice above already says when buying isn't possible (offline / signed out).
@@ -169,7 +188,7 @@ const shop: ScreenDef & { cat: ShopCategory; busy: string | null } = {
       body = `<div class="v2-sh-grid">${byCat(cat).map(card).join('')}</div>`;
     }
     return `${topBar('Shop')}
-<div class="v2-sh-tabs">${tabs(CATS.map(([k, l, i]) => [k, l, i]), cat, 'cat')}</div>
+<div class="v2-sh-tabs">${tabs(CATS.map(([k, l]) => [k, l]), cat, 'cat')}</div>
 <div class="v2-body v2-scroll v2-sh-body">${notice()}${body}</div>`;
   },
   actions: {

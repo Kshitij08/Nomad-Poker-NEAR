@@ -25,19 +25,19 @@ export interface PortraitSeatSpot {
 export const PORTRAIT_LAYOUT = {
   seats: [
     { avatar: [0, -5.5], cards: [0, -3.25] }, // 0 you (bottom)
-    { avatar: [-3.25, -5.2], cards: [-1.68, -5.2] }, // 1 bottom-left
-    { avatar: [-3.25, -1.0], cards: [-1.68, -1.0] }, // 2 left
+    { avatar: [-3.25, -5.2], cards: [-1.63, -5.2] }, // 1 bottom-left
+    { avatar: [-3.25, -1.0], cards: [-1.63, -1.0] }, // 2 left
     { avatar: [-3.25, 5.2], cards: [-3.25, 1.92] }, // 3 top-left
     { avatar: [0, 6.15], cards: [0, 2.88] }, // 4 top
     { avatar: [3.25, 5.2], cards: [3.25, 1.92] }, // 5 top-right
-    { avatar: [3.25, -1.0], cards: [1.68, -1.0] }, // 6 right
-    { avatar: [3.25, -5.2], cards: [1.68, -5.2] }, // 7 bottom-right
+    { avatar: [3.25, -1.0], cards: [1.63, -1.0] }, // 6 right
+    { avatar: [3.25, -5.2], cards: [1.63, -5.2] }, // 7 bottom-right
   ] as PortraitSeatSpot[],
   /** Community row: centre, spacing and size (landscape spacing is ~1.0). */
   board: { x: 0, y: 0.55, spacing: 1.05, scale: 1.05 },
   /** Pot pill (Pot_UI canvas, drawn at `scale` × the 3D zoom) and the chip piles (Token Parents) beside it. */
   pot: { x: 0.35, y: 1.75, scale: 0.85 },
-  tokens: { x: -2.45, y: 1.75 },
+  tokens: { x: -2.4, y: 1.75 },
   /**
    * The deck spot the portrait deal paths start from; the shoe (three/tableScene.ts) covers where they rise through the
    * felt (SHOE below): top-left of the pot, between the top-left seat and the top seat's cards. `scale` sizes the shoe.
@@ -46,7 +46,7 @@ export const PORTRAIT_LAYOUT = {
   /** Seat HUD canvases are drawn this much larger than the 3D projection. */
   hudScale: 1.55,
   /** Card 1's centre minus card 0's, along x (the fan); your cards are larger, so they spread further. */
-  fan: 0.4,
+  fan: 0.5,
   ownFan: 0.8,
   /** Each card leans this many degrees away from the fan's middle (card 0 left, card 1 right). */
   lean: 4,

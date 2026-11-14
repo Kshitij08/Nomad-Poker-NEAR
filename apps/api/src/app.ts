@@ -283,7 +283,8 @@ export function createApp(): Hono<AppEnv> {
 
   app.post(ProgressRoutes.spin, requirePlayer, async (c) => {
     if (!c.env.SPIN_SECRET) fail(501, 'not_configured', 'The daily spin is not set up on this server yet.');
-    return c.json(await progress.spin(c.env.DB, c.get('player').id, c.env.SPIN_SECRET));
+    // Unlimited spins for local testing, in the development stage only (cf dev); staging and production: one a day.
+    return c.json(await progress.spin(c.env.DB, c.get('player').id, c.env.SPIN_SECRET, Date.now(), { unlimited: c.env.STAGE === 'development' }));
   });
 
   app.post(ProgressRoutes.login, requirePlayer, async (c) => c.json(await progress.claimLogin(c.env.DB, c.get('player').id)));

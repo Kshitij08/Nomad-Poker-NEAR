@@ -94,3 +94,10 @@ html[data-orient='portrait'] .v2-sh-blinds { display: grid; grid-template-column
 html[data-orient='portrait'] .v2-sh-blinds .v2-stc-art { height: 2.6em; }
 html[data-orient='portrait'] .v2-sh-felt { height: 4.5em; }
 html[data-orient='portrait'] .v2-page[data-screen='tables'] .v2-b, html[data-orient='portrait'] .v2-page[data-screen='sol-host'] .v2-b, html[data-orient='portrait'] .v2-page[data-screen='sol-host'] .v2-chip, html[data-orient='portrait'] .v2-page[data-screen='party'] .v2-b { min-height: 40px; }
+
+/* Play with friends (round 6): the two panels are only as tall as what they hold (no stretched gap above the button),
+   centred in the page, and a little wider than before. */
+.v2-party { flex: 0 1 auto; margin-block: auto; align-items: stretch; padding: 0 7em 1em; }
+.v2-party-card { padding: 1.5em 2em 1.6em; gap: 0.7em; }
+.v2-party-card .v2-grow { flex: 0 0 0.4em; }
+html[data-orient='portrait'] .v2-party { margin-block: 0; }

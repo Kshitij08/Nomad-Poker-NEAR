@@ -77,6 +77,10 @@ The menu background was not replaced: the game keeps `assets/menu/galaxy/menu_bg
 | `assets/ui2/shop/shop_xp_pack.webp` | `shop/512/shop_xp_pack.png` | 28 KB (512×512) | shop item art |
 | `assets/ui2/rewards/slot_machine.webp` | `rewards/slot_machine.png` | 47 KB (880×937) | Daily spin machine (round 4): the reels sit in its three windows (entry.css `.v2-slot`); cut out by hand from the raw so the windows stay solid |
 | `assets/ui2/icons/ico_slot.webp` | `icons/512/ico_slot.png` | 23 KB (512×512) | colour icon (round 4): the Daily spin dock icon (key `spin`) |
+| `assets/ui2/icons/ico_emoji.webp` | `icons/512/ico_emoji.png` | 22 KB (512×512) | colour icon (round 5): the table's Reactions button (tableChrome.ts `BUTTON_ART`) |
+| `assets/ui2/icons/ico_chat.webp` | `icons/512/ico_chat.png` | 19 KB (512×512) | colour icon (round 5): the table's Chat button |
+| `assets/ui2/icons/ico_help.webp` | `icons/512/ico_help.png` | 20 KB (512×512) | colour icon (round 5): the table's How to play (hand rankings) button; Settings uses `ico_settings` |
+| `assets/ui2/chips/chip_1.webp` … `chip_6.webp` | `chips/chip_1..6.png` | ~10 KB each (160×135) | bet and pot chips (violet, blue, green, red, gold, black), hud/betChips.ts |
 | `assets/ui2/rewards/reward_chest.webp` | `rewards/512/reward_chest.png` | 24 KB (512×512) | reward art |
 | `assets/ui2/icons/ico_rotate.svg` | `icons/ico_rotate.svg` | 1 KB | one-colour SVG, takes `currentColor` |
 | `assets/ui2/glyphs/glyph_back.svg` | `glyphs/glyph_back.svg` | 1 KB | one-colour SVG, takes `currentColor` |
@@ -105,3 +109,4 @@ The menu background was not replaced: the game keeps `assets/menu/galaxy/menu_bg
 | `assets/ui2/app/og_share_1200x630.png` | `share/og_share_1200x630.png` | 840 KB (1200×630) | link share image |
 | `assets/theming/cardbacks/nomad_free_back.webp` | `cards/nomad_free_back.png` | 12 KB (732×1024) | replaces the stand-in card back |
 | `assets/theming/cardbacks/nomad_free_back_folded.webp` | `cards/nomad_free_back_folded.png` | 6 KB (732×1024) | replaces the stand-in card back |
+| `assets/ui2/shop/card_bg.webp` | `../scenes/menu_bg_codex-193237-1_raw.png` (WebP q86) | 37 KB (1280×720) | shop item card background |

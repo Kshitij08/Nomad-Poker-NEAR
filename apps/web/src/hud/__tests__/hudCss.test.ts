@@ -31,6 +31,6 @@ describe('v2hud.css', () => {
     expect(css).toMatch(/\[data-v2b='fold'\][^{]*\{[^}]*--hue: var\(--tbl-fold\)/);
     expect(css).toMatch(/\[data-v2b='call'\][^{]*\{[^}]*--hue: var\(--tbl-call\)/);
     expect(css).toMatch(/\[data-v2b='raise'\][^{]*\{[^}]*--hue: var\(--tbl-raise\)/);
-    expect(css).toMatch(/border-color: color-mix\(in srgb, var\(--hue\)/);
+    expect(css).toMatch(/border: 4px solid var\(--hue\)/);
   });
 });

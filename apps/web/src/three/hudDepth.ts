@@ -1,5 +1,7 @@
 import {
   AlwaysDepth,
+  BufferAttribute,
+  BufferGeometry,
   Color,
   DoubleSide,
   Matrix4,
@@ -66,6 +68,11 @@ export interface HudNode {
 export interface HudPlaneEntry {
   canvas: HudPlaneSource;
   visible: boolean;
+  /**
+   * Three-world height to push this plane's depth down to (along the camera rays, so its screen footprint is
+   * unchanged). The pot pill uses the felt's height: every card above the felt, in flight or landed, draws over it.
+   */
+  depthFloorY?: number;
 }
 
 /** Layer the overlay pass sees: every opaque renderable plus the lights. */
@@ -146,6 +153,27 @@ const _basis = new Matrix4();
  * shake rotations about its pivot — the same composition WorldCanvas applies to the DOM (CSS: matrix · shaker ·
  * euler offset), converted from CSS's y-down frame to the canvas's y-up frame.
  */
+/**
+ * Moves a horizontal plane down to height `floorY` along the rays from the camera (a uniform scale about the camera
+ * position), so it covers the same pixels but sits at the new depth. No-op when the plane is not between them.
+ */
+export function sinkAlongRays(m: Matrix4, camera: Camera, floorY: number): void {
+  camera.updateMatrixWorld();
+  const c = _v.setFromMatrixPosition(camera.matrixWorld);
+  const cy = c.y;
+  const py = m.elements[13];
+  if (!(cy > py && py > floorY)) return;
+  const t = (cy - floorY) / (cy - py);
+  const cx = c.x;
+  const cz = c.z;
+  _m.makeTranslation(-cx, -cy, -cz);
+  m.premultiply(_m);
+  _m.makeScale(t, t, t);
+  m.premultiply(_m);
+  _m.makeTranslation(cx, cy, cz);
+  m.premultiply(_m);
+}
+
 export function hudQuadMatrix(c: HudPlaneSource, bounds: Bounds, out: Matrix4): Matrix4 {
   const s = c.unitScale;
   const [px, py, pz] = worldCanvasSpace.positions.get(c) ?? c.position;
@@ -207,6 +235,14 @@ export class HudDepthCompositor {
   private readonly quadMaterial = new MeshBasicMaterial({ colorWrite: false, depthFunc: AlwaysDepth, side: DoubleSide });
   private readonly quadGeometry = new PlaneGeometry(1, 1);
   private overlayEmpty = true;
+  /** Screen-space masks laid on the felt (the pot pill, chip stacks): one mesh each, reused frame to frame. */
+  private readonly floorQuads: Mesh[] = [];
+  /**
+   * DOM elements drawn on the felt that every card must pass over (the pot pill and the chip stacks): their client
+   * rects, and the three-world height of the felt. Their mask is the rect itself, cast down onto that height, so it
+   * matches what is drawn exactly (CSS restyles and screen nudges included) and every card above the felt wins.
+   */
+  floor: (() => { rects: DOMRect[]; y: number } | null) | null = null;
   private readonly clearColor = new Color();
 
   constructor(
@@ -253,6 +289,21 @@ export class HudDepthCompositor {
     return q;
   }
 
+  private floorQuad(i: number): Mesh {
+    let q = this.floorQuads[i];
+    if (!q) {
+      const g = new BufferGeometry();
+      g.setAttribute('position', new BufferAttribute(new Float32Array(12), 3));
+      g.setIndex([0, 2, 1, 1, 2, 3]);
+      q = new Mesh(g, this.quadMaterial);
+      q.frustumCulled = false;
+      q.renderOrder = -500; // under every seat plane's mask (Always depth: the last one drawn wins)
+      this.maskScene.add(q);
+      this.floorQuads[i] = q;
+    }
+    return q;
+  }
+
   /** Base pass (the whole scene, under the DOM), then the overlay pass. Call instead of `lens.render`. */
   render(scene: Scene, camera: Camera, lens: LensDistortionRenderer): void {
     if (this.enabled) this.renderOverlay(scene, camera, lens);
@@ -285,11 +336,42 @@ export class HudDepthCompositor {
       if (!bounds) continue;
       const q = this.quad(n);
       hudQuadMatrix(e.canvas, bounds, q.matrixWorld);
+      if (e.depthFloorY !== undefined) sinkAlongRays(q.matrixWorld, camera, e.depthFloorY);
       q.renderOrder = n;
       q.visible = true;
       n++;
     }
     for (let i = n; i < this.quads.length; i++) this.quads[i].visible = false;
+    let nf = 0;
+    const floor = this.floor?.();
+    if (floor) {
+      const box = this.renderer.domElement.getBoundingClientRect();
+      camera.updateMatrixWorld();
+      for (const r of floor.rects) {
+        if (!(r.width > 0 && r.height > 0) || !box.width) continue;
+        const q = this.floorQuad(nf);
+        const pos = q.geometry.getAttribute('position') as BufferAttribute;
+        const corners = [[r.left, r.top], [r.right, r.top], [r.left, r.bottom], [r.right, r.bottom]];
+        let ok = true;
+        corners.forEach(([x, y], k) => {
+          const nx = ((x - box.left) / box.width) * 2 - 1;
+          const ny = 1 - ((y - box.top) / box.height) * 2;
+          const a = _v.set(nx, ny, -1).unproject(camera);
+          const ax = a.x, ay = a.y, az = a.z;
+          const b = _v.set(nx, ny, 1).unproject(camera);
+          const dy = b.y - ay;
+          if (Math.abs(dy) < 1e-9) return void (ok = false);
+          const t = (floor.y - ay) / dy;
+          pos.setXYZ(k, ax + (b.x - ax) * t, floor.y, az + (b.z - az) * t);
+        });
+        if (!ok) continue;
+        pos.needsUpdate = true;
+        q.visible = true;
+        nf++;
+      }
+    }
+    for (let i = nf; i < this.floorQuads.length; i++) this.floorQuads[i].visible = false;
+    n += nf;
 
     // Tag what the overlay pass sees: opaque renderables and the lights.
     let occluders = 0;

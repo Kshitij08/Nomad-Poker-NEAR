@@ -17,8 +17,6 @@ export class WebAudio implements AudioPort {
   private readonly sfxGain: GainNode;
   private readonly musicGain: GainNode;
   private timerSource: AudioBufferSourceNode | null = null;
-  /** The hurry-up beeps of the turn's last seconds (scheduled with the timer bed, cancelled with it). */
-  private warnBeeps: OscillatorNode[] = [];
   private musicStarted = false;
   /** The menu BGM (intro → loop) and each room's loop, each on its own gain so they can crossfade. */
   private readonly menuGain: GainNode;
@@ -103,30 +101,6 @@ export class WebAudio implements AudioPort {
     if (buf.duration > seconds) src.start(0, buf.duration - seconds);
     else src.start(this.ctx.currentTime + (seconds - buf.duration));
     this.timerSource = src;
-    this.scheduleWarnBeeps(seconds);
-  }
-
-  /**
-   * Your last 5 seconds: one short beep a second, rising in pitch, so a timeout is hard to miss without looking (the
-   * ring and the action row pulse too). Synthesised, so it needs no asset; it plays through the SFX volume.
-   */
-  private scheduleWarnBeeps(seconds: number): void {
-    const now = this.ctx.currentTime;
-    for (let left = 5; left >= 1; left--) {
-      const at = now + seconds - left;
-      if (at <= now) continue;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.value = 660 + (5 - left) * 110;
-      gain.gain.setValueAtTime(0, at);
-      gain.gain.linearRampToValueAtTime(left === 1 ? 0.5 : 0.35, at + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, at + (left === 1 ? 0.32 : 0.16));
-      osc.connect(gain).connect(this.sfxGain);
-      osc.start(at);
-      osc.stop(at + 0.35);
-      this.warnBeeps.push(osc);
-    }
   }
 
   stopTurnTimer(): void {
@@ -136,14 +110,6 @@ export class WebAudio implements AudioPort {
       /* already stopped */
     }
     this.timerSource = null;
-    for (const b of this.warnBeeps) {
-      try {
-        b.stop();
-      } catch {
-        /* already played */
-      }
-    }
-    this.warnBeeps = [];
   }
 
   private startMusic(): void {

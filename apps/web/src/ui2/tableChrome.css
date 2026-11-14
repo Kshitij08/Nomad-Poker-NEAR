@@ -203,3 +203,5 @@ html[data-orient='portrait'] .v2t-react-grid { grid-template-columns: repeat(4, 
    less (the first row has to fit Leave and four icons). */
 .v2t-cbar { font-size: 1.22em; }
 html[data-orient='portrait'] .v2t-cbar { font-size: 1.08em; }
+/* The soft-2D art icons in the round table buttons: big enough to read as art (the art keeps a 10 % margin). */
+.v2t-ib-art { width: 78%; height: 78%; object-fit: contain; pointer-events: none; filter: drop-shadow(0 0.08em 0.12em rgba(10, 4, 40, 0.35)); }

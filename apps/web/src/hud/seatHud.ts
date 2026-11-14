@@ -406,7 +406,8 @@ export class SeatHudView implements SeatHud {
     // ParkStrengthBesideNameplate: under the name plate / status chip cluster, aligned with the status chip — from
     // the authored layout (fixed), not the live one (the slide-in clips move it).
     const handH = (this.hand.sizeDelta[1] > 1 ? this.hand.sizeDelta[1] : 148) * HAND_SCALE;
-    this.hand.anchoredPosition = [this.handAnchorX, this.handClusterBottom - handH * 0.5 - 8];
+    // A clear gap under the plate (canvas units, about 0.15 px each): the meter read as glued to the name plate.
+    this.hand.anchoredPosition = [this.handAnchorX, this.handClusterBottom - handH * 0.5 - 70];
     this.handPercent.setText(`${percent}%`);
     this.handCategory.setText(sentenceCase(strengthCategory(hole, board)));
 

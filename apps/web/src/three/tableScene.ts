@@ -382,12 +382,13 @@ function buildDealerSlot(splines: [UnitySpline, UnitySpline][], feltY: number, f
   const minX = feltX - half;
   const maxX = feltX + half;
   const { minZ, maxZ } = box;
-  // The card is about 0.6 × 0.85 units on this table; the opening spans every crossing plus a card's width.
+  // The card is about 0.6 × 0.85 units on this table; the opening spans every crossing plus a card's width, and is
+  // kept thin front to back (a slim slot, not a tray).
   const w = maxX - minX + 0.95;
-  const d = maxZ - minZ + 0.42;
+  const d = maxZ - minZ + 0.16;
   const c = document.createElement('canvas');
   c.width = 512;
-  c.height = Math.max(64, Math.round((512 * d) / w));
+  c.height = Math.max(40, Math.round((512 * d) / w));
   const g = c.getContext('2d');
   if (!g) return null;
   const r = c.height * 0.48;
@@ -406,31 +407,13 @@ function buildDealerSlot(splines: [UnitySpline, UnitySpline][], feltY: number, f
   g.strokeStyle = 'rgba(255, 213, 74, 0.85)';
   g.stroke();
   // The opening: deep galaxy violet with depth toward the middle.
-  path(c.height * 0.16);
+  path(Math.max(5, c.height * 0.16));
   const grad = g.createLinearGradient(0, 0, 0, c.height);
   grad.addColorStop(0, 'rgba(14, 10, 48, 0.98)');
   grad.addColorStop(0.5, 'rgba(26, 15, 74, 1)');
   grad.addColorStop(1, 'rgba(14, 10, 48, 0.98)');
   g.fillStyle = grad;
   g.fill();
-  // A faint gold spade in the middle (cards rise over it while dealing).
-  const sz = c.height * 0.34;
-  g.save();
-  g.translate(c.width / 2, c.height / 2 + sz * 0.05);
-  g.scale(sz / 12, sz / 12);
-  g.beginPath();
-  g.moveTo(0, -6);
-  g.bezierCurveTo(-1.6, -3.2, -6, -1.2, -6, 2);
-  g.arc(-2.8, 2, 3.2, Math.PI, 0.35, true);
-  g.lineTo(-1.8, 7);
-  g.lineTo(1.8, 7);
-  g.lineTo(0.8, 4.4);
-  g.arc(2.8, 2, 3.2, Math.PI - 0.35, 0, true);
-  g.bezierCurveTo(6, -1.2, 1.6, -3.2, 0, -6);
-  g.closePath();
-  g.fillStyle = 'rgba(255, 213, 74, 0.55)';
-  g.fill();
-  g.restore();
   const tex = new CanvasTexture(c);
   tex.colorSpace = SRGBColorSpace;
   const mesh = new Mesh(new PlaneGeometry(w, d), new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));

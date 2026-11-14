@@ -38,9 +38,9 @@ function duration(seconds: number): string {
 // ------------------------------------------------------------------ shared chrome
 
 /** One tab row for every Agents page (no tabs inside tabs): the Agent's own pages, then Twin, Marketplace, Coach. */
-const MAIN_TABS: [string, string, string][] = [
-  ['ag-overview', 'Overview', 'robot'], ['ag-strategy', 'Strategy', 'style-autopilot'], ['ag-history', 'History', 'agent-history'],
-  ['ag-twin', 'My twin', 'twin'], ['ag-market', 'Marketplace', 'store'], ['ag-coach', 'Coach', 'coach'],
+const MAIN_TABS: [string, string][] = [
+  ['ag-overview', 'Overview'], ['ag-strategy', 'Strategy'], ['ag-history', 'History'],
+  ['ag-twin', 'My twin'], ['ag-market', 'Marketplace'], ['ag-coach', 'Coach'],
 ];
 
 function agMain(on: string): string {
@@ -416,18 +416,30 @@ const history: ScreenDef = {
 // ------------------------------------------------------------------ backend pages (Twin, Marketplace, Coach)
 
 interface Load {
-  state: 'idle' | 'loading' | 'ok' | 'error';
+  /** 'off': this build has no Nomad API to ask (retrying cannot help). */
+  state: 'idle' | 'loading' | 'ok' | 'error' | 'off';
   data: J | null;
   error: string;
 }
 const newLoad = (): Load => ({ state: 'idle', data: null, error: '' });
 
-/** GET (or POST) on the Agent backend into `l`, then repaint. Offline: the old dialogs' "offline" line. */
+/**
+ * What My twin, the Marketplace and the Coach say when no Nomad API is configured (no `?api=` and no VITE_API_URL):
+ * they are server features (the API keeps the recorded decisions, hands and published strategies), with no local
+ * stand-in. A dev build says how to start one; the Agent's own pages (Overview, Strategy, History) still work.
+ */
+export function agentApiMissing(dev = !!import.meta.env?.DEV): string {
+  return dev
+    ? 'My twin, the Marketplace and the Coach need the Nomad API, and this page has none. In apps/api run "npm run db:migrate:local" once, then "npm run dev", and open the game with ?api=local (or ?api=staging).'
+    : "My twin, the Marketplace and the Coach need the Nomad server, and this version of the game isn't connected to it. Your Agent's Overview, Strategy and History still work.";
+}
+
+/** GET (or POST) on the Agent backend into `l`, then repaint. No API configured: say what is missing. */
 async function fetchInto(l: Load, method: string, path: string, json: string | null = null, auth = true): Promise<void> {
   const api = marketApi(app());
   if (!api) {
-    l.state = 'error';
-    l.error = "The Agent service isn't available right now. Try again later.";
+    l.state = 'off';
+    l.error = agentApiMissing();
     ui().render();
     return;
   }
@@ -466,6 +478,7 @@ function fetchSol(l: Load, title: string, path: string, signed = false, data: J 
 
 function loadBody(l: Load, icon: string): string | null {
   if (l.state === 'loading' || l.state === 'idle') return `<div class="v2-empty">${ico(icon, 5)}Loading…</div>`;
+  if (l.state === 'off') return `<div class="v2-empty">${ico(icon, 5)}<span class="v2-ag-off">${esc(l.error)}</span></div>`;
   if (l.state === 'error') return `<div class="v2-empty">${ico(icon, 5)}${esc(l.error)}${btn('Try again', 'reload', { h: 'ghost' })}</div>`;
   return null;
 }
@@ -629,7 +642,8 @@ const market: ScreenDef = {
   render() {
     const chain = onchain();
     const sorts: [string, string][] = chain ? [['top', 'Top'], ['popular', 'Popular'], ['new', 'New']] : [['styles', 'By style'], ['new', 'Promising'], ['top', 'Top'], ['popular', 'Popular']];
-    const down = (mktTab === 'browse' ? mktLoad : mineLoad).state === 'error';
+    const downState = (mktTab === 'browse' ? mktLoad : mineLoad).state;
+    const down = downState === 'error' || downState === 'off';
     const bar = `<div class="v2-row v2-wrap v2-ag-mbar${down ? ' v2-ag-down' : ''}"${down ? ' aria-disabled="true"' : ''}>${mktTab === 'browse' ? chips(sorts, mktSort, 'mkt-sort') : ''}<div class="v2-grow"></div>${seg([['browse', 'Browse'], ['mine', 'My strategies']], mktTab, 'mkt-tab')}${btn(`${ico('plus', 0.9)} Publish`, 'mkt-publish', { h: 'violet' })}</div>`;
     const note = `<div class="v2-xs v2-mut">${chain ? 'Copy a strategy for your SOL Agent. Its creator gets 8% and Nomad 2% of the new profit it makes you, paid on chain; never of losses.' : 'Copy a strategy for your Coins Agent. Its creator gets 8% and Nomad 2% of the profit it makes you, never of losses.'}</div>`;
     const l = mktTab === 'browse' ? mktLoad : mineLoad;

@@ -22,6 +22,21 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="/assets/ui2/app/og_share_1200x630.png" />
     <link rel="stylesheet" href="/src/styles.css" />
+    <!-- Boot / loading cover (the branding poster) until the first screen is up; main.ts fades it out. Phones in
+         portrait keep the whole logo: the poster is scaled to the logo's width over the same art without the logo. -->
+    <link rel="preload" as="image" href="/assets/menu/galaxy/loading_poster.webp" />
+    <style>
+      #boot { position: fixed; inset: 0; z-index: 1000; pointer-events: none; transition: opacity 0.35s ease-out;
+        background: #1a0e5c url('/assets/menu/galaxy/loading_poster.webp') center / cover no-repeat; }
+      #boot.out { opacity: 0; }
+      @media (orientation: portrait) {
+        #boot { background: #1a0e5c url('/assets/menu/galaxy/nomad_bg.webp') center / cover no-repeat; }
+        #boot::after { content: ''; position: absolute; inset: 0;
+          background: url('/assets/menu/galaxy/loading_poster.webp') center 46% / max(200vw, 100%) auto no-repeat;
+          -webkit-mask-image: linear-gradient(transparent calc(46% - 50vw), #000 calc(46% - 30vw), #000 calc(46% + 32vw), transparent calc(46% + 58vw));
+          mask-image: linear-gradient(transparent calc(46% - 50vw), #000 calc(46% - 30vw), #000 calc(46% + 32vw), transparent calc(46% + 58vw)); }
+      }
+    </style>
   </head>
   <body>
     <div id="stage">
@@ -29,6 +44,7 @@
       <div id="hud"></div>
     </div>
     <div id="screens"></div>
+    <div id="boot" aria-hidden="true"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

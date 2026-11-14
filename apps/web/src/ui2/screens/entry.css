@@ -28,7 +28,7 @@
 
 /* ---------------------------------------------------------------- Daily Spin */
 .v2-spin-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-.v2-spin-card { width: min(44em, 100%); display: flex; flex-direction: column; align-items: center; gap: var(--v2-s3); text-align: center; }
+.v2-spin-card { width: min(44em, 100%); display: flex; flex-direction: column; align-items: center; gap: var(--v2-s2); text-align: center; }
 .v2-spin-machine {
   width: 100%; background: var(--v2-panel); border: 0.15em solid var(--v2-gold); border-radius: var(--v2-r-lg);
   padding: var(--v2-s4); box-shadow: 0 0 1.6em color-mix(in srgb, var(--v2-gold) 25%, transparent); display: flex; flex-direction: column; gap: var(--v2-s3); align-items: center;
@@ -60,14 +60,16 @@
    the art (left 7.9 / 32.4 / 56.8 %, each 22.6 % wide; top 38.3 %, 33.8 % tall). */
 /* The lever sticks out on the art's right, so the cabinet (and its reel windows, centred at 43.65% of the image) sits
    left of the image box's centre: the box moves right by the difference so the cabinet is on the page's centre line,
-   in line with the text and the button below. The width leaves room for that shift on narrow screens. */
-.v2-slot { position: relative; width: min(24em, 87%, 52vh); aspect-ratio: 880 / 937; flex: 0 0 auto; translate: 6.35% 0; filter: drop-shadow(0 0.8em 1.4em rgba(20, 8, 60, 0.45)); }
+   in line with the text and the button below. The width leaves room for that shift on narrow screens; the height
+   share (60vh) is what's left of a 16:9 screen after the top bar, the result line, the button and the note. Everything
+   inside is in % of the box, so the reels stay on the windows at any size. */
+.v2-slot { position: relative; width: min(30em, 90%, 60vh); aspect-ratio: 880 / 937; flex: 0 0 auto; translate: 6.35% 0; filter: drop-shadow(0 0.8em 1.4em rgba(20, 8, 60, 0.45)); }
 .v2-slot-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; user-select: none; -webkit-user-drag: none; }
 .v2-slot .v2-spin-reels { position: absolute; left: 7.9%; top: 38.3%; width: 71.5%; height: 33.8%; display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 2.66%; }
 .v2-slot .v2-reel { height: 100%; background: transparent; border: 0; border-radius: 0.7em; }
 .v2-slot .v2-reel::before { background: linear-gradient(rgba(120, 80, 210, 0.35), transparent); }
 .v2-slot .v2-reel::after { background: linear-gradient(transparent, rgba(120, 80, 210, 0.35)); }
-.v2-slot .v2-reel img.v2-ico { width: min(4.6em, 92%) !important; height: auto !important; aspect-ratio: 1; }
+.v2-slot .v2-reel img.v2-ico { width: 86% !important; height: auto !important; aspect-ratio: 1; }
 @media (prefers-reduced-motion: reduce) { .v2-reel-strip { animation-duration: 1.6s; } .v2-reel-face.land { animation: none; } }
 
 /* ---------------------------------------------------------------- level-up overlay */

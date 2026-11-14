@@ -5,18 +5,20 @@ Worker is described by `apps/api/cloudflare.config.ts` (no Wrangler config). Pri
 
 | Resource | Staging | Production |
 |---|---|---|
-| API Worker | `nomad-poker-api-staging` · https://nomad-poker-api-staging.kshitijiitgn.workers.dev | `nomad-poker-api` · not deployed yet |
-| Game server Worker + `TableRoom` Durable Object | `nomad-poker-game-staging` · https://nomad-poker-game-staging.kshitijiitgn.workers.dev | `nomad-poker-game` · not deployed yet |
-| D1 (players, sessions, ledger, seat locks) | `nomad-poker-staging` · `c9570cef-7f57-4845-b503-03da7893d36d` · migrations `0001`–`0005` applied (`0005_agents_tournaments` on 2026-11-09) | `nomad-poker-production` · `e630e086-697c-47c7-84c3-8ad467005c34` · empty |
+| API Worker | `nomad-poker-api-staging` · https://nomad-poker-api-staging.kshitijiitgn.workers.dev | `nomad-poker-api` · https://nomad-poker-api.kshitijiitgn.workers.dev (deployed 14 Nov 2026) |
+| Game server Worker + `TableRoom` Durable Object | `nomad-poker-game-staging` · https://nomad-poker-game-staging.kshitijiitgn.workers.dev | `nomad-poker-game` · https://nomad-poker-game.kshitijiitgn.workers.dev (deployed 14 Nov 2026) |
+| D1 (players, sessions, ledger, seat locks) | `nomad-poker-staging` · `c9570cef-7f57-4845-b503-03da7893d36d` · migrations `0001`–`0005` applied (`0005_agents_tournaments` on 2026-11-09) | `nomad-poker-production` · `e630e086-697c-47c7-84c3-8ad467005c34` · migrations `0001`–`0012` applied 14 Nov 2026 |
 | R2 (hand histories, replays) | `nomad-poker-hands-staging` | `nomad-poker-hands-production` |
 | Rate limiter (sign-in, 30/min per IP) | namespace `7102` | namespace `7103` |
 | Cron trigger on the game server (Agents sweep, tournament clock) | `* * * * *` | `* * * * *` (when deployed) |
 
 `cf dev` (mode `development`, namespace `7101`) uses local D1/R2 simulations, not the resources above.
 
-Not created yet: production deploys of either Worker. The web app stays on Vercel
-(`nomad-poker-web`, https://nomad-poker-web.vercel.app, built from this repo since 9 Nov and wired to the staging
-Workers) until a Cloudflare Pages move is decided.
+The web app is on Vercel (`nomad-poker-web`), deployed with `node apps/web/scripts/deploy-vercel.mjs production` and
+wired to the production Workers. Since 14 Nov 2026 it serves https://www.nomadpoker.fun (the apex redirects to `www`,
+308); the old Unity build's project (`poker-build-public`) no longer has the domain. `nomad-poker-web.vercel.app` is
+the same production build, so the staging Workers have no deployed web front end: use the dev server with
+`?api=staging&netServer=staging`, or a preview deploy (`deploy-vercel.mjs staging --preview`).
 
 Secrets: the game server's `DRAIN_TOKEN` (admin drain/audit), uploaded from `apps/game-server/.secrets.<stage>.json` (git-ignored). Google sign-in will need `GOOGLE_CLIENT_IDS` (a public value, set in the config), and email links
 a mail provider; neither is configured, so those routes answer `not_configured` (staging echoes email links instead).

@@ -43,7 +43,8 @@ const STAGES = {
     worker: 'nomad-poker-api',
     d1: { id: 'e630e086-697c-47c7-84c3-8ad467005c34', name: 'nomad-poker-production' },
     r2: 'nomad-poker-hands-production',
-    origins: ['https://nomad-poker-web.vercel.app', 'capacitor://localhost', 'https://localhost'],
+    // The public site (nomadpoker.fun redirects to www) and the Vercel address it is served from.
+    origins: ['https://www.nomadpoker.fun', 'https://nomadpoker.fun', 'https://nomad-poker-web.vercel.app', 'capacitor://localhost', 'https://localhost'],
     limiterNamespace: '7103',
     writeLimiterNamespace: '7106',
     emailDevEcho: '',

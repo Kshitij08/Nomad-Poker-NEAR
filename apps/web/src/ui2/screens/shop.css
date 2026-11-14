@@ -12,7 +12,15 @@
 }
 .v2-scard > * { position: relative; }
 .v2-scard small { color: var(--v2-ink2); font-weight: 700; }
-.v2-rays { position: absolute !important; inset: -30%; background: repeating-conic-gradient(from 0deg at 50% 40%, rgba(255, 255, 255, 0.08) 0 7deg, transparent 7deg 14deg); pointer-events: none; }
+/* Card background: the galaxy-with-chips art (assets/ui2/shop/card_bg.webp, Art-Factory scenes/menu_bg), cover-fit
+   from the centre, under a soft dark vignette so the item art and its text keep their contrast. */
+.v2-sbg {
+  position: absolute !important; inset: 0; pointer-events: none; border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 50% 45%, transparent 35%, color-mix(in srgb, var(--v2-shade) 55%, transparent) 100%),
+    url('/assets/ui2/shop/card_bg.webp') center / cover no-repeat,
+    var(--v2-panel-solid);
+}
 .v2-ribbon { position: absolute !important; top: 1.7em; right: -3.4em; width: 13em; text-align: center; transform: rotate(40deg); background: var(--v2-grad-ribbon); padding: 0.25em 0; font-size: 0.75em; font-weight: 900; letter-spacing: 0.06em; z-index: 2; white-space: nowrap; }
 .v2-sart { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 8em; filter: drop-shadow(0 0.5em 0.8em rgba(0, 0, 0, 0.4)); }
 .v2-sname { font-size: 1.2em; font-weight: 900; }
@@ -56,3 +64,77 @@ html[data-orient='portrait'] .v2-sh-tabs .v2-tab, html[data-orient='portrait'] .
 /* Tabs with two rows (Card skins): smaller art so both rows and their buttons fit without scrolling on desktop. */
 .v2-sh-grid:has(> :nth-child(5)) .v2-sart { min-height: 5.6em; font-size: 0.8em; }
 .v2-sh-grid:has(> :nth-child(5)) .v2-scard { padding-top: 0.8em; padding-bottom: 0.8em; gap: 0.3em; }
+
+/* ---------------------------------------------------------------- in your face (round 5)
+   Every item the same way: its art is bigger and pokes out over the card's top edge, standing on a halo in the item's
+   own colour (--glow, set per card in shop.ts: Coins gold, XP pink / violet, card backs their room's colour) with
+   slow-turning light rays and a little float. The name is in the display font, the price is a big glowing gold plate
+   across the card. The card lets the art overflow; its background and ribbon are clipped in .v2-sclip instead.
+   Cards lift on hover. Motion stops with reduced motion. */
+.v2-scard {
+  --glow: var(--v2-gold); overflow: visible; isolation: isolate;
+  border-color: color-mix(in srgb, var(--glow) 60%, var(--v2-accent));
+  box-shadow: 0 0.5em 1.2em rgba(10, 4, 40, 0.4), 0 0 1em color-mix(in srgb, var(--glow) 18%, transparent);
+  transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
+}
+.v2-scard:hover { transform: translateY(-0.25em); box-shadow: 0 0.9em 1.8em rgba(10, 4, 40, 0.5), 0 0 1.6em color-mix(in srgb, var(--glow) 40%, transparent); }
+.v2-sclip { position: absolute !important; inset: 0; overflow: hidden; border-radius: inherit; z-index: 0; pointer-events: none; }
+.v2-sclip .v2-sbg { position: absolute !important; }
+.v2-sclip .v2-ribbon { pointer-events: auto; }
+
+/* The art: bigger, lifted out over the top edge, on its halo. */
+.v2-sart { position: relative; isolation: isolate; z-index: 1; font-size: 1.15em; margin-top: -1.7em; min-height: 7.6em; }
+.v2-shalo {
+  position: absolute; left: 50%; top: 50%; width: 12em; height: 12em; translate: -50% -50%; z-index: -1; pointer-events: none; border-radius: 50%;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--glow) 72%, transparent) 0%, color-mix(in srgb, var(--glow) 30%, transparent) 34%, transparent 64%),
+    repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--glow) 34%, transparent) 0deg 9deg, transparent 9deg 24deg);
+  -webkit-mask: radial-gradient(circle, #000 28%, transparent 68%); mask: radial-gradient(circle, #000 28%, transparent 68%);
+  animation: v2-sh-rays 18s linear infinite;
+}
+.v2-sart-in {
+  display: flex; align-items: center; justify-content: center; scale: 1.15;
+  filter: drop-shadow(0 0 0.7em color-mix(in srgb, var(--glow) 55%, transparent)) drop-shadow(0 0.5em 0.6em rgba(10, 4, 40, 0.45));
+  animation: v2-sh-float 3.2s ease-in-out infinite;
+}
+.v2-scard:nth-child(2n) .v2-sart-in { animation-delay: -1.6s; }
+@keyframes v2-sh-rays { to { rotate: 360deg; } }
+@keyframes v2-sh-float { 50% { translate: 0 -0.35em; } }
+
+/* Bold names, a big price plate. */
+.v2-sname, .v2-sfeat-big { font-family: var(--v2-display); font-weight: var(--v2-display-weight); letter-spacing: 0.01em; text-shadow: 0 0.12em 0 rgba(10, 4, 40, 0.5), 0 0 0.8em color-mix(in srgb, var(--glow) 35%, transparent); }
+.v2-sname { font-size: 1.5em; line-height: 1.1; }
+.v2-scard small { font-size: 0.95em; }
+.v2-scard .v2-sh-buy { font-size: 1.25em; min-height: 2.9em; padding-inline: 1.4em; margin-top: 0.3em; border-width: 0.16em; }
+.v2-scard .v2-sh-buy.gold {
+  box-shadow: 0 0 1em color-mix(in srgb, var(--v2-gold) 45%, transparent), 0 0.4em 0.9em rgba(10, 4, 40, 0.45), inset 0 0.08em 0 rgba(255, 255, 255, 0.12);
+  animation: v2-sh-price 2.4s ease-in-out infinite;
+}
+@keyframes v2-sh-price { 50% { box-shadow: 0 0 1.8em color-mix(in srgb, var(--v2-gold) 65%, transparent), 0 0.4em 0.9em rgba(10, 4, 40, 0.45), inset 0 0.08em 0 rgba(255, 255, 255, 0.12); } }
+
+/* Room for the art that pokes out: the grid's first row and the gap between rows. */
+.v2-sh-grid { padding-top: 1.9em; row-gap: 2.4em; }
+.v2-sh-grid:has(> :nth-child(5)) .v2-sart { min-height: 6em; font-size: 0.95em; margin-top: -1.5em; }
+
+/* Featured: the hero's art is the biggest; the side cards' art pokes out to the left. */
+.v2-sh-feat { padding-top: 0.6em; }
+.v2-sfeat .v2-sart { margin-top: 0; font-size: 1.45em; }
+.v2-sfeat .v2-shalo { width: 15em; height: 15em; }
+.v2-sfeat-big { font-size: 3em; }
+.v2-sfeat .v2-sh-buy { font-size: 1.45em; min-width: 9em; }
+.v2-scard-row .v2-sart { margin-top: 0; margin-left: -1.6em; font-size: 1.1em; }
+.v2-scard-row .v2-sh-buy { min-width: 8em; }
+
+.v2-sh-owned .v2-sart-in, .v2-sh-owned .v2-shalo { animation: none; }
+html[data-orient='portrait'] .v2-sart { font-size: 0.85em; margin-top: -1.4em; min-height: 7em; }
+html[data-orient='portrait'] .v2-shalo { width: 10em; height: 10em; }
+html[data-orient='portrait'] .v2-sname { font-size: 1.2em; }
+html[data-orient='portrait'] .v2-sh-grid { padding-top: 1.5em; row-gap: 1.9em; }
+html[data-orient='portrait'] .v2-sfeat .v2-sart { font-size: 1.05em; margin-top: -1.2em; }
+html[data-orient='portrait'] .v2-sfeat { margin-top: 1.2em; }
+html[data-orient='portrait'] .v2-sfeat-big { font-size: 2.2em; }
+html[data-orient='portrait'] .v2-scard-row .v2-sart { margin-left: -0.8em; font-size: 0.8em; }
+html[data-orient='portrait'] .v2-scard .v2-sh-buy { font-size: 1.05em; min-height: 44px; padding-inline: 0.8em; }
+@media (prefers-reduced-motion: reduce) { .v2-shalo, .v2-sart-in, .v2-scard .v2-sh-buy.gold { animation: none; } .v2-scard:hover { transform: none; } }
+/* The glow and halos spill past the cards; never let them add a sideways scrollbar to the grid. */
+.v2-sh-grid { overflow-x: hidden; }

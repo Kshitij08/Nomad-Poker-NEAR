@@ -4,7 +4,7 @@
  * table toast, and simple sheets. Shared by the Nomad table chrome (menu/table/nomadTableHud.ts) and the net chrome
  * (net/chrome/netChrome.ts), which register on the same table screen: both put their buttons into one set of slots.
  */
-import { ico } from './icons';
+import { ico, ui2Art } from './icons';
 import { v2tEl } from './tableKit';
 import './tableChrome.css';
 
@@ -56,11 +56,21 @@ export function chromeSlots(root: HTMLElement): ChromeSlots {
   return s;
 }
 
+/** The round table buttons' soft-2D art (public/assets/ui2/icons), like the menu icons. */
+const BUTTON_ART: Record<string, string> = {
+  smile: 'icons/ico_emoji',
+  chat: 'icons/ico_chat',
+  help: 'icons/ico_help',
+  gear: 'icons/ico_settings',
+};
+
 /** A round icon button (settings, chat, reactions, rankings). `order` sorts it inside its bar. */
 export function iconButton(parent: HTMLElement, icon: string, label: string, onClick: () => void, order = 0): HTMLButtonElement {
   const b = v2tEl('button', 'v2t-ib', parent);
   b.type = 'button';
-  b.innerHTML = tIcon(icon, 1.35);
+  const art = BUTTON_ART[icon];
+  b.innerHTML = art ? `<img class="v2t-ib-art" src="${ui2Art(art)}" alt="" draggable="false" decoding="async">` : tIcon(icon, 1.35);
+  if (art) b.classList.add('art');
   b.setAttribute('aria-label', label);
   b.title = label;
   b.style.order = String(order);

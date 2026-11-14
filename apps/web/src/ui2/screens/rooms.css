@@ -7,27 +7,31 @@
   border: 0.18em solid rgba(255, 255, 255, 0.4); box-shadow: 0 0.6em 1.6em rgba(0, 0, 0, 0.4), inset 0 0.2em 0 rgba(255, 255, 255, 0.25);
   display: flex; align-items: flex-end;
 }
-/* Carousel motion, only when the room changes (`.in` + data-dir set for one render; rooms.ts). Going to the next room
-   the content travels left: the new card and the peeks come in from the right and the old card (a snapshot, .v2-rm-ghost)
-   slides out to the left; previous is the mirror. Each click re-renders the stage, so a quick run of clicks restarts
-   cleanly. Dots with no direction keep the small scale-in. */
-.v2-rm-stage { position: relative; --rm-t: 0.3s; --rm-ease: cubic-bezier(0.22, 0.8, 0.3, 1); }
+/* Carousel motion (rooms.ts attaches it after the render: `.in` + data-dir on the stage, the outgoing card laid back
+   in as .v2-rm-ghost). Going to the next room the content travels left: the new card and the peeks come in from the
+   right while the old card slides out to the left; previous is the mirror. Transform and opacity only, composited
+   (will-change), all on one clock: --rm-delay is how far the slide had got when the stage was (re)built, so a render
+   mid-slide continues the motion rather than restarting it. The incoming card is opaque by 45%, so the two cards never
+   sit half-transparent over each other in the middle of the move. */
+.v2-rm-stage { position: relative; --rm-t: 0.34s; --rm-ease: cubic-bezier(0.22, 0.8, 0.3, 1); --rm-delay: 0ms; --d: 1; }
+.v2-rm-stage[data-dir='prev'] { --d: -1; }
 .v2-rm-card { z-index: 1; }
-.v2-rm-card.in { animation: v2-rm-in 0.22s ease-out; }
-@keyframes v2-rm-in { from { opacity: 0.4; transform: scale(0.97); } }
-.v2-rm-card.in[data-dir='next'] { --d: 1; animation: v2-rm-slide-in var(--rm-t) var(--rm-ease) both; }
-.v2-rm-card.in[data-dir='prev'] { --d: -1; animation: v2-rm-slide-in var(--rm-t) var(--rm-ease) both; }
-@keyframes v2-rm-slide-in { from { opacity: 0; transform: translateX(calc(var(--d) * 32%)) scale(0.9); } }
-.v2-rm-ghost { position: absolute; z-index: 0; margin: 0; pointer-events: none; animation: v2-rm-slide-out var(--rm-t) var(--rm-ease) forwards; }
-@keyframes v2-rm-slide-out {
-  from { opacity: var(--g-o, 1); transform: var(--g-t, none); }
-  to { opacity: 0; transform: translateX(calc(var(--d) * -32%)) scale(0.88); }
+.v2-rm-stage.in > .v2-rm-card, .v2-rm-stage.in > .v2-rm-peek { will-change: transform, opacity; backface-visibility: hidden; }
+.v2-rm-stage.in > .v2-rm-card:not(.v2-rm-ghost) { animation: v2-rm-slide-in var(--rm-t) var(--rm-ease) var(--rm-delay) both; }
+@keyframes v2-rm-slide-in {
+  0% { opacity: 0; transform: translate3d(calc(var(--d) * 34%), 0, 0) scale(0.92); }
+  45% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
 }
-.v2-rm-stage.in[data-dir='next'] > .v2-rm-peek { --d: 1; animation: v2-rm-peek-in var(--rm-t) var(--rm-ease) both; }
-.v2-rm-stage.in[data-dir='prev'] > .v2-rm-peek { --d: -1; animation: v2-rm-peek-in var(--rm-t) var(--rm-ease) both; }
-@keyframes v2-rm-peek-in { from { opacity: 0.2; transform: translateX(calc(var(--d) * 45%)) scale(0.94); } }
+.v2-rm-ghost { position: absolute; z-index: 0; margin: 0; pointer-events: none; animation: v2-rm-slide-out var(--rm-t) var(--rm-ease) var(--rm-delay) both; }
+@keyframes v2-rm-slide-out {
+  0% { opacity: var(--g-o, 1); transform: var(--g-t, none); }
+  100% { opacity: 0; transform: translate3d(calc(var(--d) * -34%), 0, 0) scale(0.9); }
+}
+.v2-rm-stage.in > .v2-rm-peek { animation: v2-rm-peek-in var(--rm-t) var(--rm-ease) var(--rm-delay) both; }
+@keyframes v2-rm-peek-in { 0% { opacity: 0.2; transform: translate3d(calc(var(--d) * 40%), 0, 0) scale(0.94); } 100% { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .v2-rm-card.in, .v2-rm-card.in[data-dir], .v2-rm-stage.in[data-dir] > .v2-rm-peek { animation: none; }
+  .v2-rm-stage.in > .v2-rm-card, .v2-rm-stage.in > .v2-rm-peek { animation: none; }
   .v2-rm-ghost { display: none; }
 }
 .v2-rm-card.locked { filter: saturate(0.7) brightness(0.85); }
@@ -35,7 +39,7 @@
 /* Bottom bar: info left, actions right. */
 .v2-rm-bar {
   position: relative; width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 1.2em;
-  padding: 3.5em 1.4em 1.2em; background: linear-gradient(180deg, color-mix(in srgb, var(--v2-shade) 0%, transparent), color-mix(in srgb, var(--v2-shade) 58%, transparent) 45%);
+  padding: 3.5em 1.4em 1.2em;
 }
 .v2-rm-info { display: flex; flex-direction: column; gap: 0.15em; min-width: 0; }
 .v2-rm-name { font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 2.8em; letter-spacing: 0.03em; line-height: 1; text-shadow: 0 0.08em 0 rgba(0, 0, 0, 0.4); }
@@ -103,3 +107,13 @@ html[data-orient='portrait'] .v2-rm-dot.on::before { width: 2.2em; }
 .v2-rm-peek.locked { filter: saturate(0.7) brightness(0.92); }
 .v2-rm-peek-lock { position: absolute; top: 0.7em; right: 0.7em; width: 2em; height: 2em; border-radius: var(--v2-r-pill); background: var(--v2-deep); display: flex; align-items: center; justify-content: center; }
 .v2-rm-rec { background: var(--v2-grad-gold); color: var(--v2-on-gold); border-color: transparent; }
+
+/* Side rooms' name and stakes read over any room art on a firm text shadow alone (no scrim). */
+.v2-rm-peek { justify-content: flex-end !important; padding-bottom: 1.1em; }
+.v2-rm-peek > b, .v2-rm-peek > small { position: relative; z-index: 1; }
+.v2-rm-peek > b { font-size: 1.55em; color: #fff; text-shadow: 0 0.1em 0 rgba(10, 4, 40, 0.8), 0 0 0.6em rgba(10, 4, 40, 0.7); }
+.v2-rm-peek > small { font-size: 0.95em; color: #fff; text-shadow: 0 0.08em 0 rgba(10, 4, 40, 0.8), 0 0 0.5em rgba(10, 4, 40, 0.7); }
+
+/* Taller room cards (round 6): the centre card may grow to most of the free height, the peeks with it. */
+.v2-rm-card { max-height: 48em; }
+.v2-rm-peek { height: 88%; max-height: 40em; }

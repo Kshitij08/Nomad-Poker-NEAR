@@ -85,11 +85,14 @@ const main: ScreenDef & { profile: boolean } = {
     const addr = onchainApi.walletAddress?.();
     return `
 <div class="v2-mm-top">
-  <div class="v2-rplayer">
-    <button class="v2-row v2-pl"${act('profile')} aria-label="Profile">${avatar('', undefined, 'width:3.6em;height:3.6em')}<div class="v2-grow"><b class="v2-ellip v2-pl-name">${esc(playerName())}</b><div class="v2-xs v2-mut v2-ellip">${chain && addr ? `${esc(addr.slice(0, 4))}…${esc(addr.slice(-4))}` : (accountExtras(app()).isGuest ?? true) ? 'Guest account' : 'Signed in'}</div></div></button>
-    <button class="v2-row"${act('unity', 'LevelRewards')} aria-label="Level and missions"><span class="v2-lvb">LV ${lv.level}</span><div class="v2-bar"><i style="width:${Math.round(lv.p * 100)}%"></i></div>${lv.next ? `<span class="v2-xs v2-num">${fmt(lv.into)} / ${fmt(lv.next)} XP</span>` : ''}</button>
+  <div class="v2-rplayer" title="${esc(chain && addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : (accountExtras(app()).isGuest ?? true) ? 'Guest account' : 'Signed in')}">
+    <button class="v2-pl"${act('profile')} aria-label="Profile">${avatar('', undefined, 'width:100%;height:100%')}</button>
+    <div class="v2-pl-txt">
+      <button class="v2-pl-nameb"${act('profile')} aria-label="Profile"><b class="v2-ellip v2-pl-name">${esc(playerName())}</b></button>
+      <button class="v2-row v2-pl-lv"${act('unity', 'LevelRewards')} aria-label="Level and missions"><span class="v2-lvb">LV ${lv.level}</span><div class="v2-bar"><i style="width:${Math.round(lv.p * 100)}%"></i></div>${lv.next ? `<span class="v2-xs v2-num">${fmt(lv.into)} / ${fmt(lv.next)}</span>` : ''}</button>
+    </div>
   </div>
-  <h1 class="v2-rlogo"><img src="/assets/menu/galaxy/nomad_poker_logo.webp" alt="Nomad Poker" draggable="false"></h1>
+  <h1 class="v2-rlogo"><img src="/assets/menu/galaxy/nomad_poker_logo_flat.webp" alt="Nomad Poker" draggable="false"></h1>
   <div class="v2-mm-right">${coinCap()}${modeSeg()}<button class="v2-ib"${act('settings')} aria-label="Settings">${ico('gear', 2.1)}</button></div>
 </div>
 ${roomStage()}
