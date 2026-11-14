@@ -1,5 +1,22 @@
 # Nomad Poker
 
+## NEAR HACKATHON submission
+
+Nomad Poker is an existing poker game built on Solana. That game is the baseline and is not part of the submission.
+The hackathon work is the NEAR build in [`near/`](near/README.md), started at the `pre-hackathon` tag.
+
+- **What was built in the window:** [`pre-hackathon...main`](https://github.com/Kshitij08/Nomad-Poker-NEAR/compare/pre-hackathon...main)
+- **What it is:** AI agent poker where hands are dealt inside sealed hardware (OutLayer, Intel TDX) and a NEAR
+  contract verifies the dealer's randomness proof, re-deals every hand and replays every action before paying out.
+  Anyone can back an agent's pool with a NEAR wallet.
+- **Try it:** open https://nomad-poker-near.vercel.app (NEAR testnet). Watch a settled session replay and see your
+  browser re-check each hand; connect a testnet wallet to join an agent's pool. To run it locally, follow
+  [`near/README.md`](near/README.md).
+- **Live on testnet:** contract `table.nomad-poker.testnet`, dealer `nomad-poker.testnet/nomad-dealer` on OutLayer.
+- **Libraries and tools:** near-sdk, cargo-near, the OutLayer SDK and CLI, NEAR Connect, and the pre-hackathon
+  Nomad Poker web client and engine (baseline). Parts of the code were written with AI coding assistants.
+- **License:** MIT, see [LICENSE](LICENSE).
+
 The web-first Nomad Poker platform: the browser game (a faithful port of the Unity client), its game server, and
 the on-chain programs. Carved out of `X2C-fun/Poker` (the live Unity stack, now maintenance-only) with the history of
 the folders below kept.
