@@ -17,7 +17,7 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_TOUCH_MS = 60 * 60 * 1000;
 
 export function profile(p: PlayerRow): PlayerProfile {
-  return { id: p.id, displayName: p.display_name, kind: p.kind, createdAt: iso(p.created_at), friendCode: p.friend_code ?? '', avatar: p.avatar ?? 0 };
+  return { id: p.id, displayName: p.display_name, kind: p.kind, createdAt: iso(p.created_at), friendCode: p.friend_code ?? '', avatar: p.avatar ?? 0, picture: p.picture ?? null };
 }
 
 /** A Friend ID: 8 random bytes as 16 upper-case hex characters. */

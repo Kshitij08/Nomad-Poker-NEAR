@@ -41,11 +41,11 @@ export async function leaderboard(db: D1Database, playerId: string, kind: Leader
   const [rows, mine] = await Promise.all([
     db
       .prepare(
-        `SELECT s.player_id, p.display_name, s.score FROM (${scores}) s JOIN players p ON p.id = s.player_id
+        `SELECT s.player_id, p.display_name, p.picture, s.score FROM (${scores}) s JOIN players p ON p.id = s.player_id
          ORDER BY s.score DESC, p.display_name COLLATE NOCASE, s.player_id LIMIT ?3 OFFSET ?4`,
       )
       .bind(playerId, period, pageSize + 1, page * pageSize)
-      .all<{ player_id: string; display_name: string; score: number }>(),
+      .all<{ player_id: string; display_name: string; picture: string | null; score: number }>(),
     db
       .prepare(`SELECT COALESCE((SELECT score FROM (${scores}) WHERE player_id = ?1), 0) AS mine, (SELECT COUNT(*) FROM (${scores}) WHERE score > COALESCE((SELECT score FROM (${scores}) WHERE player_id = ?1), 0)) AS above`)
       .bind(playerId, period)
@@ -60,7 +60,7 @@ export async function leaderboard(db: D1Database, playerId: string, kind: Leader
     pageIndex: page,
     pageSize,
     hasMore: rows.results.length > pageSize,
-    rows: list.map((r, i) => ({ rank: page * pageSize + i + 1, displayName: r.display_name, score: r.score, isLocal: r.player_id === playerId })),
+    rows: list.map((r, i) => ({ rank: page * pageSize + i + 1, displayName: r.display_name, score: r.score, isLocal: r.player_id === playerId, picture: r.picture ?? null })),
   };
 }
 
@@ -76,12 +76,12 @@ async function agentsLeaderboard(db: D1Database, playerId: string, pageIndex: nu
   const [rows, mine] = await Promise.all([
     db
       .prepare(
-        `SELECT s.deployment_id, s.score, s.hands, d.agent_name, d.owner_id, p.display_name AS owner
+        `SELECT s.deployment_id, s.score, s.hands, d.agent_name, d.owner_id, p.display_name AS owner, p.picture
          FROM (${scores}) s JOIN agent_deployments d ON d.id = s.deployment_id JOIN players p ON p.id = d.owner_id
          ORDER BY s.score DESC, s.hands DESC, s.deployment_id LIMIT ?3 OFFSET ?4`,
       )
       .bind(playerId, since, pageSize + 1, page * pageSize)
-      .all<{ deployment_id: string; score: number; hands: number; agent_name: string; owner_id: string; owner: string }>(),
+      .all<{ deployment_id: string; score: number; hands: number; agent_name: string; owner_id: string; owner: string; picture: string | null }>(),
     db
       .prepare(
         `WITH s AS (${scores}), best AS (SELECT MAX(s.score) AS score FROM s JOIN agent_deployments d ON d.id = s.deployment_id WHERE d.owner_id = ?1)
@@ -106,6 +106,7 @@ async function agentsLeaderboard(db: D1Database, playerId: string, pageIndex: nu
       isLocal: r.owner_id === playerId,
       ownerName: r.owner,
       hands: r.hands,
+      picture: r.picture ?? null,
     })),
   };
 }

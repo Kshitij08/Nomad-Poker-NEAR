@@ -92,7 +92,7 @@ export class AccountScreen implements Screen {
     b.append(who);
 
     const bal = el('div', 'na-balances');
-    bal.append(stat('Coins', me.balances.coins, true), stat('Gems', me.balances.gems), stat('XP', me.balances.xp));
+    bal.append(stat('Coins', me.balances.coins, true), stat('XP', me.balances.xp)); // no Gems: the web game pays Coins instead
     b.append(bal);
 
     if (me.identities.length) {

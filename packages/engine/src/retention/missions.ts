@@ -57,18 +57,18 @@ export const MissionCatalog = {
     missionDef('daily_table_tour_2', 'Table Hopper — play 2 tables', MissionKind.PlayTables, 2, false,
       RewardGrant.coins(400, 'mission'), RewardGrant.xp(40, 'mission')),
     missionDef('daily_pair_power', 'Pair Power — win with a pair or better', MissionKind.WinPairOrBetter, 1, false,
-      RewardGrant.coins(300, 'mission'), RewardGrant.xp(30, 'mission'), RewardGrant.gems(1, 'mission')),
+      RewardGrant.coins(550, 'mission'), RewardGrant.xp(30, 'mission')), // + 1 Gem as 250 Coins
     missionDef('daily_buddy', 'Buddy System — play with a friend', MissionKind.PlayWithFriend, 1, false,
       RewardGrant.coins(1000, 'mission'), RewardGrant.xp(100, 'mission')),
   ]) as readonly MissionDef[],
 
   Weekly: Object.freeze([
     missionDef('weekly_grinder_40', 'Weekly Grinder — complete 40 hands', MissionKind.WeeklyHands, 40, true,
-      RewardGrant.coins(2500, 'mission'), RewardGrant.xp(200, 'mission'), RewardGrant.gems(2, 'mission')),
+      RewardGrant.coins(3000, 'mission'), RewardGrant.xp(200, 'mission')), // + 2 Gems as 500 Coins
     missionDef('weekly_collector_12', 'Cash Collector — win 12 hands', MissionKind.WinHands, 12, true,
-      RewardGrant.coins(3000, 'mission'), RewardGrant.xp(250, 'mission'), RewardGrant.gems(3, 'mission')),
+      RewardGrant.coins(3750, 'mission'), RewardGrant.xp(250, 'mission')), // + 3 Gems as 750 Coins
     missionDef('weekly_two_pair_3', 'Two Pair Club — win with two pair+ (3×)', MissionKind.WinTwoPairOrBetter, 3, true,
-      RewardGrant.coins(2000, 'mission'), RewardGrant.xp(150, 'mission'), RewardGrant.gems(2, 'mission')),
+      RewardGrant.coins(2500, 'mission'), RewardGrant.xp(150, 'mission')), // + 2 Gems as 500 Coins
   ]) as readonly MissionDef[],
 
   get All(): MissionDef[] {

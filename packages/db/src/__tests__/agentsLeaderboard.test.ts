@@ -44,8 +44,8 @@ describe('Agents leaderboard', () => {
 
     const page = await leaderboard(db, ann.id, LeaderboardKind.AgentsWeekly, 0, NOW);
     expect(page.rows).toEqual([
-      { rank: 1, displayName: 'Rock', score: 450, isLocal: false, ownerName: 'Bob', hands: 1 },
-      { rank: 2, displayName: 'Shark', score: 200, isLocal: true, ownerName: 'Ann', hands: 2 },
+      { rank: 1, displayName: 'Rock', score: 450, isLocal: false, ownerName: 'Bob', hands: 1, picture: null },
+      { rank: 2, displayName: 'Shark', score: 200, isLocal: true, ownerName: 'Ann', hands: 2, picture: null },
     ]);
     expect(page).toMatchObject({ localScore: 200, localRank: 2, hasMore: false });
   });

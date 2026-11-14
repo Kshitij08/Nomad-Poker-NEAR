@@ -14,7 +14,7 @@ import { StakeSessionNames } from '@nomad/table-server/sessions';
 import { SocialRoutes, type PlayerSearchResponse, type PlayerSearchResult } from '@nomad/contract';
 import { act, btn, esc, input, tabs } from '../core';
 import { ico } from '../icons';
-import { ui, app, host, S, onchain, onchainApi, avatar, avatarUrl, level, playerName, accountExtras, topBar, run, prompt, copy, setMode } from '../ctx';
+import { ui, app, host, S, onchain, onchainApi, avatar, avatarUrl, pictureUrl, myPicture, level, playerName, accountExtras, topBar, run, prompt, copy, setMode } from '../ctx';
 import type { ScreenDef } from '../install';
 import './social.css';
 
@@ -188,7 +188,7 @@ const friends: FriendsScreen = {
           const on = isOnline(f);
           const invite = FriendInvites.inbox.find((i) => i.fromId === f.id) ?? null;
           if (this.tab === 'requests')
-            return `<div class="v2-card v2-row v2-fr-row">${avatar('s', avatarFor(label, f.avatar))}<div class="v2-grow"><b class="v2-ellip">${esc(label)}</b><div class="v2-xs v2-mut">Wants to be friends</div></div>${btn('Accept', 'f-accept', { h: 'gold', c: 'sm', v: f.id })}${btn('Decline', 'f-decline', { h: 'ghost', c: 'sm', v: f.id })}</div>`;
+            return `<div class="v2-card v2-row v2-fr-row">${avatar('s', pictureUrl(f.picture) ?? avatarFor(label, f.avatar))}<div class="v2-grow"><b class="v2-ellip">${esc(label)}</b><div class="v2-xs v2-mut">Wants to be friends</div></div>${btn('Accept', 'f-accept', { h: 'gold', c: 'sm', v: f.id })}${btn('Decline', 'f-decline', { h: 'ghost', c: 'sm', v: f.id })}</div>`;
           // A friend at a public (pool) table can be joined straight away; a private table needs their invite.
           const publicTable = !invite && !!f.table && StakeSessionNames.isPool(f.table) && f.table !== FriendInvites.currentTable?.session;
           const where = invite ? 'Invited you to a table' : f.table ? (publicTable ? 'Playing at a public table' : 'At a private table') : f.lastLogin !== null ? `Last seen ${seenDate(f.lastLogin)}` : '';
@@ -197,7 +197,7 @@ const friends: FriendsScreen = {
             : publicTable
               ? btn('Join table', 'f-jointable', { h: 'gold', c: 'sm', v: f.id, title: 'Sit at the same table' })
               : btn('Invite', 'f-invite', { h: 'blue', c: `sm${atTable ? '' : ' dis'}`, v: f.id, title: atTable ? 'Invite to your table' : 'Enabled only while you are at a table' });
-          return `<div class="v2-card v2-row v2-fr-row">${avatar('s', avatarFor(label, f.avatar))}<div class="v2-grow"><div class="v2-row" style="gap:.5em"><b class="v2-ellip" style="font-size:1.05em">${esc(label)}</b><span class="v2-pill ${on ? 'ok' : ''}">${on ? 'Online' : 'Offline'}</span></div><div class="v2-xs v2-mut v2-ellip">${esc(where)}</div></div>${action}<button class="v2-pill v2-more"${act('f-more', f.id)} aria-label="More for ${esc(label)}">${ico('more', 1)}</button></div>`;
+          return `<div class="v2-card v2-row v2-fr-row">${avatar('s', pictureUrl(f.picture) ?? avatarFor(label, f.avatar))}<div class="v2-grow"><div class="v2-row" style="gap:.5em"><b class="v2-ellip" style="font-size:1.05em">${esc(label)}</b><span class="v2-pill ${on ? 'ok' : ''}">${on ? 'Online' : 'Offline'}</span></div><div class="v2-xs v2-mut v2-ellip">${esc(where)}</div></div>${action}<button class="v2-pill v2-more"${act('f-more', f.id)} aria-label="More for ${esc(label)}">${ico('more', 1)}</button></div>`;
         }).join('');
     return rows;
   },
@@ -237,7 +237,16 @@ const friends: FriendsScreen = {
     'f-pick-cancel': () => {
       friends.mode = 'view';
     },
+    'f-upload': () => pickPhoto(),
+    'f-unpic': () => void run(async () => {
+      const s = NomadLink.session;
+      if (!s) return 'Sign in to set a photo.';
+      await s.removePicture();
+      return s.error;
+    }, () => ui().toast('Photo removed')),
     'f-pick-save': () => {
+      // Picking an avatar replaces an uploaded photo.
+      if (myPicture()) void NomadLink.session?.removePicture();
       const av = S('avatars');
       const acc = app().services.account as unknown as { setAvatar?: (n: number) => unknown };
       if (av?.choose) av.choose(friends.pick);
@@ -338,7 +347,12 @@ const friends: FriendsScreen = {
     let tiles = '';
     for (let i = 1; i <= n; i++)
       tiles += `<button class="v2-fr-tile${i === this.pick ? ' on' : ''}"${act('f-pick', i)} aria-label="Avatar ${i}">${avatar('', sprite(i), 'width:100%;height:auto;aspect-ratio:1')}</button>`;
-    return `<b class="v2-h">Choose your picture</b><div class="v2-fr-grid v2-scroll">${tiles}</div><div class="v2-row" style="width:100%">${btn('Cancel', 'f-pick-cancel', { h: 'ghost', c: 'v2-grow' })}${btn('Save', 'f-pick-save', { h: 'gold', c: 'v2-grow' })}</div>`;
+    // Your own photo: upload one (cropped square and shrunk here), or go back to the avatars.
+    const mine = pictureUrl(myPicture());
+    const own = NomadLink.signedIn
+      ? `<div class="v2-row" style="width:100%;gap:.5em">${mine ? avatar('s', mine) : ''}${btn(`${ico('plus', 0.85)} ${mine ? 'Change photo' : 'Upload a photo'}`, 'f-upload', { h: 'violet', c: 'v2-grow sm' })}${mine ? btn('Remove', 'f-unpic', { h: 'ghost', c: 'sm' }) : ''}</div>`
+      : '';
+    return `<b class="v2-h">Choose your picture</b>${own}<div class="v2-fr-grid v2-scroll">${tiles}</div><div class="v2-row" style="width:100%">${btn('Cancel', 'f-pick-cancel', { h: 'ghost', c: 'v2-grow' })}${btn('Save', 'f-pick-save', { h: 'gold', c: 'v2-grow' })}</div>`;
   },
 };
 
@@ -364,9 +378,52 @@ function addRowsHtml(): string {
             : p.relation === 'pending_in'
               ? btn('Accept', 'f-accept', { h: 'gold', c: 'sm', v: p.id })
               : btn('Add', 'f-req', { h: 'blue', c: 'sm', v: p.id });
-      return `<div class="v2-card v2-row v2-fr-row">${avatar('s', avatarFor(p.name, p.avatar))}<div class="v2-grow"><div class="v2-row" style="gap:.5em"><b class="v2-ellip" style="font-size:1.05em">${esc(p.name)}</b><span class="v2-pill ${p.online ? 'ok' : ''}">${p.online ? 'Online' : 'Offline'}</span></div><div class="v2-xs v2-mut v2-ellip">Friend ID ${esc(FriendCode.format(p.id))}</div></div>${action}</div>`;
+      return `<div class="v2-card v2-row v2-fr-row">${avatar('s', pictureUrl(p.picture) ?? avatarFor(p.name, p.avatar))}<div class="v2-grow"><div class="v2-row" style="gap:.5em"><b class="v2-ellip" style="font-size:1.05em">${esc(p.name)}</b><span class="v2-pill ${p.online ? 'ok' : ''}">${p.online ? 'Online' : 'Offline'}</span></div><div class="v2-xs v2-mut v2-ellip">Friend ID ${esc(FriendCode.format(p.id))}</div></div>${action}</div>`;
     })
     .join('');
+}
+
+/**
+ * Upload a photo: the player picks an image; it is cut to a centred square and shrunk to 256 × 256 here (WebP, or PNG
+ * where the browser can't write WebP), so what reaches the server is small and has no metadata (no location data).
+ */
+function pickPhoto(): void {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png,image/jpeg,image/webp';
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 15_000_000) return ui().message('Upload a photo', 'That file is too big. Pick an image under 15 MB.');
+    void run(async () => {
+      const s = NomadLink.session;
+      if (!s) return 'Sign in to set a photo.';
+      let bitmap: ImageBitmap;
+      try {
+        bitmap = await createImageBitmap(file);
+      } catch {
+        return "That file isn't an image this browser can read. Try a PNG or JPEG.";
+      }
+      const side = Math.min(bitmap.width, bitmap.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      const g = canvas.getContext('2d');
+      if (!g) return "Couldn't prepare the photo.";
+      g.imageSmoothingQuality = 'high';
+      g.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 256, 256);
+      bitmap.close();
+      const encode = (type: string, q: number) => new Promise<Blob | null>((res) => canvas.toBlob(res, type, q));
+      let blob = await encode('image/webp', 0.85);
+      if (!blob || blob.type !== 'image/webp') blob = await encode('image/png', 1);
+      if (!blob) return "Couldn't prepare the photo.";
+      await s.uploadPicture(blob);
+      return s.error;
+    }, () => {
+      friends.mode = 'view';
+      ui().toast('Photo saved');
+    });
+  });
+  input.click();
 }
 
 function addFriend(): void {
@@ -449,9 +506,9 @@ const leaderboard: ScreenDef & { tab: string; board: LeaderboardSnapshot | null;
             if (agents) {
               // An Agent: its name, whose it is and the hands it played this week; the owner's picture.
               const sub = `${r.ownerName ? `by ${r.ownerName}` : ''}${r.hands ? ` · ${formatN0(r.hands)} hands` : ''}`;
-              return `<div class="v2-lbr${g}${r.isLocal ? ' you' : ''}"><span class="v2-lb-rank">${rank}</span><span class="v2-row" style="gap:.6em;min-width:0">${avatar('xs', r.isLocal ? avatarUrl() : avatarFor(r.ownerName ?? r.displayName))}<span class="v2-col" style="min-width:0;line-height:1.15"><span class="v2-ellip">${ico('robot', 0.95)} ${esc(r.displayName)}</span><span class="v2-xs v2-mut v2-ellip">${esc(sub)}</span></span>${r.isLocal ? '<span class="v2-pill gold">Yours</span>' : ''}</span><b class="v2-num ${r.score < 0 ? 'v2-badc' : ''}" style="text-align:right">${r.score > 0 ? '+' : ''}${formatN0(r.score)}</b></div>`;
+              return `<div class="v2-lbr${g}${r.isLocal ? ' you' : ''}"><span class="v2-lb-rank">${rank}</span><span class="v2-row" style="gap:.6em;min-width:0">${avatar('xs', r.isLocal ? avatarUrl() : pictureUrl(r.picture) ?? avatarFor(r.ownerName ?? r.displayName))}<span class="v2-col" style="min-width:0;line-height:1.15"><span class="v2-ellip">${ico('robot', 0.95)} ${esc(r.displayName)}</span><span class="v2-xs v2-mut v2-ellip">${esc(sub)}</span></span>${r.isLocal ? '<span class="v2-pill gold">Yours</span>' : ''}</span><b class="v2-num ${r.score < 0 ? 'v2-badc' : ''}" style="text-align:right">${r.score > 0 ? '+' : ''}${formatN0(r.score)}</b></div>`;
             }
-            return `<div class="v2-lbr${g}${r.isLocal ? ' you' : ''}"><span class="v2-lb-rank">${rank}</span><span class="v2-row" style="gap:.6em;min-width:0">${avatar('xs', r.isLocal ? avatarUrl() : avatarFor(r.displayName))}<span class="v2-ellip">${esc(r.displayName)}</span>${r.isLocal ? '<span class="v2-pill gold">You</span>' : ''}</span><b class="v2-num" style="text-align:right">${formatN0(r.score)}</b></div>`;
+            return `<div class="v2-lbr${g}${r.isLocal ? ' you' : ''}"><span class="v2-lb-rank">${rank}</span><span class="v2-row" style="gap:.6em;min-width:0">${avatar('xs', r.isLocal ? avatarUrl() : pictureUrl(r.picture) ?? avatarFor(r.displayName))}<span class="v2-ellip">${esc(r.displayName)}</span>${r.isLocal ? '<span class="v2-pill gold">You</span>' : ''}</span><b class="v2-num" style="text-align:right">${formatN0(r.score)}</b></div>`;
           }).join('')
         : `<div class="v2-empty">${ico(agents ? 'robot' : 'podium', 5)}${this.loading ? 'Loading…' : kind === LeaderboardKind.FriendsWeekly ? 'Add friends to see how you rank against them.' : agents ? 'No Agent has played a hand this week.' : 'No scores yet this period.'}${agents && !this.loading ? btn('Deploy your Agent', 'go', { h: 'gold', v: 'ag-overview' }) : ''}</div>`;
       // A near-empty board says how to climb it instead of leaving a big empty panel.

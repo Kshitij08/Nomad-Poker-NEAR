@@ -77,11 +77,12 @@ describe('race: changing the entry fee while players register', () => {
 });
 
 describe('smaller review findings', () => {
-  it('refuses a made-up stake, hides internal ids in the market, and keeps support from banning admins', async () => {
+  it('ignores a made-up stake (the bankroll picks the table), hides internal ids in the market, and keeps support from banning admins', async () => {
     const { listStrategies, publishStrategy } = await import('../strategies');
     const { setBan } = await import('../admin');
     const owner = (await findPlayer(db, (await createPlayer(db, { displayName: 'Owner' }, T0)).id))!;
-    await expect(startAgent(db, owner.id, { session: 'STAKE60', bankroll: 2000, stake: 60 }, { now: T0 })).rejects.toMatchObject({ status: 400 });
+    expect((await startAgent(db, owner.id, { session: 'STAKE60', bankroll: 2000, stake: 60 }, { now: T0 })).stake).toBe(100);
+    await db.prepare("UPDATE agent_deployments SET phase = 'completed' WHERE id = 'STAKE60'").run(); // one active Agent per owner
 
     const rules = { minHands: 0, minDays: 0, houseBb100: -1e9, houseMinHands: 1e9 };
     const s = await publishStrategy(db, owner, { name: 'Open', profile: { foldBelow: 0.3, raiseAbove: 0.6, aggression: 0.5, bluffChance: 0.05, raiseFractionOfPot: 0.6 } }, rules, T0);

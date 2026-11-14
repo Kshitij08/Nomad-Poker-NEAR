@@ -5,7 +5,7 @@
  * be clear of each other.
  */
 import { describe, expect, it } from 'vitest';
-import { type Box, PORTRAIT_CARD, PORTRAIT_LAYOUT, portraitBoxes, portraitCardSpot, portraitOverlaps } from '../portraitLayout';
+import { type Box, PORTRAIT_CARD, PORTRAIT_LAYOUT, portraitBoardSpot, portraitBoxes, portraitCardSpot, portraitOverlaps } from '../portraitLayout';
 
 describe('portrait table layout', () => {
   it('has no overlaps between seats, hole cards, board, pot and chips', () => {
@@ -30,13 +30,19 @@ describe('portrait table layout', () => {
     });
   });
 
-  it("keeps every seat's cards out of the board's row, so a showdown never reads as one long row of cards", () => {
-    const boxes = portraitBoxes();
-    const board = boxes.find((b) => b.name === 'board')!;
-    for (const c of boxes.filter((b) => b.name.endsWith('.cards'))) {
-      const shared = Math.min(c.y1, board.y1) - Math.max(c.y0, board.y0);
-      expect(shared, c.name).toBeLessThan(0.25 * (c.y1 - c.y0));
-    }
+  it('lays the board out as the flop with the turn and river centred under it', () => {
+    const spots = [0, 1, 2, 3, 4].map(portraitBoardSpot);
+    expect(new Set(spots.slice(0, 3).map(([, y]) => y)).size).toBe(1);
+    expect(spots[3]![1]).toBe(spots[4]![1]);
+    expect(spots[3]![1]).toBeLessThan(spots[0]![1]);
+    expect((spots[3]![0] + spots[4]![0]) / 2).toBeCloseTo(spots[1]![0], 6);
+  });
+
+  it("puts every seat's cards up and to the right of its avatar", () => {
+    PORTRAIT_LAYOUT.seats.forEach((s, i) => {
+      expect(s.cards[0], `seat ${i}`).toBeGreaterThan(s.avatar[0]);
+      expect(s.cards[1], `seat ${i}`).toBeGreaterThanOrEqual(s.avatar[1]);
+    });
   });
 
   it('the overlap check does catch a collision', () => {

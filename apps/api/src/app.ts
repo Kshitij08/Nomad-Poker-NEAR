@@ -61,6 +61,17 @@ const WALLET_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const EMAIL_LINK_TTL_MS = 15 * 60 * 1000;
 const EMAIL_RESEND_MS = 60 * 1000;
 
+const PICTURE_TYPES = new Set(['image/webp', 'image/png', 'image/jpeg']);
+const MAX_PICTURE_BYTES = 200_000;
+
+/** The file's first bytes match the type it claims (no HTML or SVG served as a picture). */
+function looksLike(type: string, b: Uint8Array): boolean {
+  const at = (i: number, ...v: number[]) => v.every((x, k) => b[i + k] === x);
+  if (type === 'image/png') return at(0, 0x89, 0x50, 0x4e, 0x47);
+  if (type === 'image/jpeg') return at(0, 0xff, 0xd8, 0xff);
+  return at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50); // RIFF....WEBP
+}
+
 /** The sign-in email: a plain message with one button (the link works once, for 15 minutes). */
 function signInEmail(link: string): { html: string; text: string } {
   const safe = link.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -375,6 +386,40 @@ export function createApp(): Hono<AppEnv> {
     const b = await body(c);
     return c.json(await socialDb.sendInvite(c.env.DB, c.get('player'), String(b.friendId ?? ''), String(b.session ?? ''), b.money === true));
   });
+  // ---- Profile pictures: uploaded once (the client crops and shrinks them), served from R2 by key.
+  app.post(SocialRoutes.picture, requirePlayer, async (c) => {
+    const { success } = (await c.env.WRITE_LIMITER?.limit({ key: c.get('player').id })) ?? { success: true };
+    if (!success) fail(429, 'rate_limited', 'Slow down a little and try again in a minute.');
+    const type = (c.req.header('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+    if (!PICTURE_TYPES.has(type)) fail(400, 'bad_request', 'Use a PNG, JPEG or WebP image.');
+    const body = new Uint8Array(await c.req.raw.arrayBuffer());
+    if (body.length === 0 || body.length > MAX_PICTURE_BYTES) fail(400, 'bad_request', 'That image is too big (200 KB at most).');
+    if (!looksLike(type, body)) fail(400, 'bad_request', "That file isn't the image it says it is.");
+    const key = randomId('pic', 16).replace(/[^A-Za-z0-9_-]/g, '');
+    await c.env.HANDS.put(`pictures/${key}.webp`, body, { httpMetadata: { contentType: type, cacheControl: 'public, max-age=31536000, immutable' } });
+    const old = await socialDb.setPicture(c.env.DB, c.get('player').id, key);
+    if (old) await c.env.HANDS.delete(`pictures/${old}.webp`).catch(() => undefined);
+    return c.json({ picture: key });
+  });
+  app.delete(SocialRoutes.picture, requirePlayer, async (c) => {
+    const old = await socialDb.setPicture(c.env.DB, c.get('player').id, null);
+    if (old) await c.env.HANDS.delete(`pictures/${old}.webp`).catch(() => undefined);
+    return c.json({ picture: null });
+  });
+  app.get(`${SocialRoutes.pictures}/:file`, async (c) => {
+    const m = /^([A-Za-z0-9_-]{6,48})\.webp$/.exec(c.req.param('file'));
+    if (!m) return c.body(null, 404);
+    const obj = await c.env.HANDS.get(`pictures/${m[1]}.webp`);
+    if (!obj) return c.body(null, 404);
+    return new Response(obj.body, {
+      headers: {
+        'content-type': obj.httpMetadata?.contentType ?? 'image/webp',
+        'cache-control': 'public, max-age=31536000, immutable',
+        'x-content-type-options': 'nosniff',
+      },
+    });
+  });
+
   app.get(SocialRoutes.search, requirePlayer, async (c) => {
     // Reads, but a name search can enumerate players: it shares the per-session write limit.
     const { success } = (await c.env.WRITE_LIMITER?.limit({ key: c.get('player').id })) ?? { success: true };

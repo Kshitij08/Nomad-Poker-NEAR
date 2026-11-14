@@ -23,6 +23,8 @@ export interface FriendEntry {
   online?: boolean;
   /** The table (session) a friend is seated at. */
   table?: string | null;
+  /** Their uploaded picture's key. */
+  picture?: string | null;
 }
 
 /** The display name, or the Friend ID for a player who never set one. */
@@ -75,7 +77,7 @@ async function refreshOnceAsync(): Promise<FriendsResult> {
     const s = await NomadLink.call<SocialResponse>('GET', SocialRoutes.social);
     entries.length = 0;
     for (const f of s.friends) {
-      entries.push({ id: f.id, name: f.name, relation: RELATION[f.relation] ?? FriendRelation.None, lastLogin: f.lastSeen, avatar: f.avatar, online: f.online, table: f.table });
+      entries.push({ id: f.id, name: f.name, relation: RELATION[f.relation] ?? FriendRelation.None, lastLogin: f.lastSeen, avatar: f.avatar, online: f.online, table: f.table, picture: f.picture ?? null });
     }
     hasLoaded = true;
     lastError = null;
