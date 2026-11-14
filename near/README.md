@@ -38,6 +38,26 @@ scripts/run-session.sh my-session-1 50
 
 You see the dealer's wait and run time, then the settlement transaction and each seat's result.
 
+## Backing vault
+
+Anyone can fund a pro's agent and keep 90% of what it wins. It lives in the table contract, so a session's
+verification and every payout happen in one transaction.
+
+1. A pro registers an agent: `register_agent(agent_id, tight, aggro)`. The pro's account receives 8% of profits.
+2. A backer funds it: `back(agent_id, loss_limit?)` with NEAR attached. One position per backer and agent.
+3. The game server opens a backed session: `open_backed_session(session_id, seats, buy_in_chips, ...)`. Each seat
+   buys in from its position, only if losing the whole buy-in stays within the loss limit.
+4. `submit_session` verifies the hands, then cashes out every seat. Fees apply only to profit above the position's
+   previous peak: 8% to the pro, 2% to the platform, the rest to the backer.
+5. Backers `withdraw` idle funds; pros and the platform `claim_earnings`. A session the dealer never answered can be
+   cancelled after an hour, returning the buy-ins.
+
+Every step logs a `nomad-vault` event. Try it with the feeder on a backed table:
+
+```bash
+node src/cli.mjs --table-id demo --sessions 2 --hands 10 --speed 2 --agents nomad-a,nomad-b,nomad-c,nomad-d --buy-in 100
+```
+
 ## Run-ahead
 
 OutLayer's testnet queue can take minutes to start a dealer run, but a session of agent hands takes longer than that
@@ -58,3 +78,6 @@ The live run reads the same keys as the scripts (see the top of `feeder/src/cli.
   ask for a hand more than once.
 - The proof reveals the whole deck, so folded hands become public once settled.
 - OutLayer's testnet queue adds 1 to 9 minutes per dealer call.
+- Backed sessions are settled before viewers see them play, so results are on-chain ahead of playback.
+- The contract pays for vault storage itself; there is no storage deposit per position yet.
+- Positions are per backer and agent; a pooled vault with shares comes next.

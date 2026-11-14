@@ -18,6 +18,9 @@ use near_sdk::store::LookupMap;
 use near_sdk::{env, near, require, AccountId, Gas, NearToken, PanicOnDefault, Promise, PromiseError};
 use poker_core::{self as core, game};
 
+mod vault;
+pub use vault::{Agent, BackedSeat, BackedSession, Position, PositionView, VaultConfig};
+
 const OUTLAYER_GAS: Gas = Gas::from_tgas(100);
 const DEAL_CALLBACK_GAS: Gas = Gas::from_tgas(15);
 const VERIFY_CALLBACK_GAS: Gas = Gas::from_tgas(80);
@@ -81,7 +84,7 @@ pub struct Session {
 
 /// Sessions are kept under their own storage prefix rather than in the contract's state struct, so this version
 /// deploys over the earlier one without a migration.
-fn sessions() -> LookupMap<String, Session> {
+pub(crate) fn sessions() -> LookupMap<String, Session> {
     LookupMap::new(b"s")
 }
 
@@ -96,7 +99,7 @@ pub fn verify_session(vrf_pubkey: &[u8; 32], session_id: &str, start: &game::Rul
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Table {
-    owner: AccountId,
+    pub(crate) owner: AccountId,
     outlayer: AccountId,
     project_id: String,
     vrf_pubkey: [u8; 32],
@@ -261,16 +264,19 @@ impl Table {
             sb: num("sb"),
             bb: num("bb"),
         };
-        let out = match verify_session(&self.vrf_pubkey, &session_id, &start, num("hands") as usize, &alpha, &signature_hex, &actions) {
+        let verified = verify_session(&self.vrf_pubkey, &session_id, &start, num("hands") as usize, &alpha, &signature_hex, &actions);
+        let r = match verified {
             Ok(r) => {
                 s.status = Status::Done;
                 s.result = Some(r.clone());
-                json!({ "ok": true, "hands_played": r.hands_played, "stacks": r.stacks, "totals": r.totals })
+                r
             }
-            Err(error) => json!({ "ok": false, "error": error }),
+            Err(error) => return json!({ "ok": false, "error": error }),
         };
         all.flush();
-        out
+        // Backed sessions pay out each seat's position in the same transaction.
+        let payouts = self.settle_backed(&session_id, &r);
+        json!({ "ok": true, "hands_played": r.hands_played, "stacks": r.stacks, "totals": r.totals, "payouts": payouts })
     }
 
     pub fn get_session(&self, session_id: String) -> Option<Session> {
@@ -515,5 +521,142 @@ mod tests {
         assert!(verify_play(&f.pk, "a1", &rules, &f.alpha, &f.sig_hex, "r3").is_err());
         // An extra action after the hand ended is refused.
         assert!(verify_play(&f.pk, "a1", &rules, &f.alpha, &f.sig_hex, &format!("{actions},c")).is_err());
+    }
+
+    // ---------------------------------------------------------------------------------------- backing vault flow
+
+    use near_sdk::json_types::U128;
+    use near_sdk::test_utils::VMContextBuilder;
+    use near_sdk::testing_env;
+
+    const NEAR: u128 = 1_000_000_000_000_000_000_000_000;
+
+    fn as_who(who: &str, deposit: u128, ts: u64) {
+        testing_env!(VMContextBuilder::new()
+            .current_account_id("table.near".parse().unwrap())
+            .predecessor_account_id(who.parse().unwrap())
+            .signer_account_id(who.parse().unwrap())
+            .attached_deposit(NearToken::from_yoctonear(deposit))
+            .block_timestamp(ts)
+            .build());
+    }
+
+    fn acct(s: &str) -> AccountId {
+        s.parse().unwrap()
+    }
+
+    /// A table with four agents from one pro, each backed with 1 NEAR by a different backer.
+    fn backed_table() -> (Table, Vec<BackedSeat>, [u8; 32]) {
+        let f = fixture("session", "v1");
+        as_who("table.near", 0, 1);
+        let mut t = Table::new(acct("outlayer.near"), "pro.near/dealer".into(), hex::encode(f.pk));
+        let profiles = [(10u8, 80u8), (30, 60), (5, 90), (40, 50)];
+        let mut seats = vec![];
+        for (i, (tight, aggro)) in profiles.iter().enumerate() {
+            as_who("pro.near", 0, 1);
+            t.register_agent(format!("agent-{i}"), *tight, *aggro);
+            let backer = format!("backer{i}.near");
+            as_who(&backer, NEAR, 1);
+            t.back(format!("agent-{i}"), Some(U128(NEAR / 2)));
+            seats.push(BackedSeat { backer: acct(&backer), agent_id: format!("agent-{i}") });
+        }
+        (t, seats, f.pk)
+    }
+
+    fn total_held(t: &Table, seats: &[BackedSeat]) -> u128 {
+        let positions: u128 = seats.iter().map(|s| { let p = t.get_position(s.backer.clone(), s.agent_id.clone()).unwrap(); p.balance.0 + p.at_table.0 }).sum();
+        positions + t.get_earnings(acct("pro.near")).0 + t.get_earnings(acct("table.near")).0
+    }
+
+    fn session_text(id: &str, buy_in: u64, hands: usize) -> (Fixture, String) {
+        let f = fixture("session", id);
+        let start = game::Rules { stacks: vec![buy_in; 4], button: 0, sb: 1, bb: 2 };
+        let profiles = [(10u8, 80u8), (30, 60), (5, 90), (40, 50)].map(|(tight, aggro)| agent::Profile { tight, aggro });
+        let text = agent::play_session(&profiles, &f.seed, &start, hands).unwrap();
+        (f, text)
+    }
+
+    #[test]
+    fn a_backed_session_pays_each_backer_pro_and_platform_and_conserves_money() {
+        let (mut t, seats, _) = backed_table();
+        assert_eq!(total_held(&t, &seats), 4 * NEAR);
+        as_who("table.near", 0, 2);
+        t.open_backed_session("v1".into(), seats.clone(), U64(300), 0, U64(1), U64(2), 30);
+        // 300 chips at 0.001 NEAR = 0.3 NEAR locked per seat.
+        let p0 = t.get_position(seats[0].backer.clone(), "agent-0".into()).unwrap();
+        assert_eq!((p0.balance.0, p0.at_table.0), (NEAR - 3 * NEAR / 10, 3 * NEAR / 10));
+        // Repeating the identical open locks nothing more.
+        t.open_backed_session("v1".into(), seats.clone(), U64(300), 0, U64(1), U64(2), 30);
+        assert_eq!(t.get_position(seats[0].backer.clone(), "agent-0".into()).unwrap().at_table.0, 3 * NEAR / 10);
+
+        let (f, text) = session_text("v1", 300, 30);
+        let out = t.submit_session("v1".into(), f.alpha.clone(), f.sig_hex.clone(), text);
+        assert_eq!(out["ok"], true, "{out}");
+        // Nothing is created or lost: what backers deposited is now in positions or fee earnings.
+        assert_eq!(total_held(&t, &seats), 4 * NEAR);
+        let stacks: Vec<u64> = out["stacks"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
+        let mut pro_fees = 0u128;
+        for (i, s) in seats.iter().enumerate() {
+            let p = t.get_position(s.backer.clone(), s.agent_id.clone()).unwrap();
+            assert_eq!(p.at_table.0, 0);
+            let profit = (stacks[i] as u128 * NEAR / 1000).saturating_sub(3 * NEAR / 10);
+            assert_eq!(p.fees_paid.0, profit * 8 / 100 + profit * 2 / 100, "seat {i}");
+            pro_fees += profit * 8 / 100;
+        }
+        assert_eq!(t.get_earnings(acct("pro.near")).0, pro_fees);
+        assert_eq!(t.get_agent("agent-0".into()).unwrap().sessions, 1);
+        // Settled once only.
+        assert_eq!(t.submit_session("v1".into(), f.alpha, f.sig_hex, "f".into())["ok"], false);
+    }
+
+    #[test]
+    #[should_panic(expected = "loss limit")]
+    fn a_seat_beyond_the_loss_limit_is_refused() {
+        let (mut t, seats, _) = backed_table();
+        // Limits are 0.5 NEAR; a 0.6 NEAR buy-in could lose more than that.
+        as_who("table.near", 0, 2);
+        t.open_backed_session("v1".into(), seats, U64(600), 0, U64(1), U64(2), 30);
+    }
+
+    #[test]
+    #[should_panic(expected = "more than the idle balance")]
+    fn funds_at_a_table_cannot_be_withdrawn() {
+        let (mut t, seats, _) = backed_table();
+        as_who("table.near", 0, 2);
+        t.open_backed_session("v1".into(), seats, U64(300), 0, U64(1), U64(2), 30);
+        as_who("backer0.near", 0, 3);
+        let _ = t.withdraw("agent-0".into(), U128(NEAR - 3 * NEAR / 10 + 1));
+    }
+
+    #[test]
+    #[should_panic(expected = "owner only")]
+    fn only_the_server_opens_backed_sessions() {
+        let (mut t, seats, _) = backed_table();
+        as_who("backer0.near", 0, 2);
+        t.open_backed_session("v1".into(), seats, U64(300), 0, U64(1), U64(2), 30);
+    }
+
+    #[test]
+    fn an_unanswered_session_can_be_cancelled_only_after_an_hour() {
+        let (mut t, seats, _) = backed_table();
+        as_who("table.near", 0, 10);
+        t.open_backed_session("v1".into(), seats.clone(), U64(300), 0, U64(1), U64(2), 30);
+        as_who("table.near", 0, 10 + 59 * 60 * 1_000_000_000);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.cancel_session("v1".into()))).is_err());
+        as_who("table.near", 0, 10 + 61 * 60 * 1_000_000_000);
+        t.cancel_session("v1".into());
+        let p = t.get_position(seats[0].backer.clone(), "agent-0".into()).unwrap();
+        assert_eq!((p.balance.0, p.at_table.0), (NEAR, 0));
+        assert_eq!(total_held(&t, &seats), 4 * NEAR);
+    }
+
+    #[test]
+    fn an_agent_takes_one_seat_and_unknown_agents_are_refused() {
+        let (mut t, seats, _) = backed_table();
+        as_who("table.near", 0, 2);
+        let twice = vec![seats[0].clone(), seats[0].clone()];
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.open_backed_session("v1".into(), twice, U64(100), 0, U64(1), U64(2), 10))).is_err());
+        let ghost = vec![seats[0].clone(), BackedSeat { backer: acct("backer1.near"), agent_id: "nobody".into() }];
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.open_backed_session("v2".into(), ghost, U64(100), 0, U64(1), U64(2), 10))).is_err());
     }
 }

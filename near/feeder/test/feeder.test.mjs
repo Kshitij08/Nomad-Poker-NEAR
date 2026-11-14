@@ -89,6 +89,22 @@ test("retries a failed dealer call with the identical request", async () => {
   assert.deepEqual(dealer.calls[2].input, dealer.calls[0].input);
 });
 
+test("backed tables buy in fresh each session and send the dealer the contract's request", async () => {
+  const backed = { seats: [0, 1, 2, 3].map((i) => ({ backer: `backer${i}.near`, agent_id: `agent-${i}` })), buyIn: 100 };
+  const { f, dealer, table, log } = feeder({ feeder: { backed, hands: 10 } });
+  backed.seats.forEach((s, i) => (table.agents[s.agent_id] = seats[i].profile));
+  await f.run({ sessions: 3 });
+  const ready = log.filter((e) => e.ev === "ready");
+  assert.equal(ready.length, 3);
+  for (const [n, call] of dealer.calls.entries()) {
+    // Every session starts from the buy-in, whatever the last one ended with.
+    assert.deepEqual(call.input.stacks, [100, 100, 100, 100]);
+    // The dealer gets the profiles the contract recorded, not ones the server chose.
+    assert.deepEqual(call.input.profiles, seats.map((s) => s.profile));
+    assert.equal(ready[n].payouts.seats.length, 4);
+  }
+});
+
 test("resumes the chain from its store after a restart", async () => {
   const store = new MemoryStore();
   const a = feeder({ feeder: { store } });
