@@ -12,14 +12,16 @@ const ACCOUNT_ID = 'a5e26389a89c0c84a7b4939e38574714';
 const GOOGLE_CLIENT_IDS = ['114523122703-ps6fj6q10ofb9pkft4g1dd4rrnv9k01r.apps.googleusercontent.com'];
 const EMAIL_SENDER = 'no-reply@nomadpoker.fun';
 
+// The NEAR fork has its own Workers, database, bucket and rate-limit namespaces, so nothing deployed from here can
+// touch the live Nomad Poker app (nomad-poker-api*, the nomad-poker-staging / -production databases).
 const STAGES = {
   development: {
-    worker: 'nomad-poker-api-dev',
-    d1: { id: 'c9570cef-7f57-4845-b503-03da7893d36d', name: 'nomad-poker-staging' },
-    r2: 'nomad-poker-hands-staging',
+    worker: 'nomad-poker-near-api-dev',
+    d1: { id: '50f75a10-aabe-4ffc-874a-30e2565d2934', name: 'nomad-poker-near-staging' },
+    r2: 'nomad-poker-near-hands-staging',
     origins: ['http://localhost:5180', 'http://127.0.0.1:5180'],
-    limiterNamespace: '7101',
-    writeLimiterNamespace: '7104',
+    limiterNamespace: '7201',
+    writeLimiterNamespace: '7204',
     emailDevEcho: '1',
     // Test runs: tournaments may start a minute out; market strategies qualify after 100 hands, no waiting days.
     tournamentMinLead: '45',
@@ -29,12 +31,12 @@ const STAGES = {
     shopTreasury: 'GV5LYvyakPHtjNWENbFKnfyG2NuMLkL6xYPxo6YyEcJw',
   },
   staging: {
-    worker: 'nomad-poker-api-staging',
-    d1: { id: 'c9570cef-7f57-4845-b503-03da7893d36d', name: 'nomad-poker-staging' },
-    r2: 'nomad-poker-hands-staging',
-    origins: ['https://nomad-poker-web.vercel.app', 'http://localhost:5180', 'http://127.0.0.1:5180', 'capacitor://localhost', 'https://localhost'],
-    limiterNamespace: '7102',
-    writeLimiterNamespace: '7105',
+    worker: 'nomad-poker-near-api-staging',
+    d1: { id: '50f75a10-aabe-4ffc-874a-30e2565d2934', name: 'nomad-poker-near-staging' },
+    r2: 'nomad-poker-near-hands-staging',
+    origins: ['https://nomad-poker-near.vercel.app', 'http://localhost:5180', 'http://127.0.0.1:5180', 'capacitor://localhost', 'https://localhost'],
+    limiterNamespace: '7202',
+    writeLimiterNamespace: '7205',
     emailDevEcho: '1',
     tournamentMinLead: '45',
     listingMinHands: '100',
@@ -43,13 +45,13 @@ const STAGES = {
     shopTreasury: 'GV5LYvyakPHtjNWENbFKnfyG2NuMLkL6xYPxo6YyEcJw',
   },
   production: {
-    worker: 'nomad-poker-api',
-    d1: { id: 'e630e086-697c-47c7-84c3-8ad467005c34', name: 'nomad-poker-production' },
-    r2: 'nomad-poker-hands-production',
-    // The public site (nomadpoker.fun redirects to www) and the Vercel address it is served from.
-    origins: ['https://www.nomadpoker.fun', 'https://nomadpoker.fun', 'https://nomad-poker-web.vercel.app', 'capacitor://localhost', 'https://localhost'],
-    limiterNamespace: '7103',
-    writeLimiterNamespace: '7106',
+    // Not set up yet: create the database and bucket, put the database id here and list the production web origin.
+    worker: 'nomad-poker-near-api',
+    d1: { id: '', name: 'nomad-poker-near-production' },
+    r2: 'nomad-poker-near-hands-production',
+    origins: [] as string[],
+    limiterNamespace: '7203',
+    writeLimiterNamespace: '7206',
     emailDevEcho: '',
     // A tournament may start a minute from now (the host's "In 1 min"); 45 s leaves room for the request's trip.
     tournamentMinLead: '45',
@@ -62,6 +64,7 @@ const STAGES = {
 export default defineConfig(({ mode }) => {
   const stage = mode === 'staging' || mode === 'development' ? mode : 'production';
   const s = STAGES[stage];
+  if (!s.d1.id) throw new Error(`The NEAR fork has no ${stage} database yet: create one and set its id in cloudflare.config.ts`);
   return {
     accountId: ACCOUNT_ID,
     worker: {

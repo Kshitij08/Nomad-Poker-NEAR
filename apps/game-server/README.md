@@ -2,7 +2,7 @@
 
 The game server: one Cloudflare Durable Object per table, running the same authoritative table as the local Node
 server (`@nomad/table-server`: rooms, `PokerServerGame`, bots, the binary event codec) with its chips on the Nomad
-ledger in D1 and every hand recorded to R2. Staging: https://nomad-poker-game-staging.kshitijiitgn.workers.dev
+ledger in D1 and every hand recorded to R2. Staging: https://nomad-poker-near-game-staging.kshitijiitgn.workers.dev
 
 | Route | What it does |
 |---|---|

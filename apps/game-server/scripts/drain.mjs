@@ -7,8 +7,8 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const stage = process.argv[2] ?? 'staging';
 const urls = {
-  staging: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev',
-  production: 'https://nomad-poker-game.kshitijiitgn.workers.dev',
+  staging: 'https://nomad-poker-near-game-staging.kshitijiitgn.workers.dev',
+  production: 'https://nomad-poker-near-game.kshitijiitgn.workers.dev',
 };
 const base = urls[stage];
 if (!base) {

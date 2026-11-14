@@ -50,7 +50,7 @@ is listed in `VITE_ALLOWED_ENDPOINTS` (comma-separated) or the build sets `VITE_
 ### Deploying
 
 `node scripts/deploy-vercel.mjs staging` builds the app wired to the staging API and game server (`VITE_API_URL`,
-`VITE_NET_SERVER`) and deploys it to the Vercel project `nomad-poker-web` (https://nomad-poker-web.vercel.app) as a
+`VITE_NET_SERVER`) and deploys it to the Vercel project `nomad-poker-web` (https://nomad-poker-near.vercel.app) as a
 prebuilt output; `--preview` gives a preview URL instead. Needs `apps/web/.vercel/project.json` (`npx vercel@latest link`).
 
 ### Support page
@@ -140,7 +140,7 @@ live backend).
 turns SOL features off and points at a stage's servers:
 
 ```bash
-VITE_STORE_BUILD=1 VITE_API_URL=https://nomad-poker-api-staging.kshitijiitgn.workers.dev VITE_NET_SERVER=https://nomad-poker-game-staging.kshitijiitgn.workers.dev npm run build
+VITE_STORE_BUILD=1 VITE_API_URL=https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev VITE_NET_SERVER=https://nomad-poker-near-game-staging.kshitijiitgn.workers.dev npm run build
 npx cap sync            # copies dist/ into both shells
 npx cap open android    # Android Studio (JDK 21); CI builds a debug APK: .github/workflows/android.yml
 npx cap open ios        # Xcode on a Mac (Swift Package Manager, no CocoaPods)

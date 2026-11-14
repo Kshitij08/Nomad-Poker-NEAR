@@ -7,7 +7,7 @@
 import { DailySpinCatalog, LoginRewardCatalog, MissionCatalog } from '@nomad/engine/retention';
 import type { LedgerResponse, ProgressSnapshot, SessionResponse, SpinResponse, LoginClaimResponse, MissionClaimResponse } from '@nomad/contract';
 
-const base = (process.argv[2] ?? 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev').replace(/\/$/, '');
+const base = (process.argv[2] ?? 'https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev').replace(/\/$/, '');
 let failures = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — ${JSON.stringify(detail)}`}`);

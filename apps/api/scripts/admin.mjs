@@ -11,7 +11,7 @@
 //   cf d1 query <db-id> --sql "INSERT INTO admin_users (player_id, role, added_at) VALUES ('p_…', 'admin', unixepoch()*1000)"
 import { randomUUID } from 'node:crypto';
 
-const APIS = { staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev', production: 'https://nomad-poker-api.kshitijiitgn.workers.dev', local: 'http://localhost:8788' };
+const APIS = { staging: 'https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev', production: 'https://nomad-poker-near-api.kshitijiitgn.workers.dev', local: 'http://localhost:8788' };
 const args = process.argv.slice(2);
 const stageAt = args.indexOf('--stage');
 const stage = stageAt >= 0 ? args.splice(stageAt, 2)[1] : 'staging';
@@ -25,7 +25,7 @@ if (!api || !token) {
 async function call(method, path, body) {
   const res = await fetch(api + path, {
     method,
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', origin: 'https://nomad-poker-web.vercel.app' },
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', origin: 'https://nomad-poker-near.vercel.app' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const json = await res.json().catch(() => null);

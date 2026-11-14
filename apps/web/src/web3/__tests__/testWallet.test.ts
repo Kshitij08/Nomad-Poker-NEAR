@@ -8,7 +8,7 @@ describe('dev test wallet gate', () => {
     expect(testWalletAllowed(false, 'localhost', '', true)).toBe(false);
   });
   it('refuses any host but localhost / 127.0.0.1', () => {
-    expect(testWalletAllowed(true, 'nomad-poker-web.vercel.app', '?testwallet=1')).toBe(false);
+    expect(testWalletAllowed(true, 'nomad-poker-near.vercel.app', '?testwallet=1')).toBe(false);
     expect(testWalletAllowed(true, 'staging.example.com', '?testwallet=1', true)).toBe(false);
     expect(testWalletAllowed(true, '192.168.1.5', '?testwallet=1')).toBe(false);
   });

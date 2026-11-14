@@ -136,7 +136,7 @@ function leaveOrCancel(x: TournamentInfo | null): void {
 }
 
 function shareLink(x: TournamentInfo): string {
-  const origin = typeof location !== 'undefined' ? location.origin : 'https://nomad-poker-web.vercel.app';
+  const origin = typeof location !== 'undefined' ? location.origin : 'https://nomad-poker-near.vercel.app';
   return x.visibility === 'private' && x.joinCode ? `${origin}/?trn=${encodeURIComponent(x.joinCode)}` : origin;
 }
 

@@ -3,8 +3,8 @@ import { buildEndpoint, endpointParam } from '../app/flags';
 
 /** Known game servers for `?netServer=` (fixed addresses, so allowed in any build). */
 export const GAME_SERVER_PRESETS: Record<string, string> = {
-  staging: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev',
-  production: 'https://nomad-poker-game.kshitijiitgn.workers.dev',
+  staging: 'https://nomad-poker-near-game-staging.kshitijiitgn.workers.dev',
+  production: 'https://nomad-poker-near-game.kshitijiitgn.workers.dev',
   local: 'http://localhost:8789',
 };
 

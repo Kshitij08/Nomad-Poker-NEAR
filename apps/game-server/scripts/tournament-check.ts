@@ -15,8 +15,8 @@ import { connectTable } from '../../web/src/net/matchmaking';
 import { headlessClient, type Headless } from '../../web/server/__tests__/headlessClient';
 
 const stage = process.argv[2] ?? 'staging';
-const API = { staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev' }[stage]!;
-const GAME = { staging: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev' }[stage]!;
+const API = { staging: 'https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev' }[stage]!;
+const GAME = { staging: 'https://nomad-poker-near-game-staging.kshitijiitgn.workers.dev' }[stage]!;
 const ENTRY = 500;
 const PRIZE = 2000;
 const CLIENT_SPEED = 4; // client-side animation waits only; the room runs in real time

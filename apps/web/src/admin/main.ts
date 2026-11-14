@@ -8,8 +8,8 @@ import { CURRENCIES, type Currency } from '@nomad/contract';
 import { AdminApi, AdminError, adjustProblem, sessionKey, signed, type AdminRole, type PlayerDetail } from './api';
 
 const PRESETS: Record<string, string> = {
-  staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev',
-  production: 'https://nomad-poker-api.kshitijiitgn.workers.dev',
+  staging: 'https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev',
+  production: 'https://nomad-poker-near-api.kshitijiitgn.workers.dev',
   local: 'http://localhost:8788',
 };
 
