@@ -28,6 +28,11 @@ export interface TableHostOptions {
   tableSettings?: Partial<TableSettings>;
   random?: () => number;
   disconnectGrace?: number;
+  /**
+   * Commit to every deck before the deal and reveal the seed after (PokerServerGameOptions.deckCommitments): the
+   * commitment rides on HandStarted, the reveal lands in the R2 hand record. Off by default (Coins tables).
+   */
+  deckCommitments?: boolean;
   /** How long a failing bookkeeping write is retried (default BOOKKEEPING_RETRY_MS). */
   bookkeepingRetryMs?: number;
 }
@@ -97,6 +102,7 @@ export class TableHost extends RoomHost {
       settings: opts.tableSettings,
       random: opts.random,
       disconnectGrace: opts.disconnectGrace,
+      deckCommitments: opts.deckCommitments,
       onHandSettled: (h) => this.onHandSettled(h),
       agentHooks: this.agents,
       onEngineEvent: (e) => this.style.observe(e),

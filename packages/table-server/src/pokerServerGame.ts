@@ -16,7 +16,8 @@ import { ActionType, PlayerAction, type LegalActions } from '@nomad/engine/actio
 import { HeuristicBot } from '@nomad/engine/bots/heuristicBot';
 import { positionOf, type BotContext } from '@nomad/engine/bots/botContext';
 import { QuickPlayFreeBots } from '@nomad/engine/bots/quickPlayFreeBots';
-import { CryptoRandom, SeededRandom, type IRandom } from '@nomad/engine/cards/random';
+import { CryptoRandom, HmacDrbgRandom, SeededRandom, type IRandom } from '@nomad/engine/cards/random';
+import { deckCommitment, newDeckSeed, type DealtHand, type DeckReveal } from '@nomad/engine/cards/deckCommitment';
 import { PokerEngine } from '@nomad/engine/engine/pokerEngine';
 import {
   TablePhase, type ActionRequestedEvent, type EngineEvent, type HandStartedEvent, type HoleCardsDealtEvent, type PokerEvent, type SeatSnapshot,
@@ -83,6 +84,39 @@ export interface PokerServerGameOptions {
   onHandSettled?: (hand: SettledHand) => void;
   /** Every engine event as the server processes it, before anything is filtered for players (hosts' recorders). */
   onEngineEvent?: (e: EngineEvent) => void;
+  /**
+   * Deck commitments (off by default; Coins tables leave it off and shuffle exactly as before). Before each deal the
+   * table draws a fresh 32-byte seed, shuffles with HmacDrbgRandom(seed), announces the commitment on HandStarted, and
+   * reveals the seed in {@link SettledHand.deck} once the hand is settled, so anyone can check every card afterwards
+   * (verifyDeck in @nomad/engine/cards/deckCommitment). Always on when a {@link handGate} is set. Overrides deckRandom.
+   */
+  deckCommitments?: boolean;
+  /** Where committed tables draw each hand's seed (tests). Default: 32 bytes from crypto.getRandomValues. */
+  deckSeeds?: () => Uint8Array;
+  /**
+   * Tables whose money lives outside the Coins ledger (NEAR escrow): awaited around every hand, and the table plays
+   * without bots. The gate sees the hand's deck commitment before the deal and the settled hand (with the seed reveal)
+   * after; a false from either halts the table.
+   */
+  handGate?: HandGate;
+  /** The ledger's table id (default: a fresh `t-...` id). Escrow tables pass the id their contract knows the table by. */
+  tableId?: string;
+}
+
+/** The commitment a committed table publishes before a deal. */
+export interface DeckCommitmentNotice {
+  tableId: string;
+  handNumber: number;
+  /** SHA-256 commitment, 64 hex chars (deckCommitment in @nomad/engine/cards/deckCommitment). */
+  commitment: string;
+}
+
+/** What a table whose stakes live outside the Coins ledger does around each hand (e.g. a NEAR escrow). */
+export interface HandGate {
+  /** Before each deal, with the commitment to the deck about to be dealt. False: the hand is not dealt and the table halts. */
+  beforeDeal(commit: DeckCommitmentNotice): Promise<boolean>;
+  /** After each hand passes the conservation check, with every seat's change and the deck reveal. False: the table halts. */
+  afterSettle(hand: SettledHand): Promise<boolean>;
 }
 
 export interface SettledHand {
@@ -95,6 +129,8 @@ export interface SettledHand {
   agentDelta: number;
   /** Everyone dealt into the hand: final stack, whether they won a pot, and their showdown hand (HandCategory). */
   stacks: { id: string; seat: number; startStack: number; stack: number; bot: boolean; won: boolean; showdownCategory: number | null }[];
+  /** Committed tables only: the seed behind the commitment announced at HandStarted, and the cards dealt from it. */
+  deck?: DeckReveal;
 }
 
 class SeatOccupant {
@@ -190,6 +226,9 @@ export class PokerServerGame implements IPokerTableServer {
   private showBoard: Card[] = [];
   private readonly shownSeats = new Set<number>();
   private showOpen = false;
+  /** Committed tables: the per-hand reseeded deck RNG, and this hand's seed, commitment and dealt cards. */
+  private deckRng: HmacDrbgRandom | null = null;
+  private handDeck: { tableId: string; handNumber: number; seed: Uint8Array; commitment: string; hole: Map<number, string[]>; board: string[] } | null = null;
 
   private readonly verifiedPlayers = new Map<PlayerRef, string>();
   private readonly avatarsByPlayer = new Map<PlayerRef, number>();
@@ -335,7 +374,13 @@ export class PokerServerGame implements IPokerTableServer {
       { id: 'st' + stake.minBuyIn, displayName: stake.displayName, buyInChips: stake.minBuyIn, smallBlind: stake.smallBlind, bigBlind: stake.bigBlind },
       this.clock,
       this.log,
+      this.opts.tableId,
     );
+  }
+
+  /** Whether this table commits to every deck before dealing it (see {@link PokerServerGameOptions.deckCommitments}). */
+  get commitsDecks(): boolean {
+    return !!(this.opts.deckCommitments || this.opts.handGate);
   }
 
   private applyFreePlayStake(): void {
@@ -348,7 +393,9 @@ export class PokerServerGame implements IPokerTableServer {
   private buildEngine(): void {
     const s = this.settings;
     // Cash tables shuffle with a secure generator (a clock-seeded System.Random let a player search the seed).
-    const rng: IRandom = this.opts.deckRandom ?? (s.useFixedSeed ? new SeededRandom(s.seed) : new CryptoRandom());
+    // Committed tables reseed a deterministic DRBG per hand from a fresh secret seed (see beginCommittedHand).
+    this.deckRng = this.commitsDecks ? new HmacDrbgRandom(newDeckSeed()) : null;
+    const rng: IRandom = this.deckRng ?? this.opts.deckRandom ?? (s.useFixedSeed ? new SeededRandom(s.seed) : new CryptoRandom());
     this.engine = new PokerEngine({ seatCount: s.seatCount, smallBlind: s.smallBlind, bigBlind: s.bigBlind, startingStack: s.startingStack }, rng);
     this.engine.onEvent((e) => {
       this.events.push(e);
@@ -820,6 +867,10 @@ export class PokerServerGame implements IPokerTableServer {
 
   onAddBot(source: PlayerRef): void {
     if (!this.requireOwner(source, 'add a bot')) return;
+    if (this.opts.handGate) {
+      this.log('warn', '[PokerServer] Add bot ignored: gated (escrow) tables seat players only.');
+      return;
+    }
     const seat = this.firstFreeSeat();
     if (seat < 0) {
       this.log('warn', '[PokerServer] Add bot ignored: no free seat.');
@@ -1123,7 +1174,7 @@ export class PokerServerGame implements IPokerTableServer {
   }
 
   private tuneQuickPlayBots(broadcast: boolean): boolean {
-    if (!this.isQuickPlay) return false;
+    if (!this.isQuickPlay || this.opts.handGate) return false;
     let changed = this.fillQuickPlayBotsIfLonely();
     changed = this.reserveEmptySeatForJoiner() || changed;
     if (changed && broadcast) {
@@ -1518,6 +1569,15 @@ export class PokerServerGame implements IPokerTableServer {
       if (this.tryHaltAgentsForOwners() && this.engine.countFundedPlayers() < 2) break;
       if (this.disposed) break;
 
+      const commit = this.beginCommittedHand();
+      const gate = this.opts.handGate;
+      if (gate && commit && !(await this.safeGate(() => gate.beforeDeal(commit), 'beforeDeal'))) {
+        this.handDeck = null;
+        this.economy?.halt("the escrow's hand could not be opened");
+        break;
+      }
+      if (this.disposed) break;
+
       this.renderBudget = 0;
       this.settleOpen = true; // seats stay locked until the hand is settled (see settleOpen)
       this.engine.startHand();
@@ -1525,8 +1585,11 @@ export class PokerServerGame implements IPokerTableServer {
       if (this.disposed) break;
 
       // Settle even when the hand ended the game: chips moved.
-      await this.settleChipHand();
+      const settled = await this.settleChipHand();
+      this.handDeck = null;
+      if (gate && settled && !(await this.safeGate(() => gate.afterSettle(settled), 'afterSettle'))) this.economy?.halt('the hand could not be settled in escrow');
       this.closeSettle();
+      if (gate && this.economy?.isHalted) break;
 
       this.completeAgentHandTelemetry();
       this.evaluateAgentLimitsAfterHand();
@@ -1556,6 +1619,46 @@ export class PokerServerGame implements IPokerTableServer {
     this.log('info', '[PokerServer] Game over; table back in lobby control.');
   }
 
+  /**
+   * Committed tables: draws the next hand's seed, reseeds the deck RNG with it and computes the commitment, all before
+   * the engine shuffles. Null on ordinary tables.
+   *
+   * NEAR: this commitment is what a NEAR money ledger (the escrow behind HandGate, or a ChipLedger for NEAR stakes;
+   * see ledger.ts) records before the deal, and SettledHand.deck is the reveal it checks at settlement.
+   */
+  private beginCommittedHand(): DeckCommitmentNotice | null {
+    this.handDeck = null;
+    if (!this.deckRng) return null;
+    const seed = this.opts.deckSeeds ? this.opts.deckSeeds() : newDeckSeed();
+    const tableId = this.economy?.tableId ?? this.opts.tableId ?? '';
+    const handNumber = this.engine.table.handNumber + 1; // PokerEngine.startHand increments it before the shuffle
+    const commitment = deckCommitment(seed, tableId, handNumber);
+    this.deckRng.reseed(seed);
+    this.handDeck = { tableId, handNumber, seed: seed.slice(), commitment, hole: new Map(), board: [] };
+    return { tableId, handNumber, commitment };
+  }
+
+  /** The seed reveal for the hand just played (committed tables), or undefined. */
+  private deckReveal(): DeckReveal | undefined {
+    const d = this.handDeck;
+    if (!d || d.handNumber !== this.engine.table.handNumber) return undefined;
+    const dealt: DealtHand = {
+      holeCards: [...d.hole].sort((a, b) => a[0] - b[0]).map(([seat, cards]) => ({ seat, cards })),
+      board: [...d.board],
+    };
+    return { tableId: d.tableId, handNumber: d.handNumber, seed: toHex(d.seed), commitment: d.commitment, dealt };
+  }
+
+  /** A hand gate that throws counts as a refusal (logged): the table halts rather than play an unrecorded hand. */
+  private async safeGate(fn: () => Promise<boolean>, what: string): Promise<boolean> {
+    try {
+      return await fn();
+    } catch (e) {
+      this.log('error', `[PokerServer] hand gate ${what} threw: ${(e as Error)?.message ?? e}`);
+      return false;
+    }
+  }
+
   private captureStacksAtHandStart(): void {
     this.stacksAtHandStart.clear();
     for (const p of this.engine.table.seats) {
@@ -1568,8 +1671,8 @@ export class PokerServerGame implements IPokerTableServer {
    * Closes out a finished hand: the conservation INVARIANT (asserted — halts the table), the HOUSE DELTA (logged), and
    * a checkpoint of every funded human's stack.
    */
-  private async settleChipHand(): Promise<void> {
-    if (this.stacksAtHandStart.size === 0) return;
+  private async settleChipHand(): Promise<SettledHand | null> {
+    if (this.stacksAtHandStart.size === 0) return null;
     let humanDelta = 0;
     let botDelta = 0;
     let agentDelta = 0;
@@ -1588,33 +1691,37 @@ export class PokerServerGame implements IPokerTableServer {
       this.stacksAtHandStart.clear();
       this.log('error', `[PokerServer] Chip conservation broken: off by ${off}. Humans ${humanDelta}, bots ${botDelta}, Agents ${agentDelta}, engine pot still holds ${residual}.${report.join('')}`);
       this.economy?.halt(`chips are not conserved (off by ${off}) — see the seat breakdown above`);
-      return;
+      return null;
     }
+    const settled: SettledHand = {
+      tableId: this.economy?.tableId ?? null,
+      handNumber: this.engine.table.handNumber,
+      botDelta,
+      humanDelta,
+      agentDelta,
+      stacks: [...this.stacksAtHandStart.keys()].map((id) => {
+        const seat = this.seatOfPlayer(id);
+        return { id, seat, startStack: this.stacksAtHandStart.get(id) ?? 0, stack: this.stackOfPlayer(id), bot: isBotId(id), won: this.handWinners.has(seat), showdownCategory: this.handShowdown.get(seat) ?? null };
+      }),
+    };
+    const deck = this.deckReveal();
+    if (deck) settled.deck = deck;
     try {
-      this.opts.onHandSettled?.({
-        tableId: this.economy?.tableId ?? null,
-        handNumber: this.engine.table.handNumber,
-        botDelta,
-        humanDelta,
-        agentDelta,
-        stacks: [...this.stacksAtHandStart.keys()].map((id) => {
-          const seat = this.seatOfPlayer(id);
-          return { id, seat, startStack: this.stacksAtHandStart.get(id) ?? 0, stack: this.stackOfPlayer(id), bot: isBotId(id), won: this.handWinners.has(seat), showdownCategory: this.handShowdown.get(seat) ?? null };
-        }),
-      });
+      this.opts.onHandSettled?.(settled);
     } catch (e) {
       this.log('error', `[PokerServer] onHandSettled failed: ${(e as Error)?.message ?? e}`);
     }
     if (botDelta !== 0)
       this.log('info', `[Economy] house delta ${-botDelta > 0 ? '+' : ''}${-botDelta} (table ${this.economy?.tableId ?? 'legacy-free'}, hand ${this.engine.table.handNumber})`);
     this.stacksAtHandStart.clear();
-    if (!this.economy) return;
+    if (!this.economy) return settled;
     for (const [seat, occ] of this.humans) {
       if (!occ.funded || !occ.playFabId) continue;
       const p = this.engine.table.seats[seat]!;
       if (!occ.dealtIn || !p.isOccupied) continue;
       await this.economy.checkpoint(occ.playFabId, seat, p.stack, this.engine.table.handNumber);
     }
+    return settled;
   }
 
   private closeSettle(): void {
@@ -1708,6 +1815,7 @@ export class PokerServerGame implements IPokerTableServer {
       }
       switch (e.type) {
         case 'HandStarted':
+          if (this.handDeck && this.handDeck.handNumber === e.handNumber) e.deckCommitment = this.handDeck.commitment;
           this.handWinners.clear();
           this.handShowdown.clear();
           this.showHole.clear();
@@ -1723,6 +1831,7 @@ export class PokerServerGame implements IPokerTableServer {
           const agent = this.agentAt(e.seat);
           if (agent) agent.holeCards = `${e.card0.short} ${e.card1.short}`;
           this.showHole.set(e.seat, [e.card0, e.card1]);
+          this.handDeck?.hole.set(e.seat, [e.card0.short, e.card1.short]);
           this.replicateHoleCards(e);
           this.renderBudget += this.settings.dealDelay;
           break;
@@ -1740,6 +1849,7 @@ export class PokerServerGame implements IPokerTableServer {
         case 'CommunityDealt':
           if (this.agents.length > 0) this.agentBoardCards = e.board.map((c) => c.short).join(' ');
           this.showBoard = [...e.board];
+          if (this.handDeck) this.handDeck.board = e.board.map((c) => c.short);
           this.replicate(e);
           this.renderBudget += this.settings.dealSettleDelay;
           break;
@@ -1915,6 +2025,7 @@ export class PokerServerGame implements IPokerTableServer {
     }
     this.sendCatchUp(player, {
       type: 'HandStarted', handNumber: table.handNumber, buttonSeat: table.buttonSeat, smallBlindSeat: table.smallBlindSeat, bigBlindSeat: table.bigBlindSeat, seats,
+      ...(this.handDeck?.handNumber === table.handNumber ? { deckCommitment: this.handDeck.commitment } : {}),
     } satisfies HandStartedEvent);
 
     const recipientSeat = this.seatOf(player);
@@ -2161,3 +2272,9 @@ function snapshot(o: Partial<SeatSnapshot>): SeatSnapshot {
 
 /** Exposed for the tournament porter: the Test.unity stake ladder default. */
 export const DEFAULT_STAKE = StakeCatalog.Default;
+
+function toHex(bytes: Uint8Array): string {
+  let s = '';
+  for (const b of bytes) s += b.toString(16).padStart(2, '0');
+  return s;
+}

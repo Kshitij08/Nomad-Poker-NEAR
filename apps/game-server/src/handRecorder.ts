@@ -1,3 +1,4 @@
+import type { DeckReveal } from '@nomad/engine/cards/deckCommitment';
 import type { SettledHand } from '@nomad/table-server/pokerServerGame';
 
 /**
@@ -15,6 +16,11 @@ export interface RecordedHand {
   botDelta: number;
   humanDelta: number;
   stacks: SettledHand['stacks'];
+  /**
+   * Committed tables only: the seed behind the commitment the hand's HandStarted carried, and every card dealt.
+   * Check it with verifyDeck (@nomad/engine/cards/deckCommitment).
+   */
+  deck?: DeckReveal;
   /** [recipient PlayerRef or 0 for everyone, base64 event payload], in send order. */
   events: [number, string][];
 }
@@ -50,6 +56,7 @@ export class HandRecorder {
       botDelta: h.botDelta,
       humanDelta: h.humanDelta,
       stacks: h.stacks,
+      ...(h.deck ? { deck: h.deck } : {}),
       events: this.events,
     });
     this.events = [];

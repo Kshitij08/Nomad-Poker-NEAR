@@ -1,3 +1,6 @@
+import { hmac } from '@noble/hashes/hmac';
+import { sha256 } from '@noble/hashes/sha2';
+
 /**
  * Randomness abstraction so the engine never touches a global RNG. Port of Core/Cards/IRandom.cs,
  * SeededRandom.cs and CryptoRandom.cs, plus {@link DotNetRandom}: a bit-exact port of .NET's seeded
@@ -117,6 +120,89 @@ export class CryptoRandom implements IRandom {
       if (v < limit) return v % maxExclusive;
     }
   }
+}
+
+/**
+ * A seedable, cryptographically secure IRandom: HMAC-DRBG over SHA-256 (NIST SP 800-90A, no prediction resistance,
+ * no additional input). The same seed always yields the same stream, so a deck shuffled with it can be replayed from
+ * the seed alone — the basis of deck commitments (see deckCommitment.ts). Draws are uniform via rejection sampling
+ * on 32-bit big-endian words, exactly like {@link CryptoRandom}.
+ *
+ * Seed it with at least 32 bytes of real entropy, and {@link reseed} it before every hand: one seed, one deck.
+ */
+export class HmacDrbgRandom implements IRandom {
+  /** Bytes pulled from the generator per refill (two SHA-256 blocks). */
+  private static readonly BlockBytes = 64;
+  private k = new Uint8Array(32);
+  private v = new Uint8Array(32);
+  private buf = new Uint8Array(0);
+  private pos = 0;
+
+  constructor(seed: Uint8Array) {
+    this.reseed(seed);
+  }
+
+  /** Starts a fresh stream from `seed` (a full re-instantiation: nothing of the previous stream carries over). */
+  reseed(seed: Uint8Array): void {
+    if (!(seed instanceof Uint8Array) || seed.length < 16) throw new RangeError('HmacDrbgRandom needs a seed of at least 16 bytes.');
+    this.k = new Uint8Array(32);
+    this.v = new Uint8Array(32).fill(0x01);
+    this.update(seed);
+    this.buf = new Uint8Array(0);
+    this.pos = 0;
+  }
+
+  next(maxExclusive: number): number {
+    if (!(maxExclusive > 0)) throw new RangeError(`maxExclusive must be positive, got ${maxExclusive}.`);
+    if (maxExclusive === 1) return 0;
+    const limit = Math.floor(0x100000000 / maxExclusive) * maxExclusive;
+    for (;;) {
+      const v = this.nextUint32();
+      if (v < limit) return v % maxExclusive;
+    }
+  }
+
+  private nextUint32(): number {
+    if (this.pos + 4 > this.buf.length) {
+      this.buf = this.generate(HmacDrbgRandom.BlockBytes);
+      this.pos = 0;
+    }
+    const b = this.buf;
+    const p = this.pos;
+    this.pos += 4;
+    return ((b[p]! << 24) | (b[p + 1]! << 16) | (b[p + 2]! << 8) | b[p + 3]!) >>> 0;
+  }
+
+  /** HMAC_DRBG_Update. */
+  private update(data: Uint8Array | null): void {
+    this.k = hmac(sha256, this.k, concat(this.v, [0x00], data));
+    this.v = hmac(sha256, this.k, this.v);
+    if (!data || data.length === 0) return;
+    this.k = hmac(sha256, this.k, concat(this.v, [0x01], data));
+    this.v = hmac(sha256, this.k, this.v);
+  }
+
+  /** HMAC_DRBG_Generate. */
+  private generate(n: number): Uint8Array {
+    const out = new Uint8Array(n);
+    let off = 0;
+    while (off < n) {
+      this.v = hmac(sha256, this.k, this.v);
+      const take = Math.min(this.v.length, n - off);
+      out.set(this.v.subarray(0, take), off);
+      off += take;
+    }
+    this.update(null);
+    return out;
+  }
+}
+
+function concat(a: Uint8Array, sep: number[], b: Uint8Array | null): Uint8Array {
+  const out = new Uint8Array(a.length + sep.length + (b?.length ?? 0));
+  out.set(a, 0);
+  out.set(sep, a.length);
+  if (b) out.set(b, a.length + sep.length);
+  return out;
 }
 
 function randomInt32(): number {
