@@ -31,7 +31,7 @@ export interface Peer {
   player: PlayerRef;
 }
 
-export type RoomKind = 'quick' | 'private' | 'tournament';
+export type RoomKind = 'quick' | 'private' | 'tournament' | 'side';
 
 export interface RoomSpec {
   name: string;
@@ -55,6 +55,7 @@ export class Room implements TableNet {
   private emptySince: number;
   private readonly voice = new Set<PlayerRef>();
   private readonly chatLimiters = new Map<PlayerRef, PokerChatRateLimiter>();
+  private readonly reactionLimiters = new Map<PlayerRef, PokerChatRateLimiter>();
   private readonly tokens = new Map<PlayerRef, string>();
   closed = false;
 
@@ -146,6 +147,7 @@ export class Room implements TableNet {
     this.players.delete(player);
     this.watchers.delete(player);
     this.chatLimiters.delete(player);
+    this.reactionLimiters.delete(player);
     this.tokens.delete(player);
     peer.room = null;
     peer.player = PLAYER_NONE;
@@ -231,6 +233,17 @@ export class Room implements TableNet {
         case 'chat':
           this.relayChat(peer, m.name, m.body);
           break;
+        case 'sideReaction': {
+          // Side channels only (a table played elsewhere): 4 at once, one more every 1.5 s, like table reactions.
+          let lim = this.reactionLimiters.get(p);
+          if (!lim) this.reactionLimiters.set(p, (lim = new PokerChatRateLimiter(4, 1.5)));
+          if (!lim.tryConsume(this.clock.now())) break;
+          const seat = num(m.seat);
+          const id = num(m.id) & 0xff;
+          if (seat < 0 || seat > 15) break;
+          for (const other of this.players.values()) if (other !== peer) other.sendJson({ t: 'sideReaction', from: p, seat, id });
+          break;
+        }
         case 'voiceJoin':
           this.voiceJoin(peer);
           break;

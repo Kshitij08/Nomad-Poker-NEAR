@@ -22,6 +22,9 @@ export interface Env {
   DRAIN_TOKEN?: string;
   /** Spawns, overflow lookups and Agent starts per address. Optional so tests can leave it out. */
   HTTP_LIMITER?: RateLimit;
+  /** Cloudflare Realtime TURN key (id + secret): short-lived relay credentials for table voice (/v1/voice/ice). */
+  TURN_KEY_ID?: string;
+  TURN_KEY_TOKEN?: string;
   /** Operator alerts (src/alerts.ts): Email Service binding, sender and the owner's inbox (a secret). Production only. */
   ALERT_EMAIL?: SendEmail;
   ALERT_FROM?: string;

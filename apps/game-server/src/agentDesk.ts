@@ -77,6 +77,7 @@ export class AgentDesk implements AgentHooks {
       ownerPlayFabId: row.owner_id,
       agentName: row.agent_name,
       bankroll: row.bankroll,
+      stopLoss: row.stop_loss,
       strategyPreset: row.profile,
       profile: resolveAgentProfile(config),
     });

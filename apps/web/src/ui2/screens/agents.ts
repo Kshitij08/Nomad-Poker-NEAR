@@ -473,7 +473,11 @@ function fetchSol(l: Load, title: string, path: string, signed = false, data: J 
     l.data = j;
     l.state = 'ok';
     ui().render();
-  }, signed, data);
+  }, signed, data, (message) => {
+    l.state = 'error';
+    l.error = message || "Couldn't load the marketplace.";
+    ui().render();
+  });
 }
 
 function loadBody(l: Load, icon: string): string | null {

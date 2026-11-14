@@ -14,6 +14,8 @@
  * Tournament tables (M11 TourneyLoop) are recognised (no cash-out, "Back to lobby") but the tourney loop itself —
  * seating rounds, syncing, moving tables — is not driven here yet (see the module report).
  */
+import { PerSideChannel } from './perSideChannel';
+import { cloudGameServer } from '../../net/serverUrl';
 import {
   ActionType, BettingRound, Card, PokerSound, TableEventPresenter, TableMoney, type BettingPanelPort, type PokerEvent,
   type SeatRole, type TableRosterEvent, type TableViewPort, type TurnStartedEvent,
@@ -27,7 +29,7 @@ import type { PerEntry, PerSeat } from './entry';
 import { PerIx } from './ix';
 import { PerSessionKeys } from './keys';
 import { PerGame } from './legal';
-import { sol } from './money';
+import { solTable } from './money';
 import { LocalSigner, PerUnauthorized, TeeAuth } from './rpc';
 import { PerTableSession } from './tableSession';
 import { decode } from './types';
@@ -157,6 +159,8 @@ export class PerTableController implements TableSession {
   private promptAbort: AbortController | null = null;
   private hud: PerHud | null = null;
   private wake: (() => void) | null = null;
+  private side: PerSideChannel | null = null;
+  private sideOpen = false;
 
   constructor(
     private readonly deps: PerTableDeps,
@@ -173,6 +177,11 @@ export class PerTableController implements TableSession {
     perControllers.set(host, this);
   }
 
+  /** Chat and reactions for this table, through the game server's side room (null until it is open). */
+  get sideChannel(): { chat: PerSideChannel['chat']; reactions: PerSideChannel } | null {
+    return this.side && this.sideOpen ? { chat: this.side.chat, reactions: this.side } : null;
+  }
+
   get isTournament(): boolean {
     return this.seat.tourney !== null;
   }
@@ -182,8 +191,8 @@ export class PerTableController implements TableSession {
   }
 
   start(): void {
-    // Stacks, bets and the pot are lamports here: the table writes them as dollars.
-    TableMoney.custom = (v) => sol(BigInt(Math.max(0, Math.trunc(v))));
+    // Stacks, bets and the pot are lamports here: the table writes them in SOL ("◎0.0125").
+    TableMoney.custom = (v) => solTable(BigInt(Math.max(0, Math.trunc(v))));
     this.view.showMessage(this.isTournament ? 'Tournament · waiting for the round to start…' : 'Private table · waiting for players…');
     const handlers = {
       onVerify: () => this.verifyText(),
@@ -194,8 +203,28 @@ export class PerTableController implements TableSession {
     const nomad = this.host.ctx.services.nomad;
     const layer = document.querySelector<HTMLElement>('[data-screen="table"]');
     this.hud = nomad && layer ? new NomadPerTableHud(nomad, layer, handlers) : new PerTableHud(this.host, handlers);
+    this.openSideChannel();
     void this.loop();
     void this.pump();
+  }
+
+  /** Chat and reactions: the side room on the game server (none when this build has no game server). */
+  private openSideChannel(): void {
+    const base = cloudGameServer(this.host.ctx.params);
+    if (!base) return;
+    const net = (this.host.ctx.services as unknown as { net?: { chatUserId?: string; identity?: { playerName?: string } } }).net;
+    const wallet = this.seat.wallet.toBase58();
+    this.side = new PerSideChannel(
+      base,
+      this.seat.table.toBase58(),
+      () => this.session.mySeat,
+      (seat, id) => this.view.showReaction(seat, id),
+      net?.chatUserId ?? `sol-${wallet.slice(0, 8)}`,
+      () => net?.identity?.playerName || `${wallet.slice(0, 4)}…${wallet.slice(-4)}`,
+    );
+    void this.side.open().then((ok) => {
+      this.sideOpen = ok && !this.stopped;
+    });
   }
 
   stop(): void {
@@ -206,6 +235,9 @@ export class PerTableController implements TableSession {
   }
 
   private cleanup(): void {
+    this.side?.close();
+    this.side = null;
+    this.sideOpen = false;
     TableMoney.custom = null;
     this.hud?.dispose();
     this.hud = null;

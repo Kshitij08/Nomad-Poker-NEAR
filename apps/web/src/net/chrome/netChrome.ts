@@ -80,6 +80,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
     let local: { chat: LocalChat; reactions: LocalReactions } | null = null;
     let offGame: (() => void) | null = null;
     let boundGame: ClientGame | null = null;
+    let boundSide: ChatPort | null = null;
     const bind = (s: NetTableSession | null) => {
       if (s === session && s?.game === boundGame) {
         refresh();
@@ -98,7 +99,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
         });
         s.game.privateBuyInPrompt = (g) => openPrivateBuyIn(slots, g, service, ctx);
         service.privateBuyInPrompt = s.game.privateBuyInPrompt;
-        bindSeatMic(s);
+        bindSeatMic(s, slots.layer);
       }
       refresh();
     };
@@ -115,6 +116,21 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
     };
 
     const refresh = () => {
+      // A table with its own side channel (on-chain tables): its chat and reactions.
+      const side = !session ? (host.session?.sideChannel as { chat: ChatPort; reactions: ReactionPort } | null | undefined) : null;
+      if (side) {
+        if (boundSide !== side.chat) {
+          boundSide = side.chat;
+          chat.bind(side.chat as TableChat);
+        }
+        chat.setLive(true);
+        reactions.render(side.reactions);
+        lobby.render(null);
+        invite.render(null);
+        chat.render();
+        banner.hidden = true;
+        return;
+      }
       if (!session && host.session?.localPlayerSeated) {
         if (!local) {
           local = { chat: new LocalChat(() => service.identity.playerName), reactions: new LocalReactions(host) };
@@ -904,7 +920,7 @@ const MIC_COLORS = {
 };
 
 /** PokerSeatMic on the local seat: click mutes (or retries a refused mic); the circle shows the link state. */
-function bindSeatMic(s: NetTableSession): void {
+function bindSeatMic(s: NetTableSession, layer: HTMLElement): void {
   const voice = s.voice;
   if (!voice) return;
   const paint = () => {
@@ -917,6 +933,10 @@ function bindSeatMic(s: NetTableSession): void {
       mic.el.addEventListener('click', (e) => {
         e.stopPropagation();
         if (voice.canRetry) voice.retry();
+        else if (!voice.micOn)
+          void voice.enableMic().then((ok) => {
+            if (!ok) tableToast(layer, 'Microphone blocked: allow it in your browser to talk. You can still hear the table.');
+          });
         else voice.toggleMute();
       });
     }

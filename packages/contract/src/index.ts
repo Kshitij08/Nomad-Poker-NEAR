@@ -401,6 +401,9 @@ export interface LeaderboardRowInfo {
   displayName: string;
   score: number;
   isLocal: boolean;
+  /** Agents board: the Agent's owner and the hands it played this week. */
+  ownerName?: string;
+  hands?: number;
 }
 
 export interface LeaderboardPage {

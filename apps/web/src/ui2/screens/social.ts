@@ -386,6 +386,7 @@ const KINDS: [string, string, LeaderboardKind][] = [
   ['monthly', 'Monthly', LeaderboardKind.SeasonEarnings],
   ['hands', 'Hands', LeaderboardKind.HandsWon],
   ['friends', 'Friends', LeaderboardKind.FriendsWeekly],
+  ['agents', 'Agents', LeaderboardKind.AgentsWeekly],
 ];
 const CROWN = ['#ffc21f', '#d6dde8', '#e09a5a'];
 
@@ -428,6 +429,7 @@ const leaderboard: ScreenDef & { tab: string; board: LeaderboardSnapshot | null;
   render() {
     const kind = KINDS.find((k) => k[0] === this.tab)![2];
     const hands = kind === LeaderboardKind.HandsWon;
+    const agents = kind === LeaderboardKind.AgentsWeekly;
     // Say what the score is: it's Coins won in the period (not your balance), or hands won.
     const col = hands ? 'Hands won' : 'Coins won';
     let body: string;
@@ -444,17 +446,22 @@ const leaderboard: ScreenDef & { tab: string; board: LeaderboardSnapshot | null;
             const i = r.rank - 1;
             const g = i < 3 ? ` g${i + 1}` : '';
             const rank = i < 3 ? ico('crown', 1.6, `color:${CROWN[i]}`) : `<b>${r.rank}</b>`;
+            if (agents) {
+              // An Agent: its name, whose it is and the hands it played this week; the owner's picture.
+              const sub = `${r.ownerName ? `by ${r.ownerName}` : ''}${r.hands ? ` · ${formatN0(r.hands)} hands` : ''}`;
+              return `<div class="v2-lbr${g}${r.isLocal ? ' you' : ''}"><span class="v2-lb-rank">${rank}</span><span class="v2-row" style="gap:.6em;min-width:0">${avatar('xs', r.isLocal ? avatarUrl() : avatarFor(r.ownerName ?? r.displayName))}<span class="v2-col" style="min-width:0;line-height:1.15"><span class="v2-ellip">${ico('robot', 0.95)} ${esc(r.displayName)}</span><span class="v2-xs v2-mut v2-ellip">${esc(sub)}</span></span>${r.isLocal ? '<span class="v2-pill gold">Yours</span>' : ''}</span><b class="v2-num ${r.score < 0 ? 'v2-badc' : ''}" style="text-align:right">${r.score > 0 ? '+' : ''}${formatN0(r.score)}</b></div>`;
+            }
             return `<div class="v2-lbr${g}${r.isLocal ? ' you' : ''}"><span class="v2-lb-rank">${rank}</span><span class="v2-row" style="gap:.6em;min-width:0">${avatar('xs', r.isLocal ? avatarUrl() : avatarFor(r.displayName))}<span class="v2-ellip">${esc(r.displayName)}</span>${r.isLocal ? '<span class="v2-pill gold">You</span>' : ''}</span><b class="v2-num" style="text-align:right">${formatN0(r.score)}</b></div>`;
           }).join('')
-        : `<div class="v2-empty">${ico('podium', 5)}${this.loading ? 'Loading…' : kind === LeaderboardKind.FriendsWeekly ? 'Add friends to see how you rank against them.' : 'No scores yet this period.'}</div>`;
+        : `<div class="v2-empty">${ico(agents ? 'robot' : 'podium', 5)}${this.loading ? 'Loading…' : kind === LeaderboardKind.FriendsWeekly ? 'Add friends to see how you rank against them.' : agents ? 'No Agent has played a hand this week.' : 'No scores yet this period.'}${agents && !this.loading ? btn('Deploy your Agent', 'go', { h: 'gold', v: 'ag-overview' }) : ''}</div>`;
       // A near-empty board says how to climb it instead of leaving a big empty panel.
-      const hint = rows.length > 0 && rows.length < 3 && !this.loading
+      const hint = rows.length > 0 && rows.length < 3 && !this.loading && !agents
         ? `<div class="v2-empty v2-lb-hint">${kind === LeaderboardKind.FriendsWeekly ? 'Add friends to see how you rank against them.' : hands ? 'Win hands this week to climb the board.' : 'Win Coins at the tables this week to climb the board.'}${kind === LeaderboardKind.FriendsWeekly ? btn('Add friends', 'go', { h: 'violet', v: 'friends' }) : btn('Play a hand', 'go', { h: 'gold', v: 'main' })}</div>`
         : '';
       const rank = b?.localRank ?? 0;
-      body = `<div class="v2-lbr hdr"><span>Rank</span><span>Player</span><span style="text-align:right">${esc(col)}</span></div>
+      body = `<div class="v2-lbr hdr"><span>Rank</span><span>${agents ? 'Agent' : 'Player'}</span><span style="text-align:right">${esc(agents ? 'Coins won' : col)}</span></div>
 <div class="v2-col v2-scroll v2-grow v2-lb-list">${list}${hint}</div>
-${rows.some((r) => r.isLocal) ? `<div class="v2-lbdiv"></div><div class="v2-lbnote">${kind === LeaderboardKind.SeasonEarnings ? 'Season standings' : 'Resets every Monday (UTC)'}</div>` : `<div class="v2-lbdiv"><span>Your rank</span></div><div class="v2-lbnote">${kind === LeaderboardKind.SeasonEarnings ? 'Season standings' : 'Resets every Monday (UTC)'}</div>
+${agents && !rows.some((r) => r.isLocal) ? `<div class="v2-lbdiv"></div><div class="v2-lbnote">Ranked by Coins won at Coins tables this week · resets every Monday (UTC)${rank > 0 ? ` · your best Agent is #${rank}` : ''}</div>` : rows.some((r) => r.isLocal) ? `<div class="v2-lbdiv"></div><div class="v2-lbnote">${kind === LeaderboardKind.SeasonEarnings ? 'Season standings' : 'Resets every Monday (UTC)'}</div>` : `<div class="v2-lbdiv"><span>Your rank</span></div><div class="v2-lbnote">${kind === LeaderboardKind.SeasonEarnings ? 'Season standings' : 'Resets every Monday (UTC)'}</div>
 <div class="v2-lbr you"><span class="v2-lb-rank"><b>${rank > 0 ? rank : '–'}</b></span><span class="v2-row" style="gap:.6em;min-width:0">${avatar('xs')}<span class="v2-ellip">${esc(playerName())}</span><span class="v2-pill gold">You</span></span><b class="v2-num" style="text-align:right">${formatN0(FreePlayLeaderboard.localScore(kind))}</b></div>`}`;
     }
     return `${topBar('Leaderboard')}

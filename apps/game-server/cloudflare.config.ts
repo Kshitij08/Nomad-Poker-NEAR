@@ -63,6 +63,9 @@ export default defineConfig(({ mode }) => {
         QA_ROOMS: bindings.text(s.qa ? '1' : ''),
         QA_ROOM_SPEED: bindings.text('20'),
         DRAIN_TOKEN: bindings.secret(),
+        // Table voice relay (Cloudflare Realtime TURN key "nomad-poker voice"), from .secrets.<stage>.json.
+        TURN_KEY_ID: bindings.secret(),
+        TURN_KEY_TOKEN: bindings.secret(),
         // Room spawns, overflow lookups and Agent starts: 30 a minute per address.
         HTTP_LIMITER: bindings.rateLimit({ namespace: s.limiter, simple: { limit: 30, period: 60 } }),
         // Operator alerts by email (src/alerts.ts): ledger problems, tables that gave up, a daily all-clear. The inbox is

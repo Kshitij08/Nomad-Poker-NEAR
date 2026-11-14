@@ -59,7 +59,14 @@ export class NetTableSession implements TableSession {
     this.chat = new TableChat(this.conn, this.service.chatUserId, () => this.service.identity.playerName);
     this.bind(this.conn);
     if (this.service.voiceEnabled) {
-      this.voice = new TableVoice(this.conn, (talking, muted) => this.game?.sendVoiceState(talking, muted));
+      const cloud = /^https?:\/\//i.test(this.service.serverUrl) ? this.service.serverUrl.replace(/\/+$/, '') : null;
+      const fetchIce = cloud
+        ? async () => {
+            const r = await fetch(`${cloud}/v1/voice/ice`, { method: 'POST' });
+            return r.ok ? (((await r.json()) as { iceServers?: RTCIceServer[] }).iceServers ?? null) : null;
+          }
+        : null;
+      this.voice = new TableVoice(this.conn, (talking, muted) => this.game?.sendVoiceState(talking, muted), fetchIce);
       void this.voice.join();
     }
     this.service.setCurrent(this);
@@ -318,7 +325,8 @@ export class NetService {
     this.cloud = /^https?:\/\//i.test(this.serverUrl);
     this.wallet = browserWallet(ctx);
     this.identity = browserIdentity(ctx, this.wallet, this.cloud);
-    this.voiceEnabled = ctx.params.get('voice') === '1';
+    // Table voice is on unless ?voice=0 (it joins listen-only; the mic is opt-in).
+    this.voiceEnabled = ctx.params.get('voice') !== '0';
     // TournamentsHud.JoinAsync → Connection.ConnectAsync(session): the tournaments module calls this.
     // FriendInvites: an accepted invite joins the inviter's session.
     econ(ctx).friends?.setJoinHandler?.(async (invite) => {

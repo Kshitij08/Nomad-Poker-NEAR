@@ -38,7 +38,7 @@ function setInvitesKeyed(t: PerTableAddresses, hostKey: PlayKey, wallets: readon
 }
 
 export const PerHost = {
-  /** The game shows SOL amounts in "$" at this scale: $1 = 0.0001 SOL (devnet play money). */
+  /** The stake ladder's unit, 0.0001 SOL (the game shows amounts in SOL: per/money.ts). */
   LAMPORTS_PER_DOLLAR,
   /** The program's buy-in cap (config max_buy_in: 1 SOL). */
   BUY_IN_CAP,

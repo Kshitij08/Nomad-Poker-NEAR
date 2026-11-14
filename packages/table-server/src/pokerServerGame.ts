@@ -31,6 +31,7 @@ import { StakeCatalog, type StakeTier } from '@nomad/engine/stakes/stakes';
 import { BettingRound, PlayerStatus } from '@nomad/engine/state/state';
 import { PokerChatRateLimiter } from './chat';
 import { ChainTableMode } from './sessions';
+import { capToBudget } from './agentBudget';
 import {
   AgentStopReasons, maxAgentsPerTable, newAgentSession, type AgentDeploymentConfig, type AgentHooks, type AgentSession,
 } from './agents';
@@ -1343,11 +1344,33 @@ export class PokerServerGame implements IPokerTableServer {
     const name = c.agentName || 'Agent';
     const stack = c.bankroll > 0 ? c.bankroll : this.settings.startingStack;
     this.engine.seatPlayer(seat, `agent-${c.deploymentId}`, name, true, stack, true);
-    this.router.set(seat, new BotActionProvider(bot, this.settings.botThinkMin, this.settings.botThinkMax, this.botWait, this.random));
+    const provider = new BotActionProvider(bot, this.settings.botThinkMin, this.settings.botThinkMax, this.botWait, this.random);
+    // The stop loss is a hard limit: every action is cut to what the Agent can still lose (agentBudget.ts).
+    agent.stopFloor = c.stopLoss && c.stopLoss > 0 ? stack - c.stopLoss : undefined;
+    this.router.set(
+      seat,
+      agent.stopFloor === undefined
+        ? provider
+        : {
+            requestAction: (request, submit, signal) =>
+              provider.requestAction(request, (a) => submit(this.capAgentAction(agent, request, a)), signal),
+          },
+    );
     agent.seat = seat;
     agent.lastStack = stack;
     this.agents.push(agent);
     this.log('info', `[PokerServer] Seated AFK agent '${name}' at seat ${seat} stack=${stack} preset=${c.strategyPreset ?? ''}.`);
+  }
+
+  /** The bot's action cut to what the Agent may still put in this hand without crossing its stop loss. */
+  private capAgentAction(agent: AgentSession, request: ActionRequest, a: PlayerAction): PlayerAction {
+    const floor = agent.stopFloor;
+    const p = this.engine?.table.seats[agent.seat];
+    if (floor === undefined || !p) return a;
+    const remaining = agent.handStartingStack - floor - p.totalCommitted;
+    const capped = capToBudget(a, request.legal, p.currentBet, p.stack, remaining);
+    if (capped !== a) this.log('info', `[PokerServer] Agent '${agent.config.agentName}' kept within its stop loss: ${PlayerAction.toString(a)} → ${PlayerAction.toString(capped)}.`);
+    return capped;
   }
 
   private currentAgentStack(agent: AgentSession): number {
@@ -1388,7 +1411,9 @@ export class PokerServerGame implements IPokerTableServer {
       agent.inHand = false;
       const stack = this.currentAgentStack(agent);
       agent.lastStack = stack;
-      const reason = this.opts.agentHooks?.evaluateAfterHand?.(agent, stack) ?? null;
+      let reason = this.opts.agentHooks?.evaluateAfterHand?.(agent, stack) ?? null;
+      // A blind is forced: an Agent that could not cover the next big blind without crossing its stop loss stops now.
+      if (!reason && agent.stopFloor !== undefined && stack - agent.stopFloor < this.engine.table.bigBlind) reason = 'stop_loss'; // engine AgentStopReasons.StopLoss
       if (reason) this.stopAgent(agent, reason);
     }
   }

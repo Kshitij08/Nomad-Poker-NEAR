@@ -19,6 +19,9 @@ export interface LeaderboardEntry {
   displayName: string;
   score: number;
   isLocal: boolean;
+  /** Agents board: whose Agent it is and the hands it played this week. */
+  ownerName?: string;
+  hands?: number;
 }
 
 export interface LeaderboardSnapshot {
@@ -131,6 +134,7 @@ export const FreePlayLeaderboard = {
       case LeaderboardKind.SeasonEarnings: return 'Season earnings';
       case LeaderboardKind.WeeklyHandsWon: return 'Hands won this week';
       case LeaderboardKind.FriendsWeekly: return 'Friends · weekly';
+      case LeaderboardKind.AgentsWeekly: return 'Agents · weekly';
       default: return 'Weekly earnings';
     }
   },

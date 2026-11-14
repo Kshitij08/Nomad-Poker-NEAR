@@ -23,7 +23,7 @@ import { widgetsOf } from '../../menu/ui/tree';
 import { setOffsets } from '../../menu/ui/canvas';
 import { StakeCatalog } from '@nomad/engine';
 import { formatN0 } from '../per/format';
-import { LAMPORTS_PER_DOLLAR, PerBuyIn, sol, solExact, STAKES, stakeMaxBuyIn, stakeMinBuyIn } from '../per/money';
+import { parseSol, PerBuyIn, sol, STAKES, stakeMaxBuyIn, stakeMinBuyIn } from '../per/money';
 import type { PerRuntime } from '../per/service';
 import type { PlayKey } from '../per/vault';
 import type { Stakes } from '../per/entry';
@@ -82,6 +82,9 @@ export function registerOnchainPartial(): void {
 class OnchainPartial {
   private moneyMoving = false;
   private solBalance: bigint | null = null;
+  /** The connected wallet's own SOL (read from devnet as soon as it connects; no signature needed). */
+  private walletSol: bigint | null = null;
+  private walletSolFor: string | null = null;
   private nextSolCheck = 0;
   private solAgent: Record<string, any> | null = null;
   private nextSolAgentPoll = 0;
@@ -155,7 +158,7 @@ class OnchainPartial {
         const w = this.per?.withdrawal;
         const withdrawing = this.phase === Phase.Ready ? ` · ${sol(w!.arrived)} ready to receive` : this.phase === Phase.OnTheWay ? ` · withdrawing ${sol(w!.amount)}` : '';
         this.loadSolSoon();
-        return (!addr ? 'Not connected' : this.solBalance !== null ? `${sol(this.solBalance)} (${solExact(this.solBalance)})` : 'Tap to load balance') + withdrawing;
+        return (!addr ? 'Not connected' : this.solBalance !== null ? sol(this.solBalance) : this.walletSol !== null ? `${sol(this.walletSol)} in wallet` : 'Tap to load balance') + withdrawing;
       },
       walletAddress: () => this.solana.address ?? null,
       quickPlay: (level: number, buyIn?: bigint) => this.quickPlay(level, buyIn ?? 0n),
@@ -183,7 +186,13 @@ class OnchainPartial {
     // Redesign v2: no wallet offer right after the first guest sign-in (nothing interrupts the first hand). The wallet
     // is offered when the player picks On-chain (toggleMode connects first). Re-enable with walletOfferAfterGuest.
     if (walletOfferAfterGuest.enabled) host.afterGuest.push(() => this.offerWalletAfterGuest());
-    this.ctx.events.on('web3:wallet-changed', () => host.refreshSoon());
+    this.ctx.events.on('web3:wallet-changed', () => {
+      // Connected: show the wallet's SOL at once, and the game balance too when this device can read it unasked.
+      this.loadWalletSol();
+      this.nextSolCheck = 0;
+      if (this.solana.address && this.per) this.loadSolSoon();
+      host.refreshSoon();
+    });
     host.onRefresh(() => this.refresh());
     // M9c: opened from an invite link: go straight to the private tables (PerMenuButton). Only a page whose address
     // names an invite loads the PER code for it; nothing else happens at boot.
@@ -341,7 +350,7 @@ class OnchainPartial {
     host.setText(dd, 'Panel/WalletTitle', addr ? `WALLET  ${addr.slice(0, 4)}…${addr.slice(-4)}` : 'WALLET (SOL)');
     const w = this.per?.withdrawal;
     const withdrawing = this.phase === Phase.Ready ? `  ·  ${sol(w!.arrived)} ready to receive` : this.phase === Phase.OnTheWay ? `  ·  withdrawing ${sol(w!.amount)}` : '';
-    host.setText(dd, 'Panel/SolBalance', (!addr ? 'Not connected' : this.solBalance !== null ? `${sol(this.solBalance)}  (${solExact(this.solBalance)})` : 'Tap to load balance') + withdrawing);
+    host.setText(dd, 'Panel/SolBalance', (!addr ? 'Not connected' : this.solBalance !== null ? sol(this.solBalance) : this.walletSol !== null ? `${sol(this.walletSol)} in wallet` : 'Tap to load balance') + withdrawing);
     host.setActive(dd, 'Panel/Btn_Withdraw', !!addr);
     const depositLabel = host.find(dd, 'Panel/Btn_Deposit/Label');
     if (depositLabel?.text) {
@@ -387,13 +396,39 @@ class OnchainPartial {
     }
   }
 
+  /** The connected wallet's SOL from the devnet RPC (getBalance: a public read, no wallet prompt). */
+  private loadWalletSol(): void {
+    const addr = this.solana.address ?? null;
+    if (!addr) {
+      this.walletSol = null;
+      this.walletSolFor = null;
+      return;
+    }
+    if (this.walletSolFor === addr && this.walletSol !== null) return;
+    this.walletSolFor = addr;
+    const url = w3(this.ctx).web3Config.solanaRpcUrl;
+    void fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [addr, { commitment: 'confirmed' }] }),
+    })
+      .then((r) => r.json() as Promise<{ result?: { value?: number } }>)
+      .then((j) => {
+        if (this.solana.address !== addr || typeof j.result?.value !== 'number') return;
+        this.walletSol = BigInt(j.result.value);
+        this.host.refreshSoon();
+      })
+      .catch((e) => console.warn('[NomadUi] wallet SOL:', (e as Error).message));
+  }
+
   /** Only with a play key already on this device and a connected wallet (no wallet prompt from opening a menu). */
   private loadSolSoon(): void {
     if (this.now() < this.nextSolCheck) return;
-    this.nextSolCheck = this.now() + 15;
     const per = this.per;
     const addr = per?.gameWallet.address;
     if (!per || !addr || !per.gameWallet.hasPlayKey(addr)) return;
+    // Throttled only once a read actually starts (renders before the wallet connected used to use up the window).
+    this.nextSolCheck = this.now() + 15;
     void per.balance(() => {}).then(
       (b) => b !== null && this.setBalance(b),
       (e) => console.warn('[NomadUi] SOL balance:', (e as Error).message),
@@ -789,18 +824,21 @@ class OnchainPartial {
     };
     agentsOnchain.paintFields = (root) => this.paintAgentFields(root);
     // The SOL marketplace (NomadUiHost.Market's ONCHAIN half): its requests, the wallet that decides SolCopy.Own, $.
-    marketOnchain.loadSol = (title, path, show, signed, data) => void this.loadSol(title, path, show, signed, data);
+    marketOnchain.loadSol = (title, path, show, signed, data, onError) => void this.loadSol(title, path, show, signed, data, onError);
     marketOnchain.walletAddress = () => this.solana.address;
     marketOnchain.sol = (lamports) => sol(lamports);
   }
 
   /** NomadUiHost.LoadSol: the SOL marketplace (per/backend solStrategies.ts): public GETs, or requests signed by the play key. */
-  private async loadSol(title: string, path: string, show: (j: Record<string, unknown>) => void, signed: boolean, data: Record<string, unknown> | null): Promise<void> {
+  private async loadSol(title: string, path: string, show: (j: Record<string, unknown>) => void, signed: boolean, data: Record<string, unknown> | null, onError?: (message: string) => void): Promise<void> {
     const host = this.host;
     try {
       let j: Record<string, unknown>;
       if (signed) {
-        if (!(await this.connectWallet())) return;
+        if (!(await this.connectWallet())) {
+          onError?.('Connect your wallet to see this.');
+          return;
+        }
         const per = await this.loadPer();
         const key = await per.gameWallet.playKey((s) => host.busy(title, s));
         host.busy(title, 'Loading…');
@@ -810,10 +848,16 @@ class OnchainPartial {
         const per = await this.loadPer();
         j = await per.agent.get(per.http, per.config.perBackendUrl, path);
       }
+      // The "Loading…" box closes with the answer (it used to stay up until closed by hand).
+      host.closeMessage();
       show(j);
     } catch (e) {
-      host.message(title, friendly(e));
       console.error(e);
+      // A screen with its own error state shows it there; otherwise the message box says what went wrong.
+      if (onError) {
+        host.closeMessage();
+        onError(friendly(e));
+      } else host.message(title, friendly(e));
     }
   }
 
@@ -822,9 +866,9 @@ class OnchainPartial {
     const host = this.host;
     if (this.fieldsMode === true) return;
     this.fieldsMode = true;
-    host.setText(root, 'BankrollLabel', 'Stake ($, most at risk)');
-    host.setText(root, 'StopLossLabel', 'Stop loss ($)');
-    host.setText(root, 'ProfitLabel', 'Profit target ($)');
+    host.setText(root, 'BankrollLabel', 'Stake (SOL, most at risk)');
+    host.setText(root, 'StopLossLabel', 'Stop loss (SOL)');
+    host.setText(root, 'ProfitLabel', 'Profit target (SOL)');
     host.setText(root, 'Note1', "Plays public SOL tables (devnet) from your game balance; it can't withdraw. The stake is its stack: deeper plays bigger pots.");
     host.setText(root, 'Note2', 'Stop it any time; its seat cashes out into your game balance.');
     const set = (name: string, value: string) => {
@@ -835,7 +879,7 @@ class OnchainPartial {
       input.input.inputMode = 'numeric';
       input.text = value;
     };
-    set('BankrollField', '250');
+    set('BankrollField', '0.025');
     set('StopLossField', '0');
     set('ProfitField', '0');
     // The agents partial repaints the Coins defaults when the mode goes back to DEMO; next ONCHAIN paints ours again.
@@ -848,9 +892,10 @@ class OnchainPartial {
     return Number.isFinite(v) ? v : fallback;
   }
 
-  /** A $ field as lamports ($1 = 0.0001 SOL). */
-  private readSol(root: UNode, field: string, fallbackDollars: number): bigint {
-    return BigInt(Math.max(0, Math.round(this.readField(root, field, fallbackDollars) * Number(LAMPORTS_PER_DOLLAR))));
+  /** A SOL field ("0.025") as lamports. */
+  private readSol(root: UNode, field: string, fallbackSol: number): bigint {
+    const n = this.host.find(root, field);
+    return parseSol((n ? widgetsOf(n).input?.text : '') ?? '') ?? BigInt(Math.round(fallbackSol * 1e9));
   }
 
   private get solAgentRunning(): boolean {
@@ -878,7 +923,7 @@ class OnchainPartial {
       }
       const root = host.screen('Agents_Overview');
       if (!root) return;
-      const stake = this.readSol(root, 'BankrollField', 250);
+      const stake = this.readSol(root, 'BankrollField', 0.025);
       if (stake < stakeMinBuyIn(0)) return host.message('Agent', `The stake must be at least ${sol(stakeMinBuyIn(0))} (a Micro table's buy-in).`);
       const ready = await this.readyForOnchain(stake, 'Your Agent');
       if (!ready) return;

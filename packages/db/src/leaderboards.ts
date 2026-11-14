@@ -21,6 +21,8 @@ const BOARDS: Record<LeaderboardKind, BoardSpec> = {
   [LeaderboardKind.SeasonEarnings]: { period: (n) => FreePlayLeaderboardMath.seasonId(n), where: 'r.season = ?2', score: 'SUM(r.net)' },
   [LeaderboardKind.HandsWon]: { period: () => 0, where: '?2 = 0', score: 'SUM(r.won)' },
   [LeaderboardKind.FriendsWeekly]: { period: (n) => FreePlayLeaderboardMath.weekId(n), where: 'r.week = ?2', score: 'SUM(r.net)', friendsOnly: true },
+  // Ranked from agent_hands instead (agentsLeaderboard below); the entry keeps the kind valid.
+  [LeaderboardKind.AgentsWeekly]: { period: (n) => FreePlayLeaderboardMath.weekId(n), where: '', score: '' },
 };
 
 export function isLeaderboardKind(n: number): n is LeaderboardKind {
@@ -28,6 +30,7 @@ export function isLeaderboardKind(n: number): n is LeaderboardKind {
 }
 
 export async function leaderboard(db: D1Database, playerId: string, kind: LeaderboardKind, pageIndex: number, now = Date.now()): Promise<LeaderboardPage> {
+  if (kind === LeaderboardKind.AgentsWeekly) return agentsLeaderboard(db, playerId, pageIndex, now);
   const spec = BOARDS[kind];
   const period = spec.period(now);
   const pageSize = FreePlayLeaderboardMath.PageSize;
@@ -58,6 +61,52 @@ export async function leaderboard(db: D1Database, playerId: string, kind: Leader
     pageSize,
     hasMore: rows.results.length > pageSize,
     rows: list.map((r, i) => ({ rank: page * pageSize + i + 1, displayName: r.display_name, score: r.score, isLocal: r.player_id === playerId })),
+  };
+}
+
+/**
+ * Agents this week: each Agent (deployment) ranked by the Coins it won in hands played since Monday 00:00 UTC, from
+ * agent_hands. The viewer's own line is their best Agent.
+ */
+async function agentsLeaderboard(db: D1Database, playerId: string, pageIndex: number, now: number): Promise<LeaderboardPage> {
+  const pageSize = FreePlayLeaderboardMath.PageSize;
+  const page = Math.max(0, Math.trunc(pageIndex) || 0);
+  const since = FreePlayLeaderboardMath.weekStartMs(now);
+  const scores = `SELECT h.deployment_id, SUM(h.net) AS score, COUNT(*) AS hands FROM agent_hands h WHERE h.created_at >= ?2 GROUP BY h.deployment_id`;
+  const [rows, mine] = await Promise.all([
+    db
+      .prepare(
+        `SELECT s.deployment_id, s.score, s.hands, d.agent_name, d.owner_id, p.display_name AS owner
+         FROM (${scores}) s JOIN agent_deployments d ON d.id = s.deployment_id JOIN players p ON p.id = d.owner_id
+         ORDER BY s.score DESC, s.hands DESC, s.deployment_id LIMIT ?3 OFFSET ?4`,
+      )
+      .bind(playerId, since, pageSize + 1, page * pageSize)
+      .all<{ deployment_id: string; score: number; hands: number; agent_name: string; owner_id: string; owner: string }>(),
+    db
+      .prepare(
+        `WITH s AS (${scores}), best AS (SELECT MAX(s.score) AS score FROM s JOIN agent_deployments d ON d.id = s.deployment_id WHERE d.owner_id = ?1)
+         SELECT (SELECT score FROM best) AS mine, (SELECT COUNT(*) FROM s WHERE s.score > COALESCE((SELECT score FROM best), 0)) AS above`,
+      )
+      .bind(playerId, since)
+      .first<{ mine: number | null; above: number }>(),
+  ]);
+  const list = rows.results.slice(0, pageSize);
+  return {
+    kind: LeaderboardKind.AgentsWeekly,
+    period: FreePlayLeaderboardMath.weekId(now),
+    localScore: mine?.mine ?? 0,
+    localRank: mine?.mine == null ? 0 : (mine.above ?? 0) + 1,
+    pageIndex: page,
+    pageSize,
+    hasMore: rows.results.length > pageSize,
+    rows: list.map((r, i) => ({
+      rank: page * pageSize + i + 1,
+      displayName: r.agent_name || 'Agent',
+      score: r.score,
+      isLocal: r.owner_id === playerId,
+      ownerName: r.owner,
+      hands: r.hands,
+    })),
   };
 }
 
