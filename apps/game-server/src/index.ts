@@ -1,7 +1,7 @@
 import { StakeSessionNames, PartyCodes } from '@nomad/table-server/sessions';
 import type { Env } from './env';
 import { auditTable } from '@nomad/db/seatLocks';
-import { canonicalSession } from './roomSpec';
+import { canonicalSession, isNearMoneyRoom } from './roomSpec';
 import { agentRoute, sweepAgents } from './agentRoutes';
 import { tournamentTick } from '@nomad/db/tournaments';
 import { reconcile } from '@nomad/db/reconcile';
@@ -91,6 +91,16 @@ export default {
         if (!occ.full) return json({ session: name }, 200, h);
       }
       return json({ error: 'Every overflow table is full.' }, 200, h);
+    }
+
+    // NEAR tables' Verify panel: the seed and cards of a settled hand, to check against the commitment announced at
+    // HandStarted (verifyDeck in @nomad/engine/cards/deckCommitment). Only after the hand is over.
+    const deck = /^\/v1\/near-tables\/([a-z0-9-]{1,40})\/hands\/(\d{1,9})\/deck$/.exec(url.pathname);
+    if (deck && request.method === 'GET') {
+      if (!isNearMoneyRoom(deck[1]!)) return json({ error: 'Not a NEAR table.' }, 404, h);
+      const res = await table(env, deck[1]!).fetch(`https://table/deck?session=${encodeURIComponent(deck[1]!)}&hand=${deck[2]}`);
+      if (!res.ok) return json({ error: 'No reveal for that hand (yet).' }, 404, { ...h, 'cache-control': 'no-store' });
+      return json(await res.json(), 200, { ...h, 'cache-control': 'public, max-age=3600' });
     }
 
     // Spectating: the public (Quick Play) tables being played right now, busiest first. Private party tables are not

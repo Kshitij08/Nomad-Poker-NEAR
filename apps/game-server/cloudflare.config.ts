@@ -71,6 +71,16 @@ export default defineConfig(({ mode }) => {
         TURN_KEY_TOKEN: bindings.secret(),
         // Room spawns, overflow lookups and Agent starts: 30 a minute per address.
         HTTP_LIMITER: bindings.rateLimit({ namespace: s.limiter, simple: { limit: 30, period: 60 } }),
+        // NEAR money tables (testnet): this server operates the escrow. The operator's key is a secret
+        // (NEAR_OPERATOR_KEY in .secrets.<stage>.json, `ed25519:…`); without it the poker-money-… tables stay closed.
+        ...(stage === 'production'
+          ? {}
+          : {
+              NEAR_RPC_URL: bindings.text('https://test.rpc.fastnear.com'),
+              NEAR_ESCROW: bindings.text('escrow.nomad-poker.testnet'),
+              NEAR_OPERATOR_ACCOUNT: bindings.text('nomad-poker.testnet'),
+              NEAR_OPERATOR_KEY: bindings.secret(),
+            }),
         // Operator alerts by email (src/alerts.ts): ledger problems, tables that gave up, a daily all-clear. The inbox is
         // the ALERT_TO secret (.secrets.production.json), a verified Email Routing destination.
         ...(stage === 'production'

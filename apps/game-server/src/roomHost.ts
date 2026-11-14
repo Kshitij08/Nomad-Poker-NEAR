@@ -55,6 +55,10 @@ export abstract class RoomHost {
   seatAgent(_row: AgentRow): Promise<boolean> {
     return Promise.resolve(false);
   }
+  /** A settled hand's deck reveal (committed tables only), or null. */
+  deckReveal(_handNumber: number): unknown {
+    return null;
+  }
 
   get isClosed(): boolean {
     return this.closed;

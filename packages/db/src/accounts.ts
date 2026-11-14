@@ -88,6 +88,11 @@ export async function identityOwner(db: D1Database, provider: IdentityProvider, 
   return db.prepare('SELECT player_id FROM identities WHERE provider = ?1 AND subject = ?2').bind(provider, subject).first<string>('player_id');
 }
 
+/** The NEAR account a player signed in with (their first, if several), or null. */
+export async function nearAccountOf(db: D1Database, playerId: string): Promise<string | null> {
+  return db.prepare("SELECT subject FROM identities WHERE player_id = ?1 AND provider = 'near' ORDER BY created_at LIMIT 1").bind(playerId).first<string>('subject');
+}
+
 export async function identities(db: D1Database, playerId: string): Promise<LinkedIdentity[]> {
   const rows = await db
     .prepare('SELECT provider, label, created_at FROM identities WHERE player_id = ?1 ORDER BY created_at')
