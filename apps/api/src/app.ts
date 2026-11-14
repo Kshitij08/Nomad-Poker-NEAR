@@ -28,6 +28,9 @@ import {
   type WalletChallengeRequest,
   type WalletChallengeResponse,
   type WalletVerifyRequest,
+  type NearChallengeRequest,
+  type NearChallengeResponse,
+  type NearVerifyRequest,
 } from '@nomad/contract';
 import {
   findPlayer,
@@ -43,6 +46,7 @@ import {
 } from '@nomad/db/accounts';
 import type { AppEnv, Env, PlayerRow } from './env';
 import { verifyGoogleIdToken } from './google';
+import { accessKeyOf, base64Decode, base64Encode, isAccountId, parseEd25519Key, verifyNep413 } from './near';
 import * as ledger from '@nomad/db/ledger';
 import * as progress from '@nomad/db/progress';
 import * as shop from '@nomad/db/shop';
@@ -239,6 +243,61 @@ export function createApp(): Hono<AppEnv> {
     if (!(await crypto.subtle.verify('Ed25519', key, signature, utf8(ch.payload)))) fail(401, 'unauthorized', 'The wallet signature does not match.');
     const label = address;
     const res = await completeSignIn(c.env.DB, { provider: 'wallet', subject: address, label }, `${address.slice(0, 4)}…${address.slice(-4)}`, await optionalPlayer(c));
+    return c.json(res, res.created ? 201 : 200);
+  });
+
+  // NEAR sign-in: the wallet signs a NEP-413 message (src/near.ts). The key must be a full-access key of the account.
+  app.post(Routes.nearChallenge, async (c) => {
+    if (!c.env.NEAR_RPC_URL) fail(501, 'not_configured', 'NEAR sign-in is not set up on this server yet.');
+    const { accountId } = await readJson<NearChallengeRequest>(c.req.raw);
+    const account = requireString(accountId, 'accountId', 64).toLowerCase();
+    if (!isAccountId(account)) fail(400, 'bad_request', 'Not a NEAR account id.');
+    const now = Date.now();
+    const expiresAt = now + WALLET_CHALLENGE_TTL_MS;
+    const nonce = base64Encode(crypto.getRandomValues(new Uint8Array(32)));
+    const recipient = new URL(appOrigin(c)).host;
+    const message = `Sign in to Nomad Poker as ${account}.\n\nThis signs nothing on chain and costs nothing.\nIssued ${iso(now)}; valid until ${iso(expiresAt)}.`;
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM auth_challenges WHERE expires_at < ?1').bind(now),
+      c.env.DB.prepare("INSERT INTO auth_challenges (id, kind, subject, payload, created_at, expires_at) VALUES (?1, 'near', ?2, ?3, ?4, ?5)").bind(
+        nonce,
+        account,
+        JSON.stringify({ message, recipient }),
+        now,
+        expiresAt,
+      ),
+    ]);
+    return c.json<NearChallengeResponse>({ message, recipient, nonce, expiresAt: iso(expiresAt) });
+  });
+
+  app.post(Routes.nearVerify, async (c) => {
+    const rpc = c.env.NEAR_RPC_URL;
+    if (!rpc) fail(501, 'not_configured', 'NEAR sign-in is not set up on this server yet.');
+    const body = await readJson<NearVerifyRequest>(c.req.raw);
+    const account = requireString(body.accountId, 'accountId', 64).toLowerCase();
+    const publicKey = requireString(body.publicKey, 'publicKey', 128);
+    const nonceText = requireString(body.nonce, 'nonce', 64);
+    const key = parseEd25519Key(publicKey);
+    const signature = base64Decode(requireString(body.signature, 'signature', 128));
+    const nonce = base64Decode(nonceText);
+    if (!key || signature?.length !== 64 || nonce?.length !== 32) fail(400, 'bad_request', 'Bad key, signature or nonce encoding.');
+    // Single use: the challenge is deleted whether or not the signature checks out.
+    const ch = await c.env.DB.prepare("DELETE FROM auth_challenges WHERE id = ?1 AND kind = 'near' RETURNING subject, payload, expires_at")
+      .bind(nonceText)
+      .first<{ subject: string; payload: string; expires_at: number }>();
+    if (!ch || ch.subject !== account) fail(401, 'unauthorized', 'Unknown or used sign-in challenge; ask for a new one.');
+    if (ch.expires_at <= Date.now()) fail(401, 'expired', 'The sign-in challenge expired; ask for a new one.');
+    const { message, recipient } = JSON.parse(ch.payload) as { message: string; recipient: string };
+    if (!(await verifyNep413(key, signature, message, nonce, recipient))) fail(401, 'unauthorized', 'The wallet signature does not match.');
+    let access: Awaited<ReturnType<typeof accessKeyOf>>;
+    try {
+      access = await accessKeyOf(rpc, account, publicKey);
+    } catch (e) {
+      console.warn('[near sign-in] RPC', e);
+      fail(503, 'internal', "Couldn't reach NEAR to check your key. Try again in a moment.");
+    }
+    if (access !== 'full-access') fail(401, 'unauthorized', `That key can't sign in for ${account}: it must be one of the account's full-access keys.`);
+    const res = await completeSignIn(c.env.DB, { provider: 'near', subject: account, label: account }, account.length > 24 ? `${account.slice(0, 10)}…${account.slice(-10)}` : account, await optionalPlayer(c));
     return c.json(res, res.created ? 201 : 200);
   });
 

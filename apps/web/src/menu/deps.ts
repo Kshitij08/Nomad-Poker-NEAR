@@ -22,6 +22,8 @@ export interface AccountExtras {
   signInAsGuest?(): Promise<void> | void;
   /** PlayFabLoginUI.ContinueWithGoogle. */
   signInWithGoogle?(): Promise<void> | void;
+  /** Sign in (or save a guest) with a NEAR wallet. */
+  signInWithNear?(): Promise<void> | void;
   /** PlayFabLoginUI.SignInWithEmailAsync → error or null. */
   signInWithEmail?(email: string, password: string): Promise<string | null>;
   /** PlayFabAuth.AddRecoveryLoginAsync → error or null. */
@@ -113,7 +115,7 @@ export function accountExtras(ctx: AppContext): AccountExtras {
 
 /** Every service method the menu expects, for the report / README (kept next to the interfaces above). */
 export const EXPECTED_SERVICES = [
-  'account.isGuest / busy / lastError / keepSignedIn / setKeepSignedIn / signInAsGuest / signInWithGoogle / signInWithEmail / addRecoveryLogin / rename',
+  'account.isGuest / busy / lastError / keepSignedIn / setKeepSignedIn / signInAsGuest / signInWithGoogle / signInWithNear / signInWithEmail / addRecoveryLogin / rename',
   'wallet.coins (VirtualWallet) + "wallet:changed"',
   'retention.progression.level / levelProgress01, retention.engagement.canSpin() / previewLogin().canClaim, retention.stakes (StakeSelection), retention.openWeeklyRewards / openMissions (else router "weekly-reward" / "missions")',
   'net.quickPlay({tier,buyIn}) / freePlayJoin({tier,buyIn}) / cancelSearch',

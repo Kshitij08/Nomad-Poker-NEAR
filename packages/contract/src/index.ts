@@ -16,6 +16,8 @@ export const Routes = {
   guest: '/v1/auth/guest',
   walletChallenge: '/v1/auth/wallet/challenge',
   walletVerify: '/v1/auth/wallet/verify',
+  nearChallenge: '/v1/auth/near/challenge',
+  nearVerify: '/v1/auth/near/verify',
   google: '/v1/auth/google',
   emailStart: '/v1/auth/email/start',
   emailVerify: '/v1/auth/email/verify',
@@ -27,7 +29,7 @@ export const Routes = {
 // ---- Players and identities ---------------------------------------------------------------------
 
 export type PlayerKind = 'guest' | 'registered';
-export type IdentityProvider = 'wallet' | 'google' | 'email';
+export type IdentityProvider = 'wallet' | 'google' | 'email' | 'near';
 
 export interface PlayerProfile {
   id: string;
@@ -106,6 +108,30 @@ export interface WalletVerifyRequest {
   nonce: string;
   /** Base58 ed25519 signature of the UTF-8 `message` from the challenge. */
   signature: string;
+}
+
+/** NEAR sign-in (NEP-413 signed message): ask for a challenge for a NEAR account. */
+export interface NearChallengeRequest {
+  /** A NEAR account id, e.g. alice.testnet. */
+  accountId: string;
+}
+
+/** What the wallet signs with NEP-413 `signMessage`: the message, the recipient and the nonce, exactly as given. */
+export interface NearChallengeResponse {
+  message: string;
+  recipient: string;
+  /** 32 random bytes, base64. Also identifies the challenge. */
+  nonce: string;
+  expiresAt: string;
+}
+
+export interface NearVerifyRequest {
+  accountId: string;
+  /** The key that signed, "ed25519:<base58>". It must be a full-access key of the account. */
+  publicKey: string;
+  /** The NEP-413 signature, base64 (64 bytes). */
+  signature: string;
+  nonce: string;
 }
 
 export interface GoogleSignInRequest {

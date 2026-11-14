@@ -19,6 +19,11 @@ export interface Env {
   ALLOWED_ORIGINS: string;
   /** Shown in the wallet sign-in message; SOL tables are devnet-only for now. */
   WALLET_CHAIN_ID: string;
+  /**
+   * NEAR JSON-RPC the API checks sign-in keys against (testnet in this fork). Unset: NEAR sign-in answers
+   * not_configured.
+   */
+  NEAR_RPC_URL?: string;
   /** Comma-separated Google OAuth client ids (web, Android, iOS). Unset: Google sign-in answers not_configured. */
   GOOGLE_CLIENT_IDS?: string;
   /** '1' on staging and dev: email sign-in returns the link instead of mailing it. */
