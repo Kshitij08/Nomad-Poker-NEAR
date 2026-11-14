@@ -611,6 +611,131 @@ fn only_the_owner_claims_platform_earnings() {
     e.claim_platform_earnings(None);
 }
 
+// ----------------------------------------------------------------------------------------------------- reclaim
+
+const DAY: u64 = 24 * 60 * 60 * 1_000_000_000;
+
+fn reclaim(e: &mut Escrow, who: &str, table: &str, ts: u64) -> u128 {
+    call(who, 0, ts);
+    e.reclaim(table.into()).0
+}
+
+#[test]
+fn a_player_reclaims_after_the_operator_is_idle_for_a_day() {
+    let mut e = setup();
+    house_table(&mut e, "t1");
+    deposit(&mut e, "alice.near", NEAR);
+    buy(&mut e, "alice.near", "t1", 100);
+    let t = e.get_table("t1".into()).unwrap();
+    assert_eq!((t.last_operator_at.0, t.reclaimable_at.0), (T0, T0 + DAY));
+    assert_eq!(reclaim(&mut e, "alice.near", "t1", T0 + DAY), 95 * CHIP);
+    assert!(get_logs()[0].contains("\"event\":\"reclaimed\""));
+    assert_eq!(bal(&e, "alice.near"), NEAR - 5 * CHIP);
+    assert!(e.get_seat("t1".into(), acct("alice.near")).is_none());
+    let t = e.get_table("t1".into()).unwrap();
+    assert_eq!((t.seated, t.reclaims, t.cash_outs, t.paid.0), (0, 1, 0, 95 * CHIP));
+    audit(&e, &["alice.near"], &["t1"], &[], NEAR, 0);
+}
+
+#[test]
+#[should_panic(expected = "the operator is still active at this table")]
+fn reclaiming_before_the_operator_is_idle_long_enough_is_refused() {
+    let mut e = setup();
+    house_table(&mut e, "t1");
+    deposit(&mut e, "alice.near", NEAR);
+    buy(&mut e, "alice.near", "t1", 100);
+    reclaim(&mut e, "alice.near", "t1", T0 + DAY - 1);
+}
+
+#[test]
+#[should_panic(expected = "the operator is still active at this table")]
+fn a_cash_out_restarts_the_clock() {
+    let mut e = setup();
+    house_table(&mut e, "t1");
+    deposit(&mut e, "alice.near", NEAR);
+    deposit(&mut e, "bob.near", NEAR);
+    buy(&mut e, "alice.near", "t1", 100);
+    buy(&mut e, "bob.near", "t1", 100);
+    call(OP, 0, T0 + DAY / 2);
+    e.cash_out("t1".into(), acct("bob.near"), U128(10 * CHIP), "k1".into());
+    assert_eq!(e.get_table("t1".into()).unwrap().last_operator_at.0, T0 + DAY / 2);
+    reclaim(&mut e, "alice.near", "t1", T0 + DAY);
+}
+
+#[test]
+#[should_panic(expected = "you are not seated at this table")]
+fn only_seated_players_reclaim() {
+    let mut e = setup();
+    house_table(&mut e, "t1");
+    reclaim(&mut e, "bob.near", "t1", T0 + DAY);
+}
+
+#[test]
+fn reclaim_is_capped_by_what_the_table_can_still_pay() {
+    let mut e = setup();
+    house_table(&mut e, "t1");
+    deposit(&mut e, "alice.near", NEAR);
+    deposit(&mut e, "bob.near", NEAR);
+    buy(&mut e, "alice.near", "t1", 100);
+    buy(&mut e, "bob.near", "t1", 100);
+    // Bob won 150 of Alice's 95: only 40 are left at the table.
+    pay(&mut e, "t1", "bob.near", 150 * CHIP, "k1");
+    assert_eq!(reclaim(&mut e, "alice.near", "t1", T0 + DAY), 40 * CHIP);
+    let t = e.get_table("t1".into()).unwrap();
+    assert_eq!((t.paid.0, t.locked.0, t.outstanding.0), (190 * CHIP, 190 * CHIP, 0));
+    audit(&e, &["alice.near", "bob.near"], &["t1"], &[], 2 * NEAR, 0);
+}
+
+#[test]
+fn the_last_reclaim_from_a_closed_table_finalises_it() {
+    let mut e = setup();
+    call("host.near", 0, T0);
+    e.create_hosted_table("friends".into(), cfg(), None);
+    deposit(&mut e, "alice.near", NEAR);
+    deposit(&mut e, "bob.near", NEAR);
+    buy(&mut e, "alice.near", "friends", 100);
+    buy(&mut e, "bob.near", "friends", 100);
+    // A host closing is not operator activity.
+    call("host.near", 0, T0 + DAY / 2);
+    e.close_table("friends".into());
+    assert_eq!(e.get_table("friends".into()).unwrap().last_operator_at.0, T0);
+    reclaim(&mut e, "alice.near", "friends", T0 + DAY);
+    assert!(!e.get_table("friends".into()).unwrap().finalized);
+    reclaim(&mut e, "bob.near", "friends", T0 + DAY);
+    let t = e.get_table("friends".into()).unwrap();
+    assert!(t.finalized && t.outstanding.0 == 0 && t.remainder.0 == 0);
+    audit(&e, &["alice.near", "bob.near"], &["friends"], &[], 2 * NEAR, 0);
+}
+
+#[test]
+fn the_owner_sets_the_reclaim_window() {
+    let mut e = setup();
+    assert_eq!(e.get_config().reclaim_after_secs, 24 * 60 * 60);
+    call("owner.near", 0, T0);
+    e.set_reclaim_after(3600);
+    assert_eq!(e.get_config().reclaim_after_secs, 3600);
+    house_table(&mut e, "t1");
+    deposit(&mut e, "alice.near", NEAR);
+    buy(&mut e, "alice.near", "t1", 100);
+    assert_eq!(reclaim(&mut e, "alice.near", "t1", T0 + 3600 * 1_000_000_000), 95 * CHIP);
+}
+
+#[test]
+#[should_panic(expected = "at least 1 hour")]
+fn the_reclaim_window_is_at_least_an_hour() {
+    let mut e = setup();
+    call("owner.near", 0, T0);
+    e.set_reclaim_after(3599);
+}
+
+#[test]
+#[should_panic(expected = "owner only")]
+fn only_the_owner_sets_the_reclaim_window() {
+    let mut e = setup();
+    call(OP, 0, T0);
+    e.set_reclaim_after(7200);
+}
+
 // ------------------------------------------------------------------------------------------ money conservation
 
 /// A small deterministic generator, so the run is the same every time.
@@ -645,6 +770,7 @@ fn money_is_conserved_through_random_play() {
     let mut now = T0;
     let mut keys: Vec<(String, String, u128)> = vec![];
     let mut ops = [0u32; 10];
+    let mut reclaims = 0u32;
 
     for step in 0..1_500 {
         now += 1_000_000_000;
@@ -698,6 +824,15 @@ fn money_is_conserved_through_random_play() {
                     continue;
                 }
                 let t = e.get_table(table.into()).unwrap();
+                if rng.below(10) == 0 {
+                    // The operator goes quiet for a day and the player takes their seat back.
+                    now += DAY;
+                    let seat = e.get_seat(table.into(), acct(p)).unwrap().locked.0;
+                    call(p, 0, now);
+                    assert_eq!(e.reclaim(table.into()).0, seat.min(t.outstanding.0));
+                    reclaims += 1;
+                    continue;
+                }
                 // Skew toward paying most of what is left, so the table limit is hit regularly.
                 let amount = t.outstanding.0 * rng.below(101) as u128 / 100;
                 let key = format!("k{step}");
@@ -801,4 +936,5 @@ fn money_is_conserved_through_random_play() {
     let ids: Vec<&str> = tournaments.iter().map(|s| s.as_str()).collect();
     audit(&e, &accounts, &tables, &ids, deposited, withdrawn);
     assert!(ops.iter().all(|n| *n > 20), "every kind of step ran: {ops:?}");
+    assert!(reclaims > 5, "reclaims ran: {reclaims}");
 }

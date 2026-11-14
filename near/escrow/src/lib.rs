@@ -10,6 +10,9 @@
 //! Money is NEAR in yoctoNEAR. Chips are whole numbers worth `chip_yocto` each (0.001 NEAR by default); table
 //! limits are in chips, buy-ins must be a whole number of chips.
 //!
+//! If the operator disappears, a seated player is not stuck: once the operator has done nothing on a table for
+//! `reclaim_after` (24 hours by default), the player may `reclaim` their seat's locked amount.
+//!
 //! The contract pays for its own storage, like the table spike.
 
 use near_sdk::json_types::U128;
@@ -33,6 +36,11 @@ pub const DEFAULT_TOURNAMENT_FEE_BPS: u32 = 500;
 pub const MAX_FEE_BPS: u32 = 2_000;
 /// 1 chip = 0.001 NEAR.
 pub const DEFAULT_CHIP_YOCTO: u128 = 1_000_000_000_000_000_000_000;
+/// A seated player may reclaim after the operator has been idle on the table this long: 24 hours by default.
+pub const DEFAULT_RECLAIM_AFTER_SECS: u64 = 24 * 60 * 60;
+/// The owner can set it no shorter than 1 hour.
+pub const MIN_RECLAIM_AFTER_SECS: u64 = 60 * 60;
+pub(crate) const NS_PER_SEC: u64 = 1_000_000_000;
 const PAYOUT_CALLBACK_GAS: Gas = Gas::from_tgas(5);
 
 uint::construct_uint! {
@@ -126,6 +134,8 @@ pub struct ConfigView {
     pub rake_bps: u32,
     pub tournament_fee_bps: u32,
     pub chip_yocto: U128,
+    /// Seconds the operator must be idle on a table before a seated player may `reclaim`.
+    pub reclaim_after_secs: u64,
 }
 
 #[near(contract_state)]
@@ -137,6 +147,8 @@ pub struct Escrow {
     pub(crate) rake_bps: u32,
     pub(crate) tournament_fee_bps: u32,
     pub(crate) chip_yocto: u128,
+    /// Nanoseconds the operator must be idle on a table before a seated player may reclaim.
+    pub(crate) reclaim_after_ns: u64,
     pub(crate) balances: LookupMap<AccountId, u128>,
     pub(crate) tables: LookupMap<String, tables::Table>,
     /// `{table_id}:{player}` -> what that player has bought in and not yet cashed out.
@@ -157,6 +169,7 @@ impl Escrow {
             rake_bps: DEFAULT_RAKE_BPS,
             tournament_fee_bps: DEFAULT_TOURNAMENT_FEE_BPS,
             chip_yocto: DEFAULT_CHIP_YOCTO,
+            reclaim_after_ns: DEFAULT_RECLAIM_AFTER_SECS * NS_PER_SEC,
             balances: LookupMap::new(Prefix::Balances),
             tables: LookupMap::new(Prefix::Tables),
             seats: LookupMap::new(Prefix::Seats),
@@ -200,6 +213,16 @@ impl Escrow {
             self.tournament_fee_bps = b;
         }
         event("fees_set", json!({ "rake_bps": self.rake_bps, "tournament_fee_bps": self.tournament_fee_bps }));
+    }
+
+    /// How long (in seconds, at least 1 hour) the operator must be idle on a table before a seated player may
+    /// `reclaim`. Applies at once to every table.
+    pub fn set_reclaim_after(&mut self, seconds: u64) {
+        self.assert_owner();
+        require!(seconds >= MIN_RECLAIM_AFTER_SECS, "at least 1 hour");
+        require!(seconds <= u64::MAX / NS_PER_SEC, "too long");
+        self.reclaim_after_ns = seconds * NS_PER_SEC;
+        event("reclaim_after_set", json!({ "seconds": seconds }));
     }
 
     /// Pays unclaimed platform earnings (all of them by default) to the owner.
@@ -307,6 +330,7 @@ impl Escrow {
             rake_bps: self.rake_bps,
             tournament_fee_bps: self.tournament_fee_bps,
             chip_yocto: U128(self.chip_yocto),
+            reclaim_after_secs: self.reclaim_after_ns / NS_PER_SEC,
         }
     }
 
