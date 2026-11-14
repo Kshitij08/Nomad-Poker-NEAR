@@ -110,6 +110,7 @@ export class BetChips {
     if (key === this.potKey) return;
     this.potKey = key;
     this.potEl.hidden = v <= 0;
+    if (v <= 0) this.potEl.style.opacity = '';
     if (v > 0) this.potEl.innerHTML = chipColumns(v, 2);
   }
 
@@ -218,6 +219,9 @@ export class BetChips {
       // Home: just left of the pot pill, bottoms aligned with the pill's middle.
       let px = pill && pill.width ? pill.left - layerBox.left - pw - 8 : pot.screenPivot(camera, w, h)[0] - pw - 60;
       let py = pill && pill.width ? pill.top - layerBox.top + pill.height / 2 - ph * 0.75 : pot.screenPivot(camera, w, h)[1] - ph / 2;
+      // Only the payout slide fades the pot; anything else (a slide cut short, a seat that vanished mid-slide) must
+      // never leave next hand's pot drawn faint.
+      if (!this.award && this.potEl.style.opacity) this.potEl.style.opacity = '';
       if (this.award) {
         const seat = seats[this.award.slot];
         if (seat?.visible) {
@@ -319,7 +323,7 @@ export class BetChips {
       const cw2 = c.el.offsetWidth || 44;
       const ch2 = c.el.offsetHeight || 20;
       c.el.style.transform = `translate(${Math.round(x - cw2 / 2)}px, ${Math.round(y - ch2 / 2)}px)`;
-      if (c.sweep) c.el.style.opacity = String(c.alpha);
+      c.el.style.opacity = c.sweep ? String(c.alpha) : '';
       // A chip shown since the last frame is placed now: only then is it made visible (no flash at 0,0).
       if (c.el.style.visibility) c.el.style.visibility = '';
     });

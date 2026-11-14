@@ -42,6 +42,14 @@ export class PlayerProgression {
 
   constructor(private readonly env: RetentionEnv) {}
 
+  /**
+   * The level can be trusted: local rules, or a server whose progress snapshot has loaded. Before that the server
+   * wallet reads 0 XP (level 1), and taking that as the baseline would celebrate every level when the snapshot lands.
+   */
+  get ready(): boolean {
+    return !this.backend || !!this.backend.snapshot;
+  }
+
   get totalXp(): number {
     this.ensureLoaded();
     return this.env.wallet()?.xp ?? 0;
@@ -267,8 +275,17 @@ export class LevelUpQueue {
 
   constructor(private readonly progression: PlayerProgression, private readonly show: (level: number) => void) {
     // Baseline only: do not celebrate whatever level was already on disk.
-    this.lastSeenLevel = progression.level;
-    this.highWater = this.lastSeenLevel;
+    this.baseline();
+  }
+
+  /** The current level is the starting point (nothing to celebrate); or none yet while the level isn't loaded. */
+  private baseline(): void {
+    this.pending.length = 0;
+    if (!this.progression.ready) {
+      this.lastSeenLevel = -1;
+      return;
+    }
+    this.lastSeenLevel = this.highWater = this.progression.level;
   }
 
   beginHydration(): void {
@@ -277,21 +294,26 @@ export class LevelUpQueue {
 
   endHydration(): void {
     if (this.hydrationDepth > 0) this.hydrationDepth--;
-    this.pending.length = 0;
-    this.lastSeenLevel = this.highWater = this.progression.level;
+    this.baseline();
   }
 
   /** Re-baseline (the wallet balance arrived after install). */
   rebaseline(): void {
-    this.pending.length = 0;
-    this.lastSeenLevel = this.highWater = this.progression.level;
+    this.baseline();
   }
 
   onProgressionChanged(): void {
+    if (!this.progression.ready) return; // not loaded yet: no reading to compare
     const now = this.progression.level;
     if (this.hydrationDepth > 0) {
       this.pending.length = 0;
       this.lastSeenLevel = this.highWater = now;
+      return;
+    }
+    if (this.lastSeenLevel < 0) {
+      // First real reading (the server snapshot just arrived): the baseline, not a level up.
+      this.lastSeenLevel = now;
+      this.highWater = Math.max(this.highWater, now);
       return;
     }
     if (this.lastSeenLevel >= 0 && now > this.highWater) {
