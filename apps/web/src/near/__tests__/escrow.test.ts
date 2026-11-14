@@ -25,7 +25,7 @@ describe('escrow views', () => {
   it('reads the balance as yoctoNEAR from the escrow contract', async () => {
     const { fetchImpl, calls } = rpc(() => '1500000000000000000000000');
     expect(await getBalance('alice.testnet', fetchImpl)).toBe(1_500_000_000_000_000_000_000_000n);
-    expect(calls).toEqual([{ account: 'escrow.nomad-poker.testnet', method: 'get_balance', args: { account: 'alice.testnet' } }]);
+    expect(calls).toEqual([{ account: 'nomad-escrow.testnet', method: 'get_balance', args: { account: 'alice.testnet' } }]);
   });
 
   it('reads a table and a seat (null when there is none)', async () => {

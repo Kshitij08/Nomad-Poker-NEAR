@@ -10,7 +10,7 @@ import { StakeCatalog } from '@nomad/engine/stakes/stakes';
 import { viewContract } from './rpc';
 import { nearCall } from './wallet';
 
-export const ESCROW_CONTRACT = (import.meta.env?.VITE_NEAR_ESCROW as string | undefined) ?? 'escrow.nomad-poker.testnet';
+export const ESCROW_CONTRACT = (import.meta.env?.VITE_NEAR_ESCROW as string | undefined) ?? 'nomad-escrow.testnet';
 /** One chip is 0.001 NEAR (the contract's `chip_yocto`). */
 export const CHIP_YOCTO = 10n ** 21n;
 /** The contract's default rake, 5%, until `get_config` says otherwise. */
