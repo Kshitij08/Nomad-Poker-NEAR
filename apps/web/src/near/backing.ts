@@ -2,10 +2,12 @@
  * Backing pro agents on NEAR (the table contract's pools, vault and session history). Reads go straight to a NEAR RPC
  * node; writes go through the player's wallet (wallet.ts). Amounts are yoctoNEAR strings, as the contract returns them.
  */
+import { viewContract } from './rpc';
 import { nearCall } from './wallet';
 
+export { NEAR_RPC } from './rpc';
+
 export const NEAR_CONTRACT = (import.meta.env?.VITE_NEAR_CONTRACT as string | undefined) ?? 'table.nomad-poker.testnet';
-export const NEAR_RPC = (import.meta.env?.VITE_NEAR_RPC as string | undefined) ?? 'https://test.rpc.fastnear.com';
 export const NEAR_EXPLORER = 'https://testnet.nearblocks.io';
 /** Value per share is scaled by 1e9 in the contract; a new pool starts at 1.0. */
 export const PRICE_SCALE = 1_000_000_000;
@@ -33,20 +35,9 @@ export type SessionRecord = {
   payouts: { seats: Payout[] } | null;
 };
 
-/** A read-only contract call (NEAR RPC `call_function`). */
-export async function view<T>(method: string, args: Record<string, unknown> = {}, fetchImpl: typeof fetch = fetch): Promise<T> {
-  const res = await fetchImpl(NEAR_RPC, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0', id: 'nomad', method: 'query',
-      params: { request_type: 'call_function', finality: 'optimistic', account_id: NEAR_CONTRACT, method_name: method, args_base64: btoa(JSON.stringify(args)) },
-    }),
-  });
-  const j = (await res.json()) as { result?: { result?: number[]; error?: string }; error?: { message?: string; data?: unknown } };
-  if (j.error || !j.result?.result) throw new Error(j.result?.error ?? j.error?.message ?? `NEAR RPC error (${res.status})`);
-  return JSON.parse(new TextDecoder().decode(Uint8Array.from(j.result.result))) as T;
-}
+/** A read-only call on the table contract (NEAR RPC `call_function`). */
+export const view = <T>(method: string, args: Record<string, unknown> = {}, fetchImpl: typeof fetch = fetch): Promise<T> =>
+  viewContract<T>(NEAR_CONTRACT, method, args, fetchImpl);
 
 export const listAgents = () => view<AgentCard[]>('list_agents', { limit: 100 });
 export const recentSessions = (limit = 10) => view<SessionSummary[]>('recent_sessions', { limit });

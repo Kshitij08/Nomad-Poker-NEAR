@@ -37,6 +37,7 @@ import { FriendInvites } from '../../economy/social/friendInvites';
 import { FriendRelation } from '@nomad/engine/social/friendRules';
 import { NomadLink } from '../../economy/nomadLink';
 import { isPortrait } from '../../layout/orientation';
+import { VerifyView } from './verifyPanel';
 import { chromeSlots, chipButton, iconButton, tableSheet, tableToast, tIcon, type ChromeSlots } from '../../ui2/tableChrome';
 
 const SCREEN = HUD_DATA.canvases.find((c) => c.role === 'screen-hud')!;
@@ -70,6 +71,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       chat.close();
       reactions.close();
     });
+    const verify = new VerifyView(slots, ctx);
     const banner = v2tEl('div', 'v2t-status-pill', slots.layer);
     banner.innerHTML = '<i class="v2t-spin" aria-hidden="true"></i><span>Reconnecting…</span>';
     banner.setAttribute('role', 'status');
@@ -158,6 +160,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       reactions.render(live ? g : null);
       lobby.render(live ? g : null);
       invite.render(live ? g : null);
+      verify.render(session);
       chat.render();
       banner.hidden = session?.status !== 'reconnecting';
     };
@@ -169,6 +172,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
         reactions.render(session.status !== 'closed' ? session.game : null);
         lobby.render(session.status !== 'closed' ? session.game : null);
         invite.render(session.status !== 'closed' ? session.game : null);
+        verify.render(session);
         chat.render();
       } else refresh(); // no net session (yet): a table with no server, or one still connecting
     }, 200);
@@ -184,6 +188,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       local?.reactions.dispose();
       lobby.dispose();
       invite.dispose();
+      verify.dispose();
       banner.remove();
       setPregame(false);
     };

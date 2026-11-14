@@ -217,3 +217,17 @@ html[data-orient='portrait'] .v2t-cbar { font-size: 1.08em; }
 .v2t-invite-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v2t-invite-name small { color: var(--v2-mut2); font-weight: 800; font-size: 0.8em; }
 .v2t-invite-name small.on { color: #6ee7a8; }
+
+/* NEAR money tables: Verify the deals (net/chrome/verifyPanel.ts) */
+.v2t-vf-intro { margin: 0 0 0.8em; font-size: 0.9em; opacity: 0.8; }
+.v2t-vf-empty { opacity: 0.7; padding: 0.6em 0; }
+.v2t-vf-row { padding: 0.6em 0; border-top: 0.06em solid var(--v2-line); }
+.v2t-vf-head { display: flex; align-items: center; gap: 0.6em; flex-wrap: wrap; }
+.v2t-vf-head b { flex: 1; }
+.v2t-vf-st { font-weight: 700; font-size: 0.9em; opacity: 0.8; }
+.v2t-vf-st.ok { color: #22c468; opacity: 1; }
+.v2t-vf-st.bad { color: #ff5a5a; opacity: 1; }
+.v2t-vf-k { display: flex; gap: 0.6em; font-size: 0.85em; margin-top: 0.25em; }
+.v2t-vf-k span { opacity: 0.7; min-width: 6.5em; }
+.v2t-vf-k code { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.v2t-vf-why { font-size: 0.85em; color: #ff8a8a; margin-top: 0.25em; }

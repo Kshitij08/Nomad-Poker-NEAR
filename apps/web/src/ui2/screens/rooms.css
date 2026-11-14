@@ -117,3 +117,5 @@ html[data-orient='portrait'] .v2-rm-dot.on::before { width: 2.2em; }
 /* Taller room cards (round 6): the centre card may grow to most of the free height, the peeks with it. */
 .v2-rm-card { max-height: 48em; }
 .v2-rm-peek { height: 88%; max-height: 40em; }
+/* Lobby › Play for NEAR (NEAR money tables): a small button in the card's top-right corner. */
+.v2-b.v2-rm-near { position: absolute; top: 0.8em; right: 0.8em; z-index: 2; font-size: 1.15em; }

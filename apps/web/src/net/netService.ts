@@ -5,6 +5,7 @@
  *   quickPlay({ tier, buyIn })   Quick Play at a stake (pool, then overflow) — FusionMenuUIMain.OnPlayButtonPressed
  *   freePlayJoin({ tier, buyIn }) FreePlayJoinBridge: the same Quick Play
  *   createParty() / joinParty(code)  Party Create (spawn a private room, then join it) / Join by code
+ *   joinNearTable(session, buyIn) sit at a NEAR money table with the chips the escrow seat has locked
  *   reconnect()                  rejoin the last session (e.g. after a reload) inside the seat's grace
  *   cancelSearch()               MenuConnectCancel.Request
  *   current                      the live table session (ClientGame, chat, voice) the chrome draws from
@@ -29,6 +30,8 @@ import { RewardGrant } from '../app/services';
 import { VirtualEconomy } from '../economy/virtualEconomy';
 import type { TournamentClientState } from '../tournaments/clientState';
 import { gameServerUrl } from './serverUrl';
+import { isNearMoneyRoom } from '../near/escrow';
+import { DeckLog, httpBase } from '../near/deckVerify';
 
 const LastSessionKey = 'Poker.Net.LastSession';
 
@@ -42,6 +45,8 @@ export class NetTableSession implements TableSession {
   private stopped = false;
   private offClose: (() => void) | null = null;
   private offTournament: (() => void) | null = null;
+  /** NEAR money tables: each hand's deck commitment and its check against the reveal (the table's Verify panel). */
+  deck: DeckLog | null = null;
 
   constructor(
     private readonly service: NetService,
@@ -53,10 +58,19 @@ export class NetTableSession implements TableSession {
     return this.conn;
   }
 
+  /** A NEAR money table (`poker-money-…`): chips are escrowed NEAR, never the Coins wallet. */
+  get money(): boolean {
+    return isNearMoneyRoom(this.conn.session);
+  }
+
   start(): void {
     this.view = new NetTableView(this.host.stage);
     this.view.voiceEnabled = this.service.voiceEnabled;
     this.chat = new TableChat(this.conn, this.service.chatUserId, () => this.service.identity.playerName);
+    if (this.money) {
+      const session = this.conn.session ?? '';
+      this.deck = new DeckLog({ base: httpBase(this.service.serverUrl), session, onChange: () => this.host.ctx.events.emit('near:deck', this.deck) });
+    }
     this.bind(this.conn);
     if (this.service.voiceEnabled) {
       const cloud = /^https?:\/\//i.test(this.service.serverUrl) ? this.service.serverUrl.replace(/\/+$/, '') : null;
@@ -80,10 +94,12 @@ export class NetTableSession implements TableSession {
       audio: this.host.audio,
       conn,
       identity: this.service.identity,
-      wallet: this.service.wallet,
+      // Money tables seat escrowed NEAR: no optimistic Coins debit or balance pushes on the Coins wallet.
+      wallet: this.money ? undefined : this.service.wallet,
       wait: tickerWait,
       log: (level, m) => console[level === 'info' ? 'log' : level](m),
       onPresented: (event, catchUp) => {
+        this.deck?.onEvent(event, this.game.localSeat);
         if (!catchUp) {
           this.host.ctx.events.emit('table:event', { event });
           this.trackProgress(event);
@@ -109,7 +125,7 @@ export class NetTableSession implements TableSession {
     });
     this.bindTournament(conn);
     this.applyRoomSkin(conn);
-    econ(this.host.ctx).friends?.setCurrentTable?.(conn.session ? { session: conn.session, money: false } : null);
+    econ(this.host.ctx).friends?.setCurrentTable?.(conn.session ? { session: conn.session, money: this.money } : null);
     this.game.start();
     try {
       sessionStorage.setItem(LastSessionKey, conn.session ?? '');
@@ -178,9 +194,9 @@ export class NetTableSession implements TableSession {
     this.lastSeat = seat;
     ctx.events.emit('table:seat', seat);
     if (seat >= 0 && !wasSeated) {
-      ctx.events.emit('table:joined', { localSeat: seat, moneyTable: false, roomCode: this.game.roomCode });
+      ctx.events.emit('table:joined', { localSeat: seat, moneyTable: this.money, roomCode: this.game.roomCode });
       const stake = ChainTableMode.resolveStake(this.conn.session ?? '', this.conn.properties[ChainTableMode.StakeProperty] ?? null);
-      econ(ctx).telemetry?.funnel?.beginTable?.(this.game.roomCode, stake.minBuyIn, this.service.identity.selectedBuyInChips(), false);
+      econ(ctx).telemetry?.funnel?.beginTable?.(this.game.roomCode, stake.minBuyIn, this.service.identity.selectedBuyInChips(), this.money);
       econ(ctx).economy?.markAtTable?.();
     } else if (seat < 0 && wasSeated) {
       econ(ctx).economy?.clearAtTable?.();
@@ -199,7 +215,7 @@ export class NetTableSession implements TableSession {
     const session = conn.session ?? '';
     if (ChainTableMode.isPrivateSession(session, conn.properties[ChainTableMode.KindProperty])) return;
     const stake = ChainTableMode.resolveStake(session, conn.properties[ChainTableMode.StakeProperty] ?? null);
-    theme(this.host.ctx)?.applyTableSkinForStake?.(stake.minBuyIn, false);
+    theme(this.host.ctx)?.applyTableSkinForStake?.(stake.minBuyIn, this.money);
   }
 
   /**
@@ -278,9 +294,11 @@ export class NetTableSession implements TableSession {
     this.offClose?.();
     this.offTournament?.();
     if (ChainTableMode.isTournamentSession(this.conn.session ?? '')) this.service.tournamentState?.clear();
+    this.deck?.stop();
     // ApplyOptimisticCashOutCredit: the seat assignment (-1) and the balance push both land after this session has
-    // stopped listening, so the stack goes back on the HUD wallet now (the server records the same figure).
-    if (this.game && this.game.localSeat >= 0 && !ChainTableMode.isTournamentSession(this.conn.session ?? '')) {
+    // stopped listening, so the stack goes back on the HUD wallet now (the server records the same figure). Not at a
+    // money table: there the stack is NEAR, cashed out to the escrow game balance.
+    if (this.game && this.game.localSeat >= 0 && !this.money && !ChainTableMode.isTournamentSession(this.conn.session ?? '')) {
       const stack = this.game.localChips();
       if (stack > 0) this.service.wallet.adopt(this.service.wallet.coins + stack);
     }
@@ -421,6 +439,15 @@ export class NetService {
   joinParty(code: string): Promise<void> {
     this.identity.buyInOverride = ChainTableMode.PrivateMaxBuyIn;
     return this.connect({ kind: 'join', code });
+  }
+
+  /**
+   * Sit at a NEAR money table (a house table's room, `poker-money-st50`…) with `buyIn` chips: what the player's escrow
+   * seat there has locked. The game server checks the seat on the escrow and seats exactly that.
+   */
+  joinNearTable(session: string, buyIn: number): Promise<void> {
+    this.identity.buyInOverride = buyIn;
+    return this.connect({ kind: 'join', code: session }, buyIn);
   }
 
   /** Spectate a table: a public table's session name or a party room code. Never takes a seat or chips. */
