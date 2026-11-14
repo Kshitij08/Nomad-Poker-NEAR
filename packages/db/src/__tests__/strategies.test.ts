@@ -27,9 +27,10 @@ beforeEach(async () => {
 
 /** One finished session of `hands` hands for `strategyId`, winning `perHand` (± a little) each hand at stake 1000 (bb 50). */
 async function session(owner: string, id: string, strategyId: string, hands: number, perHand: number, at: number) {
-  await startAgent(db, owner, { session: id, bankroll: 100_000, stake: 1000, strategyId }, { now: at });
+  // 10,000 Coins: the bankroll puts it at the 1,000 table (big blind 50), the scale these numbers assume.
+  await startAgent(db, owner, { session: id, bankroll: 10_000, strategyId }, { now: at });
   await markSeated(db, id, 'poker-free', at);
-  let stack = 100_000;
+  let stack = 10_000;
   for (let n = 1; n <= hands; n++) {
     const net = perHand + (n % 2 ? 10 : -10);
     stack += net;

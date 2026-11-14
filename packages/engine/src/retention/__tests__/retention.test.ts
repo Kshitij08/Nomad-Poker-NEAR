@@ -112,12 +112,11 @@ describe('PlayerLevelMath (PlayerLevelMathTests)', () => {
     expect(r[0]!.kind).toBe(RewardKind.Coins);
     expect(r[0]!.amount).toBe(125);
   });
-  it('LevelReward_MilestoneGems', () => {
+  it('LevelReward_MilestoneGems (paid as Coins: 1 Gem = 250)', () => {
     const r = LevelRewardCatalog.rewardsForLevel(5);
-    expect(r.length).toBe(2);
-    expect(r[1]!.kind).toBe(RewardKind.Gems);
+    expect(r.map((g) => [g.kind, g.amount])).toEqual([[RewardKind.Coins, 200 + 2 * 250]]);
     const ten = LevelRewardCatalog.rewardsForLevel(10);
-    expect(ten.map((g) => [g.kind, g.amount, g.itemId])).toEqual([[RewardKind.Coins, 650, ''], [RewardKind.Gems, 5, ''], [RewardKind.Cosmetic, 1, 'frame_lv10']]);
+    expect(ten.map((g) => [g.kind, g.amount, g.itemId])).toEqual([[RewardKind.Coins, 650 + 5 * 250, ''], [RewardKind.Cosmetic, 1, 'frame_lv10']]);
     expect(LevelRewardCatalog.rewardsForLevel(1)).toEqual([]);
   });
 });
@@ -173,7 +172,7 @@ describe('MissionProgressMath (MissionProgressMathTests)', () => {
     MissionProgressMath.advance(b, MissionKind.WinTwoPairOrBetter, 3, 50);
     expect(find(b, 'weekly_two_pair_3').progress).toBe(3);
     const r = MissionProgressMath.tryClaim(b, 'weekly_two_pair_3', 50)!;
-    expect([r[0]!.kind, r[0]!.amount]).toEqual([RewardKind.Coins, 2000]);
+    expect([r[0]!.kind, r[0]!.amount]).toEqual([RewardKind.Coins, 2500]);
   });
   it('DayRollover_ResetsDailyKeepsWeeklyWithinWeek', () => {
     let b = MissionProgressMath.ensureFresh(null, 70);
@@ -194,8 +193,8 @@ describe('MissionProgressMath (MissionProgressMathTests)', () => {
   it('RewardPreview_FormatsCoinsXpGems', () => {
     // NUnit asserts "Gems" here, but the C# writes " Gem" for an amount of 1, so that NUnit test fails in Unity too.
     // The port follows the C# code, not the stale assertion.
-    expect(rewardPreview(MissionCatalog.tryGet('daily_pair_power')!)).toBe('+300 Coins, +30 XP, +1 Gem');
-    expect(rewardPreview(MissionCatalog.tryGet('weekly_collector_12')!)).toBe('+3000 Coins, +250 XP, +3 Gems');
+    expect(rewardPreview(MissionCatalog.tryGet('daily_pair_power')!)).toBe('+550 Coins, +30 XP');
+    expect(rewardPreview(MissionCatalog.tryGet('weekly_collector_12')!)).toBe('+3750 Coins, +250 XP');
   });
 });
 

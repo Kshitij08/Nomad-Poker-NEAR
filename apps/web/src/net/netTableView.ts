@@ -181,6 +181,24 @@ export class NetTableView implements NetTableViewPort {
 
   hideSeat(seat: number): void {
     this.inner.hideSeat(seat);
+    if (this.pictures.delete(seat)) this.hudOf(seat)?.setPicture(null);
+  }
+
+  /** Uploaded profile pictures by seat (the room's `picture` messages); null clears one. */
+  private readonly pictures = new Map<number, string>();
+
+  setSeatPicture(seat: number, url: string | null): void {
+    // A player who moved seats leaves their old one.
+    for (const [s, u] of this.pictures) {
+      if (url && u === url && s !== seat) {
+        this.pictures.delete(s);
+        this.hudOf(s)?.setPicture(null);
+      }
+    }
+    if (seat < 0) return;
+    if (url) this.pictures.set(seat, url);
+    else this.pictures.delete(seat);
+    this.hudOf(seat)?.setPicture(url);
   }
 
   beginHand(handNumber: number): void {
@@ -313,6 +331,10 @@ export class NetTableView implements NetTableViewPort {
     root.setActive(true);
     root.layout();
     m = { root, unmute: root.find('Unmute'), mute: root.find('mute'), graph: root.find('Sound_Graph') };
+    // Until the seat reports otherwise it is not sending audio: show it muted, not live.
+    m.mute?.setActive(true);
+    m.unmute?.setActive(false);
+    m.graph?.setActive(false);
     this.mics.set(slot, m);
     return m;
   }

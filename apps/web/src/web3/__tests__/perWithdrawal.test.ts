@@ -69,7 +69,7 @@ describe('PerWithdrawal', () => {
     const statuses: string[] = [];
     expect(await w.start((s) => statuses.push(s))).toBe(3_000_000n);
     expect(f.sent.length).toBe(1);
-    expect(statuses[0]).toBe('Approve taking $30 out of the game balance in your wallet…');
+    expect(statuses[0]).toBe('Approve taking 0.003 SOL out of the game balance in your wallet…');
     const saved = parsePending(store.get(PerWithdrawal.PREF_KEY)!);
     expect(saved).toMatchObject({ Wallet: walletKey.toBase58(), Baseline: 1_000n, Expected: 3_001_000n, Confirmed: true, GiveUpAfter: 0 });
     expect(w.current).toBe(WithdrawalPhase.OnTheWay);

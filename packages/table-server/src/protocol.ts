@@ -17,6 +17,10 @@ export type JoinFailReason = 'GameIsFull' | 'GameNotFound' | 'GameClosed' | 'Inv
 export type ClientMessage =
   // ---- Session (Fusion StartGame / the dedicated spawner) ----
   /** NetworkRunner.StartGame(GameMode.Client, session): join an existing session. */
+  /** Side channel (on-chain tables): a reaction over `seat` (the table's own seat number), relayed to the room. */
+  | { t: 'sideReaction'; seat: number; id: number }
+  /** Your uploaded profile picture's key ('' = none): shown on your seat to everyone at the table. */
+  | { t: 'picture'; key: string }
   | { t: 'join'; session: string; appVersion: string; /** Watch only: never seated, outside the 8 seats' limit. */ watch?: boolean }
   /** PokerPartyClient.EnsureDedicatedRoomAsync: host a private room under `code` (then `join` it). */
   | { t: 'spawnRoom'; code: string; money: boolean }
@@ -51,6 +55,10 @@ export type ServerMessage =
   /** Joined `session` as PlayerRef `player`. */
   | { t: 'joined'; session: string; player: number; kind: string; region: string; properties: Record<string, string> }
   | { t: 'joinFailed'; reason: JoinFailReason; message: string }
+  /** Side channel: another member reacted over `seat`. */
+  | { t: 'sideReaction'; from: number; seat: number; id: number }
+  /** A member's profile picture ('' = none) and the seat it belongs on (-1: not seated). */
+  | { t: 'picture'; player: number; seat: number; key: string }
   | { t: 'roomReady'; code: string; error?: string }
   | { t: 'overflow'; session?: string; error?: string }
   | { t: 'pong'; t0: number }

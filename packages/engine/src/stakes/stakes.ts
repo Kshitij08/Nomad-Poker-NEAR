@@ -61,6 +61,16 @@ export const StakeCatalog = {
     return StakeCatalog.tryGet(minBuyIn) !== undefined;
   },
 
+  /**
+   * The table an Agent with this bankroll plays: the highest tier whose minimum buy-in is at most a tenth of it
+   * (1,000 → the 100 table, blinds 2 / 5), so one bad hand can't take the whole bankroll; never below Micro.
+   */
+  forAgentBankroll(bankroll: number): StakeTier {
+    let best = StakeCatalog.Lowest;
+    for (const t of StakeCatalog.Tiers) if (t.minBuyIn * 10 <= bankroll) best = t;
+    return best;
+  },
+
   /** Highest tier the player can currently sit at, or null if they cannot afford Micro. */
   highestAffordable(coins: number): StakeTier | null {
     let best: StakeTier | null = null;

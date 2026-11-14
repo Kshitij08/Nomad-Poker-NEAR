@@ -39,6 +39,8 @@ export interface PlayerProfile {
   friendCode: string;
   /** AvatarCatalog value, 0 = none. */
   avatar: number;
+  /** Their own uploaded picture's key (SocialRoutes.pictures + `/<key>.webp`), or null for the avatar. */
+  picture: string | null;
 }
 
 export interface LinkedIdentity {
@@ -267,6 +269,10 @@ export const SocialRoutes = {
   remove: '/v1/friends/remove',
   invite: '/v1/invites/send',
   dismiss: '/v1/invites/dismiss',
+  /** POST (raw image body, ≤ 200 KB webp / png / jpeg) sets your picture; DELETE removes it. */
+  picture: '/v1/me/picture',
+  /** + `/<key>.webp`: a player's uploaded picture (public, cached forever: a new upload is a new key). */
+  pictures: '/v1/pictures',
   /** `?q=` (2+ characters): players whose display name starts with it, for Add friend. */
   search: '/v1/players/search',
   profile: '/v1/me/profile',
@@ -351,6 +357,8 @@ export interface FriendInfo {
   online: boolean;
   /** The table (session) they are seated at; friends only. */
   table: string | null;
+  /** Their uploaded picture's key, or null. */
+  picture?: string | null;
 }
 
 /** One Add-friend suggestion (GET SocialRoutes.search). */
@@ -362,6 +370,7 @@ export interface PlayerSearchResult {
   /** Your relation to them, null when none. */
   relation: FriendRelationName | null;
   online: boolean;
+  picture?: string | null;
 }
 
 export interface PlayerSearchResponse {
@@ -401,6 +410,11 @@ export interface LeaderboardRowInfo {
   displayName: string;
   score: number;
   isLocal: boolean;
+  /** Agents board: the Agent's owner and the hands it played this week. */
+  ownerName?: string;
+  hands?: number;
+  /** The player's (or the Agent owner's) uploaded picture key. */
+  picture?: string | null;
 }
 
 export interface LeaderboardPage {

@@ -19,6 +19,9 @@
 }
 .v2t-ib:hover { border-color: var(--v2-accent); color: #fff; }
 .v2t-ib.on { background: var(--v2-grad-violet); border-color: var(--v2-violet-line); color: #fff; }
+/* The voice button: red while you are muted, grey while voice is connecting or unavailable. */
+.v2t-ib.mic-muted { background: linear-gradient(180deg, #b23a48, #7c1d2c); border-color: #e0707c; color: #fff; }
+.v2t-ib.mic-off { opacity: 0.6; }
 .v2t-ib.sm { width: 2.2em; height: 2.2em; box-shadow: none; }
 .v2t-dot { position: absolute; top: -0.25em; right: -0.25em; min-width: 1.35em; height: 1.35em; padding: 0 0.3em; border-radius: 1em; background: var(--v2-badge); border: 0.12em solid #fff; font-size: 0.72em; font-weight: 900; display: flex; align-items: center; justify-content: center; color: #fff; }
 

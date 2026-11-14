@@ -30,7 +30,8 @@ export function securityHeaders(stage) {
     "script-src 'self' https://accounts.google.com/gsi/client",
     // The UI sets element styles from script; style attributes need 'unsafe-inline'.
     "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
-    "img-src 'self' data: blob:",
+    // Uploaded profile pictures are served by the API (/v1/pictures).
+    `img-src 'self' data: blob:${stage.api ? ' ' + new URL(stage.api).origin : ''}`,
     "media-src 'self' data: blob:",
     "font-src 'self' data:",
     `connect-src ${connect.join(' ')}`,

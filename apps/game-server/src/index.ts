@@ -47,7 +47,7 @@ const json = (body: unknown, status: number, headers: Record<string, string> = {
 const table = (env: Env, session: string) => env.TABLES.get(env.TABLES.idFromName(session));
 
 /** The routes that create work (rooms, overflow scans, Agent starts) are limited per address. */
-const LIMITED = new Set(['/v1/tables/spawn', '/v1/tables/overflow', '/v1/agents/start']);
+const LIMITED = new Set(['/v1/tables/spawn', '/v1/tables/overflow', '/v1/agents/start', '/v1/voice/ice']);
 async function limited(request: Request, env: Env, path: string): Promise<boolean> {
   if (!env.HTTP_LIMITER || request.method !== 'POST' || !LIMITED.has(path)) return false;
   const { success } = await env.HTTP_LIMITER.limit({ key: `${path}:${request.headers.get('cf-connecting-ip') ?? 'unknown'}` });
@@ -120,6 +120,28 @@ export default {
         .filter((t): t is NonNullable<typeof t> => t !== null)
         .sort((a, b) => b.players - a.players || b.seated - a.seated);
       return json({ tables }, 200, { ...h, 'cache-control': 'no-store' });
+    }
+
+    // Table voice: ICE servers for the WebRTC audio mesh. Cloudflare's STUN, plus TURN relay credentials valid for a day
+    // when a TURN key is configured (most players connect directly; the relay covers strict NATs and mobile networks).
+    if (url.pathname === '/v1/voice/ice' && request.method === 'POST') {
+      if (!originOk(request, env)) return json({ error: 'Origin not allowed.' }, 403);
+      const stun = { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.cloudflare.com:53'] };
+      if (!env.TURN_KEY_ID || !env.TURN_KEY_TOKEN) return json({ iceServers: [stun] }, 200, h);
+      try {
+        const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${env.TURN_KEY_TOKEN}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ ttl: 86_400 }),
+        });
+        if (!r.ok) throw new Error(`TURN ${r.status}`);
+        const body = (await r.json()) as { iceServers?: RTCIceServer[] | RTCIceServer };
+        const servers = Array.isArray(body.iceServers) ? body.iceServers : body.iceServers ? [body.iceServers] : [];
+        return json({ iceServers: servers.length ? servers : [stun] }, 200, { ...h, 'cache-control': 'no-store' });
+      } catch (e) {
+        console.error('[voice] TURN credentials failed', (e as Error).message);
+        return json({ iceServers: [stun] }, 200, h);
+      }
     }
 
     if (url.pathname.startsWith('/v1/agents/')) {

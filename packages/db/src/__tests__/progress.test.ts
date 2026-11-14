@@ -144,7 +144,7 @@ describe('missions', () => {
 });
 
 describe('levels', () => {
-  it('pays every level crossed, gems every 5 and a cosmetic at 10, once', async () => {
+  it('pays every level crossed, a Coins bonus every 5 (the old Gems) and a cosmetic at 10, once', async () => {
     const xpFor10 = PlayerLevelMath.cumulativeXpForLevel(10);
     await post(db, [{ playerId: p, currency: 'xp', delta: xpFor10, reason: 'test', idempotencyKey: 'xp' }]);
     const before = await coins();
@@ -152,7 +152,7 @@ describe('levels', () => {
     expect(paid).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
     const expectedCoins = paid.flatMap((lv) => LevelRewardCatalog.rewardsForLevel(lv)).filter((g) => g.kind === 0).reduce((s, g) => s + g.amount, 0);
     expect(await coins()).toBe(before + expectedCoins);
-    expect((await balances(db, p)).gems).toBe(2 + 5);
+    expect((await balances(db, p)).gems).toBe(0); // Gems are paid as Coins now
     expect((await snapshot(db, p, T0)).items).toEqual(['frame_lv10']);
     expect(await settleLevels(db, p, T0)).toEqual([]);
   });

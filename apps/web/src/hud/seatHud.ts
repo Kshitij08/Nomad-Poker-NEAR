@@ -155,8 +155,27 @@ export class SeatHudView implements SeatHud {
 
   // ---------------------------------------------------------------- SeatView API
 
+  /** The player's own uploaded picture (an absolute URL), shown instead of their avatar; null: the avatar. */
+  private picture: string | null = null;
+  private lastBind: { name: string; avatar: number; avatarName: string } | null = null;
+
+  setPicture(url: string | null): void {
+    if (this.picture === url) return;
+    this.picture = url;
+    if (url && this.avatar.image) {
+      this.avatar.image.sprite = { ...(this.avatar.image.sprite ?? { ppu: 100, rect: [0, 0, 1, 1], border: [0, 0, 0, 0] }), name: 'picture', file: url };
+      this.avatar.render();
+    } else if (!url && this.lastBind) {
+      const b = this.lastBind;
+      this.lastBind = null;
+      this.bind(b.name, b.avatar, b.avatarName);
+    }
+  }
+
   bind(name: string, avatar: number, avatarName: string): void {
     this.nameText.setText(name);
+    this.lastBind = { name, avatar, avatarName };
+    if (this.picture) return; // the uploaded picture wins over the avatar
     const id = AvatarCatalog.idOf(AvatarCatalog.resolve(avatar, avatarName));
     if (id && this.avatar.image) {
       const file = `assets/ui/Test/UI/Common_UI/Pro_Pic/${id}.webp`;

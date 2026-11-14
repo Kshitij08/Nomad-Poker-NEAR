@@ -9,6 +9,8 @@ export interface PlayerRow {
   friend_code?: string | null;
   /** AvatarCatalog value, 0 = none. */
   avatar?: number;
+  /** Uploaded picture key (migrations/0014_player_picture.sql), or null. */
+  picture?: string | null;
   /** Set while the account is suspended (migrations/0006_admin.sql). */
   banned_at?: number | null;
   ban_reason?: string | null;

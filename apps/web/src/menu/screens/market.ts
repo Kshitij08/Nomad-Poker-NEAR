@@ -68,7 +68,7 @@ export function solCopyIsOwn(copy: SolCopy, walletAddress: string | null | undef
 export const marketOnchain: {
   /** NomadUiHost.LoadSol: Busy, then GET the private-tables backend + path, or (signed) connect the wallet and post a
    * request signed by the play key; `show` gets the JSON, an error goes to a message box. */
-  loadSol?: (title: string, path: string, show: (j: Record<string, unknown>) => void, signed: boolean, data: Record<string, unknown> | null) => void;
+  loadSol?: (title: string, path: string, show: (j: Record<string, unknown>) => void, signed: boolean, data: Record<string, unknown> | null, onError?: (message: string) => void) => void;
   /** PerWallet.Address (base58), or null with no wallet connected. */
   walletAddress?: () => string | null;
   /** PerUi.Sol: lamports as "$12.50". */
@@ -231,7 +231,7 @@ function loadSol(host: NomadHost, title: string, path: string, show: (j: J) => v
 }
 
 /** PerUi.Sol (the web3 partial's), or dollars at $1 = 100,000 lamports. */
-const solText = (lamports: bigint): string => marketOnchain.sol?.(lamports) ?? '$' + formatN0(Number(lamports) / 100_000);
+const solText = (lamports: bigint): string => marketOnchain.sol?.(lamports) ?? `${Number(lamports) / 1e9} SOL`;
 
 /** Money: signed Coins, or $ in ONCHAIN mode (lamports). */
 function money(host: NomadHost, v: number): string {

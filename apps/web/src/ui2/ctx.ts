@@ -48,7 +48,24 @@ export function playerName(): string {
 }
 
 /** Avatar image URL for a player (current player when omitted). */
+/** An uploaded picture's address (served by the Nomad API), or null. */
+export function pictureUrl(key: string | null | undefined): string | null {
+  const api = _ctx?.services.nomadApi as unknown as { pictureUrl?: (k: string | null | undefined) => string | null } | null | undefined;
+  return key && api?.pictureUrl ? api.pictureUrl(key) : null;
+}
+
+/** Your uploaded picture's key, or null. */
+export function myPicture(): string | null {
+  const api = _ctx?.services.nomadApi as unknown as { me?: { player?: { picture?: string | null } } } | null | undefined;
+  return api?.me?.player?.picture ?? null;
+}
+
 export function avatarUrl(avatar?: number, name?: string): string | null {
+  // Yours: the uploaded picture, when there is one.
+  if (avatar === undefined && name === undefined) {
+    const mine = pictureUrl(myPicture());
+    if (mine) return mine;
+  }
   const av = S('avatars');
   // With no picture chosen, show the same name-based default the table shows (not a blank placeholder).
   if (avatar === undefined && name === undefined) name = playerName();
@@ -88,7 +105,7 @@ export function coinCap(): string {
     // balance not read yet → "—" (beside the SOL icon); no wallet at all → "Connect".
     const live = onchainApi.walletAddress?.() ?? (S('solana')?.address as string | null | undefined) ?? null;
     const known = live ?? ((_ctx?.services.account as unknown as { walletAddress?: string | null })?.walletAddress ?? null);
-    const raw = live ? (onchainApi.balanceText?.() ?? _host.solShort ?? '').split(' (')[0].split(' · ')[0].replace(/^◎\s*/, '') : known ? '—' : 'Connect';
+    const raw = live ? (onchainApi.balanceText?.() ?? _host.solShort ?? '').split(' (')[0].split(' · ')[0].replace(/^◎\s*/, '').replace(/\s*SOL(\s+in wallet)?$/i, '') : known ? '—' : 'Connect';
     // Before the balance is read the partial says "Tap to load balance" / "Not connected" — too long for a capsule.
     const t = !raw || /tap to load|not connected/i.test(raw) ? '—' : raw;
     return `<button class="v2-coin" data-a="profile-open" aria-label="SOL balance and wallet">${ico('sol', 1.9)}<b class="v2-num">${esc(t || '—')}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;

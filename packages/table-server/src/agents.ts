@@ -17,6 +17,8 @@ export interface AgentDeploymentConfig {
   agentName: string;
   /** Chips the agent sits with (0 → the table's starting stack). */
   bankroll: number;
+  /** Stop loss in chips (0 / absent = off): the Agent never puts in more than it can lose (agentBudget.ts). */
+  stopLoss?: number;
   strategyPreset?: string;
   /** The bot personality the agent plays with (AgentSession.ResolveProfile). Omitted → a random HeuristicBot. */
   profile?: BotProfile;
@@ -36,6 +38,8 @@ export interface AgentSession {
   lastStack: number;
   ownerStopRequested: boolean;
   active: boolean;
+  /** The stack it may not go below (seated stack minus the stop loss); undefined when there is no stop loss. */
+  stopFloor?: number;
 }
 
 export interface AgentHandRecord {

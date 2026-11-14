@@ -253,6 +253,12 @@ export class PlayerProgression {
 export class LevelUpQueue {
   readonly pending: number[] = [];
   private lastSeenLevel = -1;
+  /**
+   * The highest level already reached (celebrated or baselined). A reading can dip for a moment (the wallet is swapped
+   * or reloads when leaving a table, briefly reading 0 XP) and come back; climbing back to a level already reached is
+   * not a level up, so it is never queued twice.
+   */
+  private highWater = -1;
   private hydrationDepth = 0;
   /** The panel is open (C# IsShowing). Set by the level-up screen. */
   showing = false;
@@ -262,6 +268,7 @@ export class LevelUpQueue {
   constructor(private readonly progression: PlayerProgression, private readonly show: (level: number) => void) {
     // Baseline only: do not celebrate whatever level was already on disk.
     this.lastSeenLevel = progression.level;
+    this.highWater = this.lastSeenLevel;
   }
 
   beginHydration(): void {
@@ -271,23 +278,26 @@ export class LevelUpQueue {
   endHydration(): void {
     if (this.hydrationDepth > 0) this.hydrationDepth--;
     this.pending.length = 0;
-    this.lastSeenLevel = this.progression.level;
+    this.lastSeenLevel = this.highWater = this.progression.level;
   }
 
   /** Re-baseline (the wallet balance arrived after install). */
   rebaseline(): void {
     this.pending.length = 0;
-    this.lastSeenLevel = this.progression.level;
+    this.lastSeenLevel = this.highWater = this.progression.level;
   }
 
   onProgressionChanged(): void {
     const now = this.progression.level;
     if (this.hydrationDepth > 0) {
       this.pending.length = 0;
-      this.lastSeenLevel = now;
+      this.lastSeenLevel = this.highWater = now;
       return;
     }
-    if (this.lastSeenLevel >= 0 && now > this.lastSeenLevel) for (let lv = this.lastSeenLevel + 1; lv <= now; lv++) this.pending.push(lv);
+    if (this.lastSeenLevel >= 0 && now > this.highWater) {
+      for (let lv = Math.max(this.lastSeenLevel, this.highWater) + 1; lv <= now; lv++) if (!this.pending.includes(lv)) this.pending.push(lv);
+      this.highWater = now;
+    }
     this.lastSeenLevel = now;
     if (this.autoShow && !this.showing && this.pending.length > 0) this.show(this.pending.shift()!);
   }

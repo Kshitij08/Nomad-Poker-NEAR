@@ -22,6 +22,11 @@ export interface TableSession {
    * slot (slot 0). Returns whether you hold that seat now (reactions are offered only then).
    */
   localPlayerSeated?(): boolean;
+  /**
+   * Optional: chat and reactions carried by a side channel (on-chain tables: web3/per/perSideChannel.ts). The table
+   * chrome binds its chat drawer and reaction tray to them (netChrome ChatPort / ReactionPort).
+   */
+  readonly sideChannel?: { readonly chat: unknown; readonly reactions: unknown } | null;
 }
 
 export interface TableSessionHost {

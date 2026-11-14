@@ -74,12 +74,17 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
     banner.innerHTML = '<i class="v2t-spin" aria-hidden="true"></i><span>Reconnecting…</span>';
     banner.setAttribute('role', 'status');
     banner.hidden = true;
+    // Voice: one clear button in the top bar (the seat's small mic badge does the same).
+    const micHolder: MicHolder = { session: null, click: () => undefined };
+    const micBtn = iconButton(slots.right, 'micOff', 'Turn on your microphone', () => micHolder.click(), 0);
+    micBtn.hidden = true;
 
     let session: NetTableSession | null = null;
     /** Chat and reactions for a table with no server (made on first need, kept for this visit). */
     let local: { chat: LocalChat; reactions: LocalReactions } | null = null;
     let offGame: (() => void) | null = null;
     let boundGame: ClientGame | null = null;
+    let boundSide: ChatPort | null = null;
     const bind = (s: NetTableSession | null) => {
       if (s === session && s?.game === boundGame) {
         refresh();
@@ -89,6 +94,10 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       offGame = null;
       session = s;
       boundGame = s?.game ?? null;
+      if (!s?.game) {
+        micBtn.hidden = true;
+        micHolder.session = null;
+      }
       chat.bind(s?.chat ?? local?.chat ?? null);
       if (s?.game) {
         const game = s.game;
@@ -98,7 +107,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
         });
         s.game.privateBuyInPrompt = (g) => openPrivateBuyIn(slots, g, service, ctx);
         service.privateBuyInPrompt = s.game.privateBuyInPrompt;
-        bindSeatMic(s);
+        bindSeatMic(s, slots.layer, micBtn, micHolder);
       }
       refresh();
     };
@@ -115,6 +124,21 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
     };
 
     const refresh = () => {
+      // A table with its own side channel (on-chain tables): its chat and reactions.
+      const side = !session ? (host.session?.sideChannel as { chat: ChatPort; reactions: ReactionPort } | null | undefined) : null;
+      if (side) {
+        if (boundSide !== side.chat) {
+          boundSide = side.chat;
+          chat.bind(side.chat as TableChat);
+        }
+        chat.setLive(true);
+        reactions.render(side.reactions);
+        lobby.render(null);
+        invite.render(null);
+        chat.render();
+        banner.hidden = true;
+        return;
+      }
       if (!session && host.session?.localPlayerSeated) {
         if (!local) {
           local = { chat: new LocalChat(() => service.identity.playerName), reactions: new LocalReactions(host) };
@@ -903,21 +927,63 @@ const MIC_COLORS = {
   offline: { r: 0.35, g: 0.35, b: 0.35, a: 0.8 },
 };
 
-/** PokerSeatMic on the local seat: click mutes (or retries a refused mic); the circle shows the link state. */
-function bindSeatMic(s: NetTableSession): void {
+/** The top-bar voice button's current target (the bound table session). */
+interface MicHolder {
+  session: NetTableSession | null;
+  click: () => void;
+}
+
+/**
+ * PokerSeatMic on the local seat plus the top-bar voice button: a click turns the mic on (asking the browser once),
+ * then mutes / unmutes (or retries a voice link that failed). The button and the seat's circle show the state.
+ */
+function bindSeatMic(s: NetTableSession, layer: HTMLElement, btn: HTMLButtonElement, holder: MicHolder): void {
   const voice = s.voice;
-  if (!voice) return;
+  holder.session = s;
+  if (!voice) {
+    btn.hidden = true;
+    holder.click = () => undefined;
+    return;
+  }
+  const toggle = (): void => {
+    if (voice.canRetry) voice.retry();
+    else if (!voice.micOn)
+      void voice.enableMic().then((ok) => {
+        if (!ok) tableToast(layer, 'Microphone blocked: allow it in your browser to talk. You can still hear the table.', 3500);
+        else tableToast(layer, 'Microphone on');
+      });
+    else {
+      voice.toggleMute();
+      tableToast(layer, voice.isMuted ? 'You are muted' : 'Microphone on');
+    }
+  };
+  holder.click = toggle;
+  const paintButton = (): void => {
+    if (holder.session !== s) return;
+    const joined = voice.state === VoiceLinkState.Joined;
+    btn.hidden = s.game.localSeat < 0 || (!joined && !voice.canRetry);
+    const live = joined && !voice.isMuted;
+    const label = voice.canRetry ? 'Voice unavailable: tap to retry' : !voice.micOn ? 'Turn on your microphone' : voice.isMuted ? 'Unmute' : 'Mute';
+    btn.innerHTML = tIcon(live ? 'mic' : 'micOff', 1.35);
+    btn.classList.toggle('on', live);
+    btn.classList.toggle('mic-muted', joined && voice.micOn && voice.isMuted);
+    btn.classList.toggle('mic-off', !joined || voice.micBlocked);
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('aria-pressed', String(live));
+    btn.title = label;
+  };
   const paint = () => {
+    paintButton();
     const mic = s.view.micRootForLocal();
     if (!mic) return;
     if (!mic.el.dataset.netMic) {
       mic.el.dataset.netMic = '1';
       mic.el.style.pointerEvents = 'auto';
       mic.el.style.cursor = 'pointer';
+      mic.el.title = 'Mute / unmute';
       mic.el.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (voice.canRetry) voice.retry();
-        else voice.toggleMute();
+        if (holder.session === s) toggle();
       });
     }
     const circle = mic.find('Circle');

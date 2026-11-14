@@ -8,6 +8,8 @@ export enum LeaderboardKind {
   SeasonEarnings = 2,
   WeeklyHandsWon = 3,
   FriendsWeekly = 4,
+  /** Web: Agents ranked by the Coins they won this week (their hands at Coins tables). */
+  AgentsWeekly = 5,
 }
 
 const INT_MAX = 2147483647;
@@ -28,6 +30,10 @@ function weekOfYear(mondayMs: number): number {
 }
 
 export const FreePlayLeaderboardMath = {
+  /** Epoch ms of the Monday 00:00 UTC that starts `ms`'s week (the weekId boundary). */
+  weekStartMs(ms: number): number {
+    return toMonday(utcDate(ms));
+  },
   /** Rows requested per GetLeaderboard page (UI + PlayFab MaxResultsCount). */
   PageSize: 10,
 

@@ -8,6 +8,7 @@
  */
 import { AgentStrategyWords as W, STRATEGY_BLURBS, STRATEGY_NAMES, STRATEGY_PRESETS, BRAIN_SMART, readNumberField, type AgentDeploymentSummary } from '@nomad/engine/agents';
 import type { AgentsService } from '../../agents/agentsService';
+import { StakeCatalog } from '@nomad/engine/stakes/stakes';
 import type { AgentStrategyState } from '@nomad/engine/agents';
 import { stopReasonLabel } from '../../agents/nomad/agentsPartial';
 import {
@@ -19,6 +20,7 @@ import { ico } from '../icons';
 import { ui, host, app, S, onchain, topBar, setMode, signedIn, coins, prompt, friendlyError } from '../ctx';
 import type { ScreenDef } from '../install';
 import { solAgentActions, solAgentClose, solAgentHistory, solAgentOpen, solAgentOverview, solAgentStatus } from './solAgent';
+import { startWatch } from '../../economy/nomad/social';
 import './agents.css';
 
 type J = Record<string, unknown>;
@@ -120,6 +122,13 @@ const shellActions: Record<string, (v: string) => void | Promise<void>> = {
 
 // ------------------------------------------------------------------ Overview
 
+/** The table an Agent with this bankroll plays (the server's rule, StakeCatalog.forAgentBankroll). */
+function agentTableLabel(bankroll: string): string {
+  const b = Math.max(0, Math.trunc(Number(String(bankroll).replace(/[,\s]/g, '')) || 0));
+  const t = StakeCatalog.forAgentBankroll(b);
+  return `${fmt(b)} Coins → blinds ${t.blindsLabel}`;
+}
+
 const fields: Record<string, string> = { bankroll: '5000', maxHands: '100', maxMinutes: '60', stopLoss: '2000', profitTarget: '0' };
 
 const overview: ScreenDef = {
@@ -144,7 +153,7 @@ const overview: ScreenDef = {
     const p = st.progress;
     const copying = marketState.copiedStrategyId ? `<div class="v2-xs v2-goldc">Copying ${esc(marketState.copiedName ?? 'a strategy')} · creator 8%, Nomad 2% of profit</div>` : '';
     const live = st.active
-      ? `<div class="v2-card v2-row" style="gap:.8em">${ico('eye', 2.2, 'color:#2ee38a')}<div class="v2-grow"><div class="v2-cap">Live table</div><div style="font-weight:800">${p ? `${esc(p.AssignedTable || 'Coins table')} · hand ${p.HandsPlayed} / ${p.MaxHands} · <span class="${tone(p.NetPnl)}">${signed(p.NetPnl)}</span>` : 'Looking for a table…'}</div></div></div>`
+      ? `<div class="v2-card v2-row" style="gap:.8em">${ico('eye', 2.2, 'color:#2ee38a')}<div class="v2-grow"><div class="v2-cap">Live table</div><div style="font-weight:800">${p ? `${esc(p.AssignedTable || 'Coins table')} · hand ${p.HandsPlayed} / ${p.MaxHands} · <span class="${tone(p.NetPnl)}">${signed(p.NetPnl)}</span>` : 'Looking for a table…'}</div></div>${p?.AssignedTable && p.phase === 'playing' ? btn(`${ico('eye', 0.9)} Watch live`, 'ag-watch', { h: 'violet', c: 'sm', v: p.AssignedTable }) : ''}</div>`
       : `<div class="v2-card v2-row" style="gap:.8em">${ico('robot', 2.2)}<div class="v2-grow"><div class="v2-cap">Not playing</div><div style="font-weight:800">Deploy to send it to a Coins table</div></div></div>`;
     const field = (k: string, label: string) => `<label class="v2-row v2-ag-field"><span class="v2-grow">${label}</span>${input(k, fields[k] ?? '', '0', { cls: 'v2-num', type: 'text', max: 7 })}</label>`;
     const inner = `<div class="v2-ag-ov">
@@ -155,7 +164,7 @@ const overview: ScreenDef = {
   </div>
   <div class="v2-card v2-col v2-ag-setup"><div class="v2-cap">Session setup</div>
     ${field('bankroll', 'Bankroll (Coins)')}${field('maxHands', 'Max hands')}${field('maxMinutes', 'Max minutes')}${field('stopLoss', 'Stop loss')}${field('profitTarget', 'Profit target')}
-    <div class="v2-xs v2-mut">Plays Coins tables from your Coins (you have ${fmt(coins())}). Stop it any time; its stack comes back to your Coins. 0 = off. Limits are checked after each hand, so one big pot can go past the stop loss or target. Up to 5,000 hands and 24 hours.</div>
+    <div class="v2-xs v2-mut">Plays Coins tables from your Coins (you have ${fmt(coins())}), at a table sized to its bankroll: ${esc(agentTableLabel(fields.bankroll))}. Stop it any time; its stack comes back to your Coins. 0 = off. Limits are checked after each hand, so one big pot can go past the stop loss or target. Up to 5,000 hands and 24 hours.</div>
     <div class="v2-grow"></div>
     ${st.active ? btn(st.pill === 'Stopping' ? 'Stopping…' : 'Stop Agent', 'ag-deploy', { h: 'red', c: 'lg w', dis: st.pill === 'Stopping' }) : btn('Review &amp; Deploy', 'ag-deploy', { h: 'gold', c: 'lg w' })}
   </div></div>`;
@@ -164,6 +173,10 @@ const overview: ScreenDef = {
   actions: {
     ...shellActions,
     'ag-deploy': () => deployOrStop(),
+    // Spectate the table your Agent sits at (no seat, no Coins); Leave brings you back to the menu.
+    'ag-watch': (v) => {
+      if (v) startWatch(host(), app(), String(v));
+    },
   },
 };
 
@@ -473,7 +486,11 @@ function fetchSol(l: Load, title: string, path: string, signed = false, data: J 
     l.data = j;
     l.state = 'ok';
     ui().render();
-  }, signed, data);
+  }, signed, data, (message) => {
+    l.state = 'error';
+    l.error = message || "Couldn't load the marketplace.";
+    ui().render();
+  });
 }
 
 function loadBody(l: Load, icon: string): string | null {

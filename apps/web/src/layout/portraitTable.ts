@@ -24,7 +24,7 @@ import { isPortrait, safeArea } from './orientation';
 import { PortraitSeats } from './portraitSeats';
 import { overlayScale } from './portraitRects';
 import { PORTRAIT_ROW, PORTRAIT_TOP_ROW_Y } from './portraitHud';
-import { PORTRAIT_CARD, PORTRAIT_LAYOUT as P, portraitCardSpot, SEAT_UNIT, STACKED_SEAT_BOX } from './portraitLayout';
+import { PORTRAIT_CARD, PORTRAIT_LAYOUT as P, portraitBoardSpot, portraitBoxes, portraitCardSpot, SEAT_UNIT, STACKED_SEAT_BOX } from './portraitLayout';
 import { dealCrossings } from '../three/tableScene';
 
 /** Slot i is drawn in place of landscape slot (i + SHIFT) mod 8: a quarter of the oval, so slot 0 (you) is at the bottom. */
@@ -106,8 +106,10 @@ export class PortraitTable {
 
     const u = SEAT_UNIT * P.hudScale;
     const b = STACKED_SEAT_BOX;
-    const xs = P.seats.flatMap((s) => [s.avatar[0] + b.left * u, s.avatar[0] + b.right * u]);
-    const ys = P.seats.flatMap((s, i) => [s.avatar[1] + b.top * u, s.avatar[1] + (i === 0 ? b.handBottom : b.bottom) * u]);
+    // Everything drawn: the stacked seats and every card pair (the side seats' pairs reach past their seat boxes).
+    const parts = portraitBoxes();
+    const xs = [...P.seats.flatMap((s) => [s.avatar[0] + b.left * u, s.avatar[0] + b.right * u]), ...parts.flatMap((q) => [q.x0, q.x1])];
+    const ys = [...P.seats.flatMap((s, i) => [s.avatar[1] + b.top * u, s.avatar[1] + (i === 0 ? b.handBottom : b.bottom) * u]), ...parts.flatMap((q) => [q.y0, q.y1])];
     this.extent = { x0: Math.min(...xs, -4.6) - 0.1, x1: Math.max(...xs, 4.6) + 0.1, y0: Math.min(...ys) - 0.05, y1: Math.max(...ys) + 0.05 };
   }
 
@@ -192,7 +194,8 @@ export class PortraitTable {
         return;
       }
       const home = this.slotHome[i];
-      const t = new Vector3(...unityOf(P.board.x + (i - 2) * P.board.spacing, P.board.y, home.y));
+      const [bx, by] = portraitBoardSpot(i);
+      const t = new Vector3(...unityOf(bx, by, home.y));
       const sc = P.board.scale;
       new Matrix4()
         .makeTranslation(t.x, t.y, t.z)

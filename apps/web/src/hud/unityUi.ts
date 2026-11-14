@@ -121,7 +121,7 @@ const DEFAULT_THEME_KEYS: DefaultThemeKeys = (() => {
 })();
 
 export const ASSET_BASE = import.meta.env.BASE_URL ?? '/';
-export const assetUrl = (file: string): string => ASSET_BASE + file;
+export const assetUrl = (file: string): string => (/^(https?:|blob:|data:)/.test(file) ? file : ASSET_BASE + file);
 
 export function rgba(c: ColorData | undefined, fallback: RGBA = { r: 1, g: 1, b: 1, a: 1 }): RGBA {
   if (!c) return { ...fallback };
