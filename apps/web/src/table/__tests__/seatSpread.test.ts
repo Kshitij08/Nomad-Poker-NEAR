@@ -115,6 +115,16 @@ describe('planSeats keeps the clockwise turn order', () => {
     expect([0, 1, 2, 3, 4].map((s) => five.map[s])).toEqual([0, 1, 2, 3, 4].map((s) => spreadRing(8, [0, 1, 2, 3, 4], 0).map[s]));
   });
 
+  it('never puts two players closer than one slot apart (no overlapping plates)', () => {
+    // Joins and leaves that left a player at 6.4 and a newcomer at slot 7: plates 0.6 apart.
+    const steps = [[0], [0, 1], [0, 1, 2], [0, 1], [0, 1, 6], [0, 1, 6, 3], [0, 1, 6, 3, 4], [0, 1, 6, 3, 4, 7]];
+    let p = planSeats(null, 8, steps[0]!, 0);
+    for (const seats of steps.slice(1)) p = planSeats(p, 8, seats, 0);
+    const places = steps[steps.length - 1]!.map((s) => p.ring[p.map[s]!] ?? p.map[s]!).sort((a, b) => a - b);
+    for (let i = 1; i < places.length; i++) expect(places[i]! - places[i - 1]!).toBeGreaterThanOrEqual(0.95);
+    expect(8 + places[0]! - places[places.length - 1]!).toBeGreaterThanOrEqual(0.95);
+  });
+
   it('never seats anyone out of clockwise order', () => {
     let p = planSeats(null, 8, [0], 0);
     const seats = [0];

@@ -144,6 +144,19 @@ describe('PlayerProgression', () => {
     expect(shown).toEqual([2]);
     expect(r.levelUps.pending).toEqual([]);
   });
+  it('takes the first server snapshot as the baseline, not as level ups', () => {
+    const { r, wallet, shown } = setup();
+    const backend = { snapshot: null as unknown, spin: async () => null, claimLogin: async () => null, claimMission: async () => null };
+    r.setBackend(backend as never); // the snapshot is still loading: the wallet reads 0 XP
+    wallet.xp = 3000; // the snapshot lands: a level 7 account
+    backend.snapshot = { missions: null };
+    r.progression.notifyChanged();
+    expect(shown).toEqual([]);
+    expect(r.levelUps.pending).toEqual([]);
+    wallet.xp += 2000; // a real level up afterwards is still celebrated
+    r.progression.notifyChanged();
+    expect(shown.length).toBe(1);
+  });
   it('does not celebrate or backfill a hydrated account', () => {
     const { r, wallet, shown } = setup();
     wallet.xp = 1000; // arrives from the cloud

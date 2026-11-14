@@ -71,6 +71,9 @@ export interface SeatPlan {
  * newcomer's gap has no free slot (the clockwise turn order always holds). Trade-off: a table that fills up one player
  * at a time can lean to one side until that re-spread.
  */
+/** Closest two seats may sit on the ring, in slots (a full table is exactly 1 apart). */
+const MIN_SPACING = 0.95;
+
 export function planSeats(
   prev: SeatPlan | null,
   seatCount: number,
@@ -131,6 +134,13 @@ export function planSeats(
     used.add(slot);
     ring[slot] = slot;
     pos.set(seat, slot);
+  }
+  // Stayers keep fractional places (4.8) and newcomers take whole slots (4): two plates closer than one slot apart
+  // overlap (cards over the neighbour's plate). Spread afresh instead (this runs between hands).
+  const places = [...pos.values()].sort((x, y) => x - y);
+  for (let i = 0; i < places.length; i++) {
+    const next = i + 1 < places.length ? places[i + 1]! : places[0]! + slotCount;
+    if (places.length > 1 && next - places[i]! < MIN_SPACING) return fresh();
   }
   // Empty seats: the free slots, in order (hidden), as spreadRing does.
   let free = 0;

@@ -12,7 +12,8 @@ export interface CardFace {
 export interface CardVisual {
   readonly object: Object3D;
   setFace(card: CardFace): void;
-  setGreyedOut(): void;
+  /** Folded: the grey back, or with `keepFace` the card's own face in greyscale (your own cards stay readable). */
+  setGreyedOut(keepFace?: boolean): void;
   refreshBack(): void;
   dispose(): void;
 }
@@ -41,6 +42,7 @@ export class CardView implements Linkable {
   private readonly faceDownLocalEuler: { x: number; y: number; z: number };
   private greyedOut = false;
   private faceUp = false;
+  private greyFace = false;
   private destroyed = false;
 
   /** The spline this card was dealt along (what SplineAnimate.Container remembers). */
@@ -93,17 +95,19 @@ export class CardView implements Linkable {
 
   setGreyedOut(): void {
     this.greyedOut = true;
-    this.visual.setGreyedOut();
+    // A face-up card (your own hand) keeps its face, in grey; a face-down one turns to the grey back.
+    this.greyFace = this.faceUp;
+    this.visual.setGreyedOut(this.greyFace);
   }
 
   refreshBack(): void {
-    if (this.greyedOut) this.visual.setGreyedOut();
+    if (this.greyedOut) this.visual.setGreyedOut(this.greyFace);
     else this.visual.refreshBack();
   }
 
   private applyFace(card: CardFace): void {
     this.visual.setFace(card);
-    if (this.greyedOut) this.visual.setGreyedOut();
+    if (this.greyedOut) this.visual.setGreyedOut(this.greyFace);
   }
 
   // ---- World/local helpers (the card's parent is DealtRoot, inside the Unity-space root) ----

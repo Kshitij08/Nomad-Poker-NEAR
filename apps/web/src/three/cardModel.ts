@@ -80,6 +80,24 @@ function materials() {
   return shared;
 }
 
+/** A face material shown in greyscale and a little darker: a folded hand the player can still read. */
+const greyFaces = new Map<number, MeshStandardMaterial>();
+function greyFace(index: number): MeshStandardMaterial {
+  let g = greyFaces.get(index);
+  if (g) return g;
+  const src = materials().faces[index] ?? materials().faces[0]!;
+  g = src.clone();
+  g.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      '#include <dithering_fragment>\n  gl_FragColor.rgb = vec3(dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114))) * 0.7;',
+    );
+  };
+  g.customProgramCacheKey = () => 'card-grey-face';
+  greyFaces.set(index, g);
+  return g;
+}
+
 /** Card.Index: suit * 13 + (rank - 2). */
 export function cardIndex(card: CardFace): number {
   return card.suit * 13 + (card.rank - 2);
@@ -104,6 +122,7 @@ export class CardModelVisual implements CardVisual {
   readonly mesh: Mesh;
   private face = 0;
   private greyed = false;
+  private keepFace = false;
 
   /**
    * @param meshParent when given (community slots), the mesh is added there instead of building the
@@ -133,14 +152,20 @@ export class CardModelVisual implements CardVisual {
     if (!this.greyed) this.applyMaterials();
   }
 
-  setGreyedOut(): void {
+  setGreyedOut(keepFace = false): void {
     this.greyed = true;
-    const f = materials().folded;
+    this.keepFace = keepFace;
+    const m = materials();
+    if (keepFace) {
+      this.mesh.material = [m.folded, greyFace(this.face), m.edge];
+      return;
+    }
+    const f = m.folded;
     this.mesh.material = [f, f, f];
   }
 
   refreshBack(): void {
-    if (this.greyed) this.setGreyedOut();
+    if (this.greyed) this.setGreyedOut(this.keepFace);
     else this.applyMaterials();
   }
 
