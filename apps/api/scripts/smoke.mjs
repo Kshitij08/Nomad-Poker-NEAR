@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // End-to-end check of a deployed API: guest sign-in, wallet sign-in (throwaway ed25519 key), guest → wallet link,
 // /me and the ledger. Creates test players only; touches no real wallet or funds.
-//   node scripts/smoke.mjs https://nomad-poker-api-staging.kshitijiitgn.workers.dev [origin]
+//   node scripts/smoke.mjs https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev [origin]
 
 const base = (process.argv[2] ?? 'http://localhost:8788').replace(/\/$/, '');
 const origin = process.argv[3] ?? 'http://localhost:5180';

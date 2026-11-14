@@ -30,6 +30,9 @@ const per = defineContainer({
 });
 
 export default defineConfig(() => {
+  // This is the Solana private-table service of the live Nomad Poker app. The NEAR fork does not run it, and deploying
+  // it from here would replace the live Worker, so it refuses.
+  throw new Error('apps/per is the live Solana private-table service: the NEAR fork does not deploy it');
   const s = STAGES.staging;
   return {
     accountId: ACCOUNT_ID,

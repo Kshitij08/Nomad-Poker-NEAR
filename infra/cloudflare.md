@@ -1,26 +1,30 @@
-# Cloudflare resources
+# Cloudflare resources (NEAR fork)
+
+This repository is the NEAR fork of Nomad Poker. It has its own Cloudflare resources, so nothing deployed from here
+touches the live Nomad Poker app (`nomad-poker-api*`, `nomad-poker-game*`, the `nomad-poker-staging` and
+`nomad-poker-production` databases, the `nomad-poker-hands-*` buckets, Vercel project `nomad-poker-web`).
 
 Account: `Kshitijiitgn@gmail.com's Account` (`a5e26389a89c0c84a7b4939e38574714`). Managed with the `cf` CLI; the
-Worker is described by `apps/api/cloudflare.config.ts` (no Wrangler config). Primary location Asia-Pacific (`apac`).
+Workers are described by `apps/api/cloudflare.config.ts` and `apps/game-server/cloudflare.config.ts` (no Wrangler config).
 
 | Resource | Staging | Production |
 |---|---|---|
-| API Worker | `nomad-poker-api-staging` · https://nomad-poker-api-staging.kshitijiitgn.workers.dev | `nomad-poker-api` · https://nomad-poker-api.kshitijiitgn.workers.dev (deployed 14 Nov 2026) |
-| Game server Worker + `TableRoom` Durable Object | `nomad-poker-game-staging` · https://nomad-poker-game-staging.kshitijiitgn.workers.dev | `nomad-poker-game` · https://nomad-poker-game.kshitijiitgn.workers.dev (deployed 14 Nov 2026) |
-| D1 (players, sessions, ledger, seat locks) | `nomad-poker-staging` · `c9570cef-7f57-4845-b503-03da7893d36d` · migrations `0001`–`0005` applied (`0005_agents_tournaments` on 2026-11-09) | `nomad-poker-production` · `e630e086-697c-47c7-84c3-8ad467005c34` · migrations `0001`–`0012` applied 14 Nov 2026 |
-| R2 (hand histories, replays) | `nomad-poker-hands-staging` | `nomad-poker-hands-production` |
-| Rate limiter (sign-in, 30/min per IP) | namespace `7102` | namespace `7103` |
-| DNS zone `nomadpoker.fun` | — | Active on Cloudflare since 14 Nov 2026 (nameservers moved from Hostinger). Apex A `216.150.1.1` and `www` CNAME `cname.vercel-dns.com`, both DNS only (Vercel serves the site) |
-| Email | Staging echoes sign-in links (`EMAIL_DEV_ECHO`) | Email Service sends sign-in links from `no-reply@nomadpoker.fun` (API binding `EMAIL`), 1,000/day quota to start. Email Routing forwards `support@nomadpoker.fun` to the owner's Gmail |
-| Cron trigger on the game server (Agents sweep, tournament clock) | `* * * * *` | `* * * * *` (when deployed) |
+| API Worker | `nomad-poker-near-api-staging` (not deployed yet) | `nomad-poker-near-api`: not set up |
+| Game server Worker + `TableRoom` Durable Object | `nomad-poker-near-game-staging` (not deployed yet) | `nomad-poker-near-game`: not set up |
+| D1 (players, sessions, ledger, seat locks) | `nomad-poker-near-staging` · `50f75a10-aabe-4ffc-874a-30e2565d2934` · created 14 Nov 2026, no migrations applied yet | not created |
+| R2 (hand histories, replays) | `nomad-poker-near-hands-staging` · created 14 Nov 2026 | not created |
+| Rate limiters | API `7202` (sign-in) and `7205` (writes); game server `7208` | API `7203` / `7206`; game server `7209` |
+| Web front end | Vercel project `nomad-poker-near` (https://nomad-poker-near.vercel.app) serves `near/web` today | — |
 
-`cf dev` (mode `development`, namespace `7101`) uses local D1/R2 simulations, not the resources above.
+`cf dev` (mode `development`; namespaces `7201`, `7204`, `7207`) uses local D1/R2 simulations, not the resources above.
 
-The web app is on Vercel (`nomad-poker-web`), deployed with `node apps/web/scripts/deploy-vercel.mjs production` and
-wired to the production Workers. Since 14 Nov 2026 it serves https://www.nomadpoker.fun (the apex redirects to `www`,
-308); the old Unity build's project (`poker-build-public`) no longer has the domain. `nomad-poker-web.vercel.app` is
-the same production build, so the staging Workers have no deployed web front end: use the dev server with
-`?api=staging&netServer=staging`, or a preview deploy (`deploy-vercel.mjs staging --preview`).
+Production refuses to deploy until it has a database: both configs throw while its id is empty. `apps/per` (the live
+Solana private-table service) refuses to deploy from this fork at all.
+
+Before the first staging deploy: apply the migrations (`npm run db:migrate:staging` in `apps/api`) and create
+`.secrets.staging.json` for each Worker (git-ignored).
+
+The sections below describe procedures inherited from the live app; their commands now point at the fork's resources.
 
 Secrets: the game server's `DRAIN_TOKEN` (admin drain/audit), uploaded from `apps/game-server/.secrets.<stage>.json` (git-ignored). Google sign-in will need `GOOGLE_CLIENT_IDS` (a public value, set in the config), and email links
 a mail provider; neither is configured, so those routes answer `not_configured` (staging echoes email links instead).

@@ -2,7 +2,7 @@
 // Builds the web app against a stage's API and game server and deploys it to the Vercel project as a prebuilt
 // output. (`vercel build` cannot run on this Windows machine — it fails creating symlinks — and a remote Vercel build
 // of apps/web alone would not have the workspace packages.)
-//   node scripts/deploy-vercel.mjs staging          # production deploy of nomad-poker-web, wired to staging
+//   node scripts/deploy-vercel.mjs staging          # production deploy of nomad-poker-near-app, wired to staging
 //   node scripts/deploy-vercel.mjs staging --preview # a preview URL instead
 // Needs apps/web/.vercel/project.json (vercel link / pull); it is git-ignored.
 import { execSync } from 'node:child_process';
@@ -16,7 +16,7 @@ if (!env) throw new Error(`unknown stage ${stage}`);
 const preview = process.argv.includes('--preview');
 const web = new URL('..', import.meta.url);
 const at = (p) => new URL(p, web);
-if (!existsSync(at('.vercel/project.json'))) throw new Error('apps/web is not linked: run `npx vercel@latest link` (project nomad-poker-web) first');
+if (!existsSync(at('.vercel/project.json'))) throw new Error('apps/web is not linked: run `npx vercel@latest link` (project nomad-poker-near-app) first');
 
 const run = (cmd, extra = {}) => execSync(cmd, { cwd: web, stdio: 'inherit', env: { ...process.env, ...extra } });
 

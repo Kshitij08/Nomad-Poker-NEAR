@@ -9,8 +9,8 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const STAGES = {
-  staging: 'c9570cef-7f57-4845-b503-03da7893d36d',
-  production: 'e630e086-697c-47c7-84c3-8ad467005c34',
+  staging: '50f75a10-aabe-4ffc-874a-30e2565d2934',
+  production: 'no-near-production-db-yet',
 };
 const args = process.argv.slice(2);
 const [stage, who] = args;

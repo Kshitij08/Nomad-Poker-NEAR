@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 
 const STAGES = {
-  staging: { db: 'c9570cef-7f57-4845-b503-03da7893d36d', bucket: 'nomad-poker-hands-staging' },
-  production: { db: 'e630e086-697c-47c7-84c3-8ad467005c34', bucket: 'nomad-poker-hands-production' },
+  staging: { db: '50f75a10-aabe-4ffc-874a-30e2565d2934', bucket: 'nomad-poker-near-hands-staging' },
+  production: { db: 'no-near-production-db-yet', bucket: 'nomad-poker-near-hands-production' },
 };
 const [stage, room, tableId] = process.argv.slice(2);
 const fix = process.argv.includes('--fix');

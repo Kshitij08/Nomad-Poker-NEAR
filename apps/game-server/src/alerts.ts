@@ -60,7 +60,7 @@ export class TableAlerts {
         this.env,
         `Table ${this.session} gave up on a write`,
         `A table could not save to the database after every retry.\n\nTable: ${this.session}\nError: ${message}\n\n` +
-          `Check the books: open /admin.html (Reconcile), or node infra/logs.mjs nomad-poker-game "GAVE UP".\n` +
+          `Check the books: open /admin.html (Reconcile), or node infra/logs.mjs nomad-poker-near-game "GAVE UP".\n` +
           'Further errors from this table are not mailed for an hour.\n',
       ),
     );

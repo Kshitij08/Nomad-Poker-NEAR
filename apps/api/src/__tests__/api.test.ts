@@ -27,7 +27,7 @@ beforeEach(async () => {
     DB: await D1Shim.migrated(),
     HANDS: {} as R2Bucket,
     STAGE: 'test',
-    ALLOWED_ORIGINS: `${ORIGIN},https://nomad-poker-web.vercel.app`,
+    ALLOWED_ORIGINS: `${ORIGIN},https://nomad-poker-near.vercel.app`,
     WALLET_CHAIN_ID: 'devnet',
     EMAIL_DEV_ECHO: '1',
     GOOGLE_CLIENT_IDS: 'web-client-id',

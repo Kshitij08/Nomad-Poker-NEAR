@@ -15,8 +15,8 @@ import { headlessClient, until, type Headless } from '../../web/server/__tests__
 
 const HANDS = Number(process.argv[2] ?? 1000);
 const stage = process.argv[3] ?? 'staging';
-const API = { staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev' }[stage]!;
-const GAME = { staging: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev' }[stage]!;
+const API = { staging: 'https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev' }[stage]!;
+const GAME = { staging: 'https://nomad-poker-near-game-staging.kshitijiitgn.workers.dev' }[stage]!;
 const SPEED = 20; // QA_ROOM_SPEED on staging
 const STAKE = 100; // Low: 2/5 blinds, so folding around costs ~1.4 a hand and a guest's 10,000 covers the run
 const BUY_IN = 500; // the Low tier's full stack

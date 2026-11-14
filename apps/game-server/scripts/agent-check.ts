@@ -13,8 +13,8 @@ import type { AgentDeploymentProgress, AgentDeploymentSummary, AgentHandHistory 
 
 const HANDS = Number(process.argv[2] ?? 8);
 const stage = process.argv[3] ?? 'staging';
-const API = { staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev' }[stage]!;
-const GAME = { staging: 'https://nomad-poker-game-staging.kshitijiitgn.workers.dev' }[stage]!;
+const API = { staging: 'https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev' }[stage]!;
+const GAME = { staging: 'https://nomad-poker-near-game-staging.kshitijiitgn.workers.dev' }[stage]!;
 const t0 = Date.now();
 const log = (m: string) => console.log(`[${((Date.now() - t0) / 1000).toFixed(0).padStart(4)}s] ${m}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

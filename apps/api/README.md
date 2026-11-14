@@ -54,9 +54,9 @@ Every entry has an idempotency key per player, so retries never double-pay.
 npm test                    # vitest against real SQLite (node:sqlite stand-in for D1), no Cloudflare needed
 npm run dev                 # local Worker on http://localhost:8788 with local D1/R2 (run db:migrate:local first)
 npm run db:migrate:staging  # apply migrations/ to the staging D1
-npm run deploy:staging      # build + deploy nomad-poker-api-staging (needs .secrets.staging.json with SPIN_SECRET)
+npm run deploy:staging      # build + deploy nomad-poker-near-api-staging (needs .secrets.staging.json with SPIN_SECRET)
 npx tsx scripts/rewards-check.ts   # Phase 3 exit gate: no self-granted coins, XP or items; catalogue prizes only
-node scripts/smoke.mjs https://nomad-poker-api-staging.kshitijiitgn.workers.dev https://nomad-poker-web.vercel.app
+node scripts/smoke.mjs https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev https://nomad-poker-near.vercel.app
 ```
 
 Deploys use `cf-vite build` then `cf deploy --prebuilt`, because `cf build` in cf 0.15 cannot start the Vite helper on

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Searches a Worker's logs (Workers Logs / observability) for a phrase, newest first.
 //   node infra/logs.mjs <worker> "<needle>" [minutes=60] [limit=100]
-//   node infra/logs.mjs nomad-poker-game-staging "failed after" 120
-//   node infra/logs.mjs nomad-poker-game-staging "[reconcile] PROBLEMS" 1440
+//   node infra/logs.mjs nomad-poker-near-game-staging "failed after" 120
+//   node infra/logs.mjs nomad-poker-near-game-staging "[reconcile] PROBLEMS" 1440
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 

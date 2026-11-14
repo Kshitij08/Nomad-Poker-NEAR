@@ -13,8 +13,8 @@ import { NomadProgress, NomadWallet } from './progress';
 import { ApiRequestError, localTokenStore, NomadSession, type WalletSigner } from './session';
 
 export const API_PRESETS: Record<string, string> = {
-  staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev',
-  production: 'https://nomad-poker-api.kshitijiitgn.workers.dev',
+  staging: 'https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev',
+  production: 'https://nomad-poker-near-api.kshitijiitgn.workers.dev',
   local: 'http://localhost:8788',
 };
 
