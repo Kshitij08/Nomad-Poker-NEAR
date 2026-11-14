@@ -4,7 +4,8 @@
  * its stack back through the ledger. Real TableSlot / TableHost / PokerServerGame on the node:sqlite D1 stand-in.
  */
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { createPlayer } from '@nomad/db/accounts';
+import { createPlayer, createSession } from '@nomad/db/accounts';
+import { PokerEventCodec, isHiddenCard } from '@nomad/engine/events/pokerEventCodec';
 import { agentHands, agentRow, startAgent } from '@nomad/db/agents';
 import { balances, entries } from '@nomad/db/ledger';
 import { auditTable } from '@nomad/db/seatLocks';
@@ -143,6 +144,43 @@ describe('Agents in the game server', () => {
     // The table empties once the Agent has left; the slot may close it.
     await until(async () => !s.busy, 10_000);
   }, 90_000);
+
+  it("shows an Agent's hole cards to its owner watching the table, and to no other watcher", async () => {
+    const owner = (await createPlayer(db, { displayName: 'Owner' })).id;
+    const ownerTicket = (await createSession(db, owner)).token;
+    const strangerTicket = (await createSession(db, (await createPlayer(db, { displayName: 'Stranger' })).id)).token;
+    const row = await startAgent(db, owner, { session: 'AGENTW1', bankroll: 3000, stake: 100, maxHands: 500 });
+    const s = slot('poker-free-st100-3');
+    expect(await s.seatAgent(row)).toEqual({ seated: true });
+
+    // Each watcher: the agent seat's dealt cards it was sent (real or hidden).
+    const watch = (ticket: string) => {
+      const dealt: { seat: number; hidden: boolean }[] = [];
+      const sock = {
+        send: (d: string | Uint8Array) => {
+          if (typeof d === 'string') return;
+          const e = PokerEventCodec.decode(d).event;
+          if (e?.type === 'HoleCardsDealt') dealt.push({ seat: e.seat, hidden: isHiddenCard(e.card0) });
+        },
+        close: () => undefined,
+      };
+      return { sock, dealt, start: async () => {
+        await s.message(sock, JSON.stringify({ t: 'join', session: 'poker-free-st100-3', appVersion: '', watch: true }));
+        await s.message(sock, JSON.stringify({ t: 'hello', name: 'W', token: 't', ticket, buyIn: 0 }));
+      } };
+    };
+    const mine = watch(ownerTicket);
+    const theirs = watch(strangerTicket);
+    await mine.start();
+    await theirs.start();
+    await until(() => mine.dealt.some((d) => !d.hidden) && theirs.dealt.length >= 4, 30_000);
+    const agentSeats = new Set(mine.dealt.filter((d) => !d.hidden).map((d) => d.seat));
+    expect(agentSeats.size).toBe(1); // only the Agent's seat, never a bot's
+    expect(theirs.dealt.every((d) => d.hidden)).toBe(true);
+    s.disconnect(mine.sock);
+    s.disconnect(theirs.sock);
+    s.stopAgent('AGENTW1');
+  }, 60_000);
 
   it("leaves at the hand boundary when its owner presses Stop, and is never seated twice", async () => {
     const owner = (await createPlayer(db, { displayName: 'Owner' })).id;

@@ -189,7 +189,7 @@ export class Room implements TableNet {
     const s = this.server;
     // A spectator only watches: their hello shows them the table; anything that would seat or act is ignored.
     if (this.watchers.has(p)) {
-      if (m.t === 'hello') s.onWatch?.(p);
+      if (m.t === 'hello') s.onWatch?.(p, str(m.ticket));
       return;
     }
     try {

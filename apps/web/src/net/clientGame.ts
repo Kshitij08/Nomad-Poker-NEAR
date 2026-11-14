@@ -13,7 +13,7 @@ import type {
   PotAwardedEvent, SeatSnapshot, ShowdownEvent, TableEconomyEvent, TableRosterEvent, TurnStartedEvent,
 } from '@nomad/engine/events/pokerEvent';
 import { TablePhase } from '@nomad/engine/events/pokerEvent';
-import { PokerEventCodec, type WireEvent } from '@nomad/engine/events/pokerEventCodec';
+import { PokerEventCodec, isHiddenCard, type WireEvent } from '@nomad/engine/events/pokerEventCodec';
 import type { TournamentViewEvent } from '@nomad/engine/events/tournamentEvents';
 import { TournamentViewReason } from '@nomad/engine/events/tournamentEvents';
 import { HumanActionProvider, type WaitFn } from '@nomad/engine/orchestration/actionProviders';
@@ -143,6 +143,8 @@ export class ClientGame {
     this.log = opts.log ?? ((level, m) => console[level === 'info' ? 'log' : level](m));
     this.pacing = { dealDelay: 0.12, dealSettleDelay: 4, actionDelay: 0.4, showdownDelay: 2, ...opts.pacing };
     this.presenter = new TableEventPresenter(this.view, this._localSeat, opts.audio);
+    // The server sends real cards for another seat only to its Agent's owner watching it: draw those face up.
+    this.presenter.faceUpSeat = (e) => !isHiddenCard(e.card0) && !isHiddenCard(e.card1);
   }
 
   // ---- State the chrome reads (PokerLobbyView, SeatActionButtons, reaction panel…) -----------------
