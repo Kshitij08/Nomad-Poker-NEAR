@@ -18,6 +18,12 @@ export class TableEventPresenter {
   /** The hole-card deal is one sound for the whole table; set once heard, cleared at the next hand. */
   private dealSoundPlayed = false;
 
+  /**
+   * Other seats whose dealt cards are drawn face up (besides your own). A networked table sets it to "the server sent
+   * the real cards" (your own Agent while you watch it); an offline table, which knows every card, leaves it null.
+   */
+  faceUpSeat: ((e: HoleCardsDealtEvent) => boolean) | null = null;
+
   constructor(private readonly view: TableViewPort, public localSeat: number, private readonly audio: AudioPort) {}
 
   onHandStarted(e: HandStartedEvent): void {
@@ -43,7 +49,7 @@ export class TableEventPresenter {
   }
 
   onHoleCardsDealt(e: HoleCardsDealtEvent): void {
-    this.view.showHoleCards(e.seat, e.card0, e.card1, e.seat === this.localSeat);
+    this.view.showHoleCards(e.seat, e.card0, e.card1, e.seat === this.localSeat || !!this.faceUpSeat?.(e));
     if (this.dealSoundPlayed) return;
     this.dealSoundPlayed = true;
     this.play(PokerSound.HoleCardsDealt);

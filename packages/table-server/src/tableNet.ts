@@ -38,7 +38,7 @@ export interface IPokerTableServer {
   activate(net: TableNet): void;
   onHello(player: PlayerRef, playerName: string, token: string, sessionTicket: string, buyInChips: number): void;
   /** A spectator's hello: they see the table (hole cards hidden) and are never seated. Default: ignored. */
-  onWatch?(player: PlayerRef): void;
+  onWatch?(player: PlayerRef, sessionTicket?: string): void;
   onActionSubmitted(source: PlayerRef, seat: number, action: PlayerAction): void;
   onReaction(source: PlayerRef, reactionId: number): void;
   /** After a hand: the player reveals their hole cards (optional: tournament servers may not support it). */

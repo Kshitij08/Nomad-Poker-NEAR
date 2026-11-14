@@ -177,6 +177,8 @@ export class PokerServerGame implements IPokerTableServer {
   private readonly voiceLimiters = new Map<PlayerRef, PokerChatRateLimiter>();
   private readonly avatarLimiters = new Map<PlayerRef, PokerChatRateLimiter>();
   private readonly voiceBySeat = new Map<number, { talking: boolean; muted: boolean }>();
+  /** Watchers signed in as an account (player → account id): an Agent's owner sees its cards. */
+  private readonly watcherOwners = new Map<PlayerRef, string>();
   private renderBudget = 0;
   private economy: ChipTableSession | null = null;
   private readonly stacksAtHandStart = new Map<string, number>();
@@ -586,6 +588,7 @@ export class PokerServerGame implements IPokerTableServer {
     this.avatarLimiters.delete(player);
     this.avatarsByPlayer.delete(player);
     this.verifiedPlayers.delete(player);
+    this.watcherOwners.delete(player);
 
     const seat = this.seatOf(player);
     if (seat < 0) return;
@@ -1923,7 +1926,7 @@ export class PokerServerGame implements IPokerTableServer {
       if (p.holeCards.length < 2) continue;
       const pending = this.humans.get(seat);
       if (pending && !pending.dealtIn) continue;
-      const mine = seat === recipientSeat && recipientDealtIn;
+      const mine = (seat === recipientSeat && recipientDealtIn) || this.watcherSeesSeat(player, seat);
       this.sendCatchUp(player, { type: 'HoleCardsDealt', seat, card0: mine ? p.holeCards[0]! : HIDDEN_CARD, card1: mine ? p.holeCards[1]! : HIDDEN_CARD });
     }
 
@@ -1971,7 +1974,7 @@ export class PokerServerGame implements IPokerTableServer {
     const hidden = PokerEventCodec.encode({ type: 'HoleCardsDealt', seat: e.seat, card0: HIDDEN_CARD, card1: HIDDEN_CARD }, seq);
     let real: Uint8Array | null = null;
     for (const player of this.net.activePlayers()) {
-      if (this.seatOf(player) === e.seat) this.net.sendEventTo(player, (real ??= PokerEventCodec.encode(e, seq)));
+      if (this.seatOf(player) === e.seat || this.watcherSeesSeat(player, e.seat)) this.net.sendEventTo(player, (real ??= PokerEventCodec.encode(e, seq)));
       else this.net.sendEventTo(player, hidden);
     }
   }
@@ -1994,9 +1997,33 @@ export class PokerServerGame implements IPokerTableServer {
   }
 
   /** A spectator (joined with `watch`): the table as a watcher sees it, never a seat. */
-  onWatch(player: PlayerRef): void {
+  onWatch(player: PlayerRef, sessionTicket = ''): void {
     if (this.disposed) return;
     this.spectateJoiner(player);
+    // A signed-in watcher who owns an Agent here sees that Agent's hole cards (verified through the ledger, never
+    // taken from the client's word).
+    if (this.economy && sessionTicket.trim()) this.run(this.verifyWatcher(player, sessionTicket));
+  }
+
+  private async verifyWatcher(player: PlayerRef, sessionTicket: string): Promise<void> {
+    const session = this.opts.economy?.adoptTicket(sessionTicket) ?? null;
+    const owner = session && this.economy ? await this.economy.authenticate(session) : null;
+    if (this.disposed || !owner || !this.net.activePlayers().includes(player)) return;
+    this.watcherOwners.set(player, owner);
+    // Mid-hand: their Agent's cards now.
+    if (!this.engine.handInProgress) return;
+    for (let seat = 0; seat < this.settings.seatCount; seat++) {
+      const p = this.engine.table.seats[seat];
+      if (p && p.holeCards.length >= 2 && this.watcherSeesSeat(player, seat)) {
+        this.sendCatchUp(player, { type: 'HoleCardsDealt', seat, card0: p.holeCards[0]!, card1: p.holeCards[1]! });
+      }
+    }
+  }
+
+  /** A watcher who owns the Agent in this seat (they see its cards). */
+  private watcherSeesSeat(player: PlayerRef, seat: number): boolean {
+    const owner = this.watcherOwners.get(player);
+    return !!owner && this.agents.some((a) => a.seat === seat && sameOwner(a.config.ownerPlayFabId, owner));
   }
 
   /** Seats in play (people, Agents and bots), for the public table list. */
