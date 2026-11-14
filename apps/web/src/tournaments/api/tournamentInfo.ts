@@ -28,6 +28,10 @@ export interface TournamentInfo {
   myPrize: number;
   serverReady: boolean;
   sessionName: string;
+  /** "coins" | "near" (amounts are chips of 0.001 NEAR held by the escrow). Missing from older servers: coins. */
+  currency?: string;
+  /** NEAR: the escrow has it, so players can register. */
+  escrowReady?: boolean;
 }
 
 export interface ListResult {
@@ -49,6 +53,8 @@ export interface CreateRequest {
   speed: string;
   visibility: string;
   startsAtUnix: number;
+  /** "coins" (default) or "near": the stakes go to the escrow from the host's and players' wallets. */
+  currency?: string;
 }
 
 export const defaultCreateRequest = (): CreateRequest => ({

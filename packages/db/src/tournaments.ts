@@ -1,4 +1,4 @@
-import { sessionPlayer } from './accounts';
+import { nearAccountOf, sessionPlayer } from './accounts';
 import { conditionalPostingStatement, isInsufficientFunds, postingStatement } from './ledger';
 import { fail, sha256Hex } from './util';
 
@@ -15,7 +15,39 @@ import { fail, sha256Hex } from './util';
  *
  * Players are named by their public Friend ID (friend_code) everywhere outside the database: views, the roster the
  * tournament room plays with, and the standings it posts back.
+ *
+ * NEAR tournaments (currency 'near', migrations/0016): the same record, roster and clock, but no ledger entries: the
+ * money is the escrow contract's (near/escrow; its tournament id is ours). The host creates the row here, then
+ * `create_tournament` on the escrow from their wallet; `confirmEscrow` checks the escrow has it, as created here, before
+ * anyone else can see it. Players `register` / `leave` on the escrow from their wallet first; `register` / `unregister`
+ * here check `is_registered` and only then change the roster. Once it ends here, the game server's operator settles or
+ * refunds it on the escrow (`escrowWork`, `escrowPlacings`, `markEscrow`).
  */
+
+export type Currency = 'coins' | 'near';
+export type EscrowStatus = '' | 'pending' | 'open' | 'settled' | 'refunded' | 'none';
+/** One chip is 0.001 NEAR. */
+export const CHIP_YOCTO = 10n ** 21n;
+/** The escrow's tournament fee: 5% of the entries (`tournament_fee_bps`). */
+export const NEAR_FEE_BPS = 500;
+
+/** The escrow's `get_tournament` view (near/escrow/src/tournaments.rs), the fields used here. Amounts in yoctoNEAR. */
+export interface EscrowTournament {
+  host: string;
+  entry_fee: string;
+  max_players: number;
+  starts_at: string;
+  prize: string;
+  private: boolean;
+  players: string[];
+  status: 'Open' | 'Settled' | 'Cancelled';
+}
+
+/** Read-only access to the escrow (the API reads it over NEAR RPC). */
+export interface TournamentEscrow {
+  getTournament(id: string): Promise<EscrowTournament | null>;
+  isRegistered(id: string, account: string): Promise<boolean>;
+}
 
 export type Speed = 'turbo' | 'regular' | 'slow';
 export type Visibility = 'public' | 'private';
@@ -44,6 +76,8 @@ export interface TournamentRow {
   finished_at: number | null;
   result: string | null;
   result_hash: string | null;
+  currency: Currency;
+  escrow_status: EscrowStatus;
   created_at: number;
   updated_at: number;
 }
@@ -54,7 +88,10 @@ export interface TournamentView {
   name: string;
   hostPlayFabId: string;
   hostName: string;
-  currency: 'coins';
+  /** 'near': amounts are chips of 0.001 NEAR, held by the escrow under the tournament's `id`. */
+  currency: Currency;
+  /** NEAR: the escrow has it, so players can register. Coins: always true. */
+  escrowReady: boolean;
   entryFee: number;
   hostPrize: number;
   prizePool: number;
@@ -140,6 +177,10 @@ export function formatFor(players: number): TournamentView['format'] {
   return 'four_tables';
 }
 
+const feeOf = (t: { currency?: Currency }): number => (t.currency === 'near' ? NEAR_FEE_BPS : 0);
+/** The prizes from what was actually paid in: the host's prize and each entry (NEAR: less the escrow's 5% of entries). */
+const poolOf = (t: { currency?: Currency; host_prize: number }, paidIn: number): Payout => computePayout(t.host_prize, paidIn, 1, feeOf(t));
+
 // ---- Reading ------------------------------------------------------------------------------------------------------------
 
 const unix = (ms: number) => Math.floor(ms / 1000);
@@ -157,7 +198,7 @@ interface EntryRow {
 
 function view(row: Row, entry: EntryRow | null, viewerId: string | null, now: number, showCode = row.visibility === 'public'): TournamentView {
   const players = Number(row.players ?? 0);
-  const estimate = computePayout(row.host_prize, row.entry_fee, players);
+  const estimate = computePayout(row.host_prize, row.entry_fee, players, feeOf(row));
   const myStatus = entry?.status ?? '';
   const isHost = viewerId !== null && viewerId === row.host_id;
   // Where the room is: its players and the host learn it once the room may be open (a few minutes before the start).
@@ -168,7 +209,8 @@ function view(row: Row, entry: EntryRow | null, viewerId: string | null, now: nu
     name: row.name,
     hostPlayFabId: row.host_code ?? '',
     hostName: row.host_name ?? '',
-    currency: 'coins',
+    currency: row.currency ?? 'coins',
+    escrowReady: row.currency !== 'near' || (row.escrow_status !== 'pending' && row.escrow_status !== 'none'),
     entryFee: row.entry_fee,
     hostPrize: row.host_prize,
     prizePool: estimate.pool - estimate.fee,
@@ -216,7 +258,7 @@ export async function tournamentView(db: D1Database, id: string, viewerId: strin
 export async function tournamentByCode(db: D1Database, rawCode: string, viewerId: string | null, now = Date.now()) {
   const code = normalizeJoinCode(rawCode);
   if (!isJoinCode(code)) fail(400, 'bad_request', "That isn't a tournament code.");
-  const row = await db.prepare(`${SELECT} WHERE t.join_code = ?1`).bind(code).first<Row>();
+  const row = await db.prepare(`${SELECT} WHERE t.join_code = ?1 AND t.escrow_status != 'pending'`).bind(code).first<Row>();
   if (!row) fail(404, 'not_found', 'No tournament has that code.');
   const entry = await entryOf(db, row!.id, viewerId);
   return { serverNowUnix: unix(now), tournament: view(row!, entry, viewerId, now, true) };
@@ -229,7 +271,7 @@ export async function listTournaments(db: D1Database, filter: string, limit = 50
     : filter === 'finished' ? `t.status = 'finished' AND t.finished_at > ?1 - 604800000`
     : `t.status = 'registering' AND t.starts_at > ?1`;
   const order = filter === 'finished' ? 't.finished_at DESC' : 't.starts_at ASC';
-  const rows = await db.prepare(`${SELECT} WHERE t.visibility = 'public' AND ${where} ORDER BY ${order} LIMIT ?2`).bind(now, lim).all<Row>();
+  const rows = await db.prepare(`${SELECT} WHERE t.visibility = 'public' AND t.escrow_status != 'pending' AND ${where} ORDER BY ${order} LIMIT ?2`).bind(now, lim).all<Row>();
   return { serverNowUnix: unix(now), tournaments: rows.results.map((r) => view(r, null, null, now)) };
 }
 
@@ -303,17 +345,27 @@ export interface CreateInput {
   visibility?: unknown;
   startsAtUnix?: unknown;
   startsAt?: unknown;
+  /** 'coins' (default) or 'near'. */
+  currency?: unknown;
 }
 
-/** Creates a tournament and takes the host's prize, atomically. */
+const nearRequired = (what: string): never => fail(403, 'near_required', `Continue with NEAR to ${what} a NEAR tournament.`);
+
+/**
+ * Creates a tournament and takes the host's prize, atomically. A NEAR one takes nothing here and stays hidden
+ * ('pending') until the host's wallet has created it on the escrow and `confirmEscrow` has seen it.
+ */
 export async function createTournament(db: D1Database, hostId: string, input: CreateInput, rules: TournamentRules = DEFAULT_RULES, now = Date.now()) {
+  const currency = oneOf<Currency>(input?.currency ?? 'coins', ['coins', 'near'], 'Currency');
+  if (currency === 'near' && !(await nearAccountOf(db, hostId))) nearRequired('host');
   const name = text(input?.name, 1, 40, 'Name');
   const entryFee = whole(input?.entryFee ?? 0, 0, MAX_ENTRY_FEE, 'Entry fee');
   const hostPrize = whole(input?.hostPrize ?? 0, 0, MAX_HOST_PRIZE, 'Host prize');
   const maxPlayers = whole(input?.maxPlayers ?? 30, 2, 30, 'Max players');
   const speed = oneOf<Speed>(input?.speed ?? 'regular', ['turbo', 'regular', 'slow'], 'Speed');
   const visibility = oneOf<Visibility>(input?.visibility ?? 'public', ['public', 'private'], 'Visibility');
-  const startsAt = startTime(input, now, rules);
+  // NEAR: whole seconds, so the escrow's `starts_at` (nanoseconds) is exactly startsAtUnix × 10⁹.
+  const startsAt = currency === 'near' ? Math.ceil(startTime(input, now, rules) / 1000) * 1000 : startTime(input, now, rules);
   if (hostPrize + entryFee * maxPlayers > MAX_POOL) fail(400, 'bad_request', 'That prize pool is too big.');
   const open = await db.prepare(`SELECT count(*) AS n FROM tournaments WHERE host_id = ?1 AND status IN ${OPEN}`).bind(hostId).first<{ n: number }>();
   if ((open?.n ?? 0) >= rules.maxActivePerHost) fail(409, 'conflict', `You can host ${rules.maxActivePerHost} tournaments at a time.`);
@@ -324,11 +376,11 @@ export async function createTournament(db: D1Database, hostId: string, input: Cr
       db
         .prepare(
           `INSERT INTO tournaments (id, name, host_id, entry_fee, host_prize, visibility, join_code, session_name, starts_at, speed, max_players,
-             status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'registering', ?12, ?12)`,
+             status, currency, escrow_status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'registering', ?13, ?14, ?12, ?12)`,
         )
-        .bind(id, name, hostId, entryFee, hostPrize, visibility, newJoinCode(), newSessionName(), startsAt, speed, maxPlayers, now),
+        .bind(id, name, hostId, entryFee, hostPrize, visibility, newJoinCode(), newSessionName(), startsAt, speed, maxPlayers, now, currency, currency === 'near' ? 'pending' : ''),
     ];
-    if (hostPrize > 0) {
+    if (hostPrize > 0 && currency === 'coins') {
       stmts.push(postingStatement(db, { playerId: hostId, currency: 'coins', delta: -hostPrize, reason: 'tournament:host_prize', ref: id, idempotencyKey: `trn:${id}:host_prize` }, now));
     }
     try {
@@ -342,9 +394,47 @@ export async function createTournament(db: D1Database, hostId: string, input: Cr
   return tournamentView(db, id, hostId, now);
 }
 
+/** What the host's wallet sends to the escrow's `create_tournament` for this NEAR tournament (yoctoNEAR as strings). */
+export function escrowCreateArgs(t: Pick<TournamentRow, 'id' | 'name' | 'entry_fee' | 'host_prize' | 'max_players' | 'starts_at'>) {
+  return {
+    tournament_id: t.id,
+    name: t.name,
+    entry_fee: String(BigInt(t.entry_fee) * CHIP_YOCTO),
+    max_players: t.max_players,
+    starts_at: String(BigInt(t.starts_at) * 1_000_000n),
+    prize: String(BigInt(t.host_prize) * CHIP_YOCTO),
+  };
+}
+
+/**
+ * The host says their wallet created the tournament on the escrow: check the escrow holds it, as created here (host,
+ * fee, prize, size, start, private or not), and show it. Repeating it once confirmed is a no-op.
+ */
+export async function confirmEscrow(db: D1Database, escrow: TournamentEscrow, hostId: string, id: string, now = Date.now()) {
+  const t = await hosted(db, id, hostId);
+  if (t.currency !== 'near') fail(409, 'conflict', 'This is not a NEAR tournament.');
+  if (t.escrow_status !== 'pending') return tournamentView(db, id, hostId, now);
+  if (t.status !== 'registering') fail(409, 'conflict', 'This tournament has ended.');
+  const e = await escrow.getTournament(id);
+  if (!e) fail(409, 'escrow_missing', "The escrow doesn't have this tournament yet. Approve it in your wallet, then try again.");
+  const want = escrowCreateArgs(t);
+  const account = await nearAccountOf(db, hostId);
+  const same =
+    e!.status === 'Open' && e!.host === account && e!.entry_fee === want.entry_fee && e!.prize === want.prize &&
+    e!.max_players === want.max_players && e!.starts_at === want.starts_at && e!.private === (t.visibility === 'private');
+  if (!same) fail(409, 'escrow_mismatch', "The escrow's tournament doesn't match this one.");
+  await db.prepare(`UPDATE tournaments SET escrow_status = 'open', updated_at = ?2 WHERE id = ?1 AND escrow_status = 'pending'`).bind(id, now).run();
+  return tournamentView(db, id, hostId, now);
+}
+
 export async function editTournament(db: D1Database, hostId: string, id: string, input: CreateInput, rules: TournamentRules = DEFAULT_RULES, now = Date.now()) {
   const t = await hosted(db, id, hostId);
   if (t.status !== 'registering') fail(409, 'conflict', "This tournament can't be changed now.");
+  if (t.currency === 'near') {
+    // The escrow keeps the fee, prize, size, start and private code: only the name and speed are ours to change.
+    const fixed = ['entryFee', 'hostPrize', 'maxPlayers', 'visibility', 'startsAt', 'startsAtUnix'] as const;
+    if (fixed.some((k) => input?.[k] !== undefined)) fail(409, 'conflict', "A NEAR tournament's fee, prize, size, start and visibility are set on the escrow.");
+  }
   if (now >= t.starts_at - EDIT_FREEZE_MS) fail(409, 'conflict', 'Details are frozen in the last 5 minutes.');
   const sets: string[] = [];
   const args: unknown[] = [];
@@ -385,6 +475,7 @@ export async function editTournament(db: D1Database, hostId: string, id: string,
 export async function raisePrize(db: D1Database, hostId: string, id: string, rawAmount: unknown, now = Date.now()) {
   const amount = whole(rawAmount, 1, MAX_HOST_PRIZE, 'Amount');
   const t = await hosted(db, id, hostId);
+  if (t.currency === 'near') fail(409, 'conflict', "A NEAR tournament's prize is set on the escrow when it is created.");
   if (t.status !== 'registering' || now >= t.starts_at) fail(409, 'conflict', 'The prize can only be raised before the start.');
   if (t.host_prize + amount + t.entry_fee * t.max_players > MAX_POOL) fail(400, 'bad_request', 'That prize pool is too big.');
   const n = t.prize_raises + 1;
@@ -411,19 +502,30 @@ export async function raisePrize(db: D1Database, hostId: string, id: string, raw
   return tournamentView(db, id, hostId, now);
 }
 
-export async function cancelTournament(db: D1Database, hostId: string, id: string, now = Date.now()) {
+/**
+ * The host cancels before the start. NEAR: the host's wallet normally cancels on the escrow first (refunding everyone
+ * there); if it hasn't, the game server's operator does it once this record says cancelled (`escrowWork`).
+ */
+export async function cancelTournament(db: D1Database, hostId: string, id: string, now = Date.now(), escrow?: TournamentEscrow) {
   const t = await hosted(db, id, hostId);
   if (t.status !== 'registering') fail(409, 'conflict', 'A tournament can only be cancelled before it starts.');
   await endAndRefund(db, id, 'cancelled', 'host_cancelled', now, `('registering')`);
+  if (t.currency === 'near' && escrow) {
+    const e = await escrow.getTournament(id).catch(() => undefined);
+    const done: EscrowStatus | null = e === null ? 'none' : e?.status === 'Cancelled' ? 'refunded' : null;
+    if (done) await markEscrow(db, id, done, now);
+  }
   return tournamentView(db, id, hostId, now);
 }
 
 /**
  * Ends a tournament that won't finish and gives back everything taken: each entry's fee and the host's prize. One
  * batch; the status change is the fence (a tournament already ended refunds nothing more), and every refund is keyed.
+ * A NEAR tournament posts no refunds here: the operator cancels it on the escrow (`escrowWork`).
  */
 export async function endAndRefund(db: D1Database, id: string, status: 'cancelled' | 'aborted', reason: string, now = Date.now(), from = OPEN): Promise<boolean> {
-  const did = `EXISTS (SELECT 1 FROM tournaments WHERE id = ?1 AND status = '${status}' AND updated_at = ?2)`;
+  const did = `EXISTS (SELECT 1 FROM tournaments WHERE id = ?1 AND status = '${status}' AND updated_at = ?2 AND currency = 'coins')`;
+  const ended = `EXISTS (SELECT 1 FROM tournaments WHERE id = ?1 AND status = '${status}' AND updated_at = ?2)`;
   const results = await db.batch([
     db.prepare(`UPDATE tournaments SET status = ?2, cancel_reason = ?3, updated_at = ?4 WHERE id = ?1 AND status IN ${from}`).bind(id, status, reason, now),
     db
@@ -443,7 +545,7 @@ export async function endAndRefund(db: D1Database, id: string, status: 'cancelle
       )
       .bind(id, now),
     db
-      .prepare(`UPDATE tournament_entries SET status = 'cancelled', updated_at = ?2 WHERE tournament_id = ?1 AND status IN ('registered', 'playing') AND ${did}`)
+      .prepare(`UPDATE tournament_entries SET status = 'cancelled', updated_at = ?2 WHERE tournament_id = ?1 AND status IN ('registered', 'playing') AND ${ended}`)
       .bind(id, now),
   ]);
   return (results[0]?.meta.changes ?? 0) > 0;
@@ -451,22 +553,36 @@ export async function endAndRefund(db: D1Database, id: string, status: 'cancelle
 
 // ---- Playing -----------------------------------------------------------------------------------------------------------
 
-/** Registers and takes the entry fee, atomically: a full or closed tournament takes nothing, a short balance registers nobody. */
-export async function register(db: D1Database, player: { id: string; display_name: string }, id: string, now = Date.now()) {
+/**
+ * Registers and takes the entry fee, atomically: a full or closed tournament takes nothing, a short balance registers
+ * nobody. NEAR: the player's wallet has already paid the escrow (`register`); this checks `is_registered` and records
+ * the entry. The escrow refuses registrations after the start, so a paid one arriving just after it still counts
+ * until the roster locks.
+ */
+export async function register(db: D1Database, player: { id: string; display_name: string }, id: string, now = Date.now(), escrow?: TournamentEscrow) {
   const t = await findRow(db, id);
   if (!t) notFound();
-  if (t!.status !== 'registering' || now >= t!.starts_at) fail(409, 'conflict', 'Registration is closed.');
+  const near = t!.currency === 'near';
+  if (near && t!.escrow_status === 'pending') notFound();
+  if (t!.status !== 'registering' || (!near && now >= t!.starts_at)) fail(409, 'conflict', 'Registration is closed.');
   const existing = await entryOf(db, id, player.id);
   if (existing?.status === 'registered') return tournamentView(db, id, player.id, now);
   if (existing?.status === 'removed') fail(403, 'forbidden', 'The host removed you from this tournament.');
+  if (near) {
+    const account = await nearAccountOf(db, player.id);
+    if (!account) nearRequired('enter');
+    if (!escrow) fail(501, 'not_configured', 'NEAR tournaments are not set up on this server.');
+    if (!(await escrow!.isRegistered(id, account!))) fail(409, 'escrow_unpaid', 'Pay the entry in your wallet first.');
+  }
   const attempt = (existing?.attempt ?? 0) + 1;
   const fee = t!.entry_fee;
+  const open = near ? `t.status = 'registering'` : `t.status = 'registering' AND t.starts_at > ?6`;
   const stmts: D1PreparedStatement[] = [
     db
       .prepare(
         `INSERT INTO tournament_entries (tournament_id, player_id, display_name, status, attempt, paid_amount, created_at, updated_at)
          SELECT ?1, ?2, ?3, 'registered', ?4, ?5, ?6, ?6
-         WHERE EXISTS (SELECT 1 FROM tournaments t WHERE t.id = ?1 AND t.status = 'registering' AND t.starts_at > ?6 AND t.entry_fee = ?5
+         WHERE EXISTS (SELECT 1 FROM tournaments t WHERE t.id = ?1 AND ${open} AND t.entry_fee = ?5
            AND (SELECT count(*) FROM tournament_entries e WHERE e.tournament_id = ?1 AND e.status = 'registered') < t.max_players)
          ON CONFLICT (tournament_id, player_id) DO UPDATE SET status = 'registered', attempt = excluded.attempt, paid_amount = excluded.paid_amount,
            display_name = excluded.display_name, place = 0, round_reached = 0, prize = 0, updated_at = excluded.updated_at
@@ -474,7 +590,7 @@ export async function register(db: D1Database, player: { id: string; display_nam
       )
       .bind(id, player.id, player.display_name, attempt, fee, now),
   ];
-  if (fee > 0) {
+  if (fee > 0 && !near) {
     stmts.push(
       conditionalPostingStatement(
         db,
@@ -500,19 +616,22 @@ export async function register(db: D1Database, player: { id: string; display_nam
   return tournamentView(db, id, player.id, now);
 }
 
-/** Takes a player out before the start and refunds their fee (the player leaving, or the host removing them). */
-async function leave(db: D1Database, id: string, playerId: string, status: 'unregistered' | 'removed', now: number): Promise<void> {
+/**
+ * Takes a player out before the start and refunds their fee (the player leaving, or the host removing them). NEAR
+ * (`near`): no refund here (the escrow's `leave` gave it back), and no start-time fence: the escrow already enforced it.
+ */
+async function leave(db: D1Database, id: string, playerId: string, status: 'unregistered' | 'removed', now: number, near = false): Promise<void> {
   const entry = await entryOf(db, id, playerId);
   if (!entry || entry.status !== 'registered') fail(404, 'not_found', "That player isn't registered.");
   const stmts: D1PreparedStatement[] = [
     db
       .prepare(
         `UPDATE tournament_entries SET status = ?3, updated_at = ?4 WHERE tournament_id = ?1 AND player_id = ?2 AND status = 'registered'
-           AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?1 AND status = 'registering' AND starts_at > ?4)`,
+           AND EXISTS (SELECT 1 FROM tournaments WHERE id = ?1 AND status = 'registering'${near ? '' : ' AND starts_at > ?4'})`,
       )
       .bind(id, playerId, status, now),
   ];
-  if (entry!.paid_amount > 0) {
+  if (entry!.paid_amount > 0 && !near) {
     stmts.push(
       conditionalPostingStatement(
         db,
@@ -527,17 +646,25 @@ async function leave(db: D1Database, id: string, playerId: string, status: 'unre
   if (!r?.meta.changes) fail(409, 'conflict', "You can't leave after the start.");
 }
 
-export async function unregister(db: D1Database, playerId: string, id: string, now = Date.now()) {
+/** NEAR: the player's wallet has already left on the escrow (`leave`, which refunds); this checks and updates the roster. */
+export async function unregister(db: D1Database, playerId: string, id: string, now = Date.now(), escrow?: TournamentEscrow) {
   const t = await findRow(db, id);
   if (!t) notFound();
-  if (t!.status !== 'registering' || now >= t!.starts_at) fail(409, 'conflict', "You can't leave after the start.");
-  await leave(db, id, playerId, 'unregistered', now);
+  const near = t!.currency === 'near';
+  if (t!.status !== 'registering' || (!near && now >= t!.starts_at)) fail(409, 'conflict', "You can't leave after the start.");
+  if (near) {
+    const account = await nearAccountOf(db, playerId);
+    if (!escrow) fail(501, 'not_configured', 'NEAR tournaments are not set up on this server.');
+    if (account && (await escrow!.isRegistered(id, account))) fail(409, 'escrow_registered', 'Leave in your wallet first; that refunds your entry.');
+  }
+  await leave(db, id, playerId, 'unregistered', now, near);
   return tournamentView(db, id, playerId, now);
 }
 
-/** The host removes a player (named by Friend ID) before the start. */
+/** The host removes a player (named by Friend ID) before the start. Not for NEAR: only the player can leave the escrow. */
 export async function removePlayer(db: D1Database, hostId: string, id: string, friendCode: string, now = Date.now()) {
   const t = await hosted(db, id, hostId);
+  if (t.currency === 'near') fail(409, 'conflict', "Players can't be removed from a NEAR tournament: their entry is on the escrow.");
   if (t.status !== 'registering' || now >= t.starts_at) fail(409, 'conflict', 'Players can only be removed before the start.');
   const who = await db.prepare('SELECT id FROM players WHERE friend_code = ?1').bind(String(friendCode ?? '').replace(/-/g, '').toUpperCase()).first<{ id: string }>();
   if (!who) fail(404, 'not_found', "That player isn't registered.");
@@ -603,7 +730,7 @@ export async function roster(db: D1Database, id: string, now = Date.now()): Prom
     )
     .bind(id)
     .all<{ friend_code: string; display_name: string; paid_amount: number }>();
-  const prizes = computePayout(t!.host_prize + entries.results.reduce((sum, e) => sum + e.paid_amount, 0), 0, 0);
+  const prizes = poolOf(t!, entries.results.reduce((sum, e) => sum + e.paid_amount, 0));
   return {
     serverNowUnix: unix(now),
     tournamentId: t!.id,
@@ -689,7 +816,7 @@ export async function postResult(db: D1Database, id: string, body: { championId?
 
   // The pool is what was actually paid in (the host's prize and each entry's paid amount), never fee × players.
   const paidIn = playing.results.reduce((sum, e) => sum + e.paid_amount, 0);
-  const payout = computePayout(t.host_prize + paidIn, 0, 0);
+  const payout = poolOf(t, paidIn);
   const did = `EXISTS (SELECT 1 FROM tournaments WHERE id = ?8 AND status = 'finished' AND result_hash = ?9)`;
   const stmts: D1PreparedStatement[] = [
     db
@@ -707,7 +834,8 @@ export async function postResult(db: D1Database, id: string, body: { championId?
         )
         .bind(id, e.player_id, s.place, s.roundReached, prize, now, hash),
     );
-    if (prize > 0) {
+    if (prize > 0 && t.currency !== 'near') {
+      // NEAR prizes are the escrow's to pay: the game server's operator settles it with these places (escrowPlacings).
       stmts.push(
         conditionalPostingStatement(
           db,
@@ -738,6 +866,55 @@ function validateStandings(standings: Standing[], championId: string, roster: st
   }
   const champion = standings.find((s) => s.place === 1);
   return champion && champion.playFabId === championId ? null : 'The champion must be in 1st place.';
+}
+
+// ---- NEAR: what the escrow still has to do (game server) -------------------------------------------------------------
+
+export interface EscrowJob {
+  id: string;
+  /** 'finished': settle with the placings; 'cancelled' / 'aborted': refund everyone. */
+  status: TournamentStatus;
+  escrowStatus: EscrowStatus;
+}
+
+/** NEAR tournaments that ended here but not yet on the escrow (or whose escrow record was never seen). */
+export async function escrowWork(db: D1Database, limit = 20): Promise<EscrowJob[]> {
+  const rows = await db
+    .prepare(
+      `SELECT id, status, escrow_status FROM tournaments WHERE currency = 'near' AND escrow_status IN ('pending', 'open')
+         AND status IN ('finished', 'cancelled', 'aborted') ORDER BY updated_at LIMIT ?1`,
+    )
+    .bind(limit)
+    .all<{ id: string; status: TournamentStatus; escrow_status: EscrowStatus }>();
+  return rows.results.map((r) => ({ id: r.id, status: r.status, escrowStatus: r.escrow_status }));
+}
+
+/** One tournament's escrow job, or null if the escrow has nothing (more) to do for it. */
+export async function escrowJob(db: D1Database, id: string): Promise<EscrowJob | null> {
+  const r = await db
+    .prepare(
+      `SELECT id, status, escrow_status FROM tournaments WHERE id = ?1 AND currency = 'near' AND escrow_status IN ('pending', 'open')
+         AND status IN ('finished', 'cancelled', 'aborted')`,
+    )
+    .bind(id)
+    .first<{ id: string; status: TournamentStatus; escrow_status: EscrowStatus }>();
+  return r ? { id: r.id, status: r.status, escrowStatus: r.escrow_status } : null;
+}
+
+/** A finished NEAR tournament's NEAR accounts, best first (what the escrow's `settle_tournament` takes). */
+export async function escrowPlacings(db: D1Database, id: string): Promise<string[]> {
+  const rows = await db
+    .prepare(
+      `SELECT (SELECT i.subject FROM identities i WHERE i.player_id = e.player_id AND i.provider = 'near' ORDER BY i.created_at LIMIT 1) AS account
+       FROM tournament_entries e WHERE e.tournament_id = ?1 AND e.status = 'finished' AND e.place > 0 ORDER BY e.place`,
+    )
+    .bind(id)
+    .all<{ account: string | null }>();
+  return rows.results.map((r) => r.account).filter((a): a is string => !!a);
+}
+
+export async function markEscrow(db: D1Database, id: string, status: Exclude<EscrowStatus, '' | 'pending'>, now = Date.now()): Promise<void> {
+  await db.prepare(`UPDATE tournaments SET escrow_status = ?2, updated_at = ?3 WHERE id = ?1 AND currency = 'near'`).bind(id, status, now).run();
 }
 
 // ---- The clock (game server cron, every minute) -------------------------------------------------------------------------

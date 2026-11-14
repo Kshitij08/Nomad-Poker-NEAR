@@ -143,6 +143,23 @@ platform earnings), `get_platform_earnings`, `get_table`, `get_seat`, `get_cash_
 At all times `balances + at_tables + in_tournaments + platform_earnings == deposited - withdrawn`; the tests check it
 from the views alone through 1,500 random steps.
 
+**Hosted tournaments for NEAR** reuse the Coins tournament machinery (`packages/db/src/tournaments.ts`, currency
+`'near'`): D1 keeps the record, roster and clock; the escrow holds the money under the same tournament id. The app's
+Host tab has a NEAR stakes option (fees and prizes in chips of 0.001 NEAR). The flow:
+
+1. The host (signed in with NEAR) creates it in the API (hidden), their wallet calls `create_tournament` with the prize
+   attached, and `POST /v1/tournaments/<id>/confirm-escrow` checks `get_tournament` matches (host, fee, prize, size,
+   start, private) before anyone else can see it.
+2. Players' wallets `register` / `leave`; the API's register / unregister only change the roster once `is_registered`
+   agrees. The host's wallet cancels with `cancel_tournament`, then the API marks it cancelled.
+3. The game server (the operator) settles it when the tournament room posts its result (`settle_tournament` with the
+   NEAR accounts in finishing order), and its minute cron refunds anything cancelled or aborted here but still open on
+   the escrow (`cancel_tournament`). Both read the escrow first, so a repeat does nothing; see
+   `apps/game-server/src/tournamentEscrow.ts`. The API needs `NEAR_ESCROW` (and `NEAR_RPC_URL`) set.
+
+`NEAR_LIVE=1 … npx vitest run src/__tests__/nearTournamentLive.test.ts` in `apps/game-server` runs create, register
+both test accounts, cancel and refund against the real escrow (gas only).
+
 ## Run-ahead
 
 OutLayer's testnet queue can take minutes to start a dealer run, but a session of agent hands takes longer than that

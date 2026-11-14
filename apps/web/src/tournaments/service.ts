@@ -60,6 +60,7 @@ export class TournamentsService {
   register(id: string): Promise<Reply<TournamentInfo>> { return this.api.register(id); }
   unregister(id: string): Promise<Reply<TournamentInfo>> { return this.api.unregister(id); }
   cancel(id: string): Promise<Reply<TournamentInfo>> { return this.api.cancel(id); }
+  confirmEscrow(id: string): Promise<Reply<TournamentInfo>> { return this.api.confirmEscrow(id); }
   raisePrize(id: string, amount: number): Promise<Reply<TournamentInfo>> { return this.api.raisePrize(id, amount); }
 
   // ---- Playing -------------------------------------------------------------------------------

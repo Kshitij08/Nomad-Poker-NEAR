@@ -7,6 +7,7 @@
  * the RPC node answers (view_access_key).
  */
 import { base58Decode } from '@nomad/db/util';
+import type { EscrowTournament, TournamentEscrow } from '@nomad/db/tournaments';
 
 /** NEP-413's tag, 2^31 + 413, written before the payload so a signed message can never be a valid transaction. */
 const NEP413_TAG = 2 ** 31 + 413;
@@ -76,6 +77,32 @@ export async function accessKeyOf(rpcUrl: string, accountId: string, publicKey: 
   // A missing key or account comes back as an error, either top-level or inside `result`.
   if (body.error || !body.result || body.result.error) return 'unknown';
   return body.result.permission === 'FullAccess' ? 'full-access' : 'limited';
+}
+
+/** A contract view (call_function) over NEAR JSON-RPC; throws if the node or the contract errs. */
+export async function viewFunction<T>(rpcUrl: string, contractId: string, method: string, args: Record<string, unknown>): Promise<T> {
+  const res = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'nomad-view',
+      method: 'query',
+      params: { request_type: 'call_function', finality: 'optimistic', account_id: contractId, method_name: method, args_base64: base64Encode(new TextEncoder().encode(JSON.stringify(args))) },
+    }),
+  });
+  if (!res.ok) throw new Error(`NEAR RPC answered ${res.status}`);
+  const body = (await res.json()) as { result?: { result?: number[]; error?: string }; error?: unknown };
+  if (body.error || !body.result?.result) throw new Error(`NEAR view ${method} failed: ${JSON.stringify(body.error ?? body.result?.error ?? 'no result').slice(0, 200)}`);
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(body.result.result))) as T;
+}
+
+/** The escrow's tournament views (near/escrow), for NEAR tournaments (packages/db/src/tournaments.ts). */
+export function tournamentEscrow(rpcUrl: string, contractId: string): TournamentEscrow {
+  return {
+    getTournament: (id) => viewFunction<EscrowTournament | null>(rpcUrl, contractId, 'get_tournament', { tournament_id: id }),
+    isRegistered: (id, account) => viewFunction<boolean>(rpcUrl, contractId, 'is_registered', { tournament_id: id, account }),
+  };
 }
 
 export function base64Decode(s: string): Uint8Array | null {

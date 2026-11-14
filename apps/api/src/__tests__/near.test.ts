@@ -14,6 +14,21 @@ let env: Env;
 /** Keys the stubbed RPC node knows: account -> public key -> permission. */
 let chainKeys: Record<string, Record<string, 'FullAccess' | { FunctionCall: object }>> = {};
 let rpcDown = false;
+const ESCROW = 'nomad-escrow.testnet';
+type EscrowT = { host: string; entry_fee: string; max_players: number; starts_at: string; prize: string; private: boolean; players: string[]; status: string };
+/** The escrow's tournaments as its views show them (get_tournament, is_registered). */
+let escrowTournaments: Record<string, EscrowT> = {};
+
+function escrowView(params: { account_id: string; method_name: string; args_base64: string }): Response {
+  if (params.account_id !== ESCROW) throw new Error('unexpected contract ' + params.account_id);
+  if (rpcDown) return new Response('down', { status: 502 });
+  const args = JSON.parse(new TextDecoder().decode(base64Decode(params.args_base64)!));
+  const t = escrowTournaments[args.tournament_id] ?? null;
+  const value = params.method_name === 'get_tournament' ? t : params.method_name === 'is_registered' ? !!t?.players.includes(args.account) : undefined;
+  if (value === undefined) throw new Error('unexpected view ' + params.method_name);
+  const result = [...new TextEncoder().encode(JSON.stringify(value))];
+  return new Response(JSON.stringify({ jsonrpc: '2.0', id: 'x', result: { result, logs: [] } }), { status: 200 });
+}
 
 beforeEach(async () => {
   env = {
@@ -25,13 +40,16 @@ beforeEach(async () => {
     EMAIL_DEV_ECHO: '1',
     SPIN_SECRET: 'test-secret',
     NEAR_RPC_URL: RPC,
+    NEAR_ESCROW: ESCROW,
   };
   chainKeys = {};
+  escrowTournaments = {};
   rpcDown = false;
   vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
     if (url !== RPC) throw new Error(`unexpected fetch ${url}`);
     if (rpcDown) return new Response('down', { status: 502 });
     const { params } = JSON.parse(String(init.body));
+    if (params.request_type === 'call_function') return escrowView(params);
     const permission = chainKeys[params.account_id]?.[params.public_key];
     const body = permission ? { result: { nonce: 1, permission } } : { error: { name: 'HANDLER_ERROR', cause: { name: 'UNKNOWN_ACCESS_KEY' } } };
     return new Response(JSON.stringify({ jsonrpc: '2.0', id: 'x', ...body }), { status: 200 });
@@ -163,5 +181,55 @@ describe('NEAR sign-in', () => {
     const r = await call<ApiErrorBody>('POST', Routes.nearChallenge, { accountId: 'alice.testnet' });
     expect(r.status).toBe(501);
     expect(r.body.error.code).toBe('not_configured');
+  });
+});
+
+describe('NEAR tournaments over HTTP', () => {
+  type One = { tournament: { id: string; currency: string; escrowReady: boolean; players: number; myStatus: string; status: string; joinCode: string; startsAtUnix: number } };
+  it('creates, confirms against the escrow, registers and leaves by what the escrow says, and cancels', async () => {
+    env.TOURNAMENT_MIN_LEAD_SECONDS = '60';
+    const host = await nearSignIn(await newAccount('host.testnet'));
+    const ann = await nearSignIn(await newAccount('ann.testnet'));
+    const guest = await call<SessionResponse>('POST', Routes.guest, {});
+    const startsAtUnix = Math.floor(Date.now() / 1000) + 3600;
+
+    const made = await call<One>('POST', '/v1/tournaments', { name: 'NEAR Cup', entryFee: 50, hostPrize: 100, maxPlayers: 6, startsAtUnix, currency: 'near' }, host.body.token);
+    expect(made.status).toBe(200);
+    const t = made.body.tournament;
+    expect(t).toMatchObject({ currency: 'near', escrowReady: false });
+    expect((await call<ApiErrorBody>('POST', '/v1/tournaments', { name: 'x', startsAtUnix, currency: 'near' }, guest.body.token)).body.error.code).toBe('near_required');
+    expect((await call<{ tournaments: unknown[] }>('GET', '/v1/tournaments')).body.tournaments).toEqual([]);
+
+    // Not on the escrow yet, then created there by the host's wallet.
+    expect((await call<ApiErrorBody>('POST', `/v1/tournaments/${t.id}/confirm-escrow`, {}, host.body.token)).body.error.code).toBe('escrow_missing');
+    const yocto = (chips: number) => (BigInt(chips) * 10n ** 21n).toString();
+    escrowTournaments[t.id] = { host: 'host.testnet', entry_fee: yocto(50), max_players: 6, starts_at: (BigInt(startsAtUnix) * 10n ** 9n).toString(), prize: yocto(100), private: false, players: [], status: 'Open' };
+    rpcDown = true;
+    expect((await call<ApiErrorBody>('POST', `/v1/tournaments/${t.id}/confirm-escrow`, {}, host.body.token)).status).toBe(503);
+    rpcDown = false;
+    expect((await call<One>('POST', `/v1/tournaments/${t.id}/confirm-escrow`, {}, host.body.token)).body.tournament.escrowReady).toBe(true);
+    expect((await call<{ tournaments: { id: string }[] }>('GET', '/v1/tournaments')).body.tournaments.map((x) => x.id)).toEqual([t.id]);
+
+    // Register: only once the escrow has ann's entry; leave: only once it let her go.
+    expect((await call<ApiErrorBody>('POST', `/v1/tournaments/${t.id}/register`, {}, ann.body.token)).body.error.code).toBe('escrow_unpaid');
+    escrowTournaments[t.id]!.players.push('ann.testnet');
+    expect((await call<One>('POST', `/v1/tournaments/${t.id}/register`, {}, ann.body.token)).body.tournament).toMatchObject({ players: 1, myStatus: 'registered' });
+    expect((await call<ApiErrorBody>('POST', `/v1/tournaments/${t.id}/unregister`, {}, ann.body.token)).body.error.code).toBe('escrow_registered');
+    escrowTournaments[t.id]!.players = [];
+    expect((await call<One>('POST', `/v1/tournaments/${t.id}/unregister`, {}, ann.body.token)).body.tournament.myStatus).toBe('unregistered');
+    expect((await call<ApiErrorBody>('POST', `/v1/tournaments/${t.id}/register`, {}, guest.body.token)).body.error.code).toBe('near_required');
+
+    // The host's wallet cancelled it on the escrow; then the API marks it cancelled.
+    escrowTournaments[t.id]!.status = 'Cancelled';
+    expect((await call<One>('POST', `/v1/tournaments/${t.id}/cancel`, {}, host.body.token)).body.tournament.status).toBe('cancelled');
+    const row = await env.DB.prepare('SELECT escrow_status FROM tournaments WHERE id = ?1').bind(t.id).first<{ escrow_status: string }>();
+    expect(row?.escrow_status).toBe('refunded');
+  });
+
+  it('answers not_configured for a NEAR tournament without an escrow', async () => {
+    env.NEAR_ESCROW = undefined;
+    const host = await nearSignIn(await newAccount('host.testnet'));
+    const r = await call<ApiErrorBody>('POST', '/v1/tournaments', { name: 'x', startsAtUnix: Math.floor(Date.now() / 1000) + 3600, currency: 'near' }, host.body.token);
+    expect(r.status).toBe(501);
   });
 });

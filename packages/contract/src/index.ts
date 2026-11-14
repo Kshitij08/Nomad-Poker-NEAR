@@ -187,7 +187,14 @@ export type ErrorCode =
   | 'insufficient_funds'
   | 'not_configured'
   | 'rate_limited'
-  | 'internal';
+  | 'internal'
+  // NEAR tournaments: sign in with NEAR first; the escrow doesn't have the tournament (or it differs); the wallet
+  // hasn't paid the entry yet; the wallet hasn't left yet.
+  | 'near_required'
+  | 'escrow_missing'
+  | 'escrow_mismatch'
+  | 'escrow_unpaid'
+  | 'escrow_registered';
 
 export interface ApiErrorBody {
   error: { code: ErrorCode; message: string };
@@ -316,7 +323,7 @@ export const TournamentRoutes = {
   list: '/v1/tournaments',
   /** GET `/v1/tournaments/code/<code>`: a tournament by its 6-letter join code. */
   byCode: '/v1/tournaments/code',
-  /** GET `/v1/tournaments/<id>`; POST `/v1/tournaments/<id>/<action>`: edit | raise-prize | cancel | remove | register | unregister. */
+  /** GET `/v1/tournaments/<id>`; POST `/v1/tournaments/<id>/<action>`: edit | raise-prize | cancel | remove | register | unregister | confirm-escrow (NEAR). */
   one: '/v1/tournaments',
   /** GET: the signed-in player's entries and hosted tournaments. */
   mine: '/v1/me/tournaments',

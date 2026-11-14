@@ -46,7 +46,7 @@ import {
 } from '@nomad/db/accounts';
 import type { AppEnv, Env, PlayerRow } from './env';
 import { verifyGoogleIdToken } from './google';
-import { accessKeyOf, base64Decode, base64Encode, isAccountId, parseEd25519Key, verifyNep413 } from './near';
+import { accessKeyOf, base64Decode, base64Encode, isAccountId, parseEd25519Key, tournamentEscrow, verifyNep413 } from './near';
 import * as ledger from '@nomad/db/ledger';
 import * as progress from '@nomad/db/progress';
 import * as shop from '@nomad/db/shop';
@@ -519,25 +519,42 @@ export function createApp(): Hono<AppEnv> {
   app.get(`${TournamentRoutes.one}/:id`, async (c) =>
     c.json(await tournaments.tournamentView(c.env.DB, c.req.param('id'), (await optionalPlayer(c))?.id ?? null)),
   );
-  app.post(TournamentRoutes.list, requirePlayer, async (c) =>
-    c.json(await tournaments.createTournament(c.env.DB, c.get('player').id, await json(c), rules(c.env))),
-  );
+  /** NEAR tournaments' stakes are on the escrow; these views check what players' wallets did there. */
+  const escrowOf = (env: Env) => (env.NEAR_RPC_URL && env.NEAR_ESCROW ? tournamentEscrow(env.NEAR_RPC_URL, env.NEAR_ESCROW) : undefined);
+  const needEscrow = (env: Env) => escrowOf(env) ?? fail(501, 'not_configured', 'NEAR tournaments are not set up on this server.');
+  /** An escrow view that failed (RPC down) is a 503, not a 500. */
+  const viaEscrow = async <T>(p: Promise<T>): Promise<T> => {
+    try {
+      return await p;
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      console.warn('[near tournaments] escrow view', e);
+      return fail(503, 'internal', "Couldn't reach NEAR to check the escrow. Try again in a moment.");
+    }
+  };
+  app.post(TournamentRoutes.list, requirePlayer, async (c) => {
+    const b = await json(c);
+    if (b.currency === 'near') needEscrow(c.env);
+    return c.json(await tournaments.createTournament(c.env.DB, c.get('player').id, b, rules(c.env)));
+  });
   app.post(`${TournamentRoutes.one}/:id/:action`, requirePlayer, async (c) => {
     const db = c.env.DB;
     const me = c.get('player');
     const id = c.req.param('id');
     const b = await json(c);
     switch (c.req.param('action')) {
+      case 'confirm-escrow':
+        return c.json(await viaEscrow(tournaments.confirmEscrow(db, needEscrow(c.env), me.id, id)));
       case 'register':
-        return c.json(await tournaments.register(db, me, id));
+        return c.json(await viaEscrow(tournaments.register(db, me, id, Date.now(), escrowOf(c.env))));
       case 'unregister':
-        return c.json(await tournaments.unregister(db, me.id, id));
+        return c.json(await viaEscrow(tournaments.unregister(db, me.id, id, Date.now(), escrowOf(c.env))));
       case 'edit':
         return c.json(await tournaments.editTournament(db, me.id, id, b, rules(c.env)));
       case 'raise-prize':
         return c.json(await tournaments.raisePrize(db, me.id, id, b.amount));
       case 'cancel':
-        return c.json(await tournaments.cancelTournament(db, me.id, id));
+        return c.json(await tournaments.cancelTournament(db, me.id, id, Date.now(), escrowOf(c.env)));
       case 'remove':
         return c.json(await tournaments.removePlayer(db, me.id, id, String(b.playFabId ?? b.friendId ?? '')));
       default:

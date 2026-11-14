@@ -118,6 +118,11 @@ export class TournamentApiClient {
     return this.demoMode ? Promise.resolve(this.demo.cancel(id)) : this.one('POST', `/api/tournaments/${id}/cancel`, '{}', true);
   }
 
+  /** NEAR: after the host's wallet created it on the escrow, the API checks and shows it. */
+  confirmEscrow(id: string): Promise<Reply<TournamentInfo>> {
+    return this.one('POST', `/api/tournaments/${id}/confirm-escrow`, '{}', true);
+  }
+
   raisePrize(id: string, amount: number): Promise<Reply<TournamentInfo>> {
     return this.demoMode ? Promise.resolve(this.demo.raisePrize(id, amount))
       : this.one('POST', `/api/tournaments/${id}/raise-prize`, JSON.stringify({ amount }), true);
