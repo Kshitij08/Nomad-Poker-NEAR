@@ -45,14 +45,20 @@ export class WebAudio implements AudioPort {
     this.menuGain.gain.value = 0; // faded in by applyTrack when the menu BGM is the wanted track
     this.menuGain.connect(this.musicGain);
 
+    // Unlocked by the first gesture. The listeners are captured (no handler can stop them) and stay until the context
+    // is actually running: a gesture the browser doesn't count (or a resume that fails) must not use up the only try.
+    const events = ['pointerdown', 'pointerup', 'mousedown', 'touchend', 'keydown', 'click'] as const;
     const unlock = () => {
-      void this.ctx.resume();
+      // Music starts inside the gesture (Safari allows media only there); the graph is heard once the context runs.
       this.startMusic();
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
+      void this.ctx
+        .resume()
+        .then(() => {
+          if (this.ctx.state === 'running') for (const e of events) window.removeEventListener(e, unlock, true);
+        })
+        .catch(() => {});
     };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
+    for (const e of events) window.addEventListener(e, unlock, true);
   }
 
   /** PokerVolumeControl: master / music / sfx levels (0..1), applied immediately. */

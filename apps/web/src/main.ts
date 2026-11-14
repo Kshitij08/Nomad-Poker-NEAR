@@ -16,6 +16,27 @@ import type { CardFace } from './table/cardView';
  */
 const params = new URLSearchParams(location.search);
 
+// The Unity build that used to live on this domain left a service worker (/sw.js) in its visitors' browsers. It sits
+// between this page and the network and serves from its old cache, which stalled audio on the first visit. Remove it,
+// and when it controlled this load, reload once so everything comes straight from the network. (public/sw.js is the
+// replacement script, which does the same for browsers that update the worker before opening the page.)
+void (async () => {
+  const sw = navigator.serviceWorker;
+  if (!sw) return;
+  try {
+    const regs = await sw.getRegistrations();
+    if (!regs.length) return;
+    await Promise.all(regs.map((r) => r.unregister()));
+    if ('caches' in window) await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
+    if (sw.controller && sessionStorage.getItem('np.swCleared') !== '1') {
+      sessionStorage.setItem('np.swCleared', '1');
+      location.reload();
+    }
+  } catch {
+    /* storage blocked: nothing we can do, the page still works */
+  }
+})();
+
 const stage = new TableStage(
   document.getElementById('stage')!,
   document.getElementById('table3d') as HTMLCanvasElement,
