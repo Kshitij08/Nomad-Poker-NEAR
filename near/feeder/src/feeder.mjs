@@ -4,7 +4,8 @@
 // still. So as soon as session N is settled and handed to playback, the feeder asks the dealer for session N+1 and
 // settles it on the table contract, while N plays. Viewers only ever wait for the first session.
 //
-// Sessions chain: each starts from the previous one's final stacks, with the button moved on by the hands played.
+// Sessions chain: each starts from the previous one's final stacks. Inside a session a busted player sits out; between
+// sessions every busted seat rebuys, so each session starts with a full table.
 // Every step is safe to repeat (the dealer and the contract both accept an identical request again), so any failure
 // is retried with the same request.
 import { EventEmitter } from "node:events";
@@ -140,7 +141,10 @@ export class SessionFeeder extends EventEmitter {
       rebuys.push({ seat: i, amount: this.seats[i].stack });
       return this.seats[i].stack;
     });
-    await this.store.save({ index: st.index + 1, stacks: next, button: (st.button + detail.hands.length) % this.seats.length });
+    // Busted seats sat out the rest of this session; they rebuy before the next. The next session's button is the
+    // seat after the last hand's button.
+    const lastButton = detail.hands.at(-1)?.button ?? st.button;
+    await this.store.save({ index: st.index + 1, stacks: next, button: (lastButton + 1) % this.seats.length });
 
     const session = { id, index: st.index, hands: detail.hands, startStacks: st.stacks, endStacks: detail.stacks, rebuys, alpha, signature_hex, fetchedMs, runMs: answer.runMs, cost: answer.cost, settleMs, readyAt: Date.now() };
     this.emit("ready", session);

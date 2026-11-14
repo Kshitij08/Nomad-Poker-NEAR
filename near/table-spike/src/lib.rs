@@ -90,7 +90,7 @@ pub fn verify_session(vrf_pubkey: &[u8; 32], session_id: &str, start: &game::Rul
     let seed = seed_from_proof(vrf_pubkey, "session", session_id, alpha, signature_hex)?;
     let out = core::session::replay(start, &seed, hands, actions)?;
     let totals = (0..start.stacks.len()).map(|i| out.stacks[i] as i64 - start.stacks[i] as i64).collect();
-    Ok(SessionResult { hands_played: out.deltas.len() as u32, stacks: out.stacks, totals, actions: actions.to_string() })
+    Ok(SessionResult { hands_played: out.hands.len() as u32, stacks: out.stacks, totals, actions: actions.to_string() })
 }
 
 #[near(contract_state)]
@@ -493,7 +493,7 @@ mod tests {
         let r = verify_session(&f.pk, "s1", &start, 40, &f.alpha, &f.sig_hex, &text).unwrap();
         assert_eq!(r.totals.iter().sum::<i64>(), 0);
         assert_eq!(r.stacks.iter().sum::<u64>(), 900);
-        assert!(r.hands_played == 40 || r.stacks.iter().any(|s| *s == 0));
+        assert!(r.hands_played == 40 || core::session::active(&r.stacks) < 2);
         // A single-hand proof cannot settle a session, and a session cannot be cut short.
         let p = fixture("play", "s1");
         assert!(verify_session(&p.pk, "s1", &start, 40, &p.alpha, &p.sig_hex, &text).unwrap_err().contains("another request"));

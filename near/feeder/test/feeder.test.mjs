@@ -55,7 +55,20 @@ test("chains stacks and button from one session to the next, with rebuys", async
     const prev = ready[n - 1];
     const expected = prev.endStacks.map((s, i) => (s > 0 ? s : seats[i].stack));
     assert.deepEqual(dealer.calls[n].input.stacks, expected);
-    assert.equal(dealer.calls[n].input.button, (dealer.calls[n - 1].input.button + prev.hands.length) % seats.length);
+    assert.equal(dealer.calls[n].input.button, (prev.hands.at(-1).button + 1) % seats.length);
+  }
+  // Inside a session a busted seat sits out: no button, no result, and the session goes on while two have chips.
+  for (const s of ready) {
+    for (const h of s.hands) {
+      h.stacks_before.forEach((stack, i) => {
+        if (stack === 0) {
+          assert.equal(h.deltas[i], 0);
+          assert.notEqual(h.button, i);
+        }
+      });
+    }
+    const left = s.endStacks.filter((x) => x > 0).length;
+    assert.ok(s.hands.length === 60 || left === 1, `${s.id}: ${s.hands.length} hands, ${left} players left`);
   }
   // Within a session chips are only moved; across sessions only rebuys add any.
   for (const s of ready) assert.equal(s.endStacks.reduce((a, b) => a + b), s.startStacks.reduce((a, b) => a + b));

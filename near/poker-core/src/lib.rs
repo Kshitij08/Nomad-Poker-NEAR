@@ -216,12 +216,21 @@ pub mod game {
             if !(2..=super::MAX_PLAYERS).contains(&n) {
                 return Err("2 to 9 players".into());
             }
-            if r.sb == 0 || r.bb < r.sb || r.button >= n || r.stacks.iter().any(|s| *s == 0) {
-                return Err("bad blinds, button or stack".into());
+            if r.sb == 0 || r.bb < r.sb || r.button >= n {
+                return Err("bad blinds or button".into());
             }
             if r.stacks.iter().any(|s| *s > 1 << 50) {
                 return Err("stack too large".into());
             }
+            // A seat with no chips sits out: it is dealt nothing that matters, posts nothing and is never asked to act.
+            let active = r.stacks.iter().filter(|s| **s > 0).count();
+            if active < 2 {
+                return Err("fewer than 2 players have chips".into());
+            }
+            if r.stacks[r.button] == 0 {
+                return Err("the button seat has no chips".into());
+            }
+            let next = |from: usize| (1..=n).map(|k| (from + k) % n).find(|i| r.stacks[*i] > 0).expect("2 players have chips");
             let mut h = Hand {
                 n,
                 button: r.button,
@@ -229,7 +238,7 @@ pub mod game {
                 stack: r.stacks.clone(),
                 total: vec![0; n],
                 bet: vec![0; n],
-                folded: vec![false; n],
+                folded: r.stacks.iter().map(|s| *s == 0).collect(),
                 acted: vec![false; n],
                 street: 0,
                 current: r.bb,
@@ -238,8 +247,14 @@ pub mod game {
                 turn: None,
                 over: false,
             };
-            // Heads-up the button posts the small blind and acts first before the flop.
-            let (sb_seat, bb_seat) = if n == 2 { (r.button, (r.button + 1) % n) } else { ((r.button + 1) % n, (r.button + 2) % n) };
+            // Blinds go to the next seats with chips. Heads-up the button posts the small blind and acts first before
+            // the flop.
+            let (sb_seat, bb_seat) = if active == 2 {
+                (r.button, next(r.button))
+            } else {
+                let sb = next(r.button);
+                (sb, next(sb))
+            };
             h.pay(sb_seat, r.sb);
             h.pay(bb_seat, r.bb);
             h.turn = h.find_next(bb_seat);
@@ -447,8 +462,9 @@ pub mod game {
     }
 }
 
-/// A session: many hands at one table from one randomness proof. Stacks carry over and the button moves one seat
-/// each hand. The session ends after the asked number of hands, or right after a hand in which a player busts.
+/// A session: many hands at one table from one randomness proof. Stacks carry over. A player who runs out of chips
+/// sits out the rest of the session, and the button moves to the next seat that still has chips. The session ends
+/// after the asked number of hands, or when only one player has chips left.
 pub mod session {
     use super::game::{self, Rules};
     use super::{deal, sha};
@@ -460,8 +476,28 @@ pub mod session {
         sha(&[b"nomad-session-hand:", seed, &k.to_le_bytes()])
     }
 
-    pub fn rules_for(start: &Rules, stacks: &[u64], k: usize) -> Rules {
-        Rules { stacks: stacks.to_vec(), button: (start.button + k) % start.stacks.len(), sb: start.sb, bb: start.bb }
+    /// Players who still have chips.
+    pub fn active(stacks: &[u64]) -> usize {
+        stacks.iter().filter(|s| **s > 0).count()
+    }
+
+    fn next_active(stacks: &[u64], from: usize) -> usize {
+        let n = stacks.len();
+        (1..=n).map(|k| (from + k) % n).find(|i| stacks[*i] > 0).unwrap_or(from)
+    }
+
+    /// The button for a hand: the session's starting button for the first hand, then the next seat with chips after
+    /// the previous hand's button.
+    pub fn button_for(start: &Rules, stacks: &[u64], previous: Option<usize>) -> usize {
+        match previous {
+            None if stacks[start.button] > 0 => start.button,
+            None => next_active(stacks, start.button),
+            Some(b) => next_active(stacks, b),
+        }
+    }
+
+    pub fn rules_for(start: &Rules, stacks: &[u64], button: usize) -> Rules {
+        Rules { stacks: stacks.to_vec(), button, sb: start.sb, bb: start.bb }
     }
 
     pub fn check(start: &Rules, hands: usize) -> Result<(), String> {
@@ -472,14 +508,22 @@ pub mod session {
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct HandRecord {
+        pub button: usize,
+        pub stacks_before: Vec<u64>,
+        /// Each seat's result; 0 for a seat sitting out.
+        pub deltas: Vec<i64>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct Outcome {
-        /// Each hand's result per seat.
-        pub deltas: Vec<Vec<i64>>,
+        pub hands: Vec<HandRecord>,
         pub stacks: Vec<u64>,
     }
 
-    /// Replays a session from its action text (hands separated by `;`). Refuses a session that stops early, runs
-    /// long, keeps playing after a bust, or contains any illegal or missing action.
+    /// Replays a session from its action text (hands separated by `;`). Refuses a session that stops while two
+    /// players still have chips, runs long, keeps playing after one player is left, or contains any illegal or
+    /// missing action.
     pub fn replay(start: &Rules, seed: &[u8; 32], hands: usize, text: &str) -> Result<Outcome, String> {
         check(start, hands)?;
         let parts: Vec<&str> = text.split(';').collect();
@@ -488,23 +532,26 @@ pub mod session {
         }
         let n = start.stacks.len();
         let mut stacks = start.stacks.clone();
-        let mut deltas = Vec::with_capacity(parts.len());
+        let mut button = None;
+        let mut records = Vec::with_capacity(parts.len());
         for (k, part) in parts.iter().enumerate() {
-            if stacks.iter().any(|s| *s == 0) {
-                return Err(format!("hand {k} was played after a player busted"));
+            if active(&stacks) < 2 {
+                return Err(format!("hand {k} was played after only one player had chips"));
             }
-            let rules = rules_for(start, &stacks, k);
+            let b = button_for(start, &stacks, button);
+            button = Some(b);
+            let rules = rules_for(start, &stacks, b);
             let hand = game::replay(&rules, &game::parse_actions(part)?).map_err(|e| format!("hand {k}: {e}"))?;
             let d = hand.payouts(&deal(&hand_seed(seed, k as u32), n))?;
+            records.push(HandRecord { button: b, stacks_before: stacks.clone(), deltas: d.clone() });
             for i in 0..n {
                 stacks[i] = (stacks[i] as i64 + d[i]) as u64;
             }
-            deltas.push(d);
         }
-        if parts.len() < hands && !stacks.iter().any(|s| *s == 0) {
-            return Err("the session stopped before its last hand".into());
+        if parts.len() < hands && active(&stacks) >= 2 {
+            return Err("the session stopped while two players still had chips".into());
         }
-        Ok(Outcome { deltas, stacks })
+        Ok(Outcome { hands: records, stacks })
     }
 }
 
@@ -589,12 +636,15 @@ pub mod agent {
         session::check(start, hands)?;
         let n = start.stacks.len();
         let mut stacks = start.stacks.clone();
+        let mut button = None;
         let mut out = Vec::new();
         for k in 0..hands {
-            if stacks.iter().any(|s| *s == 0) {
+            if session::active(&stacks) < 2 {
                 break;
             }
-            let rules = session::rules_for(start, &stacks, k);
+            let b = session::button_for(start, &stacks, button);
+            button = Some(b);
+            let rules = session::rules_for(start, &stacks, b);
             let hs = session::hand_seed(seed, k as u32);
             let d = deal(&hs, n);
             let acts = play(profiles, &hs, game::Hand::new(&rules)?, &d);
@@ -774,6 +824,83 @@ mod tests {
     }
 
     #[test]
+    fn empty_seats_sit_out() {
+        use game::*;
+        // The button must have chips, and at least two players must.
+        assert!(Hand::new(&Rules { stacks: vec![0, 100, 100], button: 0, sb: 1, bb: 2 }).is_err());
+        assert!(Hand::new(&Rules { stacks: vec![0, 0, 100], button: 2, sb: 1, bb: 2 }).is_err());
+        // Seat 0 empty, two players left: heads-up rules, the button posts the small blind and acts first.
+        let rules = Rules { stacks: vec![0, 100, 100], button: 1, sb: 1, bb: 2 };
+        let h = Hand::new(&rules).unwrap();
+        assert_eq!(h.total, vec![0, 1, 2]);
+        assert_eq!(h.to_act(), Some(1));
+        // Four seats, seat 2 empty, button 1: blinds skip seat 2, so seat 3 posts the small blind and seat 0 the big.
+        let h = Hand::new(&Rules { stacks: vec![100, 100, 0, 100], button: 1, sb: 1, bb: 2 }).unwrap();
+        assert_eq!(h.total, vec![2, 0, 0, 1]);
+        assert_eq!(h.to_act(), Some(1));
+        // The empty seat's cards play no part: aces win, seat 0 is unaffected.
+        let d = Deal { holes: vec![[c("2c"), c("3d")], [c("Ah"), c("Ad")], [c("Kh"), c("Kd")]], board: board(["Ks", "9s", "4h", "Jd", "3c"]) };
+        let h = replay(&rules, &parse_actions("c,c,c,c,c,c,c,c").unwrap()).unwrap();
+        assert_eq!(h.payouts(&d).unwrap(), vec![0, -2, 2]);
+    }
+
+    #[test]
+    fn a_session_continues_after_a_bust_and_ends_with_one_player() {
+        // The first to act shoves and everyone calls, so players bust quickly.
+        let start = game::Rules { stacks: vec![10, 100, 100], button: 0, sb: 1, bb: 2 };
+        let n = 3;
+        let mut continued = 0;
+        for round in 0u32..300 {
+            let seed = sha(&[b"bust", &round.to_le_bytes()]);
+            let mut stacks = start.stacks.clone();
+            let mut button = None;
+            let mut texts = vec![];
+            for k in 0..40usize {
+                if session::active(&stacks) < 2 {
+                    break;
+                }
+                let b = session::button_for(&start, &stacks, button);
+                button = Some(b);
+                let rules = session::rules_for(&start, &stacks, b);
+                let d = deal(&session::hand_seed(&seed, k as u32), n);
+                let mut h = game::Hand::new(&rules).unwrap();
+                let mut acts = vec![];
+                while h.to_act().is_some() {
+                    let a = match h.raise_range() {
+                        Some((_, hi)) if acts.is_empty() => game::Act::RaiseTo(hi),
+                        _ => game::Act::Call,
+                    };
+                    h.apply(a).unwrap();
+                    acts.push(a);
+                }
+                for (i, x) in h.payouts(&d).unwrap().iter().enumerate() {
+                    stacks[i] = (stacks[i] as i64 + x) as u64;
+                }
+                texts.push(game::format_actions(&acts));
+            }
+            let out = session::replay(&start, &seed, 40, &texts.join(";")).unwrap();
+            assert_eq!(out.stacks, stacks);
+            assert_eq!(out.stacks.iter().sum::<u64>(), 210);
+            assert!(out.hands.len() == 40 || session::active(&out.stacks) == 1);
+            // Once a seat is out, the button never lands on it and the hands go on without it.
+            if let Some(k) = out.hands.iter().position(|h| h.stacks_before[0] == 0) {
+                continued += 1;
+                for h in &out.hands[k..] {
+                    assert_ne!(h.button, 0);
+                    assert_eq!(h.deltas[0], 0);
+                }
+            }
+            // Cutting a session short while two players still have chips is refused.
+            if out.hands.len() > 1 && session::active(&out.hands[out.hands.len() - 1].stacks_before) >= 2 {
+                let short = texts[..texts.len() - 1].join(";");
+                let cut = session::replay(&start, &seed, 40, &short);
+                assert!(cut.is_err() || session::active(&cut.unwrap().stacks) < 2);
+            }
+        }
+        assert!(continued > 50, "seat 0 should often bust and the session go on: {continued}");
+    }
+
+    #[test]
     fn side_pots_pay_each_layer() {
         use game::*;
         // Seat 0 is short (30). Seats 1 and 2 have 100. Button 0, so seat 1 posts 1 and seat 2 posts 2; seat 0 acts first.
@@ -840,8 +967,16 @@ mod tests {
             let out = session::replay(&start, &seed, 50, &text).unwrap();
             // Chips are only moved, never made.
             assert_eq!(out.stacks.iter().sum::<u64>(), 200 * n as u64);
-            let played = out.deltas.len();
-            assert!(played == 50 || out.stacks.iter().any(|s| *s == 0));
+            let played = out.hands.len();
+            assert!(played == 50 || session::active(&out.stacks) < 2, "round {round}: stopped early");
+            // A seat that sat out a hand neither won nor lost in it.
+            for h in &out.hands {
+                for i in 0..n {
+                    if h.stacks_before[i] == 0 {
+                        assert_eq!(h.deltas[i], 0);
+                    }
+                }
+            }
             // Dropping the last hand is refused unless it is a legitimate early stop (never, here: we drop one).
             if played > 1 {
                 let short = &text[..text.rfind(';').unwrap()];

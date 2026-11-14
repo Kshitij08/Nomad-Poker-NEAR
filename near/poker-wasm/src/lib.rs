@@ -45,31 +45,30 @@ pub fn replay(input: &Input) -> Result<Output, String> {
     let sig = hex::decode(&input.signature_hex).map_err(|_| "signature is not hex")?;
     let seed = core::seed_from_signature(&sig);
     let start = game::Rules { stacks: input.stacks.clone(), button: input.button, sb: input.sb, bb: input.bb };
-    // The same checks as the contract: a session it would refuse is refused here too.
-    session::replay(&start, &seed, input.hands, &input.actions)?;
+    // The same replay as the contract: a session it would refuse is refused here too.
+    let out = session::replay(&start, &seed, input.hands, &input.actions)?;
 
     let n = start.stacks.len();
-    let mut stacks = start.stacks.clone();
-    let mut hands = Vec::new();
-    for (k, text) in input.actions.split(';').enumerate() {
-        let rules = session::rules_for(&start, &stacks, k);
-        let d = core::deal(&session::hand_seed(&seed, k as u32), n);
-        let deltas = game::replay(&rules, &game::parse_actions(text)?)?.payouts(&d)?;
-        let name = |c: &u8| core::card_name(*c);
-        hands.push(HandOut {
-            index: k,
-            button: rules.button,
-            stacks_before: stacks.clone(),
-            holes: d.holes.iter().map(|h| [name(&h[0]), name(&h[1])]).collect(),
-            board: d.board.map(|c| name(&c)),
-            actions: text.to_string(),
-            deltas: deltas.clone(),
-        });
-        for i in 0..n {
-            stacks[i] = (stacks[i] as i64 + deltas[i]) as u64;
-        }
-    }
-    Ok(Output { hands, stacks })
+    let texts: Vec<&str> = input.actions.split(';').collect();
+    let name = |c: &u8| core::card_name(*c);
+    let hands = out
+        .hands
+        .iter()
+        .enumerate()
+        .map(|(k, rec)| {
+            let d = core::deal(&session::hand_seed(&seed, k as u32), n);
+            HandOut {
+                index: k,
+                button: rec.button,
+                stacks_before: rec.stacks_before.clone(),
+                holes: d.holes.iter().map(|h| [name(&h[0]), name(&h[1])]).collect(),
+                board: d.board.map(|c| name(&c)),
+                actions: texts[k].to_string(),
+                deltas: rec.deltas.clone(),
+            }
+        })
+        .collect();
+    Ok(Output { hands, stacks: out.stacks })
 }
 
 #[derive(Deserialize)]
