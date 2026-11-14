@@ -6,8 +6,21 @@ import { isTournamentSessionName } from '@nomad/db/tournaments';
 
 /** The NEAR house tables: `poker-money-st<stake>` rooms, one per stake (no overflow tables). */
 export const NEAR_MONEY_STAKES = [50, 100, 500] as const;
+/** A table a player hosts on the escrow: `poker-money-st<stake>-h<8 of a-z0-9>` (its escrow table id). */
+const NEAR_HOSTED = /^poker-money-st(\d+)-h[a-z0-9]{8}$/;
+
 export function isNearMoneyRoom(session: string): boolean {
-  return (NEAR_MONEY_STAKES as readonly number[]).some((s) => session === `${StakeSessionNames.MoneyRoot}-st${s}`);
+  return (NEAR_MONEY_STAKES as readonly number[]).some((s) => session === `${StakeSessionNames.MoneyRoot}-st${s}`) || isNearHostedRoom(session);
+}
+
+export function isNearHostedRoom(session: string): boolean {
+  const m = NEAR_HOSTED.exec(session);
+  return !!m && (NEAR_MONEY_STAKES as readonly number[]).includes(Number(m[1]));
+}
+
+/** A NEAR table's stake (min buy-in in chips), from its room name. */
+export function nearRoomStake(session: string): number {
+  return Number(/^poker-money-st(\d+)/.exec(session)?.[1] ?? 0);
 }
 
 /**
@@ -44,6 +57,7 @@ export function canonicalSession(raw: string | null | undefined): string | null 
   if (QA_ROOM.test(s.toLowerCase())) return s.toLowerCase();
   if (isTournamentSessionName(s.toUpperCase())) return s.toUpperCase();
   if (SIDE_ROOM.test(s)) return s; // base58 is case-sensitive
+  if (isNearHostedRoom(s.toLowerCase())) return s.toLowerCase();
   return null;
 }
 
@@ -58,6 +72,11 @@ export function roomSpecFor(session: string, opts: RoomSpecOptions): RoomSpecRes
     child: true,
     properties: { [ChainTableMode.KindProperty]: ChainTableMode.KindQuick, [ChainTableMode.StakeProperty]: String(stake) },
   });
+  // A hosted NEAR table: whether it exists on the escrow (and with this stake's blinds) the ledger checks at buy-in.
+  if (isNearHostedRoom(session)) {
+    if (!opts.nearTables) return { ok: false, reason: 'GameNotFound', message: 'NEAR tables are not available here.' };
+    return { ok: true, spec: { ...quick(nearRoomStake(session)), maxPlayers: 6 } };
+  }
   if (StakeSessionNames.isPool(session)) {
     if (session.startsWith(StakeSessionNames.MoneyRoot)) {
       if (!opts.nearTables || !isNearMoneyRoom(session)) return { ok: false, reason: 'GameNotFound', message: 'That NEAR table is not available.' };

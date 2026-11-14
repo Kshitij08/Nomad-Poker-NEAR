@@ -23,6 +23,7 @@ import { tournamentScreens } from './screens/tournaments';
 import { agentScreens } from './screens/agents';
 import { entryScreens, installEntryOverlays } from './screens/entry';
 import { solScreens, installSolOverlays } from './screens/sol';
+import { openNearTableLink } from './screens/nearTables';
 import { solTourneyScreens } from './screens/solTourneys';
 
 declare module '../app/app' {
@@ -72,6 +73,7 @@ export function install(ctx: AppContext): void {
   wire(ctx, host, ui, byUnity);
   installEntryOverlays(ctx, host, ui);
   installSolOverlays(ctx, host, ui);
+  openNearTableLink(ctx.params, ui);
 }
 
 function wire(ctx: AppContext, host: NomadHost, ui: V2, byUnity: Map<string, string>): void {

@@ -15,7 +15,14 @@ import { D1ChipLedger, d1TableEconomy } from './d1ChipLedger';
 import { NearChipLedger } from './nearChipLedger';
 import type { NearOperator } from './nearOperator';
 import type { DeckReveal } from '@nomad/engine/cards/deckCommitment';
-import { isNearMoneyRoom } from './roomSpec';
+import { isNearHostedRoom, isNearMoneyRoom, nearRoomStake } from './roomSpec';
+import { StakeCatalog } from '@nomad/engine/stakes/stakes';
+
+/** The blinds a hosted NEAR room deals: its stake tier's. */
+function hostedBlinds(room: string): { small: number; big: number } {
+  const t = StakeCatalog.get(nearRoomStake(room));
+  return { small: t.smallBlind, big: t.bigBlind };
+}
 import type { HandRecorder } from './handRecorder';
 import { RoomHost, type LogFn } from './roomHost';
 
@@ -91,7 +98,7 @@ export class TableHost extends RoomHost {
     const room = opts.spec.name;
     this.money = isNearMoneyRoom(room) && !!opts.near;
     const ledger = this.money
-      ? new NearChipLedger(opts.db, opts.near!.operator, opts.near!.escrow, room, opts.log)
+      ? new NearChipLedger(opts.db, opts.near!.operator, opts.near!.escrow, room, opts.log, isNearHostedRoom(room) ? hostedBlinds(room) : null)
       : new D1ChipLedger(opts.db, room, (lock) => this.stillSeated(lock), opts.log);
     this.agents = new AgentDesk({
       db: opts.db,

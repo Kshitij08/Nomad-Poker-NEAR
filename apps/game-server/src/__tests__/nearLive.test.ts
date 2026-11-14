@@ -24,7 +24,8 @@ const GAME = process.env.NEAR_LIVE_GAME ?? 'http://localhost:8789';
 const ORIGIN = 'http://localhost:5183';
 const RPC = 'https://test.rpc.fastnear.com';
 const ESCROW = 'nomad-escrow.testnet';
-const ROOM = 'poker-money-st50';
+/** NEAR_LIVE_HOSTED=1: the first account hosts a fresh st50 table on the escrow and both play there. */
+const ROOM = process.env.NEAR_LIVE_HOSTED === '1' ? `poker-money-st50-h${Math.random().toString(36).slice(2, 10).padEnd(8, '0')}` : 'poker-money-st50';
 const BUY_IN = 6n * 10n ** 22n; // 0.06 NEAR → 57 chips after the 5% rake
 const HANDS = Number(process.env.NEAR_LIVE_HANDS ?? 4);
 
@@ -64,6 +65,10 @@ describe.skipIf(!LIVE)('live: a NEAR table on testnet', () => {
   const balance = (w: Who) => w.signer.view<string>(ESCROW, 'get_balance', { account: w.account }).then(BigInt);
 
   it('signs in with NEAR and buys in on the escrow', async () => {
+    if (ROOM !== 'poker-money-st50') {
+      await players[0]!.signer.call(ESCROW, 'create_hosted_table', { table_id: ROOM, config: { small_blind: 1, big_blind: 2, min_buy_in: 50, max_buy_in: 200, seats: 6 }, invites: players.map((w) => w.account) }, { tgas: 30n });
+      console.log(`${players[0]!.account} hosts ${ROOM} (invite-only)`);
+    }
     for (const w of players) {
       w.token = await signIn(w);
       const existing = await w.signer.view<{ locked: string } | null>(ESCROW, 'get_seat', { table_id: ROOM, player: w.account });

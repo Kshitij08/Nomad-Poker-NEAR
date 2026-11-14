@@ -33,6 +33,7 @@ class FakeEscrow {
   paidTotal = 0n;
   keys = new Set<string>();
   calls: string[] = [];
+  tables = new Map<string, { config: { small_blind: number; big_blind: number }; closed: boolean }>();
   buyIn(player: string, chips: number) {
     const locked = BigInt(chips) * CHIP_YOCTO;
     this.seats.set(player, (this.seats.get(player) ?? 0n) + locked);
@@ -44,6 +45,7 @@ class FakeEscrow {
       return (l === undefined ? null : { bought_in: String(l), locked: String(l) }) as T;
     }
     if (method === 'get_balance') return String(this.balances.get(String(a.account)) ?? 0n) as T;
+    if (method === 'get_table') return (this.tables.get(String(a.table_id)) ?? null) as T;
     throw new Error('unknown view ' + method);
   }
   async call<T>(_c: string, method: string, a: Record<string, unknown>): Promise<T> {
@@ -125,8 +127,8 @@ async function nearAccount(name: string, near: string | null): Promise<{ id: str
   return { id: p.id, token: (await createSession(db, p.id)).token };
 }
 
-async function sit(name: string, acct: { token: string }, buyIn: number): Promise<Headless> {
-  const r = await connectTable({ kind: 'join', code: ROOM }, { url: base, delay: (ms) => new Promise((res) => setTimeout(res, ms / SPEED)) });
+async function sit(name: string, acct: { token: string }, buyIn: number, room = ROOM): Promise<Headless> {
+  const r = await connectTable({ kind: 'join', code: room }, { url: base, delay: (ms) => new Promise((res) => setTimeout(res, ms / SPEED)) });
   expect(r.ok, r.message).toBe(true);
   const h = headlessClient(r.conn!, { name, token: `tok-${name}`, playerId: name, coins: 0, speed: SPEED, buyIn, ticket: () => acct.token });
   h.panel.policy = (legal) => (legal.canCheck ? PlayerAction.check() : legal.canCall ? PlayerAction.call() : PlayerAction.fold());
@@ -200,5 +202,32 @@ describe('game server: a NEAR money table', () => {
       h.game.stop();
       h.conn.close();
     }
+  }, 30_000);
+
+  it("opens a hosted table only once the escrow has it with the stake's blinds", async () => {
+    const HOSTED = 'poker-money-st100-habcd1234';
+    const dan = await nearAccount('Dan', 'dan.testnet');
+    escrow.buyIn('dan.testnet', 100);
+    const tryIt = async (stay = false) => {
+      const d = await sit('Dan', dan, 100, HOSTED);
+      await new Promise((r) => setTimeout(r, 600));
+      const seat = d.game.localSeat;
+      if (!stay) {
+        d.game.stop();
+        d.conn.close();
+      }
+      return { seat, d };
+    };
+    expect((await tryIt()).seat).toBe(-1); // not on the escrow
+    escrow.tables.set(HOSTED, { config: { small_blind: 1, big_blind: 2 }, closed: false });
+    expect((await tryIt()).seat).toBe(-1); // wrong blinds for st100 (2/5)
+    escrow.tables.set(HOSTED, { config: { small_blind: 2, big_blind: 5 }, closed: false });
+    const ok = await tryIt(true);
+    expect(ok.seat).toBeGreaterThanOrEqual(0);
+    ok.d.game.requestLeaveTable();
+    await until(() => !escrow.seats.has('dan.testnet'), 8000, 'Dan cashed out');
+    expect(escrow.balances.get('dan.testnet')).toBe(100n * CHIP_YOCTO);
+    ok.d.game.stop();
+    ok.d.conn.close();
   }, 30_000);
 });

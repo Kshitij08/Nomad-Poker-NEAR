@@ -10,8 +10,9 @@
  */
 import { formatN0 } from '@nomad/engine';
 import {
-  ESCROW_CONTRACT, DEFAULT_RAKE_BPS, HOUSE_TABLES, buyIn, buyInError, buyInPlan, chipsToYocto, deposit, getBalance, getConfig, getSeat, getTable,
-  withdraw, yoctoToChips, type EscrowConfig, type EscrowSeat, type EscrowTable, type HouseTable,
+  ESCROW_CONTRACT, DEFAULT_RAKE_BPS, HOUSE_TABLES, buyIn, buyInError, buyInPlan, chipsToYocto, closeTable, createHostedTable, deposit, getBalance, getConfig, getSeat,
+  getTable, hostedTableLink, isHostedTableId, newHostedTableId, parseInvites, tableForId, withdraw, yoctoToChips,
+  type EscrowConfig, type EscrowSeat, type EscrowTable, type HouseTable,
 } from '../../near/escrow';
 import { NEAR_EXPLORER, formatNear, parseNear } from '../../near/backing';
 import { nearAccount, nearSigner } from '../../near/wallet';
@@ -34,6 +35,48 @@ const state = {
   note: '',
 };
 
+// ------------------------------------------------------------------ hosted tables this browser knows
+
+const KNOWN_KEY = 'nomad.near.hostedTables';
+
+/** Hosted tables you made or opened a link to (newest first), remembered in this browser. */
+function knownHosted(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(KNOWN_KEY) ?? '[]') as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && isHostedTableId(x)).slice(0, 20) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Remembers a hosted table (a link you opened, or one you made). False for an id that isn't one. */
+export function rememberHostedTable(id: string): boolean {
+  if (!isHostedTableId(id)) return false;
+  try {
+    localStorage.setItem(KNOWN_KEY, JSON.stringify([id, ...knownHosted().filter((x) => x !== id)].slice(0, 20)));
+  } catch {
+    /* private mode: listed for this visit only */
+    sessionHosted.add(id);
+  }
+  return true;
+}
+const sessionHosted = new Set<string>();
+
+function forgetHostedTable(id: string): void {
+  try {
+    localStorage.setItem(KNOWN_KEY, JSON.stringify(knownHosted().filter((x) => x !== id)));
+  } catch {
+    /* nothing stored */
+  }
+  sessionHosted.delete(id);
+}
+
+/** The house tables, then the hosted ones this browser knows. */
+function allTables(): HouseTable[] {
+  const hosted = [...new Set([...knownHosted(), ...sessionHosted])].map(tableForId).filter((t): t is HouseTable => !!t);
+  return [...HOUSE_TABLES, ...hosted];
+}
+
 /** Your Nomad account's linked NEAR account, or null (not signed in with NEAR). */
 function nearIdentity(): string | null {
   const me = S('nomadApi')?.me as { identities?: { provider: string; label: string }[] } | null | undefined;
@@ -52,15 +95,16 @@ async function load(): Promise<void> {
     state.account = nearIdentity();
     state.wallet = await nearAccount();
     const me = state.account;
+    const list = allTables();
     const [config, tables, balance, seats] = await Promise.all([
       getConfig().catch(() => null),
-      Promise.all(HOUSE_TABLES.map((t) => getTable(t.id))),
+      Promise.all(list.map((t) => getTable(t.id))),
       me ? getBalance(me) : Promise.resolve(0n),
-      me ? Promise.all(HOUSE_TABLES.map((t) => getSeat(t.id, me))) : Promise.resolve(HOUSE_TABLES.map(() => null)),
+      me ? Promise.all(list.map((t) => getSeat(t.id, me))) : Promise.resolve(list.map(() => null)),
     ]);
     state.config = config;
     state.balance = balance;
-    HOUSE_TABLES.forEach((t, i) => {
+    list.forEach((t, i) => {
       state.tables.set(t.id, tables[i] ?? null);
       state.seats.set(t.id, seats[i] ?? null);
     });
@@ -180,8 +224,62 @@ async function seatAfterBuyIn(tableId: string, account: string): Promise<EscrowS
   return null;
 }
 
+/** Host a table: pick a stake, optionally invite accounts, then the wallet creates it on the escrow. */
+async function hostTable(): Promise<void> {
+  if (!(await walletReady())) return;
+  const pick = (stake: number) => {
+    ui().closeDialog();
+    const t = tableForId(newHostedTableId(stake))!;
+    prompt(
+      `Host a table: ${t.name.replace('Hosted · ', '')}`,
+      `Blinds ${t.config.small_blind} / ${t.config.big_blind}, buy-in ${formatN0(t.config.min_buy_in)}–${formatN0(t.config.max_buy_in)} chips, ${t.config.seats} seats. Invite NEAR accounts to make it invite-only (comma separated), or leave it empty for anyone with the link. Hosting costs nothing; the house takes ${rakeBps() / 100}% of each buy-in, as at house tables.`,
+      'alice.testnet, bob.testnet (optional)', '', 'Create table',
+      (v) => {
+        let invites: string[] | null;
+        try {
+          invites = parseInvites(v);
+        } catch (e) {
+          return ui().message('Host a table', esc((e as Error).message));
+        }
+        void (async () => {
+          const ok = await walletAct('Confirm the new table in your wallet…', 'Your table is open. Copy its link to invite players.', () => createHostedTable(t, invites));
+          if (ok) {
+            rememberHostedTable(t.id);
+            await load();
+          }
+        })();
+      },
+      400,
+    );
+  };
+  const stakes = HOUSE_TABLES.map((h, i) => btn(`${esc(h.name)}<br><span class="v2-xs">${h.config.small_blind}/${h.config.big_blind} · ${near(h.config.min_buy_in)}+ NEAR</span>`, `host-st${i}`, { h: 'blue' })).join('');
+  const actions: Record<string, () => void> = { 'host-cancel': () => ui().closeDialog() };
+  HOUSE_TABLES.forEach((h, i) => (actions[`host-st${i}`] = () => pick(Number(/st(\d+)/.exec(h.id)![1]))));
+  ui().openDialog({ title: 'Host a table', body: 'Pick the stakes. Players buy in from their own NEAR wallets; the escrow holds every stake.', buttons: `<div class="v2-btn-grid">${stakes}${btn('Cancel', 'host-cancel', { h: 'ghost' })}</div>`, actions });
+}
+
+async function copyLink(id: string): Promise<void> {
+  const link = hostedTableLink(id);
+  try {
+    await navigator.clipboard.writeText(link);
+    state.note = 'Invite link copied.';
+  } catch {
+    return ui().message('Invite link', `<input class="v2-field" style="width:100%" readonly value="${esc(link)}">`);
+  }
+  ui().render();
+}
+
+function closeHosted(id: string): void {
+  void walletReady().then((ok) => {
+    if (!ok) return;
+    ui().message('Close your table?', 'No one can buy in after this. Players still seated keep playing and are paid out when they leave.', 'Close table', () => {
+      void walletAct('Confirm closing the table in your wallet…', 'Table closed.', () => closeTable(id));
+    }, 'Cancel', undefined, 'red');
+  });
+}
+
 async function sit(i: number): Promise<void> {
-  const t = HOUSE_TABLES[i];
+  const t = allTables()[i];
   if (!t) return;
   if (!state.account) return void signIn();
   const seat = state.seats.get(t.id) ?? null;
@@ -235,13 +333,19 @@ function tableCard(t: HouseTable, i: number): string {
     [`${near(c.min_buy_in)}–${near(c.max_buy_in)}`, 'NEAR'],
     [table ? `${table.seated} / ${c.seats}` : '—', 'seats taken'],
   ].map(([v, l]) => `<div><b>${v}</b><div class="v2-xs v2-mut">${l}</div></div>`).join('');
+  const hosted = isHostedTableId(t.id);
+  const iHost = hosted && !!table?.host && table.host === state.account;
   const status = mine
     ? `<span class="v2-good">You have a seat: ${formatN0(mine)} chips</span>`
-    : !table ? 'Not open on NEAR yet' : table.closed ? 'Closed' : full ? 'Full' : '';
+    : !table ? (hosted ? 'Not found on NEAR' : 'Not open on NEAR yet') : table.closed ? 'Closed' : full ? 'Full' : '';
+  const who = hosted && table ? ` · ${iHost ? 'hosted by you' : `hosted by ${esc(table.host ?? '?')}`}${table.invite_only ? ' · invite-only' : ''}` : '';
   const action = mine
     ? btn(`Sit with ${formatN0(mine)} chips ${ico('next', 0.8)}`, 'nt-sit', { h: 'gold', c: 'w', v: i })
     : btn(`Buy in & sit ${ico('next', 0.8)}`, 'nt-sit', { h: 'gold', c: 'w', v: i, dis: !open || full });
-  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('coin', 2.2)}<div class="v2-grow"><b style="display:block;font-size:1.1em">${esc(t.name)}</b><div class="v2-xs v2-mut">${esc(t.id)}${status ? ` · ${status}` : ''}</div></div></div><div class="v2-row v2-ag-mstats">${stats}</div>${action}</div>`;
+  const tools = hosted
+    ? `<div class="v2-row v2-wrap" style="gap:.4em">${open ? btn('Copy invite link', 'nt-link', { h: 'violet', c: 'sm', v: t.id }) : ''}${iHost && open ? btn('Close', 'nt-close', { h: 'ghost', c: 'sm', v: t.id }) : ''}${!open && !mine ? btn('Remove', 'nt-forget', { h: 'ghost', c: 'sm', v: t.id }) : ''}</div>`
+    : '';
+  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('coin', 2.2)}<div class="v2-grow"><b style="display:block;font-size:1.1em">${esc(t.name)}</b><div class="v2-xs v2-mut">${esc(t.id)}${who}${status ? ` · ${status}` : ''}</div></div></div><div class="v2-row v2-ag-mstats">${stats}</div>${tools}${action}</div>`;
 }
 
 export const nearTablesScreen: ScreenDef = {
@@ -255,7 +359,10 @@ export const nearTablesScreen: ScreenDef = {
     let body: string;
     if (state.loading && !state.tables.size) body = `<div class="v2-panel v2-body"><div class="v2-empty">${ico('coin', 5)}Loading from NEAR…</div></div>`;
     else if (state.error) body = `<div class="v2-panel v2-body"><div class="v2-empty">${esc(state.error)}${btn('Try again', 'nt-reload', { h: 'gold' })}</div></div>`;
-    else body = `${balanceCard()}<div class="v2-ag-mgrid v2-scroll">${HOUSE_TABLES.map(tableCard).join('')}</div>`;
+    else {
+      const host = state.account ? `<div class="v2-row">${btn(`${ico('plus', 0.9)} Host a table`, 'nt-host', { h: 'violet', c: 'sm' })}<span class="v2-xs v2-mut">Your own table at these stakes, open or invite-only, with a link to share.</span></div>` : '';
+      body = `${balanceCard()}${host}<div class="v2-ag-mgrid v2-scroll">${allTables().map(tableCard).join('')}</div>`;
+    }
     return topBar('NEAR tables') + `<div class="v2-body v2-col">${note}${body}</div>`;
   },
   actions: {
@@ -264,5 +371,28 @@ export const nearTablesScreen: ScreenDef = {
     'nt-deposit': () => depositNear(),
     'nt-withdraw': () => withdrawNear(),
     'nt-sit': (v) => void sit(Number(v)),
+    'nt-host': () => void hostTable(),
+    'nt-link': (v) => void copyLink(String(v)),
+    'nt-close': (v) => closeHosted(String(v)),
+    'nt-forget': (v) => {
+      forgetHostedTable(String(v));
+      void load();
+    },
   },
 };
+
+/**
+ * An invite link (`?neartable=<id>`): remember the table and open Play for NEAR once the main menu is up (after any
+ * sign-in screen). Called once at boot.
+ */
+export function openNearTableLink(params: URLSearchParams, v2: { readonly currentId: string | null; show(id: string): void }): void {
+  const id = params.get('neartable');
+  if (!id || !rememberHostedTable(id)) return;
+  const started = Date.now();
+  const timer = setInterval(() => {
+    if (v2.currentId === 'main') {
+      clearInterval(timer);
+      v2.show('near-tables');
+    } else if (Date.now() - started > 120_000) clearInterval(timer);
+  }, 400);
+}

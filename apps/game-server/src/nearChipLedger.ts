@@ -32,7 +32,26 @@ export class NearChipLedger implements ChipLedger {
     /** The escrow's table id: the room name. */
     private readonly table: string,
     private readonly log: LogFn,
+    /**
+     * A hosted table's blinds as this room deals them: the escrow table (made by its host) must exist with the same
+     * blinds before anyone sits. House tables, opened by the operator, skip the check.
+     */
+    private readonly hostedBlinds: { small: number; big: number } | null = null,
   ) {}
+
+  private tableChecked = false;
+
+  /** Null when the table is fine to sit at, else why not. */
+  private async tableProblem(): Promise<string | null> {
+    if (!this.hostedBlinds || this.tableChecked) return null;
+    const t = await this.operator.view<{ config: { small_blind: number; big_blind: number }; closed: boolean } | null>(this.escrow, 'get_table', { table_id: this.table });
+    if (!t) return 'This table was not created on NEAR.';
+    if (t.closed) return 'The host closed this table.';
+    if (t.config.small_blind !== this.hostedBlinds.small || t.config.big_blind !== this.hostedBlinds.big)
+      return `This table's blinds on NEAR (${t.config.small_blind}/${t.config.big_blind}) don't match its stake.`;
+    this.tableChecked = true;
+    return null;
+  }
 
   private async accountOf(playerId: string): Promise<string | null> {
     const known = this.accounts.get(playerId);
@@ -55,6 +74,8 @@ export class NearChipLedger implements ChipLedger {
     try {
       const account = await this.accountOf(playerId);
       if (!account) return LedgerResult.fail('Sign in with NEAR to play NEAR tables.');
+      const problem = await this.tableProblem();
+      if (problem) return LedgerResult.fail(problem);
       const s = await this.operator.view<Seat | null>(this.escrow, 'get_seat', { table_id: this.table, player: account });
       if (!s) return LedgerResult.fail('Buy in from your NEAR wallet first.');
       const locked = Number(BigInt(s.locked) / CHIP_YOCTO);
