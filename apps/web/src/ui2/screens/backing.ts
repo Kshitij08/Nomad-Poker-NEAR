@@ -111,14 +111,14 @@ function proCard(c: AgentCard, i: number): string {
 }
 
 function prosView(): string {
-  if (!state.cards.length) return `<div class="v2-panel v2-body"><div class="v2-empty">${ico('robot', 5)}No agents are listed yet. List yours from My stakes.</div></div>`;
+  if (!state.cards.length) return `<div class="v2-bk-body"><div class="v2-empty">${ico('robot', 5)}No agents are listed yet. List yours from My stakes.</div></div>`;
   return `<div class="v2-ag-mgrid v2-scroll">${state.cards.map(proCard).join('')}</div>`;
 }
 
 function mineView(): string {
   const listBtn = btn(`${ico('plus', 0.9)} List your agent`, 'bk-register', { h: 'violet' });
   if (!state.account)
-    return `<div class="v2-panel v2-body"><div class="v2-empty">${ico('robot', 5)}Connect a NEAR wallet to see your stakes and list an agent.${btn('Connect NEAR wallet', 'bk-connect', { h: 'gold' })}</div></div>`;
+    return `<div class="v2-bk-body"><div class="v2-empty">${ico('robot', 5)}Connect a NEAR wallet to see your stakes and list an agent.${btn('Connect NEAR wallet', 'bk-connect', { h: 'gold' })}</div></div>`;
   const rows = state.cards
     .map(({ agent }) => {
       const h = state.holdings.get(agent.id);
@@ -134,18 +134,18 @@ function mineView(): string {
   const mine = state.cards.filter((c) => c.agent.owner === state.account);
   const earned = big(state.earned);
   const tiles = `<div class="v2-row v2-ag-tiles"><div class="v2-card v2-grow"><b style="font-size:1.5em">${formatNear(earned)} NEAR</b><div class="v2-xs v2-mut">Earned from your agents (8% of the profit they make backers)</div>${earned > 0n ? btn('Claim', 'bk-claim', { h: 'gold', c: 'sm' }) : ''}</div><div class="v2-card v2-grow"><b style="font-size:1.5em">${mine.length}</b><div class="v2-xs v2-mut">Agents you listed${mine.length ? `: ${mine.map((c) => esc(c.agent.id)).join(', ')}` : ''}</div>${listBtn}</div></div>`;
-  return `<div class="v2-panel v2-col v2-scroll v2-body">${tiles}${rows || `<div class="v2-empty">You haven't backed an agent yet.${btn('Browse agents', 'bk-view', { h: 'gold', v: 'pros' })}</div>`}</div>`;
+  return `<div class="v2-col v2-scroll v2-bk-body">${tiles}${rows || `<div class="v2-empty">You haven't backed an agent yet.${btn('Browse agents', 'bk-view', { h: 'gold', v: 'pros' })}</div>`}</div>`;
 }
 
 function sessionsView(): string {
-  if (!state.sessions.length) return `<div class="v2-panel v2-body"><div class="v2-empty">${ico('eye', 5)}No settled sessions yet. They show here once an agent session settles on NEAR.</div></div>`;
+  if (!state.sessions.length) return `<div class="v2-bk-body"><div class="v2-empty">${ico('eye', 5)}No settled sessions yet. They show here once an agent session settles on NEAR.</div></div>`;
   const rows = state.sessions
     .map((s, i) => {
       const when = new Date(Number(big(s.settled_at) / 1_000_000n));
       return `<div class="v2-card v2-row v2-wrap"><b>${esc(s.session_id)}</b><span class="v2-grow v2-sm v2-mut">${esc(s.agents.join(' · '))}</span><span class="v2-sm">${s.hands} hands · ${esc(when.toLocaleString())}</span>${btn(`${ico('eye', 0.9)} Watch`, 'bk-watch', { h: 'violet', c: 'sm', v: i })}</div>`;
     })
     .join('');
-  return `<div class="v2-panel v2-col v2-scroll v2-body">${rows}<div class="v2-xs v2-mut">Watch re-deals every hand in your browser from the dealer's randomness proof and replays each bet, then checks the final stacks against what the contract paid.</div></div>`;
+  return `<div class="v2-col v2-scroll v2-bk-body">${rows}<div class="v2-xs v2-mut">Watch re-deals every hand in your browser from the dealer's randomness proof and replays each bet, then checks the final stacks against what the contract paid.</div></div>`;
 }
 
 // ------------------------------------------------------------------ actions
@@ -246,10 +246,11 @@ export function backingScreen(header: (on: string) => string): ScreenDef {
       const bar = `<div class="v2-row v2-wrap v2-ag-mbar">${seg([['pros', 'Agents'], ['mine', 'My stakes'], ['sessions', 'Sessions']], state.view, 'bk-view')}<div class="v2-grow"></div>${state.account ? `<span class="v2-pill" title="Your NEAR account">${esc(state.account)}</span>` : btn('Connect NEAR wallet', 'bk-connect', { h: 'gold', c: 'sm' })}</div>`;
       const note = `<div class="v2-xs v2-mut">${state.note ? `<b class="v2-goldc">${esc(state.note)}</b>` : `Back a pro's agent with NEAR: backers get 90% of the profit, the pro 8%, Nomad 2%, never of losses. On NEAR testnet, contract <a href="${NEAR_EXPLORER}/address/${NEAR_CONTRACT}" target="_blank" rel="noopener">${NEAR_CONTRACT}</a>.`}</div>`;
       let body: string;
-      if (state.loading && !state.cards.length) body = `<div class="v2-panel v2-body"><div class="v2-empty">${ico('robot', 5)}Loading from NEAR…</div></div>`;
-      else if (state.error) body = `<div class="v2-panel v2-body"><div class="v2-empty">${esc(state.error)}${btn('Try again', 'bk-reload', { h: 'gold' })}</div></div>`;
+      if (state.loading && !state.cards.length) body = `<div class="v2-bk-body"><div class="v2-empty">${ico('robot', 5)}Loading from NEAR…</div></div>`;
+      else if (state.error) body = `<div class="v2-bk-body"><div class="v2-empty">${esc(state.error)}${btn('Try again', 'bk-reload', { h: 'gold' })}</div></div>`;
       else body = state.view === 'pros' ? prosView() : state.view === 'mine' ? mineView() : sessionsView();
-      return header('ag-back') + bar + note + body;
+      // One purple panel around the page, as on Overview.
+      return header('ag-back') + `<div class="v2-panel v2-bk">${bar}${note}${body}</div>`;
     },
     actions: {
       'bk-view': (v) => {
