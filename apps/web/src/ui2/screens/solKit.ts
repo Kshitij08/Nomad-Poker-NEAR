@@ -1,21 +1,19 @@
 /**
- * Shared bits of the On-chain (SOL) pages: the private tables (play.ts), SOL tournaments (solTourneys.ts) and the
- * SOL Agent (solAgent.ts). The chain actions live in src/web3/ui/lobby*.ts (loaded with @solana/web3.js on first use);
- * these pages run them through `solTask`: a v2 dialog with a spinner and the action's progress, then a plain-language
- * result or error. Resolves true when the action finished without an error.
+ * Shared bits of the On-chain pages: the private tables (play.ts), tournaments (solTourneys.ts) and the Agent
+ * (solAgent.ts). Chain actions go through the chain seam (src/chain), loaded on first use; these pages run them through
+ * `solTask`: a v2 dialog with a spinner and the action's progress, then a plain-language result or error. Resolves
+ * true when the action finished without an error.
  */
-import type { PerRuntime } from '../../web3/per/service';
-import { sol } from '../../web3/per/money';
-import { w3 } from '../../web3/services';
+import { chainMoney } from '../../chain';
 import { btn, esc } from '../core';
 import { ico } from '../icons';
-import { ui, app, friendlyError } from '../ctx';
+import { ui, friendlyError } from '../ctx';
 
-/** The private-tables runtime (loads @solana/web3.js the first time). */
-export const perRt = (): Promise<PerRuntime> => w3(app()).per.get();
-
-/** A SOL amount: the SOL icon and the game's $ figure. */
-export const solAmt = (lamports: bigint | number, size = 1.05): string => `<span class="v2-solamt">${ico('sol', size)}<b class="v2-num">${esc(sol(lamports))}</b></span>`;
+/** An on-chain amount: the currency icon and the amount. */
+export const solAmt = (units: bigint | number, size = 1.05): string => {
+  const m = chainMoney();
+  return `<span class="v2-solamt">${ico(m.icon, size)}<b class="v2-num">${esc(m.format(units))}</b></span>`;
+};
 
 /** "AbCd…WxYz". */
 export const shortAddr = (a: string): string => (a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);

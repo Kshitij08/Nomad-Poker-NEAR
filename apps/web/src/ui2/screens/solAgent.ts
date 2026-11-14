@@ -1,40 +1,34 @@
 /**
  * The SOL Agent (On-chain) on the v2 Agents pages: Overview shows what it's doing, its limits and Deploy / Stop;
  * History lists its sessions. It plays the Strategy tab's profile, or a strategy copied from the SOL marketplace.
- * The chain actions are src/web3/ui/lobbyAgent.ts (Per/Unity/PerAgentPanel.cs); they load with @solana/web3.js the
- * first time an Agents page opens On-chain. While a page is open the Agent is read every 10 s.
+ * The chain actions go through the chain seam (src/chain), which loads the chain's code the first time an Agents page
+ * opens On-chain. While a page is open the Agent is read every 10 s.
  */
-import type { PerRuntime } from '../../web3/per/service';
-import type { SolAgentLimits, SolAgentRead } from '../../web3/ui/lobbyAgent';
-import { deployedText } from '../../web3/nomad/solAgentCopy';
+import { chain, chainMoney, type AgentLimits, type AgentRead, type ChainService } from '../../chain';
 import { marketState, solProfile, type AgentStrategyLike } from '../../menu/screens/market';
-import { sol } from '../../web3/per/money';
 import { btn, chips, esc, type Action } from '../core';
 import { ico } from '../icons';
-import { ui, host, app, S, onchain, onchainApi, signedIn } from '../ctx';
-import { perRt, shortAddr, solAmt, solBusy, solError, solTask } from './solKit';
+import { ui, host, S, onchain, onchainApi, signedIn } from '../ctx';
+import { shortAddr, solAmt, solBusy, solError, solTask } from './solKit';
 
-type Mod = typeof import('../../web3/ui/lobbyAgent');
+const sol = (units: bigint | number): string => chainMoney().format(units);
 
 const SA = {
-  per: null as PerRuntime | null,
-  mod: null as Mod | null,
+  c: null as ChainService | null,
   loadErr: '',
-  read: null as SolAgentRead | null,
+  read: null as AgentRead | null,
   readErr: '',
   readAt: 0,
   timer: 0,
-  limits: { stake: 1, buyIn: 1, hands: 1, minutes: 1, loss: 0, profit: 0 } as SolAgentLimits,
+  limits: { stake: 1, buyIn: 1, hands: 1, minutes: 1, loss: 0, profit: 0 } as AgentLimits,
 };
 
 const strategy = (): (AgentStrategyLike & { styleName?: string; shortSummary?: string }) | undefined => S('agentStrategy');
 
 async function ready(): Promise<boolean> {
-  if (SA.per && SA.mod) return true;
+  if (SA.c) return true;
   try {
-    const [per, mod] = await Promise.all([perRt(), import('../../web3/ui/lobbyAgent')]);
-    SA.per = per;
-    SA.mod = mod;
+    SA.c = await chain();
     SA.loadErr = '';
     return true;
   } catch (e) {
@@ -48,7 +42,7 @@ async function refresh(): Promise<void> {
   SA.readAt = performance.now();
   if (!(await ready())) return void ui().render();
   try {
-    SA.read = await SA.mod!.readSolAgent(SA.per!);
+    SA.read = await SA.c!.agent.read();
     SA.readErr = '';
   } catch (e) {
     console.warn('[ui2] SOL Agent read', e);
@@ -86,7 +80,7 @@ export function solAgentStatus(): { pill: string; line: string } {
   if (!r) return { pill: 'Idle', line: SA.readErr ? 'SOL Agent · status unavailable' : 'SOL Agent · checking…' };
   const pill = r.status === 'running' ? 'Playing' : r.status === 'stopping' ? 'Stopping' : 'Idle';
   // The service's detail line only while it plays (after a stop it's a developer note such as "the Agent key was replaced").
-  const line = r.state !== 'ok' || !r.status ? 'SOL Agent · not deployed' : `SOL Agent · ${SA.mod!.agentLabel(r.status)}${running() && r.detail ? ` · ${r.detail}` : ''}`;
+  const line = r.state !== 'ok' || !r.status ? 'SOL Agent · not deployed' : `SOL Agent · ${SA.c!.agent.label(r.status)}${running() && r.detail ? ` · ${r.detail}` : ''}`;
   return { pill, line };
 }
 
@@ -121,11 +115,11 @@ function group(label: string, items: string[], on: number, a: string): string {
 /** Overview, On-chain: the inner markup of the Agents shell. */
 export function solAgentOverview(): string {
   ensureOpen();
-  if (!SA.mod) {
+  if (!SA.c) {
     if (SA.loadErr) return `<div class="v2-empty">${ico('sol', 5)}<span>${esc(SA.loadErr)}</span>${btn('Try again', 'sa-refresh', { h: 'blue' })}</div>`;
     return `<div class="v2-empty"><i class="v2-spin" aria-hidden="true"></i><span>Getting your SOL Agent…</span></div>`;
   }
-  const M = SA.mod;
+  const M = SA.c.agent.options;
   const l = SA.limits;
   const s = strategy();
   const copy = marketState.copiedSol;
@@ -171,8 +165,8 @@ export function solAgentHistory(): string {
 
 function confirmDeploy(): void {
   if (!signedIn()) return host().show('Login');
-  const M = SA.mod;
-  if (!M) return;
+  if (!SA.c) return;
+  const M = SA.c.agent.options;
   const l = SA.limits;
   const stake = M.STAKES[l.stake]!;
   const copy = marketState.copiedSol;
@@ -183,8 +177,8 @@ function confirmDeploy(): void {
     'Deploy', () =>
       void solTask('Deploy your SOL Agent', "Couldn't deploy your Agent. Nothing was staked. Try again in a moment.", async (st) => {
         if (!(await ready())) throw new Error(SA.loadErr);
-        await SA.mod!.deploySolAgent(app(), SA.per!, l, solProfile(strategy()), copy, st);
-        return deployedText(sol(stake), copy);
+        await SA.c!.agent.deploy(l, solProfile(strategy()), copy, st);
+        return SA.c!.agent.deployedText(sol(stake), copy);
       }, () => void refresh()), 'Cancel');
 }
 
@@ -212,6 +206,6 @@ export const solAgentActions: Record<string, Action> = {
     ui().message('Stop your SOL Agent?', 'It leaves after the hand being played, and its seat cashes out into your game balance.', 'Stop', () =>
       void solTask('Stop your SOL Agent', "Couldn't stop your Agent. Try again in a moment.", async (st) => {
         if (!(await ready())) throw new Error(SA.loadErr);
-        return SA.mod!.stopSolAgent(app(), SA.per!, st);
+        return SA.c!.agent.stop(st);
       }, () => void refresh()), 'Keep playing', undefined, 'red'),
 };
