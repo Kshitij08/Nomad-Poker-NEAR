@@ -9,6 +9,8 @@ export interface TableSlotDeps {
   /** Was this party room spawned? (persisted by the Durable Object) */
   isSpawned(): Promise<boolean>;
   qaRooms: boolean;
+  /** NEAR house tables open here (the server is the escrow's operator). */
+  nearTables?: boolean;
   /** Time scale for qa rooms. */
   qaSpeed: number;
   /** Builds what the room hosts: a cash table, or a tournament (which looks its record up first, hence async). */
@@ -43,6 +45,11 @@ export class TableSlot {
 
   holds(playerId: string, tableId: string): boolean {
     return this.live?.holds(playerId, tableId) ?? false;
+  }
+
+  /** A settled hand's deck reveal on a committed table, while the table is open. */
+  deckReveal(handNumber: number): unknown {
+    return this.live?.deckReveal(handNumber) ?? null;
   }
 
   /** Seats a queued Agent here, opening the table if it isn't running (an Agent keeps a Quick Play table alive). */
@@ -123,7 +130,7 @@ export class TableSlot {
     if (live) return Promise.resolve(live);
     this.opening ??= (async () => {
       try {
-        const spec = roomSpecFor(this.deps.session, { spawned: await this.deps.isSpawned(), qaRooms: this.deps.qaRooms });
+        const spec = roomSpecFor(this.deps.session, { spawned: await this.deps.isSpawned(), qaRooms: this.deps.qaRooms, nearTables: this.deps.nearTables });
         if (!spec.ok) return { reason: spec.reason, message: spec.message };
         const speed = isQaRoom(this.deps.session) ? qaSpeed(this.deps.session, this.deps.qaSpeed) : 1;
         try {

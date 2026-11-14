@@ -101,6 +101,11 @@ export interface PokerServerGameOptions {
   handGate?: HandGate;
   /** The ledger's table id (default: a fresh `t-...` id). Escrow tables pass the id their contract knows the table by. */
   tableId?: string;
+  /**
+   * Seat a joiner with exactly the chips they ask for (no clamping to the stake's buy-in range). For escrow tables,
+   * where the buy-in already happened on chain and the ledger refuses any request that differs from it.
+   */
+  exactBuyIn?: boolean;
 }
 
 /** The commitment a committed table publishes before a deal. */
@@ -555,6 +560,8 @@ export class PokerServerGame implements IPokerTableServer {
 
   private resolveBuyInChips(requested: number): number {
     if (this.isPrivatePlay) return ChainTableMode.clampPrivateBuyIn(requested);
+    // Escrow tables: the player already bought in on chain; the ledger checks the request equals what is locked.
+    if (this.opts.exactBuyIn && requested > 0) return Math.floor(requested);
     let min = this.settings.bigBlind > 0 ? this.settings.bigBlind * 20 : 50;
     const stake = this.resolveStake();
     if (stake.minBuyIn > 0) min = stake.minBuyIn;

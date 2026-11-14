@@ -9,6 +9,18 @@ import { tournamentBySession } from '@nomad/db/tournaments';
 import { TableHost, type HostSocket, type LogFn } from './tableHost';
 import { TournamentHost } from './tournamentHost';
 import { TableSlot } from './tableSlot';
+import { NearOperator } from './nearOperator';
+
+/** The NEAR escrow operator, when this stage has one configured (all four NEAR_* settings). */
+function nearOperatorFor(env: Env): { operator: NearOperator; escrow: string } | null {
+  if (!env.NEAR_RPC_URL || !env.NEAR_ESCROW || !env.NEAR_OPERATOR_ACCOUNT || !env.NEAR_OPERATOR_KEY) return null;
+  try {
+    return { operator: new NearOperator({ rpcUrl: env.NEAR_RPC_URL, accountId: env.NEAR_OPERATOR_ACCOUNT, secretKey: env.NEAR_OPERATOR_KEY }), escrow: env.NEAR_ESCROW };
+  } catch (e) {
+    console.error(`[near] operator key unusable: ${(e as Error).message}`);
+    return null;
+  }
+}
 
 /**
  * One table, as a Durable Object named by its session ('poker-free', 'poker-free-st50-2', a party code…). The logic
@@ -19,6 +31,7 @@ import { TableSlot } from './tableSlot';
  *   POST /spawn?session=        mark a party room as created (PokerDedicatedPartySpawner)
  *   GET  /occupancy             { open, players, full } for overflow placement
  *   GET  /holds?player=&table=  does this table still hold that seat? (before paying a stranded stack back)
+ *   GET  /deck?hand=            a NEAR table's deck reveal for a settled hand (404 until then)
  *   POST /drain                 finish the hand, pay everyone out, close (before a deploy)
  *   POST /open?session=         open the room now (the cron, a few minutes before a tournament starts)
  *   POST /agents/seat?session=  body: an agent_deployments row → { seated } (opens the table if needed)
@@ -45,6 +58,10 @@ export class TableRoom extends DurableObject<Env> {
         return Response.json({ ok: true });
       case '/occupancy':
         return Response.json(slot?.occupancy() ?? { open: false, players: 0, full: false });
+      case '/deck': {
+        const reveal = slot?.deckReveal(Number(url.searchParams.get('hand')));
+        return reveal ? Response.json(reveal) : new Response('not found', { status: 404 });
+      }
       case '/holds':
         return Response.json({ holds: slot?.holds(url.searchParams.get('player') ?? '', url.searchParams.get('table') ?? '') ?? false });
       case '/drain':
@@ -78,6 +95,7 @@ export class TableRoom extends DurableObject<Env> {
     if (!session) return null;
     const env = this.env;
     const alerts = new TableAlerts(env, session);
+    const near = nearOperatorFor(env);
     const log: LogFn = (level, m) => {
       console[level === 'info' ? 'log' : level](`[${session}] ${m}`);
       alerts.onLog(level, m, (p) => this.ctx.waitUntil(p));
@@ -86,6 +104,7 @@ export class TableRoom extends DurableObject<Env> {
       session,
       isSpawned: async () => (await this.ctx.storage.get<boolean>('spawned')) === true,
       qaRooms: env.QA_ROOMS === '1',
+      nearTables: !!near,
       qaSpeed: Number(env.QA_ROOM_SPEED) || 1,
       log,
       createHost: async (spec, speed) => {
@@ -99,6 +118,7 @@ export class TableRoom extends DurableObject<Env> {
         return new TableHost({
           spec,
           db: env.DB,
+          near: near ?? undefined,
           clock: realClock(speed),
           log,
           recorder: new HandRecorder(session, (key, body) => env.HANDS.put(key, body, { httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' } }).then(() => undefined), log),

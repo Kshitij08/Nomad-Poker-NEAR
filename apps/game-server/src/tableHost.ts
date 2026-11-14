@@ -12,6 +12,10 @@ import { recordDecisions, recordStyleHands } from '@nomad/db/strategies';
 import { AgentDesk } from './agentDesk';
 import { StyleRecorder } from './styleRecorder';
 import { D1ChipLedger, d1TableEconomy } from './d1ChipLedger';
+import { NearChipLedger } from './nearChipLedger';
+import type { NearOperator } from './nearOperator';
+import type { DeckReveal } from '@nomad/engine/cards/deckCommitment';
+import { isNearMoneyRoom } from './roomSpec';
 import type { HandRecorder } from './handRecorder';
 import { RoomHost, type LogFn } from './roomHost';
 
@@ -35,7 +39,15 @@ export interface TableHostOptions {
   deckCommitments?: boolean;
   /** How long a failing bookkeeping write is retried (default BOOKKEEPING_RETRY_MS). */
   bookkeepingRetryMs?: number;
+  /**
+   * NEAR money tables (`poker-money-…` rooms): the escrow holds the stakes and this server is its operator. Such a table
+   * seats players only (no bots or Agents), commits every deck, and keeps recent reveals for the Verify panel.
+   */
+  near?: { operator: Pick<NearOperator, 'view' | 'call'>; escrow: string };
 }
+
+/** How many settled hands' deck reveals a NEAR table keeps for GET …/hands/{n}/deck. */
+export const KEPT_REVEALS = 200;
 
 /** Ten minutes: long enough to ride out a D1 export or restart, short enough that a drain still finishes. */
 export const BOOKKEEPING_RETRY_MS = 10 * 60_000;
@@ -69,12 +81,18 @@ export class TableHost extends RoomHost {
   /** D1 bookkeeping (table session row, house totals) runs in order, with retries, off the game loop. */
   private bookkeeping: Promise<void> = Promise.resolve();
   private readonly retryMs: number;
+  /** A NEAR money table (escrow stakes). */
+  readonly money: boolean;
+  private readonly reveals = new Map<number, DeckReveal>();
 
   constructor(private readonly opts: TableHostOptions) {
     super(opts.spec);
     this.retryMs = opts.bookkeepingRetryMs ?? BOOKKEEPING_RETRY_MS;
     const room = opts.spec.name;
-    const ledger = new D1ChipLedger(opts.db, room, (lock) => this.stillSeated(lock), opts.log);
+    this.money = isNearMoneyRoom(room) && !!opts.near;
+    const ledger = this.money
+      ? new NearChipLedger(opts.db, opts.near!.operator, opts.near!.escrow, room, opts.log)
+      : new D1ChipLedger(opts.db, room, (lock) => this.stillSeated(lock), opts.log);
     this.agents = new AgentDesk({
       db: opts.db,
       room,
@@ -103,6 +121,22 @@ export class TableHost extends RoomHost {
       random: opts.random,
       disconnectGrace: opts.disconnectGrace,
       deckCommitments: opts.deckCommitments,
+      ...(this.money
+        ? {
+            tableId: room,
+            exactBuyIn: true,
+            handGate: {
+              beforeDeal: async () => true,
+              afterSettle: async (h: SettledHand) => {
+                if (h.deck) {
+                  this.reveals.set(h.handNumber, h.deck);
+                  if (this.reveals.size > KEPT_REVEALS) this.reveals.delete(this.reveals.keys().next().value!);
+                }
+                return true;
+              },
+            },
+          }
+        : {}),
       onHandSettled: (h) => this.onHandSettled(h),
       agentHooks: this.agents,
       onEngineEvent: (e) => this.style.observe(e),
@@ -111,7 +145,8 @@ export class TableHost extends RoomHost {
     this.room = new RecordingRoom(opts.spec, this.game, opts.clock, opts.log, opts.recorder);
     this.game.activate(this.room);
     const tableId = this.game.tableId;
-    if (tableId) {
+    // A NEAR table's id is its room name (the escrow's table), the same every time it opens: no D1 table session.
+    if (tableId && !this.money) {
       const stake = Number(opts.spec.properties[ChainTableMode.StakeProperty]) || 0;
       this.queue(`open ${tableId}`, () => openTableSession(opts.db, { id: tableId, room, stake }));
     }
@@ -150,8 +185,12 @@ export class TableHost extends RoomHost {
     return this.game.agentCount;
   }
 
+  override deckReveal(handNumber: number): DeckReveal | null {
+    return this.reveals.get(handNumber) ?? null;
+  }
+
   override seatAgent(row: AgentRow): Promise<boolean> {
-    if (this.closed || this.draining || !this.game.isQuickPlay) return Promise.resolve(false);
+    if (this.closed || this.draining || !this.game.isQuickPlay || this.money) return Promise.resolve(false);
     return this.agents.seat(row);
   }
 
@@ -171,7 +210,7 @@ export class TableHost extends RoomHost {
     this.closed = true;
     const tableId = this.game.tableId;
     this.room.close(reason); // disposes the game: every seated player is cashed out
-    if (tableId) this.queue(`close ${tableId}`, () => closeTableSession(this.opts.db, tableId));
+    if (tableId && !this.money) this.queue(`close ${tableId}`, () => closeTableSession(this.opts.db, tableId));
     await Promise.all([this.bookkeeping, this.opts.recorder?.flush()]);
   }
 
@@ -192,7 +231,7 @@ export class TableHost extends RoomHost {
     }
     if (h.tableId) {
       const tableId = h.tableId;
-      this.queue(`hand ${h.handNumber}`, () => recordHand(this.opts.db, tableId, h.botDelta, h.agentDelta));
+      if (!this.money) this.queue(`hand ${h.handNumber}`, () => recordHand(this.opts.db, tableId, h.botDelta, h.agentDelta));
       // Suspended accounts leave at the hand boundary (a ban ends sessions; this ends a seat already taken).
       const humans = h.stacks.filter((s) => !s.bot && s.id.startsWith('p_')).map((s) => s.id);
       if (humans.length) {

@@ -25,6 +25,14 @@ export interface Env {
   /** Cloudflare Realtime TURN key (id + secret): short-lived relay credentials for table voice (/v1/voice/ice). */
   TURN_KEY_ID?: string;
   TURN_KEY_TOKEN?: string;
+  /**
+   * NEAR money tables: the escrow contract this server operates, the RPC node, and the operator's account and
+   * full-access key (`ed25519:…`, a secret). All four set: the `poker-money-st<stake>` house tables open.
+   */
+  NEAR_RPC_URL?: string;
+  NEAR_ESCROW?: string;
+  NEAR_OPERATOR_ACCOUNT?: string;
+  NEAR_OPERATOR_KEY?: string;
   /** Operator alerts (src/alerts.ts): Email Service binding, sender and the owner's inbox (a secret). Production only. */
   ALERT_EMAIL?: SendEmail;
   ALERT_FROM?: string;

@@ -4,6 +4,12 @@ import { StakeCatalog } from '@nomad/engine/stakes/stakes';
 import type { JoinFailReason } from '@nomad/table-server/protocol';
 import { isTournamentSessionName } from '@nomad/db/tournaments';
 
+/** The NEAR house tables: `poker-money-st<stake>` rooms, one per stake (no overflow tables). */
+export const NEAR_MONEY_STAKES = [50, 100, 500] as const;
+export function isNearMoneyRoom(session: string): boolean {
+  return (NEAR_MONEY_STAKES as readonly number[]).some((s) => session === `${StakeSessionNames.MoneyRoot}-st${s}`);
+}
+
 /**
  * Which room a session name means, for the game server. One Durable Object per session name:
  * - Quick Play pools and their overflow tables (`poker-free`, `poker-free-st50-2`) open on first join;
@@ -19,6 +25,8 @@ export interface RoomSpecOptions {
   /** The party room was spawned (its Durable Object stored the flag). */
   spawned: boolean;
   qaRooms: boolean;
+  /** This server is a NEAR escrow's operator: the `poker-money-st<stake>` house tables open (tableHost.ts). */
+  nearTables?: boolean;
 }
 
 export type RoomSpecResult = { ok: true; spec: RoomSpec } | { ok: false; reason: JoinFailReason; message: string };
@@ -51,7 +59,10 @@ export function roomSpecFor(session: string, opts: RoomSpecOptions): RoomSpecRes
     properties: { [ChainTableMode.KindProperty]: ChainTableMode.KindQuick, [ChainTableMode.StakeProperty]: String(stake) },
   });
   if (StakeSessionNames.isPool(session)) {
-    if (session.startsWith(StakeSessionNames.MoneyRoot)) return { ok: false, reason: 'GameNotFound', message: 'Money tables are not available yet.' };
+    if (session.startsWith(StakeSessionNames.MoneyRoot)) {
+      if (!opts.nearTables || !isNearMoneyRoom(session)) return { ok: false, reason: 'GameNotFound', message: 'That NEAR table is not available.' };
+      return { ok: true, spec: { ...quick(StakeSessionNames.parseMinBuyIn(session)), maxPlayers: 6 } };
+    }
     return { ok: true, spec: quick(StakeSessionNames.parseMinBuyIn(session)) };
   }
   if (PartyCodes.isValid(session)) {
