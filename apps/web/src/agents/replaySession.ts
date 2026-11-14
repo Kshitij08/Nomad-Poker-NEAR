@@ -29,7 +29,12 @@ export interface ReplaySessionOptions {
   returnTo?: string;
   /** Called when the player leaves the replay (e.g. to reopen the hands list). */
   onBack?: () => void;
+  /** With several hands (a whole session), " · hand k of n" follows it. */
   title?: string;
+  /** The leave button's label (default "Back to hands"). */
+  backLabel?: string;
+  /** What captions call the face-up seat instead of "your Agent" (e.g. "you back it"); '' drops the note. */
+  focusLabel?: string;
 }
 
 const PAUSES: Record<ReplayPause, number> = {
@@ -41,7 +46,9 @@ const PAUSES: Record<ReplayPause, number> = {
   showdown: DEFAULT_TABLE_SETTINGS.showdownDelay,
 };
 
-export function replaySession(replay: AgentHandReplay, opts: ReplaySessionOptions = {}): TableSessionFactory {
+/** One hand, or a whole session's hands played one after another. */
+export function replaySession(replays: AgentHandReplay | readonly AgentHandReplay[], opts: ReplaySessionOptions = {}): TableSessionFactory {
+  const list: readonly AgentHandReplay[] = Array.isArray(replays) ? replays : [replays as AgentHandReplay];
   return (host) => {
     let abort = new AbortController();
     let speed = 1;
@@ -50,8 +57,9 @@ export function replaySession(replay: AgentHandReplay, opts: ReplaySessionOption
     let bar: HTMLElement | null = null;
     let caption: HTMLElement | null = null;
     let playBtn: HTMLButtonElement | null = null;
-    const { items, seatMap } = replayToEvents(replay, host.view.seatCount);
-    const agentViewSeat = seatMap.get(replay.agentSeat) ?? 0;
+    let titleEl: HTMLElement | null = null;
+    const titleOf = (k: number) =>
+      list.length > 1 ? `${opts.title ?? 'Session'} · hand ${k + 1} of ${list.length}` : (opts.title ?? `Hand #${list[0]!.handNumber} · replay`);
 
     const wait = async (seconds: number, signal: AbortSignal) => {
       if (seconds > 0) await tickerWait(seconds / speed, signal);
@@ -59,11 +67,30 @@ export function replaySession(replay: AgentHandReplay, opts: ReplaySessionOption
     };
 
     const setCaption = (text: string) => {
+      if (opts.focusLabel !== undefined) text = text.replace(' (your Agent)', opts.focusLabel ? ` (${opts.focusLabel})` : '');
       if (caption) caption.textContent = text;
     };
 
     async function play(signal: AbortSignal): Promise<void> {
-      const presenter = new TableEventPresenter(host.view, agentViewSeat, host.audio);
+      for (let k = 0; k < list.length; k++) {
+        if (signal.aborted) return;
+        if (k > 0) {
+          await wait(1.2, signal);
+          if (signal.aborted) return;
+          host.view.endHand();
+        }
+        if (titleEl) titleEl.textContent = titleOf(k);
+        await playHand(list[k]!, signal);
+      }
+      if (!signal.aborted) {
+        if (list.length > 1) setCaption(`End of the session: ${list.length} hands.`);
+        if (playBtn) playBtn.textContent = 'Replay';
+      }
+    }
+
+    async function playHand(replay: AgentHandReplay, signal: AbortSignal): Promise<void> {
+      const { items, seatMap } = replayToEvents(replay, host.view.seatCount);
+      const presenter = new TableEventPresenter(host.view, seatMap.get(replay.agentSeat) ?? 0, host.audio);
       setCaption('Cards are dealt.');
       for (const item of items) {
         if (signal.aborted) return;
@@ -89,10 +116,7 @@ export function replaySession(replay: AgentHandReplay, opts: ReplaySessionOption
         }
         await wait(PAUSES[item.pause], signal);
       }
-      if (!signal.aborted) {
-        setCaption(AgentHandReplayText.summary(replay));
-        if (playBtn) playBtn.textContent = 'Replay';
-      }
+      if (!signal.aborted) setCaption(AgentHandReplayText.summary(replay));
     }
 
     const restart = () => {
@@ -113,9 +137,9 @@ export function replaySession(replay: AgentHandReplay, opts: ReplaySessionOption
       if (!layer) return;
       bar = document.createElement('div');
       bar.className = 'agent-replay-bar';
-      const title = document.createElement('div');
+      const title = (titleEl = document.createElement('div'));
       title.className = 'agent-replay-title';
-      title.textContent = opts.title ?? `Hand #${replay.handNumber} · replay`;
+      title.textContent = titleOf(0);
       caption = document.createElement('div');
       caption.className = 'agent-replay-caption';
       const buttons = document.createElement('div');
@@ -139,7 +163,7 @@ export function replaySession(replay: AgentHandReplay, opts: ReplaySessionOption
         speed = speed >= 4 ? 1 : speed * 2;
         b.textContent = `SPEED ${speed}X`;
       });
-      button('Back to hands', () => {
+      button(opts.backLabel ?? 'Back to hands', () => {
         opts.onBack?.();
         host.leave(opts.returnTo);
       });

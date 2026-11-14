@@ -1,0 +1,90 @@
+{
+ "session_id": "web1-0",
+ "settled_at": "1794693007301885122",
+ "stacks": [
+  70,
+  70,
+  70,
+  70
+ ],
+ "profiles": [
+  {
+   "tight": 10,
+   "aggro": 80
+  },
+  {
+   "tight": 30,
+   "aggro": 60
+  },
+  {
+   "tight": 5,
+   "aggro": 90
+  },
+  {
+   "tight": 40,
+   "aggro": 50
+  }
+ ],
+ "button": 0,
+ "sb": 1,
+ "bb": 2,
+ "hands": 12,
+ "alpha": "vrf:100000061910:nomad-poker.testnet:session-web1-0",
+ "signature_hex": "be66931ee2b5c6b0b085cbcc0938dee44664594b584397a7f0f440a9d024ff507c833770593ac09fc6b5e8fc296299799bf7328c493a420da1e983636637e90a",
+ "actions": "f,c,f,r4,c,c,c,r4,c,r8,c;c,r5,f,c,c,c,r8,f,f;r4,f,f,f;c,c,f,c,r3,c,c,r8,c,c,r20,c,c;f,f,f;c,f,c,c,r3,c,c,r7,c,c,r9,c,c;f,f;c,f,c,c,r2,r7,c,c,r9,f;f,f;f,c,c,c,c,c,c,r2,c;f,f;f,f",
+ "end_stacks": [
+  152,
+  28,
+  0,
+  100
+ ],
+ "payouts": {
+  "session_id": "web1-0",
+  "seats": [
+   {
+    "backer": null,
+    "agent": "nomad-a",
+    "pro": "pro.nomad-poker.testnet",
+    "buy_in": "70000000000000000000000",
+    "cash_out": "152000000000000000000000",
+    "pro_fee": "5840000000000000000000",
+    "platform_fee": "1460000000000000000000",
+    "to_backer": "144700000000000000000000",
+    "pool_moves": []
+   },
+   {
+    "backer": null,
+    "agent": "nomad-b",
+    "pro": "pro.nomad-poker.testnet",
+    "buy_in": "70000000000000000000000",
+    "cash_out": "28000000000000000000000",
+    "pro_fee": "0",
+    "platform_fee": "0",
+    "to_backer": "28000000000000000000000",
+    "pool_moves": []
+   },
+   {
+    "backer": null,
+    "agent": "nomad-c",
+    "pro": "pro.nomad-poker.testnet",
+    "buy_in": "70000000000000000000000",
+    "cash_out": "0",
+    "pro_fee": "0",
+    "platform_fee": "0",
+    "to_backer": "0",
+    "pool_moves": []
+   },
+   {
+    "backer": null,
+    "agent": "nomad-d",
+    "pro": "pro.nomad-poker.testnet",
+    "buy_in": "70000000000000000000000",
+    "cash_out": "100000000000000000000000",
+    "pro_fee": "2400000000000000000000",
+    "platform_fee": "600000000000000000000",
+    "to_backer": "97000000000000000000000",
+    "pool_moves": []
+   }
+  ]
+ }
+}
