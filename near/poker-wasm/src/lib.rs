@@ -24,6 +24,20 @@ pub struct Input {
     pub actions: String,
 }
 
+/// One action as played, for showing a hand step by step.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Step {
+    pub seat: usize,
+    /// `f`, `c` (check or call) or `r<to>`.
+    pub act: String,
+    /// 0 preflop, 1 flop, 2 turn, 3 river.
+    pub street: u8,
+    /// Chips the seat put in with this action.
+    pub put_in: u64,
+    /// The pot after this action.
+    pub pot: u64,
+}
+
 #[derive(Serialize, Debug, PartialEq)]
 pub struct HandOut {
     pub index: usize,
@@ -33,6 +47,24 @@ pub struct HandOut {
     pub board: [String; 5],
     pub actions: String,
     pub deltas: Vec<i64>,
+    /// The blinds as posted, then every action in order.
+    pub blinds: Vec<u64>,
+    pub steps: Vec<Step>,
+}
+
+/// Plays a hand's actions again, recording who acted, on which street, and the pot.
+fn steps_of(rules: &game::Rules, text: &str) -> Result<(Vec<u64>, Vec<Step>), String> {
+    let mut h = game::Hand::new(rules)?;
+    let blinds = h.total.clone();
+    let mut steps = vec![];
+    for a in game::parse_actions(text)? {
+        let seat = h.to_act().ok_or("an action after the hand ended")?;
+        let street = h.street;
+        let before = h.total[seat];
+        h.apply(a)?;
+        steps.push(Step { seat, act: game::format_actions(&[a]), street, put_in: h.total[seat] - before, pot: h.pot() });
+    }
+    Ok((blinds, steps))
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -57,6 +89,7 @@ pub fn replay(input: &Input) -> Result<Output, String> {
         .enumerate()
         .map(|(k, rec)| {
             let d = core::deal(&session::hand_seed(&seed, k as u32), n);
+            let (blinds, steps) = steps_of(&session::rules_for(&start, &rec.stacks_before, rec.button), texts[k]).unwrap_or_default();
             HandOut {
                 index: k,
                 button: rec.button,
@@ -65,6 +98,8 @@ pub fn replay(input: &Input) -> Result<Output, String> {
                 board: d.board.map(|c| name(&c)),
                 actions: texts[k].to_string(),
                 deltas: rec.deltas.clone(),
+                blinds,
+                steps,
             }
         })
         .collect();
@@ -167,6 +202,12 @@ mod tests {
         assert_eq!(out.stacks, vec![557, 287, 191, 165]);
         assert_eq!(out.hands.len(), 20);
         assert_eq!(out.hands[1].button, 1);
+        // Steps cover every action, and the last pot equals what was put in.
+        for h in &out.hands {
+            assert_eq!(h.steps.len(), h.actions.split(',').filter(|a| !a.is_empty()).count());
+            let put: u64 = h.blinds.iter().sum::<u64>() + h.steps.iter().map(|s| s.put_in).sum::<u64>();
+            assert_eq!(h.steps.last().map(|s| s.pot).unwrap_or(put), put);
+        }
         assert_eq!(out.hands[1].stacks_before, out.hands[0].stacks_before.iter().zip(&out.hands[0].deltas).map(|(s, d)| (*s as i64 + d) as u64).collect::<Vec<_>>());
     }
 

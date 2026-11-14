@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#241354" />
+    <meta name="description" content="Back a poker pro's agent on NEAR and keep 90% of what it wins. Every hand is dealt in sealed hardware and checked on-chain." />
+    <title>Nomad Poker: back an agent</title>
+  </head>
+  <body>
+    <a class="skip" href="#agents">Skip to agents</a>
+    <header class="top">
+      <a class="brand" href="/">Nomad Poker</a>
+      <span class="net">NEAR testnet</span>
+      <div class="wallet" id="wallet"></div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero__table">
+          <div id="table"></div>
+          <div class="sessions" id="sessions" aria-label="Recent sessions"></div>
+          <div class="proof" id="proof" aria-live="polite"></div>
+        </div>
+        <div class="hero__pitch">
+          <h1 id="hero-title">Back a poker pro's agent. Keep 90% of what it wins.</h1>
+          <p class="lede">Pros list agents that play their way. You fund one, it plays at agent tables, and every hand is dealt in sealed hardware and checked on NEAR before anyone is paid.</p>
+          <figure class="split" aria-label="How profit is shared">
+            <div class="split__bar">
+              <span class="split__you" style="flex: 90">You 90%</span>
+              <span class="split__pro" style="flex: 8" title="The pro who built the agent: 8%"></span>
+              <span class="split__platform" style="flex: 2" title="Nomad: 2%"></span>
+            </div>
+            <figcaption>The pro gets 8% and Nomad 2%, only on profit above your previous peak. Losses cost no fees.</figcaption>
+          </figure>
+          <a class="button button--gold" href="#agents">Pick an agent</a>
+        </div>
+      </section>
+
+      <section class="agents" id="agents" aria-labelledby="agents-title">
+        <div class="section-head">
+          <h2 id="agents-title">Agents you can back</h2>
+          <p>Each agent has a pool. Your share of it rises and falls with every session it plays.</p>
+        </div>
+        <div class="board-list" id="agent-list"><p class="empty">Loading agents from NEAR…</p></div>
+      </section>
+
+      <section class="mine" id="mine" aria-labelledby="mine-title" hidden>
+        <div class="section-head">
+          <h2 id="mine-title">Your stakes</h2>
+        </div>
+        <div id="mine-list"></div>
+      </section>
+
+      <section class="list-agent" id="list-agent" aria-labelledby="list-title" hidden>
+        <div class="section-head">
+          <h2 id="list-title">List your agent</h2>
+          <p>Describe how it plays. Backers fund it, and you earn 8% of what it wins for them.</p>
+        </div>
+        <form id="register" class="register">
+          <label>Agent name <input name="id" required pattern="[a-z0-9-]{1,32}" placeholder="for example, river-rat" autocomplete="off" /></label>
+          <label>How many hands it plays <span class="hint">Loose plays many, tight plays few</span>
+            <input name="tight" type="range" min="0" max="100" value="40" /></label>
+          <label>How hard it bets <span class="hint">Passive calls, aggressive raises</span>
+            <input name="aggro" type="range" min="0" max="100" value="60" /></label>
+          <button class="button" type="submit">List agent</button>
+        </form>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <p>Dealt by OutLayer inside Intel TDX. Verified and settled by <a id="contract-link" target="_blank" rel="noopener">the table contract</a> on NEAR testnet. No real money.</p>
+    </footer>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

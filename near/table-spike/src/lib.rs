@@ -18,6 +18,7 @@ use near_sdk::store::LookupMap;
 use near_sdk::{env, near, require, AccountId, Gas, NearToken, PanicOnDefault, Promise, PromiseError};
 use poker_core::{self as core, game};
 
+mod history;
 mod pool;
 mod vault;
 pub use pool::PoolView;
@@ -275,9 +276,11 @@ impl Table {
             }
             Err(error) => return json!({ "ok": false, "error": error }),
         };
+        let request = s.request.clone();
         all.flush();
         // Backed sessions pay out each seat's position in the same transaction.
         let payouts = self.settle_backed(&session_id, &r);
+        history::record_session(&session_id, &request, &alpha, &signature_hex, &actions, &r.stacks, &payouts);
         json!({ "ok": true, "hands_played": r.hands_played, "stacks": r.stacks, "totals": r.totals, "payouts": payouts })
     }
 
@@ -753,5 +756,30 @@ mod tests {
         let out = t.leave_pool("agent-0".into(), U128(shares));
         assert_eq!(out["paid"], U128(NEAR).0.to_string());
         assert_eq!(t.get_pool("agent-0".into()).unwrap().value.0, 0);
+    }
+
+    #[test]
+    fn settled_sessions_and_agents_can_be_listed_and_replayed() {
+        let (mut t, seats, _) = backed_table();
+        let cards = t.list_agents(None, None);
+        assert_eq!(cards.iter().map(|c| c.agent.id.clone()).collect::<Vec<_>>(), vec!["agent-0", "agent-1", "agent-2", "agent-3"]);
+        assert!(cards[0].pool.is_none());
+        as_who("table.near", 0, 2);
+        t.open_backed_session("v1".into(), seats, U64(300), 0, U64(1), U64(2), 30);
+        let (f, text) = session_text("v1", 300, 30);
+        t.submit_session("v1".into(), f.alpha.clone(), f.sig_hex.clone(), text.clone());
+        let rec = t.get_session_record("v1".into()).unwrap();
+        assert_eq!(rec["signature_hex"], f.sig_hex);
+        assert_eq!(rec["actions"], text);
+        assert_eq!(rec["stacks"], json!([300, 300, 300, 300]));
+        assert_eq!(rec["payouts"]["seats"].as_array().unwrap().len(), 4);
+        // The record is enough to replay: re-deal from the proof and get the contract's result.
+        let start = game::Rules { stacks: vec![300; 4], button: 0, sb: 1, bb: 2 };
+        let seed = core::seed_from_signature(&hex::decode(rec["signature_hex"].as_str().unwrap()).unwrap());
+        let out = core::session::replay(&start, &seed, 30, rec["actions"].as_str().unwrap()).unwrap();
+        assert_eq!(json!(out.stacks), rec["end_stacks"]);
+        let recent = t.recent_sessions(None);
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0]["agents"], json!(["agent-0", "agent-1", "agent-2", "agent-3"]));
     }
 }

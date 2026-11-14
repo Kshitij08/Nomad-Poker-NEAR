@@ -298,6 +298,7 @@ impl Table {
         let owner = env::predecessor_account_id();
         all.insert(agent_id.clone(), Agent { id: agent_id.clone(), owner: owner.clone(), tight, aggro, sessions: 0, hands: 0, net_chips: 0, created_at: U64(env::block_timestamp()) });
         all.flush();
+        crate::history::index_agent(&agent_id);
         event("agent_registered", json!({ "agent": agent_id, "pro": owner }));
     }
 
