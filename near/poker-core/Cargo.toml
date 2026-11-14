@@ -1,0 +1,23 @@
+[package]
+name = "poker-core"
+version = "0.1.0"
+edition = "2021"
+description = "Deck shuffle, deal layout and hand ranking shared by the OutLayer dealer and the NEAR table contract"
+
+[features]
+# Hole-card sealing (X25519 + ChaCha20-Poly1305). The dealer and clients need it; the contract does not.
+seal = ["dep:x25519-dalek", "dep:chacha20poly1305"]
+# The stand-in agent that plays a hand from a profile. Dealer only.
+agent = []
+
+[dependencies]
+sha2 = { version = "0.10", default-features = false }
+x25519-dalek = { version = "2", features = ["static_secrets"], optional = true }
+chacha20poly1305 = { version = "0.10", optional = true }
+
+[dev-dependencies]
+hex = "0.4"
+
+[[example]]
+name = "vector"
+required-features = ["seal"]
