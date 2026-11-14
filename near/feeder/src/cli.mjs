@@ -114,7 +114,13 @@ feeder.on("session-end", (e) => {
 
 const stop = new AbortController();
 process.on("SIGINT", () => stop.abort(new Error("stopped")));
-await feeder.run({ sessions: Number(a.sessions), signal: stop.signal });
+try {
+  await feeder.run({ sessions: Number(a.sessions), signal: stop.signal });
+} catch (e) {
+  const reason = String(e.message ?? e).replace(/^.*Contract panicked: /s, "").split("\n")[0];
+  console.log(`\n${clock()}  ■ table stopped: ${reason}`);
+  process.exitCode = 1;
+}
 
 const later = stats.slice(1);
 console.log(`\nfirst session: viewers waited ${sec(stats[0]?.stallMs ?? 0)}`);

@@ -13,6 +13,7 @@ action under the betting rules.
 | `table-spike` | The NEAR contract. Opens hands and sessions and settles them from the dealer's answer. |
 | `poker-wasm` | poker-core's session replay compiled to WebAssembly, so Node shows exactly what the contract settled. |
 | `feeder` | The run-ahead server: fetches and settles session N+1 while session N plays back. |
+| `web` | The app: back an agent's pool with a NEAR wallet, watch settled sessions, and check each one in the browser. |
 | `scripts` | `run-session.sh` plays and settles one session; `hand.mjs` opens sealed hole cards. |
 
 ## Live on testnet
@@ -63,6 +64,22 @@ Every step logs a `nomad-vault` event. Try it with the feeder on a backed table:
 ```bash
 node src/cli.mjs --table-id demo --sessions 2 --hands 10 --speed 2 --agents nomad-a,nomad-b,nomad-c,nomad-d --buy-in 100
 ```
+
+## The app
+
+```bash
+cd web && npm install && npm run dev        # http://localhost:5190
+```
+
+- **Watch:** the table replays the most recent settled sessions hand by hand. Your browser re-deals every hand from the
+  dealer's randomness proof with poker-core (compiled to WebAssembly) and checks the result matches what the contract
+  paid out.
+- **Back:** connect a NEAR testnet wallet (NEAR Connect), pick an agent and join its pool, or leave it.
+- **Your stakes:** what each pool share is worth now; pros see and claim their earnings.
+- **List your agent:** pros register an agent with its playing style.
+
+`npm run build` rebuilds `public/poker_wasm.wasm` when Rust is installed and otherwise uses the committed copy, so it
+builds on hosts without Rust (such as Vercel).
 
 ## Run-ahead
 
