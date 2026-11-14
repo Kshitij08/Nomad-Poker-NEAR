@@ -8,8 +8,11 @@
 //! - A table never pays out more than it locked: `paid <= locked` always.
 //! - The operator, or the host of a hosted table, closes a table. Once it is closed and nobody is seated, it is
 //!   finalised: whatever was locked and not paid out (the remainder) goes to platform earnings and is reported.
+//! - If the operator has done nothing on a table (open, cash out, close) for `reclaim_after` (24 hours by default),
+//!   a seated player may `reclaim` their seat's locked amount to their game balance, capped by what the table can
+//!   still pay. Their seat is removed, as if the operator had cashed them out.
 
-use crate::{bps_of, check_id, event, Escrow, EscrowExt};
+use crate::{bps_of, check_id, event, Escrow, EscrowExt, NS_PER_SEC};
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::json;
 use near_sdk::{env, near, require, AccountId};
@@ -60,7 +63,11 @@ pub struct Table {
     pub remainder: u128,
     pub buy_ins: u32,
     pub cash_outs: u32,
+    /// Seats removed by `reclaim` (their payouts are counted in `paid`).
+    pub reclaims: u32,
     pub created_at: u64,
+    /// The last time the operator opened, cashed out at or closed this table (creation for a hosted table).
+    pub last_operator_at: u64,
 }
 
 impl Table {
@@ -112,7 +119,11 @@ pub struct TableView {
     pub remainder: U128,
     pub buy_ins: u32,
     pub cash_outs: u32,
+    pub reclaims: u32,
     pub created_at: U64,
+    pub last_operator_at: U64,
+    /// From this time (nanoseconds) seated players may `reclaim`, unless the operator acts on the table first.
+    pub reclaimable_at: U64,
 }
 
 #[near(serializers = [json])]
@@ -168,7 +179,9 @@ impl Escrow {
             remainder: 0,
             buy_ins: 0,
             cash_outs: 0,
+            reclaims: 0,
             created_at: env::block_timestamp(),
+            last_operator_at: env::block_timestamp(),
         };
         self.tables.insert(table_id, t);
     }
@@ -276,6 +289,7 @@ impl Escrow {
         t.paid += amount.0;
         t.seated -= 1;
         t.cash_outs += 1;
+        t.last_operator_at = env::block_timestamp();
         self.totals.at_tables -= amount.0;
         self.credit(&player, amount.0);
         self.cash_outs.insert(key_id, CashOut { player: player.clone(), amount: amount.0, at: env::block_timestamp() });
@@ -301,6 +315,9 @@ impl Escrow {
         require!(who == self.operator || t.host.as_ref() == Some(&who), "operator or host only");
         require!(!t.closed, "already closed");
         t.closed = true;
+        if who == self.operator {
+            t.last_operator_at = env::block_timestamp();
+        }
         event(
             "table_closed",
             json!({ "table": table_id, "by": who, "seated": t.seated, "outstanding": U128(t.outstanding()) }),
@@ -309,6 +326,35 @@ impl Escrow {
             self.finalize(&table_id, &mut t);
         }
         self.tables.insert(table_id, t);
+    }
+
+    /// A seated player takes their seat's locked amount back to their game balance once the operator has done
+    /// nothing on the table for `reclaim_after`. Capped by what the table can still pay, so it never pays out more
+    /// than it locked. The seat is removed. Returns the amount reclaimed.
+    pub fn reclaim(&mut self, table_id: String) -> U128 {
+        let who = env::predecessor_account_id();
+        let mut t = self.table(&table_id);
+        let idle = env::block_timestamp().saturating_sub(t.last_operator_at);
+        require!(idle >= self.reclaim_after_ns, "the operator is still active at this table");
+        let seat = self.seats.remove(&seat_key(&table_id, &who)).unwrap_or_else(|| env::panic_str("you are not seated at this table"));
+        let amount = seat.locked.min(t.outstanding());
+        t.paid += amount;
+        t.seated -= 1;
+        t.reclaims += 1;
+        self.totals.at_tables -= amount;
+        self.credit(&who, amount);
+        event(
+            "reclaimed",
+            json!({
+                "table": table_id, "player": who, "amount": U128(amount), "seat_bought_in": U128(seat.bought_in),
+                "seat_locked": U128(seat.locked), "operator_idle_secs": idle / NS_PER_SEC, "table_outstanding": U128(t.outstanding()),
+            }),
+        );
+        if t.closed && t.seated == 0 {
+            self.finalize(&table_id, &mut t);
+        }
+        self.tables.insert(table_id, t);
+        U128(amount)
     }
 
     pub fn get_table(&self, table_id: String) -> Option<TableView> {
@@ -328,7 +374,10 @@ impl Escrow {
             remainder: U128(t.remainder),
             buy_ins: t.buy_ins,
             cash_outs: t.cash_outs,
+            reclaims: t.reclaims,
             created_at: U64(t.created_at),
+            last_operator_at: U64(t.last_operator_at),
+            reclaimable_at: U64(t.last_operator_at.saturating_add(self.reclaim_after_ns)),
         })
     }
 
