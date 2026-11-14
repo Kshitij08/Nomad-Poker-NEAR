@@ -52,6 +52,12 @@ verification and every payout happen in one transaction.
 5. Backers `withdraw` idle funds; pros and the platform `claim_earnings`. A session the dealer never answered can be
    cancelled after an hour, returning the buy-ins.
 
+**Pools.** Instead of one backer per seat, a seat can be an agent's pool, shared by many backers through shares:
+`join_pool(agent_id)` with NEAR attached, `leave_pool(agent_id, shares)`. Joins and leaves made while the pool is in
+a session are queued and applied at the value it settles at. Fees apply only to gains above the pool's best value per
+share. A session stakes at most 25% of the pool by default (`set_pool_risk`, up to 50%, set by the pro). Pass a seat
+with no `backer` to seat a pool, or `--pool` to the feeder.
+
 Every step logs a `nomad-vault` event. Try it with the feeder on a backed table:
 
 ```bash
@@ -80,4 +86,5 @@ The live run reads the same keys as the scripts (see the top of `feeder/src/cli.
 - OutLayer's testnet queue adds 1 to 9 minutes per dealer call.
 - Backed sessions are settled before viewers see them play, so results are on-chain ahead of playback.
 - The contract pays for vault storage itself; there is no storage deposit per position yet.
-- Positions are per backer and agent; a pooled vault with shares comes next.
+- A pool's high-water mark is per pool, not per backer: someone who joins after a drawdown pays no fees on the
+  recovery up to the old peak.

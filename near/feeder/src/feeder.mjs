@@ -88,6 +88,8 @@ export class SessionFeeder extends EventEmitter {
         return await fn();
       } catch (e) {
         if (signal?.aborted) throw e;
+        // The contract refused for a reason a retry cannot fix (funds, limits, unknown agents): stop the table.
+        if (/loss limit|below the buy-in|of the pool|too small|lost too much|no position|has no pool|no agent|owner only/.test(e.message)) throw e;
         this.emit("retry", { what, attempt, error: e.message });
         await sleep(Math.min(this.retryMs * attempt, 60_000), signal);
       }

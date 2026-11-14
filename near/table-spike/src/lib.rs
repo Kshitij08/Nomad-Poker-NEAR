@@ -18,7 +18,9 @@ use near_sdk::store::LookupMap;
 use near_sdk::{env, near, require, AccountId, Gas, NearToken, PanicOnDefault, Promise, PromiseError};
 use poker_core::{self as core, game};
 
+mod pool;
 mod vault;
+pub use pool::PoolView;
 pub use vault::{Agent, BackedSeat, BackedSession, Position, PositionView, VaultConfig};
 
 const OUTLAYER_GAS: Gas = Gas::from_tgas(100);
@@ -558,13 +560,13 @@ mod tests {
             let backer = format!("backer{i}.near");
             as_who(&backer, NEAR, 1);
             t.back(format!("agent-{i}"), Some(U128(NEAR / 2)));
-            seats.push(BackedSeat { backer: acct(&backer), agent_id: format!("agent-{i}") });
+            seats.push(BackedSeat { backer: Some(acct(&backer)), agent_id: format!("agent-{i}") });
         }
         (t, seats, f.pk)
     }
 
     fn total_held(t: &Table, seats: &[BackedSeat]) -> u128 {
-        let positions: u128 = seats.iter().map(|s| { let p = t.get_position(s.backer.clone(), s.agent_id.clone()).unwrap(); p.balance.0 + p.at_table.0 }).sum();
+        let positions: u128 = seats.iter().map(|s| { let p = t.get_position(s.backer.clone().unwrap(), s.agent_id.clone()).unwrap(); p.balance.0 + p.at_table.0 }).sum();
         positions + t.get_earnings(acct("pro.near")).0 + t.get_earnings(acct("table.near")).0
     }
 
@@ -583,11 +585,11 @@ mod tests {
         as_who("table.near", 0, 2);
         t.open_backed_session("v1".into(), seats.clone(), U64(300), 0, U64(1), U64(2), 30);
         // 300 chips at 0.001 NEAR = 0.3 NEAR locked per seat.
-        let p0 = t.get_position(seats[0].backer.clone(), "agent-0".into()).unwrap();
+        let p0 = t.get_position(seats[0].backer.clone().unwrap(), "agent-0".into()).unwrap();
         assert_eq!((p0.balance.0, p0.at_table.0), (NEAR - 3 * NEAR / 10, 3 * NEAR / 10));
         // Repeating the identical open locks nothing more.
         t.open_backed_session("v1".into(), seats.clone(), U64(300), 0, U64(1), U64(2), 30);
-        assert_eq!(t.get_position(seats[0].backer.clone(), "agent-0".into()).unwrap().at_table.0, 3 * NEAR / 10);
+        assert_eq!(t.get_position(seats[0].backer.clone().unwrap(), "agent-0".into()).unwrap().at_table.0, 3 * NEAR / 10);
 
         let (f, text) = session_text("v1", 300, 30);
         let out = t.submit_session("v1".into(), f.alpha.clone(), f.sig_hex.clone(), text);
@@ -597,7 +599,7 @@ mod tests {
         let stacks: Vec<u64> = out["stacks"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
         let mut pro_fees = 0u128;
         for (i, s) in seats.iter().enumerate() {
-            let p = t.get_position(s.backer.clone(), s.agent_id.clone()).unwrap();
+            let p = t.get_position(s.backer.clone().unwrap(), s.agent_id.clone()).unwrap();
             assert_eq!(p.at_table.0, 0);
             let profit = (stacks[i] as u128 * NEAR / 1000).saturating_sub(3 * NEAR / 10);
             assert_eq!(p.fees_paid.0, profit * 8 / 100 + profit * 2 / 100, "seat {i}");
@@ -645,7 +647,7 @@ mod tests {
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.cancel_session("v1".into()))).is_err());
         as_who("table.near", 0, 10 + 61 * 60 * 1_000_000_000);
         t.cancel_session("v1".into());
-        let p = t.get_position(seats[0].backer.clone(), "agent-0".into()).unwrap();
+        let p = t.get_position(seats[0].backer.clone().unwrap(), "agent-0".into()).unwrap();
         assert_eq!((p.balance.0, p.at_table.0), (NEAR, 0));
         assert_eq!(total_held(&t, &seats), 4 * NEAR);
     }
@@ -656,7 +658,100 @@ mod tests {
         as_who("table.near", 0, 2);
         let twice = vec![seats[0].clone(), seats[0].clone()];
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.open_backed_session("v1".into(), twice, U64(100), 0, U64(1), U64(2), 10))).is_err());
-        let ghost = vec![seats[0].clone(), BackedSeat { backer: acct("backer1.near"), agent_id: "nobody".into() }];
+        let ghost = vec![seats[0].clone(), BackedSeat { backer: Some(acct("backer1.near")), agent_id: "nobody".into() }];
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.open_backed_session("v2".into(), ghost, U64(100), 0, U64(1), U64(2), 10))).is_err());
+    }
+
+    // ---------------------------------------------------------------------------------------- pooled backing
+
+    #[test]
+    fn a_mixed_session_settles_pools_and_positions_and_applies_queued_joins_and_leaves() {
+        let (mut t, seats, _) = backed_table();
+        let mut deposits = 4 * NEAR; // the four positions from backed_table
+        for (who, agent, amount) in [("alice.near", "agent-0", NEAR), ("bob.near", "agent-0", NEAR / 2), ("alice.near", "agent-1", 3 * NEAR / 2)] {
+            as_who(who, amount, 1);
+            assert_eq!(t.join_pool(agent.into())["queued"], false);
+            deposits += amount;
+        }
+        let pooled = vec![
+            BackedSeat { backer: None, agent_id: "agent-0".into() },
+            BackedSeat { backer: None, agent_id: "agent-1".into() },
+            seats[2].clone(),
+            seats[3].clone(),
+        ];
+        as_who("table.near", 0, 2);
+        t.open_backed_session("p1".into(), pooled, U64(300), 0, U64(1), U64(2), 30);
+        assert_eq!(t.get_pool("agent-0".into()).unwrap().at_table.0, 3 * NEAR / 10);
+
+        // While the session is in play, a join and a leave are queued rather than priced now.
+        as_who("carol.near", 4 * NEAR / 10, 3);
+        assert_eq!(t.join_pool("agent-0".into())["queued"], true);
+        deposits += 4 * NEAR / 10;
+        let alice_shares: u128 = t.get_holding(acct("alice.near"), "agent-0".into())["shares"].as_str().unwrap().parse().unwrap();
+        as_who("alice.near", 0, 3);
+        assert_eq!(t.leave_pool("agent-0".into(), U128(alice_shares / 2))["queued"], true);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.leave_pool("agent-0".into(), U128(alice_shares / 2 + 1)))).is_err(), "cannot queue more than held");
+
+        let (f, text) = session_text("p1", 300, 30);
+        as_who("anyone.near", 0, 4);
+        let out = t.submit_session("p1".into(), f.alpha, f.sig_hex, text);
+        assert_eq!(out["ok"], true, "{out}");
+
+        let mut paid_out = 0u128;
+        for seat in out["payouts"]["seats"].as_array().unwrap() {
+            for m in seat["pool_moves"].as_array().into_iter().flatten() {
+                if let Some(p) = m["paid"].as_str() {
+                    paid_out += p.parse::<u128>().unwrap();
+                }
+            }
+        }
+        assert!(paid_out > 0, "alice's queued leave was paid");
+        let pool0 = t.get_pool("agent-0".into()).unwrap();
+        assert_eq!((pool0.at_table.0, pool0.pending_in.0, pool0.pending_out_shares.0), (0, 0, 0));
+        // Carol joined at the settled value: her shares are worth what she paid, give or take rounding.
+        let carol: u128 = t.get_holding(acct("carol.near"), "agent-0".into())["value"].as_str().unwrap().parse().unwrap();
+        assert!(4 * NEAR / 10 - carol < 1_000_000, "carol's holding is worth {carol}");
+
+        // Every yoctoNEAR deposited is in a position, a pool, fee earnings, or was paid out to alice.
+        let pools_value: u128 = ["agent-0", "agent-1"].iter().map(|a| t.get_pool(a.to_string()).unwrap().value.0).sum();
+        let positions: u128 = (0..4)
+            .map(|i| t.get_position(acct(&format!("backer{i}.near")), format!("agent-{i}")).unwrap())
+            .map(|p| p.balance.0 + p.at_table.0)
+            .sum();
+        let fees = t.get_earnings(acct("pro.near")).0 + t.get_earnings(acct("table.near")).0;
+        assert_eq!(positions + pools_value + fees + paid_out, deposits);
+    }
+
+    #[test]
+    fn a_pool_stakes_at_most_its_risk_cap() {
+        let (mut t, _, _) = backed_table();
+        as_who("alice.near", NEAR, 1);
+        t.join_pool("agent-0".into());
+        as_who("alice.near", NEAR, 1);
+        t.join_pool("agent-1".into());
+        as_who("table.near", 0, 2);
+        // 0.3 NEAR is more than 25% of a 1 NEAR pool.
+        let seats = vec![BackedSeat { backer: None, agent_id: "agent-0".into() }, BackedSeat { backer: None, agent_id: "agent-1".into() }];
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.open_backed_session("p1".into(), seats.clone(), U64(300), 0, U64(1), U64(2), 10)));
+        assert!(r.is_err());
+        // The pro may raise the cap to 50%; nobody else may.
+        as_who("alice.near", 0, 3);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.set_pool_risk("agent-0".into(), 5000))).is_err());
+        as_who("pro.near", 0, 3);
+        t.set_pool_risk("agent-0".into(), 5000);
+        t.set_pool_risk("agent-1".into(), 5000);
+        as_who("table.near", 0, 4);
+        t.open_backed_session("p1".into(), seats, U64(300), 0, U64(1), U64(2), 10);
+    }
+
+    #[test]
+    fn leaving_an_idle_pool_pays_at_once() {
+        let (mut t, _, _) = backed_table();
+        as_who("alice.near", NEAR, 1);
+        let shares: u128 = t.join_pool("agent-0".into())["shares"].as_str().unwrap().parse().unwrap();
+        as_who("alice.near", 0, 2);
+        let out = t.leave_pool("agent-0".into(), U128(shares));
+        assert_eq!(out["paid"], U128(NEAR).0.to_string());
+        assert_eq!(t.get_pool("agent-0".into()).unwrap().value.0, 0);
     }
 }
