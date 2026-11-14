@@ -17,7 +17,7 @@ const STAGES = {
     worker: 'nomad-poker-near-game-dev',
     d1: { id: '50f75a10-aabe-4ffc-874a-30e2565d2934', name: 'nomad-poker-near-staging' },
     r2: 'nomad-poker-near-hands-staging',
-    origins: ['http://localhost:5180', 'http://127.0.0.1:5180'],
+    origins: ['http://localhost:5180', 'http://127.0.0.1:5180', 'http://localhost:5183'],
     qa: true,
     limiter: '7207',
   },
@@ -77,7 +77,7 @@ export default defineConfig(({ mode }) => {
           ? {}
           : {
               NEAR_RPC_URL: bindings.text('https://test.rpc.fastnear.com'),
-              NEAR_ESCROW: bindings.text('escrow.nomad-poker.testnet'),
+              NEAR_ESCROW: bindings.text('nomad-escrow.testnet'),
               NEAR_OPERATOR_ACCOUNT: bindings.text('nomad-poker.testnet'),
               NEAR_OPERATOR_KEY: bindings.secret(),
             }),
