@@ -14,13 +14,14 @@ action under the betting rules.
 | `poker-wasm` | poker-core's session replay compiled to WebAssembly, so Node shows exactly what the contract settled. |
 | `feeder` | The run-ahead server: fetches and settles session N+1 while session N plays back. |
 | `web` | The app: back an agent's pool with a NEAR wallet, watch settled sessions, and check each one in the browser. |
-| `escrow` | The stakes contract for human tables, hosted tables and tournaments (see Escrow below). Not deployed yet. |
+| `escrow` | The stakes contract for human tables, hosted tables and tournaments (see Escrow below). Live as `nomad-escrow.testnet`. |
 | `scripts` | `run-session.sh` plays and settles one session; `hand.mjs` opens sealed hole cards. |
 
 ## Live on testnet
 
 - Dealer: OutLayer project `nomad-poker.testnet/nomad-dealer`
 - Contract: `table.nomad-poker.testnet`
+- Escrow (human money tables): `nomad-escrow.testnet`, operator `nomad-poker.testnet`
 
 ## Try it
 
@@ -87,11 +88,30 @@ builds on hosts without Rust (such as Vercel).
 `escrow` holds players' stakes for human tables, hosted tables and tournaments. The table server still deals and runs
 the games at normal speed and is trusted to report results (the operator); the contract holds the money, refuses any
 table that would pay out more than it took in after rake, and logs every step as a `nomad-escrow` event. Amounts are
-yoctoNEAR (`U128` strings); table limits are chips (0.001 NEAR each) and buy-ins are whole chips. Not deployed yet.
+yoctoNEAR (`U128` strings); table limits are chips (0.001 NEAR each) and buy-ins are whole chips.
 
 ```bash
 cd escrow && cargo test        # in WSL: aws-lc-sys does not build on Windows
 cargo near build non-reproducible-wasm --no-abi
+```
+
+**On testnet:** `nomad-escrow.testnet` (a faucet-funded account, which is also the owner), operator
+`nomad-poker.testnet` (the game server). `escrow/deploy.sh [contract] [operator]` builds, deploys with `new` and opens
+the house tables; run it in WSL. The house tables' ids are the game server's room names, 6 seats each:
+
+| Table id | Blinds (chips) | Buy-in (chips) | Buy-in (NEAR) |
+| --- | --- | --- | --- |
+| `poker-money-st50` | 1/2 | 50 to 200 | 0.05 to 0.2 |
+| `poker-money-st100` | 2/5 | 100 to 500 | 0.1 to 0.5 |
+| `poker-money-st500` | 10/25 | 500 to 2500 | 0.5 to 2.5 |
+
+**If the operator disappears:** a seated player calls `reclaim(table_id)` once the operator has done nothing on that
+table for 24 hours (`get_table(...).reclaimable_at`, nanoseconds). They get their seat's locked amount (the buy-in
+after rake) back to their game balance, never more than the table still holds, and can then `withdraw` it.
+
+```bash
+near contract call-function as-transaction nomad-escrow.testnet reclaim json-args '{"table_id":"poker-money-st50"}' \
+  prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as <you>.testnet network-config testnet sign-with-keychain send
 ```
 
 | Method | Who | What |
