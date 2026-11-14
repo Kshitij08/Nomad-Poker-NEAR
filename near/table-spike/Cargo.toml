@@ -12,6 +12,7 @@ near-sdk = "5"
 poker-core = { path = "../poker-core" }
 serde_json = "1.0"
 hex = "0.4"
+uint = { version = "0.10", default-features = false }
 
 [dev-dependencies]
 poker-core = { path = "../poker-core", features = ["agent"] }

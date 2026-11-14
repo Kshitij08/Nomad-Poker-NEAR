@@ -30,6 +30,8 @@ const { values: a } = parseArgs({
     // Backed table: comma-separated agent ids, all backed by --backer, each seat buying in --buy-in chips.
     agents: { type: "string" },
     backer: { type: "string" },
+    // Seat each agent's pool instead of one backer's position.
+    pool: { type: "boolean", default: false },
     "buy-in": { type: "string", default: "100" },
   },
 });
@@ -59,7 +61,7 @@ const table = new TableClient({
 
 const speed = Number(a.speed);
 const backed = a.agents
-  ? { seats: a.agents.split(",").map((agent_id) => ({ backer: a.backer ?? OWNER, agent_id: agent_id.trim() })), buyIn: Number(a["buy-in"]) }
+  ? { seats: a.agents.split(",").map((agent_id) => ({ backer: a.pool ? null : a.backer ?? OWNER, agent_id: agent_id.trim() })), buyIn: Number(a["buy-in"]) }
   : null;
 const feeder = new SessionFeeder({
   tableId: a["table-id"],
@@ -101,7 +103,8 @@ const nearOf = (yocto) => (Number(BigInt(yocto) / 10n ** 18n) / 1e6).toFixed(4);
 feeder.on("ready", (s) => {
   for (const p of s.payouts?.seats ?? []) {
     const result = (BigInt(p.cash_out) - BigInt(p.buy_in)) / 10n ** 18n;
-    console.log(`${clock()}      paid ${p.agent} (backer ${p.backer}): bought in ${nearOf(p.buy_in)}, cashed out ${nearOf(p.cash_out)} NEAR (${Number(result) / 1e6 >= 0 ? "+" : ""}${(Number(result) / 1e6).toFixed(4)}); pro ${nearOf(p.pro_fee)}, platform ${nearOf(p.platform_fee)}, backer ${nearOf(p.to_backer)}`);
+    console.log(`${clock()}      paid ${p.agent} (${p.backer ? `backer ${p.backer}` : "pool"}): bought in ${nearOf(p.buy_in)}, cashed out ${nearOf(p.cash_out)} NEAR (${Number(result) / 1e6 >= 0 ? "+" : ""}${(Number(result) / 1e6).toFixed(4)}); pro ${nearOf(p.pro_fee)}, platform ${nearOf(p.platform_fee)}, backer ${nearOf(p.to_backer)}`);
+    for (const m of p.pool_moves ?? []) console.log(`${clock()}        pool: ${JSON.stringify(m)}`);
   }
 });
 feeder.on("session-end", (e) => {

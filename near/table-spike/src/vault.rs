@@ -9,6 +9,7 @@
 //!
 //! Money is NEAR in yoctoNEAR; chips convert at `chip_yocto` per chip.
 
+use crate::pool::{self, pools, holdings};
 use crate::{sessions, SessionResult, Status, Table, TableExt};
 use near_sdk::json_types::{I128, U128, U64};
 use near_sdk::serde_json::{json, Value};
@@ -103,7 +104,9 @@ impl From<&Position> for PositionView {
 #[near(serializers = [json, borsh])]
 #[derive(Clone, Debug, PartialEq)]
 pub struct BackedSeat {
-    pub backer: AccountId,
+    /// The backer whose position buys the seat in; none for the agent's pool.
+    #[serde(default)]
+    pub backer: Option<AccountId>,
     pub agent_id: String,
 }
 
@@ -172,7 +175,7 @@ pub fn settle(p: &mut Position, buy_in: u128, cash_out: u128, pro_bps: u32, plat
 fn config_store() -> LazyOption<VaultConfig> {
     LazyOption::new(b"c".to_vec(), None)
 }
-fn agents() -> LookupMap<String, Agent> {
+pub(crate) fn agents() -> LookupMap<String, Agent> {
     LookupMap::new(b"a")
 }
 fn positions() -> LookupMap<String, Position> {
@@ -193,7 +196,7 @@ fn valid_agent_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 32 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
-fn event(name: &str, data: Value) {
+pub(crate) fn event(name: &str, data: Value) {
     env::log_str(&format!("EVENT_JSON:{}", json!({ "standard": "nomad-vault", "version": "1.0.0", "event": name, "data": [data] })));
 }
 
@@ -217,12 +220,28 @@ impl Table {
         let mut pos = positions();
         let mut ags = agents();
         let mut earn = earnings();
+        let mut pls = pools();
+        let mut held = holdings();
+        let mut transfers: Vec<(AccountId, u128)> = vec![];
         let mut seats = Vec::new();
         for (i, seat) in b.seats.iter().enumerate() {
             let cash_out = r.stacks[i] as u128 * b.chip_yocto.0;
-            let key = position_key(&seat.backer, &seat.agent_id);
-            let p = pos.get_mut(&key).unwrap_or_else(|| env::panic_str("position missing"));
-            let s = settle(p, buy_in, cash_out, cfg.pro_bps, cfg.platform_bps);
+            let mut pool_moves = Value::Null;
+            let s = match &seat.backer {
+                Some(backer) => {
+                    let p = pos.get_mut(&position_key(backer, &seat.agent_id)).unwrap_or_else(|| env::panic_str("position missing"));
+                    settle(p, buy_in, cash_out, cfg.pro_bps, cfg.platform_bps)
+                }
+                None => {
+                    let pl = pls.get_mut(&seat.agent_id).unwrap_or_else(|| env::panic_str("pool missing"));
+                    let s = pool::settle(pl, buy_in, cash_out, cfg.pro_bps, cfg.platform_bps);
+                    // Joins and leaves queued during the session now happen at the settled value.
+                    let (pay, log) = pool::apply_pending(pl, &seat.agent_id, &mut held);
+                    transfers.extend(pay);
+                    pool_moves = json!(log);
+                    s
+                }
+            };
             let agent = ags.get_mut(&seat.agent_id).unwrap_or_else(|| env::panic_str("agent missing"));
             agent.sessions += 1;
             agent.hands += r.hands_played as u64;
@@ -238,12 +257,18 @@ impl Table {
                 "backer": seat.backer, "agent": seat.agent_id, "pro": pro,
                 "buy_in": U128(buy_in), "cash_out": U128(cash_out),
                 "pro_fee": U128(s.pro_fee), "platform_fee": U128(s.platform_fee), "to_backer": U128(s.to_backer),
+                "pool_moves": pool_moves,
             }));
         }
         all.flush();
         pos.flush();
         ags.flush();
         earn.flush();
+        pls.flush();
+        held.flush();
+        for (who, amount) in transfers {
+            Promise::new(who).transfer(NearToken::from_yoctonear(amount)).detach();
+        }
         let data = json!({ "session_id": session_id, "seats": seats });
         event("session_settled", data.clone());
         Some(data)
@@ -371,13 +396,26 @@ impl Table {
         let cfg = self.vault_config();
         let buy_in = buy_in_chips.0 as u128 * cfg.chip_yocto.0;
         let mut pos = positions();
+        let mut pls = pools();
         for s in &seats {
-            let p = pos.get_mut(&position_key(&s.backer, &s.agent_id)).unwrap_or_else(|| env::panic_str(&format!("{} has no position on {}", s.backer, s.agent_id)));
-            if let Err(e) = can_seat(p, buy_in) {
-                env::panic_str(&format!("{} on {}: {e}", s.backer, s.agent_id));
+            match &s.backer {
+                Some(backer) => {
+                    let p = pos.get_mut(&position_key(backer, &s.agent_id)).unwrap_or_else(|| env::panic_str(&format!("{backer} has no position on {}", s.agent_id)));
+                    if let Err(e) = can_seat(p, buy_in) {
+                        env::panic_str(&format!("{backer} on {}: {e}", s.agent_id));
+                    }
+                    lock(p, buy_in);
+                }
+                None => {
+                    let pl = pls.get_mut(&s.agent_id).unwrap_or_else(|| env::panic_str(&format!("{} has no pool", s.agent_id)));
+                    if let Err(e) = pool::can_seat(pl, buy_in) {
+                        env::panic_str(&format!("pool {}: {e}", s.agent_id));
+                    }
+                    pool::lock(pl, buy_in);
+                }
             }
-            lock(p, buy_in);
         }
+        pls.flush();
         all.insert(session_id.clone(), crate::Session { status: Status::Pending, request: request_text, started_at: U64(env::block_timestamp()), result: None });
         let mut b = backed();
         b.insert(session_id.clone(), BackedSession { seats, buy_in_chips: buy_in_chips.0, chip_yocto: cfg.chip_yocto });
@@ -405,12 +443,28 @@ impl Table {
         if let Some(bs) = b.remove(&session_id) {
             let buy_in = bs.buy_in_chips as u128 * bs.chip_yocto.0;
             let mut pos = positions();
+            let mut pls = pools();
+            let mut held = holdings();
             for seat in &bs.seats {
-                if let Some(p) = pos.get_mut(&position_key(&seat.backer, &seat.agent_id)) {
-                    unlock(p, buy_in);
+                match &seat.backer {
+                    Some(backer) => {
+                        if let Some(p) = pos.get_mut(&position_key(backer, &seat.agent_id)) {
+                            unlock(p, buy_in);
+                        }
+                    }
+                    None => {
+                        if let Some(pl) = pls.get_mut(&seat.agent_id) {
+                            pool::unlock(pl, buy_in);
+                            for (who, amount) in pool::apply_pending(pl, &seat.agent_id, &mut held).0 {
+                                Promise::new(who).transfer(NearToken::from_yoctonear(amount)).detach();
+                            }
+                        }
+                    }
                 }
             }
             pos.flush();
+            pls.flush();
+            held.flush();
         }
         all.flush();
         b.flush();
