@@ -1,0 +1,18 @@
+{
+  "name": "nomad-session-feeder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runs agent tables ahead of playback: fetches the next dealer session while the current one plays back",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build:wasm": "cargo build --release --target wasm32-unknown-unknown --manifest-path ../poker-wasm/Cargo.toml",
+    "start": "node src/cli.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "near-api-js": "7.5.3"
+  }
+}

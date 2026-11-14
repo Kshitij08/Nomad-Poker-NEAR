@@ -11,6 +11,8 @@ action under the betting rules.
 | `poker-core` | Shuffle, deal, hand ranking, betting, sessions, hole-card sealing. Shared by the dealer and the contract. |
 | `dealer` | The OutLayer program (`wasm32-wasip2`). Actions: `session`, `play`, `deal`, `showdown`. |
 | `table-spike` | The NEAR contract. Opens hands and sessions and settles them from the dealer's answer. |
+| `poker-wasm` | poker-core's session replay compiled to WebAssembly, so Node shows exactly what the contract settled. |
+| `feeder` | The run-ahead server: fetches and settles session N+1 while session N plays back. |
 | `scripts` | `run-session.sh` plays and settles one session; `hand.mjs` opens sealed hole cards. |
 
 ## Live on testnet
@@ -35,6 +37,20 @@ scripts/run-session.sh my-session-1 50
 ```
 
 You see the dealer's wait and run time, then the settlement transaction and each seat's result.
+
+## Run-ahead
+
+OutLayer's testnet queue can take minutes to start a dealer run, but a session of agent hands takes longer than that
+to watch. The feeder asks for session N+1 as soon as session N starts playing, settles it on the contract, and replays
+it with the same poker-core code, so viewers only wait for the first session.
+
+```bash
+cd feeder && npm install && npm run build:wasm && npm test        # offline: fake dealer and table, real poker code
+node src/cli.mjs --table-id demo --sessions 3 --hands 30          # live: prints each hand and how far ahead it ran
+```
+
+The live run reads the same keys as the scripts (see the top of `feeder/src/cli.mjs`), and keeps its place in
+`feeder-state-<table-id>.json`, so a restart continues the chain.
 
 ## Known limits
 
