@@ -38,8 +38,14 @@ export function stopReasonLabel(reason: string | null): { label: string; look: s
     : reason === AgentStopReasons.OwnerStop ? 'Stopped'
     : reason === AgentStopReasons.StopLoss ? 'Stop loss'
     : reason === AgentStopReasons.ProfitTarget ? 'Target hit'
-    : reason === AgentStopReasons.Halted ? 'Server stopped' : 'Completed';
-  const look = label === 'Stop loss' || label === 'Server stopped' ? 'Stopped' : label === 'Target hit' ? 'Completed' : label;
+    : reason === AgentStopReasons.MaxHands ? 'Hand limit'
+    : reason === AgentStopReasons.MaxRuntime ? 'Time limit'
+    : reason === AgentStopReasons.Halted ? 'Server stopped'
+    // The table was lost (a server restart or crash): the bankroll / last stack was paid back.
+    : reason === 'server_lost' ? 'Refunded'
+    : reason === 'banned' ? 'Removed' : 'Completed';
+  const look = label === 'Stop loss' || label === 'Server stopped' || label === 'Refunded' || label === 'Removed' ? 'Stopped'
+    : label === 'Target hit' || label === 'Hand limit' || label === 'Time limit' ? 'Completed' : label;
   return { label, look };
 }
 

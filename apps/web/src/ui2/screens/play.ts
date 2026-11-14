@@ -4,7 +4,8 @@ import { joinFreePlay } from '../../menu/screens/mainMenu';
 import { StakeTableSkin, type Theme } from '../../menu/stakes';
 import { MENU_DATA } from '../../menu/data';
 import { assetUrl } from '../../hud/unityUi';
-import { startParty } from '../../economy/nomad/social';
+import { startParty, startWatch } from '../../economy/nomad/social';
+import { cloudGameServer } from '../../net/serverUrl';
 import { STAKES as SOL_STAKES, PerBuyIn, sol, stakeMinBuyIn, stakeMaxBuyIn } from '../../web3/per/money';
 import type { PerRuntime } from '../../web3/per/service';
 import type { HostedRow, LobbyRead } from '../../web3/ui/lobby';
@@ -414,6 +415,7 @@ const party: ScreenDef = {
 <div class="v2-party">
   <div class="v2-panel v2-col v2-party-card">${ico('cards', 7)}<b class="v2-h">Create a party</b><div class="v2-mut">${chain ? 'Open a private SOL table and share its code.' : 'Start a private table and share the code.'}</div><div class="v2-grow"></div>${btn('Create a table', 'create', { h: 'gold', c: 'w' })}</div>
   <div class="v2-panel v2-col v2-party-card">${ico('friends', 7)}<b class="v2-h">Join a party</b><div class="v2-mut">Join a friend's table with their code.</div>${input('code', this.input?.code ?? '', 'Enter session code', { max: chain ? 44 : 12, cls: 'v2-party-code' })}<div class="v2-grow"></div><button class="v2-b blue w" data-a="join" data-enter="code">Join table</button></div>
+  ${chain ? '' : `<div class="v2-panel v2-col v2-party-card">${ico('eye', 7)}<b class="v2-h">Watch a table</b><div class="v2-mut">Spectate live games: public tables, or a private one by its code.</div><div class="v2-grow"></div>${btn('Watch', 'watch', { h: 'violet', c: 'w' })}</div>`}
 </div></div>`;
   },
   actions: {
@@ -423,11 +425,96 @@ const party: ScreenDef = {
       if (needCoins(PARTY_MIN_BUYIN, 'A private table')) return;
       startParty(host(), app(), true, '');
     },
+    watch: () => ui().show('watch'),
     join: () => {
       const code = (party.input?.code ?? '').trim();
       if (!code) return ui().message('Join a party', 'Enter the session code your friend shared.');
       if (needCoins(PARTY_MIN_BUYIN, 'Joining a private table')) return;
       startParty(host(), app(), false, code);
+    },
+  },
+};
+
+// ------------------------------------------------------------------ Watch (spectate)
+
+interface LiveTable {
+  session: string;
+  stake: number;
+  seated: number;
+  players: number;
+  watchers: number;
+}
+
+/**
+ * Spectating: the public tables being played right now (the game server's /v1/tables/live, busiest first) and a room
+ * code box for private tables. Watching never takes a seat or Coins; hole cards stay hidden until a showdown.
+ */
+const watch: ScreenDef & { tables: LiveTable[] | null; error: string; timer: ReturnType<typeof setInterval> | 0 } = {
+  id: 'watch',
+  back: 'party',
+  input: { code: '' },
+  tables: null,
+  error: '',
+  timer: 0,
+  open() {
+    this.input = { code: '' };
+    this.tables = null;
+    this.error = '';
+    const load = async () => {
+      const base = cloudGameServer(app().params);
+      if (!base) {
+        this.tables = [];
+        this.error = 'The list of live tables needs the online game server. You can still watch a table by its code.';
+        ui().render();
+        return;
+      }
+      try {
+        const r = await fetch(`${base}/v1/tables/live`);
+        const body = (await r.json()) as { tables?: LiveTable[]; error?: string };
+        if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+        this.tables = body.tables ?? [];
+        this.error = '';
+      } catch {
+        this.tables ??= [];
+        this.error = "Couldn't load the live tables. Check your connection.";
+      }
+      ui().render();
+    };
+    void load();
+    this.timer = setInterval(() => void load(), 15_000);
+  },
+  close() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = 0;
+  },
+  render() {
+    const list = this.tables;
+    const rows =
+      list === null
+        ? `<div class="v2-empty">Loading live tables…</div>`
+        : list.length === 0
+          ? `<div class="v2-empty">${ico('eye', 6)}${esc(this.error || 'No public tables are being played right now. Check back in a minute.')}</div>`
+          : list
+              .map((t) => {
+                const tier = StakeCatalog.get(t.stake);
+                const who = `${t.seated} playing${t.watchers ? ` · ${t.watchers} watching` : ''}`;
+                return `<div class="v2-card v2-row v2-watch-row"><div class="v2-grow"><b>${esc(tier.displayName)} table · ${esc(tier.blindsLabel)}</b><div class="v2-xs v2-mut">${esc(who)}</div></div>${btn('Watch', 'w-go', { h: 'gold', c: 'sm', v: t.session })}</div>`;
+              })
+              .join('');
+    return (
+      topBar('Watch a table') +
+      `<div class="v2-body v2-watch">
+  <div class="v2-panel v2-col v2-watch-list"><b class="v2-h">Live public tables</b><div class="v2-col v2-scroll v2-grow" style="gap:.5em">${rows}</div></div>
+  <div class="v2-panel v2-col v2-watch-code"><b class="v2-h">Private table</b><div class="v2-mut">Enter the room code a player shared to watch their table.</div>${input('code', this.input?.code ?? '', 'Room code', { max: 12, cls: 'v2-party-code' })}<button class="v2-b blue w" data-a="w-code" data-enter="code">Watch table</button><div class="v2-xs v2-mut">Spectators see the table and the community cards. Players' cards stay hidden until a showdown.</div></div>
+</div>`
+    );
+  },
+  actions: {
+    'w-go': (v) => startWatch(host(), app(), String(v)),
+    'w-code': () => {
+      const code = (watch.input?.code ?? '').trim().toUpperCase();
+      if (!code) return ui().message('Watch a table', 'Enter the room code of the table you want to watch.');
+      startWatch(host(), app(), code);
     },
   },
 };
@@ -524,5 +611,5 @@ async function createSolTable(): Promise<void> {
 }
 
 export function playScreens(): ScreenDef[] {
-  return [tables, party, solHost];
+  return [tables, party, solHost, watch];
 }

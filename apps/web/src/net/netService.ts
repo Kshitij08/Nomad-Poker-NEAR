@@ -388,6 +388,11 @@ export class NetService {
     return this.connect({ kind: 'join', code });
   }
 
+  /** Spectate a table: a public table's session name or a party room code. Never takes a seat or chips. */
+  watch(code: string): Promise<void> {
+    return this.connect({ kind: 'watch', code });
+  }
+
   /** Rejoin the session this tab was last at (a reload inside the seat's grace keeps the seat and stack). */
   async reconnect(): Promise<boolean> {
     let session: string | null = null;

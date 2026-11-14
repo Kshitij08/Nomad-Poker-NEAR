@@ -28,6 +28,7 @@ const Offline = { r: 0.55, g: 0.58, b: 0.66, a: 1 };
 interface NetParty {
   createParty?(): Promise<void>;
   joinParty?(code: string): Promise<void>;
+  watch?(code: string): Promise<void>;
   cancelSearch?(): void;
 }
 
@@ -252,6 +253,21 @@ export function startParty(host: NomadHost, ctx: AppContext, create: boolean, ra
     return;
   }
   void connect(host, () => (create ? n.createParty!() : n.joinParty!(code.toUpperCase())), n);
+}
+
+/** Spectate a table: a public table's session name, or a private table's room code. No Coins needed. */
+export function startWatch(host: NomadHost, ctx: AppContext, rawCode: string): void {
+  const n = net(ctx);
+  if (!n?.watch) {
+    host.message('Watch a table', 'Open the game from the menu scene to watch.');
+    return;
+  }
+  const code = rawCode.replace(/\u200b/g, '').trim();
+  if (!code) {
+    host.message('Watch a table', 'Enter the room code of the table you want to watch.');
+    return;
+  }
+  void connect(host, () => n.watch!(code), n);
 }
 
 // ------------------------------------------------------------------------------ Leaderboard (NomadUiHost.Tournaments.cs)

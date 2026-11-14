@@ -36,9 +36,9 @@ export class TableSlot {
     return this.host && !this.host.isClosed ? this.host : null;
   }
 
-  occupancy(): { open: boolean; players: number; full: boolean } {
+  occupancy(): { open: boolean; players: number; full: boolean; seated: number; watchers: number } {
     const h = this.live;
-    return { open: !!h, players: h?.playerCount ?? 0, full: h?.isFull ?? false };
+    return { open: !!h, players: h?.playerCount ?? 0, full: h?.isFull ?? false, seated: h?.seatedCount ?? 0, watchers: h?.watcherCount ?? 0 };
   }
 
   holds(playerId: string, tableId: string): boolean {

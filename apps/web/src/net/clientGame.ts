@@ -177,6 +177,11 @@ export class ClientGame {
     return ChainTableMode.isTournamentSession(this.roomCode);
   }
 
+  /** Joined as a spectator: never seated, no Join / Start / Add bot. */
+  get isWatching(): boolean {
+    return this.conn.watching;
+  }
+
   get isPrivateTable(): boolean {
     if (this.isTournament) return false;
     if (this._lobby && !this._lobby.autoStart) return true;
@@ -267,7 +272,28 @@ export class ClientGame {
   sendReaction(reactionId: number): boolean {
     if (!this.conn.isOpen || this._localSeat < 0) return false;
     if (!this.reactionLimiter.tryConsume(this.now())) return false;
-    this.conn.send({ t: 'reaction', id: reactionId & 0xff });
+    const id = reactionId & 0xff;
+    this.conn.send({ t: 'reaction', id });
+    // Shown at once on your own seat; the server's echo of it is skipped when it arrives (ownReactionEcho).
+    this.ownReactions.push({ id, at: this.now() });
+    try {
+      this.presenter.onReaction({ type: 'Reaction', seat: this._localSeat, reactionId: id });
+    } catch {
+      /* the seat isn't drawn yet */
+    }
+    return true;
+  }
+
+  /** Reactions you sent and already showed: their echo from the server is dropped (seconds of `now()`). */
+  private ownReactions: { id: number; at: number }[] = [];
+
+  private ownReactionEcho(seat: number, id: number): boolean {
+    const now = this.now();
+    this.ownReactions = this.ownReactions.filter((r) => now - r.at < 10);
+    if (seat !== this._localSeat) return false;
+    const i = this.ownReactions.findIndex((r) => r.id === id);
+    if (i < 0) return false;
+    this.ownReactions.splice(i, 1);
     return true;
   }
 
@@ -509,6 +535,20 @@ export class ClientGame {
     }
     if (sequence === PokerEventCodec.OutOfBandSequence) {
       this.push({ event, arrivedAt: this.now(), catchUp: true });
+      return;
+    }
+    // A reaction is shown the moment it arrives, not after the deal / showdown pauses queued ahead of it: it is
+    // somebody talking over the hand, not part of it. (It still counts in the sequence.)
+    if (event.type === 'Reaction') {
+      if (this.expectedSequence >= 0 && sequence !== this.expectedSequence) this.sequenceErrors++;
+      this.expectedSequence = sequence + 1;
+      if (!this.ownReactionEcho(event.seat, event.reactionId)) {
+        try {
+          this.presenter.onReaction(event);
+        } catch (ex) {
+          this.log('error', `[PokerClient] Reaction failed: ${(ex as Error)?.message ?? ex}`);
+        }
+      }
       return;
     }
     if (this.expectedSequence >= 0 && sequence !== this.expectedSequence) {

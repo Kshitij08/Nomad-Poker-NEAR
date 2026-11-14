@@ -205,3 +205,12 @@ html[data-orient='portrait'] .v2t-react-grid { grid-template-columns: repeat(4, 
 html[data-orient='portrait'] .v2t-cbar { font-size: 1.08em; }
 /* The soft-2D art icons in the round table buttons: big enough to read as art (the art keeps a 10 % margin). */
 .v2t-ib-art { width: 78%; height: 78%; object-fit: contain; pointer-events: none; filter: drop-shadow(0 0.08em 0.12em rgba(10, 4, 40, 0.35)); }
+
+/* Invite friends at a party table (net/chrome/netChrome.ts InviteView). */
+.v2t-invite-note { color: var(--v2-mut2); font-weight: 700; }
+.v2t-invite-list { display: flex; flex-direction: column; gap: 0.4em; overflow-y: auto; min-height: 3em; max-height: 18em; scrollbar-width: thin; }
+.v2t-invite-row { display: flex; align-items: center; gap: 0.6em; padding: 0.45em 0.6em; border-radius: var(--v2-r-md); background: color-mix(in srgb, var(--v2-shade) 50%, transparent); }
+.v2t-invite-name { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.v2t-invite-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v2t-invite-name small { color: var(--v2-mut2); font-weight: 800; font-size: 0.8em; }
+.v2t-invite-name small.on { color: #6ee7a8; }

@@ -17,7 +17,7 @@ export type JoinFailReason = 'GameIsFull' | 'GameNotFound' | 'GameClosed' | 'Inv
 export type ClientMessage =
   // ---- Session (Fusion StartGame / the dedicated spawner) ----
   /** NetworkRunner.StartGame(GameMode.Client, session): join an existing session. */
-  | { t: 'join'; session: string; appVersion: string }
+  | { t: 'join'; session: string; appVersion: string; /** Watch only: never seated, outside the 8 seats' limit. */ watch?: boolean }
   /** PokerPartyClient.EnsureDedicatedRoomAsync: host a private room under `code` (then `join` it). */
   | { t: 'spawnRoom'; code: string; money: boolean }
   /** PokerPartyClient.RequestOverflowAsync: another Quick Play table after `failed` was full. */

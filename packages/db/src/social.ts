@@ -1,6 +1,6 @@
 import { FriendCode } from '@nomad/engine/social/friendCode';
 import { FriendInviteRules } from '@nomad/engine/social/friendRules';
-import type { FriendInfo, FriendRelationName, ProfileUpdateRequest, SocialActionResult, SocialResponse, TableInviteInfo } from '@nomad/contract';
+import type { FriendInfo, FriendRelationName, PlayerSearchResult, ProfileUpdateRequest, SocialActionResult, SocialResponse, TableInviteInfo } from '@nomad/contract';
 import type { PlayerRow } from './types';
 
 /**
@@ -171,6 +171,34 @@ export async function social(db: D1Database, me: PlayerRow, now = Date.now()): P
     ),
     serverTime: Math.floor(now / 1000),
   };
+}
+
+/**
+ * Add-friend suggestions: players whose display name starts with `query` (2+ characters, case-insensitive), not you.
+ * Signed-in players before guests, then exact matches, then the most recently active; at most `limit`.
+ */
+export async function searchPlayers(db: D1Database, me: PlayerRow, query: string, limit = 8, now = Date.now()): Promise<PlayerSearchResult[]> {
+  const q = (query ?? '').trim();
+  if (q.length < 2 || q.length > 24) return [];
+  // LIKE wildcards in the typed name are matched literally (escaped with '!').
+  const pattern = q.replace(/[!%_]/g, (c) => `!${c}`) + '%';
+  const rows = await db
+    .prepare(
+      `SELECT p.friend_code, p.display_name, p.avatar, p.last_seen_at, f.relation
+       FROM players p LEFT JOIN friendships f ON f.player_id = ?1 AND f.friend_id = p.id
+       WHERE p.id <> ?1 AND p.friend_code IS NOT NULL AND p.display_name LIKE ?2 ESCAPE '!'
+       ORDER BY (p.kind = 'guest'), (p.display_name = ?3 COLLATE NOCASE) DESC, p.last_seen_at DESC
+       LIMIT ?4`,
+    )
+    .bind(me.id, pattern, q, Math.max(1, Math.min(20, limit)))
+    .all<{ friend_code: string; display_name: string; avatar: number; last_seen_at: number; relation: FriendRelationName | null }>();
+  return rows.results.map((r) => ({
+    id: r.friend_code,
+    name: r.display_name,
+    avatar: r.avatar,
+    relation: r.relation ?? null,
+    online: now - (r.last_seen_at ?? 0) < ONLINE_WINDOW_MS,
+  }));
 }
 
 /** Display name (2–24 characters, no control characters) and avatar (AvatarCatalog value). */

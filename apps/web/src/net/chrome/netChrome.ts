@@ -32,6 +32,10 @@ import { VoiceLinkState } from '../voice/tableVoice';
 import { ReactionBubbles, LOCAL_PERSPECTIVE_SLOT } from '../netTableView';
 import '../../ui2/table.css'; // v2 pre-game row rule (html.v2t-pregame)
 import { v2tEl } from '../../ui2/tableKit';
+import { Friends, friendLabel, type FriendEntry } from '../../economy/social/friends';
+import { FriendInvites } from '../../economy/social/friendInvites';
+import { FriendRelation } from '@nomad/engine/social/friendRules';
+import { NomadLink } from '../../economy/nomadLink';
 import { isPortrait } from '../../layout/orientation';
 import { chromeSlots, chipButton, iconButton, tableSheet, tableToast, tIcon, type ChromeSlots } from '../../ui2/tableChrome';
 
@@ -62,6 +66,10 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
     const reactions = new ReactionView(slots, host.audio, () => chat.close());
     chat.onOpen = () => reactions.close();
     const lobby = new LobbyView(slots, host.audio);
+    const invite = new InviteView(slots, host.audio, () => {
+      chat.close();
+      reactions.close();
+    });
     const banner = v2tEl('div', 'v2t-status-pill', slots.layer);
     banner.innerHTML = '<i class="v2t-spin" aria-hidden="true"></i><span>Reconnecting…</span>';
     banner.setAttribute('role', 'status');
@@ -115,6 +123,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
         chat.setLive(true);
         reactions.render(local.reactions);
         lobby.render(null);
+        invite.render(null);
         chat.render();
         banner.hidden = true;
         return;
@@ -124,6 +133,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       chat.setLive(live);
       reactions.render(live ? g : null);
       lobby.render(live ? g : null);
+      invite.render(live ? g : null);
       chat.render();
       banner.hidden = session?.status !== 'reconnecting';
     };
@@ -134,6 +144,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       if (session) {
         reactions.render(session.status !== 'closed' ? session.game : null);
         lobby.render(session.status !== 'closed' ? session.game : null);
+        invite.render(session.status !== 'closed' ? session.game : null);
         chat.render();
       } else refresh(); // no net session (yet): a table with no server, or one still connecting
     }, 200);
@@ -148,6 +159,7 @@ export function netTableChrome(ctx: AppContext, service: NetService): TableChrom
       reactions.dispose();
       local?.reactions.dispose();
       lobby.dispose();
+      invite.dispose();
       banner.remove();
       setPregame(false);
     };
@@ -429,7 +441,8 @@ class ReactionView {
       const img = v2tEl('img', '', b);
       img.src = assetUrl(sprite.file);
       img.alt = '';
-      img.loading = 'lazy';
+      // Eager: the same files draw the reaction bubbles over the seats, so they are cached before anyone reacts.
+      img.loading = 'eager';
       b.addEventListener('click', () => {
         audio.play(PokerSound.ButtonGeneric);
         if (this.game?.sendReaction(entry.id)) this.setOpen(false); // closeAfterSend
@@ -574,6 +587,7 @@ class LobbyView {
   private readonly botChip: HTMLButtonElement;
   private readonly code: HTMLButtonElement;
   private game: ClientGame | null = null;
+  private announcedWatch: ClientGame | null = null;
 
   constructor(private readonly slots: ChromeSlots, audio: Audio) {
     const click = (fn: () => void) => () => {
@@ -625,13 +639,18 @@ class LobbyView {
     }
     // SeatActionButtons.Refresh
     const joining = game.isJoining;
-    const seatOffered = (game.localSeat < 0 && (lobby.youCanBuyIn || game.isPrivateTable)) || joining;
+    const watching = game.isWatching;
+    if (watching && this.announcedWatch !== game) {
+      this.announcedWatch = game;
+      tableToast(this.slots.layer, "You're watching. Players' cards stay hidden until a showdown.");
+    }
+    const seatOffered = !watching && ((game.localSeat < 0 && (lobby.youCanBuyIn || game.isPrivateTable)) || joining);
     this.join.hidden = !seatOffered;
     this.join.disabled = !game.canJoinTable || joining;
     this.join.textContent = joining ? 'Joining…' : 'Join table';
 
     // PokerLobbyView.SetVisible / Render
-    const owner = lobby.youAreOwner;
+    const owner = lobby.youAreOwner && !watching;
     const playing = lobby.phase === TablePhase.Playing;
     const showBots = owner && !game.isMoneyTable && !lobby.autoStart;
     const freeSeat = (game.roster ?? []).some((s) => !s.isOccupied);
@@ -669,6 +688,121 @@ class LobbyView {
       this.code.innerHTML = html;
       this.code.setAttribute('aria-label', shared ? 'Quick Play table' : `Room code ${code}, tap to copy`);
     }
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------- invite friends
+
+/**
+ * "Invite" at a private (party) table: a drawer of your friends, online first, each with an Invite button. The invite
+ * lands in their Friends list ("Invited you to a table" → Join); sharing the room code still works alongside it.
+ */
+class InviteView {
+  private readonly chip: HTMLButtonElement;
+  private readonly tray: HTMLElement;
+  private readonly list: HTMLElement;
+  private readonly sent = new Set<string>();
+  private open = false;
+  private game: ClientGame | null = null;
+  private readonly offChanged: () => void;
+
+  constructor(
+    private readonly slots: ChromeSlots,
+    private readonly audio: Audio,
+    private readonly onOpen: () => void,
+  ) {
+    this.chip = chipButton(slots.left, `${tIcon('friends', 1.1)}<span>Invite</span>`, 'Invite friends to this table', () => {
+      audio.play(PokerSound.ButtonGeneric);
+      this.setOpen(!this.open);
+    }, 'invite', 1);
+    this.tray = v2tEl('div', 'v2t-drawer v2t-invite', slots.layer);
+    this.tray.setAttribute('role', 'dialog');
+    this.tray.setAttribute('aria-label', 'Invite friends');
+    const head = v2tEl('div', 'v2t-drawer-head', this.tray);
+    v2tEl('div', 'v2t-h', head, 'Invite friends');
+    const x = v2tEl('button', 'v2t-ib sm', head);
+    x.type = 'button';
+    x.innerHTML = tIcon('close', 0.95);
+    x.setAttribute('aria-label', 'Close');
+    x.addEventListener('click', () => this.setOpen(false));
+    v2tEl('small', 'v2t-invite-note', this.tray, 'They get it in their Friends list and can join with one tap.');
+    this.list = v2tEl('div', 'v2t-invite-list', this.tray);
+    this.offChanged = Friends.changed.on(() => {
+      if (this.open) this.paint();
+    });
+    this.setOpen(false);
+  }
+
+  dispose(): void {
+    this.offChanged();
+    this.chip.remove();
+    this.tray.remove();
+  }
+
+  close(): void {
+    if (this.open) this.setOpen(false);
+  }
+
+  private setOpen(open: boolean): void {
+    this.open = open && !!this.game;
+    if (this.open) {
+      this.onOpen();
+      this.paint();
+      void Friends.refreshAsync().then(() => {
+        if (this.open) this.paint();
+      });
+    }
+    this.tray.hidden = !this.open;
+    this.chip.classList.toggle('on', this.open);
+  }
+
+  private paint(): void {
+    const online = (f: FriendEntry): boolean => f.online === true;
+    const friends = Friends.all
+      .filter((f) => f.relation === FriendRelation.Friend)
+      .sort((a, b) => Number(online(b)) - Number(online(a)) || friendLabel(a).localeCompare(friendLabel(b)));
+    this.list.textContent = '';
+    if (!friends.length) {
+      v2tEl('div', 'v2t-chat-empty', this.list, 'No friends yet. Add them from Friends on the main menu, or share the room code.');
+      return;
+    }
+    for (const f of friends) {
+      const row = v2tEl('div', 'v2t-invite-row', this.list);
+      const name = v2tEl('div', 'v2t-invite-name', row);
+      v2tEl('b', '', name, friendLabel(f));
+      v2tEl('small', online(f) ? 'on' : '', name, online(f) ? 'Online' : 'Offline');
+      const b = v2tEl('button', 'v2t-b sm', row, this.sent.has(f.id) ? 'Invited' : 'Invite');
+      b.type = 'button';
+      b.disabled = this.sent.has(f.id);
+      b.addEventListener('click', () => {
+        this.audio.play(PokerSound.ButtonGeneric);
+        b.disabled = true;
+        b.textContent = 'Sending…';
+        void FriendInvites.inviteAsync(f).then((res) => {
+          if (res.success) {
+            this.sent.add(f.id);
+            b.textContent = 'Invited';
+          } else {
+            b.disabled = false;
+            b.textContent = 'Invite';
+            tableToast(this.slots.layer, res.error ?? "Couldn't send the invite");
+          }
+        });
+      });
+    }
+  }
+
+  render(game: ClientGame | null): void {
+    this.game = game;
+    const code = game?.roomCode ?? '';
+    // Private party tables only (a pool has no code and is joined from Friends directly), signed in, not a tournament
+    // or a real-money table.
+    const usable =
+      !!game && game.isPrivateTable && !game.isTournament && !game.isMoneyTable && code.length > 0 && !StakeSessionNames.isPool(code) && NomadLink.signedIn;
+    this.chip.hidden = !usable;
+    const slot = isPortrait() ? this.slots.left2 : this.slots.left;
+    if (this.chip.parentElement !== slot) slot.append(this.chip);
+    if (!usable && this.open) this.setOpen(false);
   }
 }
 

@@ -93,6 +93,35 @@ export default {
       return json({ error: 'Every overflow table is full.' }, 200, h);
     }
 
+    // Spectating: the public (Quick Play) tables being played right now, busiest first. Private party tables are not
+    // listed; they are watched by their room code.
+    if (url.pathname === '/v1/tables/live' && request.method === 'GET') {
+      if (!originOk(request, env)) return json({ error: 'Origin not allowed.' }, 403);
+      const open = await env.DB.prepare('SELECT DISTINCT room FROM table_sessions WHERE closed_at IS NULL LIMIT 60').all<{ room: string }>();
+      const rooms = open.results.map((r) => r.room).filter((r) => StakeSessionNames.isPool(r));
+      const tables = (
+        await Promise.all(
+          rooms.map(async (room) => {
+            try {
+              const o = (await (await table(env, room).fetch(`https://table/occupancy?session=${encodeURIComponent(room)}`)).json()) as {
+                open: boolean;
+                players: number;
+                seated?: number;
+                watchers?: number;
+              };
+              if (!o.open || !(o.seated ?? o.players)) return null;
+              return { session: room, stake: StakeSessionNames.parseMinBuyIn(room), seated: o.seated ?? o.players, players: o.players, watchers: o.watchers ?? 0 };
+            } catch {
+              return null;
+            }
+          }),
+        )
+      )
+        .filter((t): t is NonNullable<typeof t> => t !== null)
+        .sort((a, b) => b.players - a.players || b.seated - a.seated);
+      return json({ tables }, 200, { ...h, 'cache-control': 'no-store' });
+    }
+
     if (url.pathname.startsWith('/v1/agents/')) {
       if (!originOk(request, env)) return json({ error: 'Origin not allowed.' }, 403);
       return (await agentRoute(request, env, url, (body, status = 200) => json(body, status, h)))!;

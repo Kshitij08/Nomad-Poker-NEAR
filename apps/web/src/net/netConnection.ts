@@ -178,7 +178,10 @@ export class NetConnection {
   }
 
   /** NetworkRunner.StartGame(GameMode.Client, session). */
-  async join(session: string, timeoutMs = 8000): Promise<JoinResult> {
+  /** Joined to watch only (never seated): set by join(…, watch). */
+  watching = false;
+
+  async join(session: string, timeoutMs = 8000, watch = false): Promise<JoinResult> {
     if (this.cloudBase) {
       // One socket per table: drop the previous table's socket quietly, open this one's.
       this.replaceSocket();
@@ -193,11 +196,12 @@ export class NetConnection {
       if (m.t === 'joinFailed') return { ok: false, reason: m.reason, message: m.message };
       return undefined;
     }, timeoutMs);
-    this.send({ t: 'join', session, appVersion: LOCAL_APP_VERSION });
+    this.send(watch ? { t: 'join', session, appVersion: LOCAL_APP_VERSION, watch: true } : { t: 'join', session, appVersion: LOCAL_APP_VERSION });
     const r = (await reply) ?? { ok: false, reason: 'Disconnected' as const, message: 'The table server did not answer.' };
     if (r.ok) {
       this.session = r.session!;
       this.player = r.player!;
+      this.watching = watch;
       this.properties = r.properties ?? {};
       this.kind = r.kind ?? '';
       this.region = r.region ?? '';

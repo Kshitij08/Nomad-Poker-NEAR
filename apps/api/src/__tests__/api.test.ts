@@ -387,6 +387,24 @@ describe('social over HTTP (two accounts)', () => {
     expect((await call('GET', '/v1/leaderboards/9', undefined, a.body.token)).status).toBe(404);
     expect((await call('GET', '/v1/social')).status).toBe(401);
   });
+
+  it('suggests players by the start of their name, with the relation, never yourself', async () => {
+    const me = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Zed' });
+    const zara = await call<SessionResponse>('POST', Routes.guest, { displayName: 'Zara_Plays' });
+    await call<SessionResponse>('POST', Routes.guest, { displayName: 'Zack 100%' });
+    type R = { players: { id: string; name: string; relation: string | null }[] };
+    const za = await call<R>('GET', '/v1/players/search?q=za', undefined, me.body.token);
+    expect(za.body.players.map((p) => p.name).sort()).toEqual(['Zack 100%', 'Zara_Plays']);
+    expect(za.body.players.every((p) => p.relation === null)).toBe(true);
+    // Wildcards in the query are literal; self is left out; one character is too short.
+    expect((await call<R>('GET', '/v1/players/search?q=Zara%25', undefined, me.body.token)).body.players).toEqual([]);
+    expect((await call<R>('GET', '/v1/players/search?q=Ze', undefined, me.body.token)).body.players).toEqual([]);
+    expect((await call<R>('GET', '/v1/players/search?q=Z', undefined, me.body.token)).body.players).toEqual([]);
+    await call('POST', '/v1/friends/request', { idOrName: zara.body.player.friendCode }, me.body.token);
+    const again = await call<R>('GET', '/v1/players/search?q=zar', undefined, me.body.token);
+    expect(again.body.players).toMatchObject([{ id: zara.body.player.friendCode, relation: 'pending_out' }]);
+    expect((await call('GET', '/v1/players/search?q=za')).status).toBe(401);
+  });
 });
 
 describe('tournaments and the strategies market over HTTP', () => {

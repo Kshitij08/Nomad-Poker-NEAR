@@ -167,7 +167,8 @@ export async function startAgent(
         .bind(
           id, ownerId, text(input.agentName, 24, 'Agent'), text(input.profile, 24, 'balanced'), text(input.strategyVersion, 40, 'v1'),
           input.strategyId ? String(input.strategyId) : null, JSON.stringify(strategy), bankroll, stake,
-          int(input.maxHands, 1, 100_000, 100), int(input.maxRuntime, 60, 7 * 86_400, 3600),
+          // Same caps as the engine (AgentDeploymentConfig.normalize): 5,000 hands, 24 hours.
+          int(input.maxHands, 1, 5_000, 100), int(input.maxRuntime, 60, 86_400, 3600),
           Math.max(0, Math.trunc(num(input.stopLoss))), Math.max(0, Math.trunc(num(input.profitTarget))), now,
         ),
       postingStatement(db, { playerId: ownerId, currency: 'coins', delta: -bankroll, reason: 'agent:bankroll', ref: id, idempotencyKey: `agent:${id}:bankroll` }, now),
