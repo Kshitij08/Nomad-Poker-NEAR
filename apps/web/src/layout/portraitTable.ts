@@ -16,7 +16,7 @@
  *
  * Landscape restores every original value (identity anchors, original splines/positions) — nothing changes there.
  */
-import { Group, MathUtils, Matrix3, Matrix4, Object3D, Quaternion, Vector3 } from 'three';
+import { Group, MathUtils, Matrix3, Matrix4, Object3D, Plane, Quaternion, Raycaster, Vector2, Vector3 } from 'three';
 import type { TableStage } from '../table/tableStage';
 import { UnitySpline } from '../anim/unitySpline';
 import { worldCanvasSpace } from './canvasSpace';
@@ -24,7 +24,7 @@ import { isPortrait, safeArea } from './orientation';
 import { PortraitSeats } from './portraitSeats';
 import { overlayScale } from './portraitRects';
 import { PORTRAIT_ROW, PORTRAIT_TOP_ROW_Y } from './portraitHud';
-import { PORTRAIT_LAYOUT as P, portraitCardSpot, SEAT_UNIT, STACKED_SEAT_BOX } from './portraitLayout';
+import { PORTRAIT_CARD, PORTRAIT_LAYOUT as P, portraitCardSpot, SEAT_UNIT, STACKED_SEAT_BOX } from './portraitLayout';
 import { dealCrossings } from '../three/tableScene';
 
 /** Slot i is drawn in place of landscape slot (i + SHIFT) mod 8: a quarter of the oval, so slot 0 (you) is at the bottom. */
@@ -62,6 +62,8 @@ export class PortraitTable {
   /** Unity-space rotation that undoes the world's quarter turn (for the community slots). */
   private readonly counter = new Quaternion();
   private readonly cardHome = new Map<Object3D, CardHome>();
+  /** Landscape: each slot's deal paths as placeSeats left them (before setCardSpot moved where they land). */
+  private landBase: SplineFields[][] = [];
   /** Fit region (portrait coords), from the seat grid and the stacked seat box. */
   private readonly extent: { x0: number; x1: number; y0: number; y1: number };
   /** Exact ring place of each slot's player (seatSpread.ts spreadRing); null / whole = the slot's own place. */
@@ -131,7 +133,7 @@ export class PortraitTable {
     }
     this.syncBackdrop();
     this.seats.frame();
-    if (this.portrait || this.cardHome.size) this.adjustCards();
+    this.adjustCards();
   }
 
   // ---------------------------------------------------------------- splines
@@ -299,7 +301,102 @@ export class PortraitTable {
         });
       });
     }
+    if (!p) this.spreadPairs();
+    // What setCardSpot bends from (and restores).
+    this.landBase = stage.table.seatSplines.map((pair) => pair.map((s) => ({ ...(s as unknown as SplineFields) })));
     stage.hud.refreshCardClear();
+  }
+
+  /**
+   * Landscape: slot `slot`'s two hole cards land centred on screen point `at` (CSS px), keeping the pair's own spread;
+   * null puts them back on Unity's spot. The table HUD calls this once a seat is placed, so side seats get their cards
+   * on the felt beside the plate instead of above it, where they ran into the seat above (hud/tableHud.ts).
+   */
+  setCardSpot(slot: number, at: readonly [number, number] | null): void {
+    if (this.portrait) return;
+    const base = this.landBase[slot];
+    const live = this.stage.table.seatSplines[slot];
+    if (!base || !live) return;
+    if (!at) {
+      live.forEach((s, k) => Object.assign(s as unknown as SplineFields, base[k]));
+    } else {
+      const ends = base.map((b) => splineOf(b).evaluatePosition(1));
+      const mid = ends[0]!.clone().add(ends[1]!).multiplyScalar(0.5);
+      const cam = this.stage.table.camera;
+      cam.updateMatrixWorld();
+      this.world.updateMatrixWorld(true);
+      const midW = this.world.localToWorld(mid.clone());
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      _ray.setFromCamera(new Vector2((at[0] / w) * 2 - 1, 1 - (at[1] / h) * 2), cam);
+      const hit = _ray.ray.intersectPlane(new Plane(new Vector3(0, 1, 0), -midW.y), new Vector3());
+      if (!hit) return;
+      const delta = this.world.worldToLocal(hit).sub(mid);
+      live.forEach((s, k) => {
+        const bent = bendSplineEnd(splineOf(base[k]!), ends[k]!.clone().add(delta));
+        Object.assign(s as unknown as SplineFields, { ...(bent as unknown as SplineFields) });
+      });
+    }
+    // Cards already dealt to this slot move to the new spot.
+    for (const cv of this.spawned()) {
+      const spline = (cv as unknown as { spline: UnitySpline | null }).spline;
+      if (cv.alive && spline && live.includes(spline as never)) cv.retargetSpline(spline);
+    }
+  }
+
+  /**
+   * Landscape: each other player's two hole cards land side by side on screen, card 0 left and card 1 right,
+   * LANDSCAPE_PAIR_SEP of a card's width apart, so both faces read at the showdown. Unity's own ends stack some
+   * seats' pairs almost exactly on top of each other (the top and right seats) and swap the order on others. Your
+   * own pair keeps Unity's fan.
+   */
+  private spreadPairs(): void {
+    const cam = this.stage.table.camera;
+    cam.updateMatrixWorld();
+    this.world.updateMatrixWorld(true);
+    const screen = (v: Vector3): Vector2 => {
+      const n = this.world.localToWorld(v.clone()).project(cam);
+      return new Vector2(n.x * window.innerWidth, -n.y * window.innerHeight);
+    };
+    const sep = PORTRAIT_CARD.w * LANDSCAPE_CARD_SCALE * LANDSCAPE_PAIR_SEP;
+    const camLocal = this.world.worldToLocal(cam.getWorldPosition(new Vector3()));
+    this.stage.table.seatSplines.forEach((pair, i) => {
+      if (i === 0 || pair.length !== 2) return;
+      const ends = pair.map((s) => splineOf(s as unknown as SplineFields).evaluatePosition(1));
+      const mid = ends[0]!.clone().add(ends[1]!).multiplyScalar(0.5);
+      // The table-plane direction that runs straight across the screen at this spot (the camera looks down at a slant).
+      const o = screen(mid);
+      const ax = screen(mid.clone().add(new Vector3(1, 0, 0))).sub(o);
+      const az = screen(mid.clone().add(new Vector3(0, 0, 1))).sub(o);
+      const det = ax.x * az.y - az.x * ax.y;
+      if (Math.abs(det) < 1e-9) return;
+      // Solve a·ax + b·az = (1, 0): a unit step right on screen, in table units.
+      const dir = new Vector3(az.y / det, 0, -ax.y / det).normalize();
+      pair.forEach((s, k) => {
+        const end = mid.clone().addScaledVector(dir, (k === 0 ? -sep : sep) / 2);
+        end.y = ends[k]!.y;
+        // The right card lies on top of the left one, so both corner indices (rank and suit, top-left) show at the
+        // showdown: it is pulled toward the camera along its own view ray, which leaves it at the same spot on screen.
+        if (k === 1) {
+          const toCam = camLocal.clone().sub(end);
+          end.addScaledVector(toCam, LANDSCAPE_RIGHT_LIFT / toCam.length());
+        }
+        const bent = bendSplineEnd(splineOf(s as unknown as SplineFields), end);
+        Object.assign(s as unknown as SplineFields, { ...(bent as unknown as SplineFields) });
+      });
+    });
+  }
+
+  /** Landscape: the card objects of slot `slot`'s hole cards that have landed (none while they fly or return). */
+  landedCards(slot: number): Object3D[] {
+    const live = this.stage.table.seatSplines[slot];
+    if (!live) return [];
+    const out: Object3D[] = [];
+    for (const cv of this.spawned()) {
+      const c = cv as unknown as { spline: UnitySpline | null; animPlaying: boolean; animEnabled: boolean; pathProgress: number; transform: Object3D; alive: boolean };
+      if (c.alive && c.spline && live.includes(c.spline as never) && !c.animPlaying && c.animEnabled && c.pathProgress >= 1) out.push(c.transform);
+    }
+    return out;
   }
 
   private spawned(): CardViewLike[] {
@@ -365,12 +462,14 @@ export class PortraitTable {
    * inside each CardView gets a yaw about the card's normal that stands the card's long side up the screen, leaning
    * `lean` degrees out from the pair's middle. The yaw is solved each frame from the card's live pose, so it holds
    * for every seat's path, through the showdown flip and through the river-slam camera moves. Your own two cards
-   * also grow to `ownCardScale` as they land.
+   * also grow to `ownCardScale` as they land (portrait). Landscape does the same turn, so every seat shows a neat,
+   * upright pair instead of Unity's pairs lying at each seat's own angle, and other players' cards land a little
+   * smaller (LANDSCAPE_CARD_SCALE) so they sit above their plates without crowding the next seat.
    */
   private adjustCards(): void {
     const which = new Map<Object3D, { seat: number; card: number }>();
     const progress = new Map<Object3D, number>();
-    if (this.portrait) {
+    {
       const index = new Map<unknown, { seat: number; card: number }>();
       this.stage.table.seatSplines.forEach((pair, seat) => pair.forEach((s, card) => index.set(s, { seat, card })));
       for (const cv of this.spawned()) {
@@ -391,20 +490,22 @@ export class PortraitTable {
       }
       let angle = 0;
       let grow = 1;
-      if (this.portrait) {
+      {
         const at = which.get(card);
         // By progress along the path, not distance from the deck: the swirl passes back near the deck, and a card
         // must not twist mid-air. The card flies like Unity's (aligned with the path) and turns upright as it comes
         // in to its seat; on the way back it unwinds as it leaves.
         const t = progress.get(card) ?? 1;
-        const wgt = MathUtils.smoothstep(t, TURN_FROM, 0.97);
         const own = at?.seat === 0;
+        // Landscape keeps your own pair as Unity fans it (big, both corners showing).
+        const wgt = !this.portrait && own ? 0 : MathUtils.smoothstep(t, TURN_FROM, 0.97);
         const lean = MathUtils.degToRad(own ? P.ownLean : P.lean) * (at?.card === 1 ? -1 : 1);
         const solved = this.uprightYaw(card, home, Math.PI / 2 + lean);
         // Same orientation, nearest turn to last frame's: no full spins when the solution crosses ±180°.
         if (solved !== null) home.angle += wrapAngle(solved - home.angle);
         angle = home.angle * wgt;
-        if (own) grow = 1 + (P.ownCardScale - 1) * wgt;
+        const target = this.portrait ? (own ? P.ownCardScale : 1) : own ? 1 : LANDSCAPE_CARD_SCALE;
+        grow = 1 + (target - 1) * wgt;
       }
       _yaw.setFromAxisAngle(Y_AXIS, angle);
       deck.quaternion.copy(_yaw).multiply(home.q);
@@ -467,6 +568,7 @@ function wrapAngle(a: number): number {
 }
 
 const Y_AXIS = new Vector3(0, 1, 0);
+const _ray = new Raycaster();
 const _yaw = new Quaternion();
 const _dir = new Vector3();
 const _right = new Vector3(1, 0, 0);
@@ -479,6 +581,12 @@ const _screenUp = new Vector3(0, 0, -1);
 const SWIRL = { x: 0.75, y: 0.75 };
 /** Path progress from which a card turns upright (and yours grows), reaching it just before the seat. */
 const TURN_FROM = 0.72;
+/** Landscape: other players' landed hole cards at this scale (your own stay full size). */
+const LANDSCAPE_CARD_SCALE = 0.82;
+/** How far (table units, toward the camera) the right card of a landscape pair sits above the left one. */
+const LANDSCAPE_RIGHT_LIFT = 0.15;
+/** Landscape: other players' two cards sit this many card widths apart (centre to centre), so both faces show. */
+const LANDSCAPE_PAIR_SEP = 0.62;
 /** Landed hole cards stay under the seat canvases' plane (y 0.92), as Unity's do, so the HUD sorts over them. */
 const LANDED_MAX_Y = 0.85;
 /** Fraction of the path (by length) after which it starts bending onto the portrait card spot. */

@@ -1,7 +1,8 @@
 name: D1 backup
 
-# Daily off-site dump of the staging (and, once it exists, production) D1 database to its R2 bucket (infra/backup-d1.mjs).
-# Does nothing until a repository secret CLOUDFLARE_API_TOKEN exists (D1 export + R2 write on the account).
+# Daily off-site dump of the production and staging D1 databases, each to its own R2 bucket (infra/backup-d1.mjs):
+# backups/d1/<date>/<bookmark>.sql.gz. Does nothing until a repository secret CLOUDFLARE_API_TOKEN exists (an account
+# API token with D1: Edit and Workers R2 Storage: Edit). Scheduled runs only fire from the default branch (main).
 # Runs at 04:30 UTC, a quiet hour: an export briefly blocks writes (table bookkeeping retries through it).
 on:
   workflow_dispatch:
@@ -28,6 +29,9 @@ jobs:
           cache: npm
       - if: env.CLOUDFLARE_API_TOKEN != ''
         run: npm ci
+      - name: Back up production
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: PATH="$PWD/node_modules/.bin:$PATH" node infra/backup-d1.mjs production
       - name: Back up staging
         if: env.CLOUDFLARE_API_TOKEN != ''
         run: PATH="$PWD/node_modules/.bin:$PATH" node infra/backup-d1.mjs staging

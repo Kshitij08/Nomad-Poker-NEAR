@@ -6,6 +6,7 @@
  * avatars are saved there, and PokerClientIdentity mirrors the server (its "playFabId" is the public Friend ID, so the
  * Friends screens show it unchanged). Without one there is a local guest only — the game still plays offline.
  */
+import { requestGoogleIdToken } from '../account/googleSignIn';
 import type { EventBus } from '../app/app';
 import { PlayerPrefs, type AccountService } from '../app/services';
 import { FriendCode } from '@nomad/engine/social/friendCode';
@@ -117,9 +118,28 @@ export class EconomyAccount implements AccountService {
     return s.signedIn ? null : (s.error ?? 'Sign-in failed.');
   }
 
-  /** Continue with Google: needs a Google OAuth client id on the server, which is not set up yet. */
+  /**
+   * Continue with Google: Google's prompt (or its button in a small dialog) hands back an ID token, which the Nomad
+   * server checks. A guest signed in on this browser keeps its coins: Google is linked to it.
+   */
   async continueWithGoogle(): Promise<string | null> {
-    return this.fail(this.online ? 'Google sign-in is not set up yet. Use your email instead.' : 'Google sign-in needs the Nomad server. Play as Guest instead.');
+    const s = NomadLink.session;
+    if (!s) return this.fail('Google sign-in needs the Nomad server. Play as Guest instead.');
+    let idToken: string | null;
+    try {
+      idToken = await requestGoogleIdToken();
+    } catch (e) {
+      return this.fail((e as Error).message || "Couldn't reach Google.");
+    }
+    if (!idToken) {
+      this.setBusy(false, null);
+      return 'Google sign-in cancelled.';
+    }
+    this.setBusy(true, 'Signing in…');
+    await s.google(idToken);
+    this.setBusy(false, s.signedIn ? null : s.error);
+    this.changed();
+    return s.signedIn ? null : (s.error ?? 'Google sign-in failed.');
   }
 
   /**

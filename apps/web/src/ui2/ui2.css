@@ -21,8 +21,13 @@
   --v2-bg-top: #4f2bb8;
   --v2-bg-mid: #7448e0;
   --v2-bg-bot: #43249c;
-  --v2-panel: rgba(104, 66, 214, 0.66);
+  /* Panels on every screen: the same deep fill as the main menu's dock groups (--v2-home-panel), so screens read alike. */
+  --v2-panel: rgba(58, 32, 142, 0.78);
   --v2-deep: rgba(58, 32, 142, 0.78);
+  /* Main menu panels (player card, dock groups, room info): the balance capsule / Settings fill, so they stand off the
+     bright menu art instead of melting into it. */
+  --v2-home-panel: var(--v2-deep);
+  --v2-home-panel-solid: #3a208e;
   --v2-dlg: #4b2ca3;
   --v2-gold: #ffd54a;
   --v2-good: #2ee38a;
@@ -102,23 +107,24 @@ html[data-orient='portrait'] .v2 { font-size: min(calc(100vw / 30), calc(100dvh 
 }
 
 /* ---------------------------------------------------------------- background + screen frame */
-/* Menu background: the Unity loading screen art without its logo (public/assets/menu/galaxy/MANIFEST.md). The main
-   menu shows it nearly as is; other pages tint it a little so panels stay readable. A lavender 'screen' layer on top
-   lifts the dark art toward the lighter galaxy (reference: Art-Factory art-out/nomad-poker/reference/). */
+/* Menu background: nomad_bg, the branding stage art (spotlights, Solana chips, the room skylines;
+   public/assets/menu/galaxy/MANIFEST.md). The main menu shows it nearly as is (a light lavender 'screen' layer); other
+   pages tint it a little more so panels stay readable. On a portrait phone cover-fit shows the centre strip: the
+   spotlight over the empty stage. */
 .v2-bg {
   position: absolute; inset: 0; pointer-events: none;
   background:
     linear-gradient(rgba(150, 105, 245, 0.42), rgba(120, 80, 230, 0.32)),
     linear-gradient(color-mix(in srgb, var(--v2-bg-top) 30%, transparent), color-mix(in srgb, var(--v2-bg-bot) 45%, transparent)),
-    url('/assets/menu/galaxy/menu_bg.webp') center 40% / cover no-repeat,
+    url('/assets/menu/galaxy/nomad_bg.webp') center 40% / cover no-repeat,
     var(--v2-bg-mid);
   background-blend-mode: screen, normal, normal, normal;
 }
 .v2:has(> .v2-page[data-screen='main']) > .v2-bg {
   background:
-    linear-gradient(rgba(160, 115, 250, 0.45), rgba(130, 90, 240, 0.35)),
+    linear-gradient(rgba(160, 115, 250, 0.22), rgba(130, 90, 240, 0.16)),
     linear-gradient(180deg, color-mix(in srgb, var(--v2-bg-top) 14%, transparent) 0, transparent 30%, transparent 62%, color-mix(in srgb, var(--v2-bg-bot) 45%, transparent) 100%),
-    url('/assets/menu/galaxy/menu_bg.webp') center 40% / cover no-repeat,
+    url('/assets/menu/galaxy/nomad_bg.webp') center 40% / cover no-repeat,
     var(--v2-bg-mid);
   background-blend-mode: screen, normal, normal, normal;
 }
@@ -153,13 +159,11 @@ html[data-orient='portrait'] .v2 { font-size: min(calc(100vw / 30), calc(100dvh 
 .v2-top-r { display: flex; align-items: center; justify-content: flex-end; gap: 0.7em; justify-self: end; min-width: 0; }
 .v2-title { display: inline-flex; align-items: center; justify-content: center; gap: 0.35em; max-width: 60vw; }
 .v2-title-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.v2-title-orn { display: inline-flex; flex: 0 0 auto; }
 .v2-title {
   min-width: 0; text-align: center; font-family: var(--v2-display); font-weight: var(--v2-display-weight); font-size: 2.3em;
   letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   text-shadow: 0 0.06em 0 var(--v2-bg-mid), 0 0 0.5em color-mix(in srgb, var(--v2-accent) 60%, transparent);
 }
-.v2-title .v2-ico { color: var(--v2-accent); vertical-align: -0.05em; }
 h1.v2-title { margin: 0; }
 /* Play mode on sub-screens: a pill (the switch lives on the main menu and the profile popover). */
 .v2-mode-pill { flex: 0 0 auto; font-size: 0.9em; padding: 0.35em 0.9em; border: 0.1em solid var(--v2-line); }
@@ -336,7 +340,6 @@ html[data-orient='portrait'] .v2-b,
 html[data-orient='portrait'] .v2-ib { min-height: 3.1em; }
 html[data-orient='portrait'] .v2-seg > button { min-height: 3.1em; }
 html[data-orient='portrait'] button.v2-pill { min-height: 2.6em; min-width: 2.6em; display: inline-flex; align-items: center; justify-content: center; }
-html[data-orient='portrait'] .v2-title .v2-ico { display: none; }
 
 /* Phones: nothing smaller than 11 px, body text at least 12 px (13 px base font in portrait). */
 html[data-orient='portrait'] .v2-page :where(.v2-xs, .v2-cap, small) { font-size: max(0.72em, 11px); }

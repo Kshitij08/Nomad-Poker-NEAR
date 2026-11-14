@@ -19,6 +19,7 @@ import numpy as np
 
 SR = 32000
 TARGET_LUFS = -15.0  # menu BGM measures -13.8 LUFS; tables sit a touch under it
+ROOM_LUFS = {'forest': -17.0}  # the forest loop sits further in the background
 OUT_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'public', 'assets', 'music')
 NOTE_INDEX = {'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7,
               'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11}
@@ -383,7 +384,7 @@ def solana(rng):
 
 
 def forest(rng):
-    """Calm acoustic: fingerpicked plucks, soft flute, shaker, birds, crickets and wind."""
+    """Calm acoustic, kept mellow: soft low fingerpicked plucks, breathy flute, shaker, wind, distant birds."""
     bpm, bars = 78, 28
     tr = Track(beats_to_s(bars * 4, bpm))
     prog = [('D3', 'maj9'), ('B2', 'min7'), ('G2', 'maj7'), ('A2', 'sus4')]
@@ -394,39 +395,42 @@ def forest(rng):
         rm = nmidi(root)
         notes = chord_notes(rm, q)
         bar_s = beats_to_s(bar * 4, bpm)
-        tr.add(pluck(midi_hz(rm - 12), 2.4, 0.6), bar_s, gain=0.30, pan=-0.05)
+        tr.add(fft_filter(pluck(midi_hz(rm - 12), 2.4, 0.4), 'low', fc=900), bar_s, gain=0.30, pan=-0.05)
         for i, idx in enumerate(pattern):
-            m = notes[idx % len(notes)] + 12
-            tr.add(pluck(midi_hz(m), 1.8, 0.9), bar_s + beats_to_s(i * 0.5, bpm) + rng.uniform(0, 0.008), gain=0.13,
-                   pan=-0.3 + 0.6 * (i % 2))
-        tr.add(pad([midi_hz(m) for m in notes[:3]], beats_to_s(4, bpm) + 1.0, cutoff=900, kind='tri', attack=1.2,
-                   release=1.2), bar_s, gain=0.10)
+            # The picked strings stay in the guitar's middle register and dark (no glassy upper partials).
+            m = notes[idx % len(notes)]
+            if m < nmidi('A2'):
+                m += 12
+            g = fft_filter(pluck(midi_hz(m), 1.8, 0.35), 'low', fc=1800, order=2)
+            tr.add(g, bar_s + beats_to_s(i * 0.5, bpm) + rng.uniform(0, 0.008), gain=0.12, pan=-0.3 + 0.6 * (i % 2))
+        tr.add(pad([midi_hz(m) for m in notes[:3]], beats_to_s(4, bpm) + 1.0, cutoff=800, kind='tri', attack=1.2,
+                   release=1.2), bar_s, gain=0.11)
         if bar >= 8 and bar < 24:
             for i in range(4):
                 m = melody[((bar - 8) * 4 + i) % len(melody)]
                 if m is not None and (bar + i) % 3 != 2:
-                    tr.add(flute(midi_hz(m), beats_to_s(0.95, bpm), rng), bar_s + beats_to_s(i, bpm), gain=0.10, pan=0.2)
+                    # An octave below the old line: a low, breathy flute instead of a piercing one.
+                    fl = fft_filter(flute(midi_hz(m - 12), beats_to_s(0.95, bpm), rng), 'low', fc=1600)
+                    tr.add(fl, bar_s + beats_to_s(i, bpm), gain=0.11, pan=0.2)
         for b in range(8):
-            tr.add(shaker(rng), bar_s + beats_to_s(b * 0.5, bpm), gain=0.05 if b % 2 else 0.08, pan=0.4)
-    # ambience: wind bed, crickets, occasional birds
-    wind = fft_filter(noise(tr.n, rng), 'band', fc=500, q_width=1.2)
+            sh = fft_filter(shaker(rng), 'low', fc=5000)
+            tr.add(sh, bar_s + beats_to_s(b * 0.5, bpm), gain=0.03 if b % 2 else 0.045, pan=0.4)
+    # Ambience: a wind bed and a few distant, low birds (no crickets: their 4 kHz chirp grated).
+    wind = fft_filter(noise(tr.n, rng), 'band', fc=420, q_width=1.2)
     wind *= 0.5 + 0.5 * np.sin(2 * np.pi * np.arange(tr.n) / tr.n * 3)  # whole-number cycles keep the loop seamless
     tr.add(wind, 0, gain=0.035)
     t_loop = tr.n / SR
-    for k in range(int(t_loop * 1.2)):
-        c = additive(4300 + rng.uniform(-150, 150), 0.06, [(1, 1, 1)], decay=40)
-        for rep in range(3):
-            tr.add(c, rng.uniform(0, t_loop) + rep * 0.07, gain=0.012, pan=rng.uniform(-0.8, 0.8))
-    for k in range(9):
+    for k in range(6):
         start = rng.uniform(0, t_loop)
-        for chirp in range(int(rng.integers(2, 5))):
-            n = int(0.12 * SR)
+        for chirp in range(int(rng.integers(2, 4))):
+            n = int(0.14 * SR)
             t = t_axis(n)
-            f = 2600 + 900 * np.sin(np.pi * t / 0.12) + rng.uniform(-200, 200)
-            sig = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * t / 0.12) ** 2
-            tr.add(sig, start + chirp * 0.16, gain=0.025, pan=rng.uniform(-0.7, 0.7))
-    ir = reverb_ir(3.0, rng, damp=4500)
-    return add_reverb(tr.buf, ir, 0.4)
+            f = 1500 + 400 * np.sin(np.pi * t / 0.14) + rng.uniform(-100, 100)
+            sig = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * t / 0.14) ** 2
+            tr.add(sig, start + chirp * 0.18, gain=0.010, pan=rng.uniform(-0.7, 0.7))
+    ir = reverb_ir(3.0, rng, damp=3500)
+    mix = add_reverb(tr.buf, ir, 0.4)
+    return np.array([fft_filter(mix[0], 'low', fc=4500, order=2), fft_filter(mix[1], 'low', fc=4500, order=2)])
 
 
 def town(rng):
@@ -475,40 +479,96 @@ def town(rng):
     return mix
 
 
+def clop(rng, f=950.0):
+    """A hoof clop / coconut-shell knock: a hollow wooden tone with a short noise click."""
+    n = int(0.09 * SR)
+    t = t_axis(n)
+    tone = (np.sin(2 * np.pi * f * t) + 0.4 * np.sin(2 * np.pi * f * 1.52 * t)) * np.exp(-t * 55)
+    click = fft_filter(noise(n, rng), 'band', fc=f * 1.8, q_width=0.7) * np.exp(-t * 120) * 0.5
+    return tone + click
+
+
+def strum(freqs, dur, rng, down=True, bright=0.6, spread=0.014):
+    """An acoustic strum: each string a pluck, a few ms apart (low to high on a downstroke)."""
+    order = freqs if down else freqs[::-1]
+    n = int((dur + spread * len(freqs)) * SR)
+    out = np.zeros(n)
+    for k, f in enumerate(order):
+        g = pluck(f, dur, bright)
+        o = int((k * spread + rng.uniform(0, 0.003)) * SR)
+        take = min(g.size, n - o)
+        out[o:o + take] += g[:take]
+    return fft_filter(out / len(freqs), 'low', fc=3200) * env(n, a=0.002, d=0.05, s=0.9, r=0.05)
+
+
+def whistle(f, dur):
+    """A whistled note (the spaghetti-western lead): near-pure tone, a vibrato that grows, soft attack."""
+    n = int(dur * SR)
+    t = t_axis(n)
+    vib = 1 + 0.006 * np.sin(2 * np.pi * 5.5 * t) * np.clip(t / 0.35, 0, 1)
+    ph = 2 * np.pi * f * np.cumsum(vib) / SR
+    sig = np.sin(ph) + 0.04 * np.sin(2 * ph)
+    return sig * env(n, a=0.06, d=0.1, s=0.8, r=0.15)
+
+
 def desert(rng):
-    """Desert dusk: handpan ostinato, twangy tremolo guitar, frame drum, shaker, wind."""
-    bpm, bars = 90, 32
+    """Cowboy western: boom-chick bass and strummed acoustic, a clip-clop gallop, a tremolo twang lead and a whistled
+    tune over Em - D - C - B7 (the classic trail-ride cadence) at a loping 100 BPM."""
+    bpm, bars = 100, 32
     tr = Track(beats_to_s(bars * 4, bpm))
-    # D Phrygian dominant flavour over a D drone, moving to C and Bb.
-    scale = [nmidi('D3') + i for i in (0, 1, 4, 5, 7, 8, 10, 12)]
-    roots = ['D2', 'D2', 'C2', 'Bb1']
-    pan_pattern = [0, 4, 2, 5, 3, 7, 4, 2]
+    chords = [
+        ([52, 59, 64, 67, 71], (40, 35)),  # Em: E B e g b / bass E, B
+        ([50, 57, 62, 66, 69], (38, 33)),  # D
+        ([48, 55, 60, 64, 67], (36, 31)),  # C
+        ([47, 51, 57, 59, 66], (35, 30)),  # B7
+    ]
+    # Eight bars of tune: (beat, midi, beats).
+    tune = [
+        [(0, 64, 1.5), (1.5, 67, 0.5), (2, 71, 2)],
+        [(0, 69, 1), (1, 67, 1), (2, 66, 2)],
+        [(0, 64, 1.5), (1.5, 67, 0.5), (2, 72, 1), (3, 71, 1)],
+        [(0, 71, 3), (3, 66, 1)],
+        [(0, 76, 1.5), (1.5, 74, 0.5), (2, 71, 2)],
+        [(0, 69, 1), (1, 71, 1), (2, 74, 2)],
+        [(0, 72, 1), (1, 71, 1), (2, 69, 1), (3, 67, 1)],
+        [(0, 66, 2), (2, 63, 1), (3, 66, 1)],
+    ]
     for bar in range(bars):
         bar_s = beats_to_s(bar * 4, bpm)
-        rm = nmidi(roots[(bar // 2) % 4])
-        drone = pad([midi_hz(rm), midi_hz(rm + 7)], beats_to_s(4, bpm) + 0.8, cutoff=600, kind='tri', attack=0.8, release=0.8)
-        tr.add(drone, bar_s, gain=0.16)
-        for i, deg in enumerate(pan_pattern):
-            if bar < 4 and i % 2:
-                continue
-            m = scale[(deg + (bar // 4) % 2) % len(scale)] + 12
-            tr.add(handpan(midi_hz(m), 2.2), bar_s + beats_to_s(i * 0.5, bpm), gain=0.12, pan=-0.4 + 0.1 * i)
-        if bar >= 8 and bar < 28 and bar % 2 == 0:
-            twang = [scale[4] + 12, scale[5] + 12, scale[4] + 12, scale[2] + 12, scale[1] + 12, scale[0] + 12]
-            for i, m in enumerate(twang):
-                g = pluck(midi_hz(m), 1.6, 1.0)
-                tr.add(tremolo(g, 7.0, 0.5), bar_s + beats_to_s(i * 0.66, bpm), gain=0.11, pan=0.35)
-        tr.add(frame_drum(rng, 0.6, 85), bar_s, gain=0.5)
-        tr.add(frame_drum(rng, 0.4, 120), bar_s + beats_to_s(1.5, bpm), gain=0.25)
-        tr.add(frame_drum(rng, 0.6, 85), bar_s + beats_to_s(2, bpm), gain=0.4)
-        tr.add(frame_drum(rng, 0.3, 160), bar_s + beats_to_s(3.5, bpm), gain=0.18)
-        for s in range(8):
-            tr.add(shaker(rng, 0.1), bar_s + beats_to_s(s * 0.5 + 0.25, bpm), gain=0.05, pan=-0.35)
-    wind = fft_filter(noise(tr.n, rng), 'band', fc=380, q_width=1.0)
+        voicing, (b1, b2) = chords[bar % 4]
+        hz_v = [midi_hz(m) for m in voicing]
+        # Boom (bass on 1 and 3, root then fifth) - chick (strum on 2 and 4), a light upstroke after each chick.
+        tr.add(upright_bass(midi_hz(b1), beats_to_s(0.95, bpm)), bar_s, gain=0.42)
+        tr.add(upright_bass(midi_hz(b2), beats_to_s(0.95, bpm)), bar_s + beats_to_s(2, bpm), gain=0.38)
+        for beat in (1, 3):
+            tr.add(strum(hz_v, beats_to_s(0.45, bpm), rng, True, 0.55), bar_s + beats_to_s(beat, bpm), gain=0.30, pan=-0.25)
+            tr.add(strum(hz_v[2:], beats_to_s(0.3, bpm), rng, False, 0.45), bar_s + beats_to_s(beat + 0.66, bpm),
+                   gain=0.14, pan=-0.25)
+        # Gallop: da-da-DUM on every beat (shuffled), shell tones panned apart like hooves.
+        if bar >= 2:
+            for beat in range(4):
+                bs = bar_s + beats_to_s(beat, bpm)
+                tr.add(clop(rng, 820), bs, gain=0.09, pan=0.3)
+                tr.add(clop(rng, 1050), bs + beats_to_s(0.33, bpm), gain=0.05, pan=0.45)
+                tr.add(clop(rng, 900), bs + beats_to_s(0.66, bpm), gain=0.065, pan=0.38)
+        # Lead: the twang guitar states the tune, the whistle answers, then both together, then the rhythm alone.
+        section = bar // 8
+        for beat, m, dur in tune[bar % 8]:
+            at = bar_s + beats_to_s(beat, bpm)
+            d = beats_to_s(dur, bpm)
+            if section in (0, 2):
+                g = tremolo(fft_filter(pluck(midi_hz(m - 12), d + 0.6, 0.8), 'low', fc=2800), 6.0, 0.45)
+                tr.add(g, at, gain=0.20 if section == 0 else 0.14, pan=0.25)
+            if section in (1, 2):
+                tr.add(whistle(midi_hz(m), d * 0.95), at, gain=0.10 if section == 1 else 0.07, pan=-0.1)
+        # A low tom on each bar's last off-beat leads into the next chord.
+        tr.add(frame_drum(rng, 0.4, 110), bar_s + beats_to_s(3.5, bpm), gain=0.12)
+    wind = fft_filter(noise(tr.n, rng), 'band', fc=350, q_width=1.0)
     wind *= 0.4 + 0.6 * (0.5 + 0.5 * np.sin(2 * np.pi * np.arange(tr.n) / tr.n * 4))
-    tr.add(wind, 0, gain=0.05)
-    mix = add_reverb(tr.buf, reverb_ir(3.2, rng, damp=4200), 0.38)
-    return delay(mix, beats_to_s(0.75, bpm), 0.3, 0.08)
+    tr.add(wind, 0, gain=0.03)
+    # A short, bright "spring" room plus a slap-back echo: the old western-guitar sound.
+    mix = add_reverb(tr.buf, reverb_ir(1.6, rng, damp=5000), 0.3)
+    return delay(mix, 0.11, 0.25, 0.12, pingpong=False)
 
 
 def neon_city(rng):
@@ -597,7 +657,7 @@ def render(name):
     os.makedirs(OUT_DIR, exist_ok=True)
     wav = os.path.join(OUT_DIR, f'_{name}.wav')
     write_wav(wav, mix)
-    gain = TARGET_LUFS - loudness(wav)
+    gain = ROOM_LUFS.get(name, TARGET_LUFS) - loudness(wav)
     mp3 = os.path.join(OUT_DIR, f'{name}.mp3')
     subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-i', wav, '-af',
                     f'volume={gain:.2f}dB,alimiter=limit=0.89:attack=5:release=60:level=false', '-ar', '44100',

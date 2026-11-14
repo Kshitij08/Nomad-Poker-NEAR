@@ -28,7 +28,8 @@
 .v2-seat.v2-turn [data-name='Name_bar'] { border-color: var(--v2-gold, var(--v2-gold)); box-shadow: 0 0 0 12px color-mix(in srgb, var(--v2-gold) 22%, transparent), 0 0 90px color-mix(in srgb, var(--v2-gold) 60%, transparent); }
 .v2-seat.v2-win [data-name='Name_bar'] { border-color: var(--v2-gold, var(--v2-gold)); box-shadow: 0 0 0 16px color-mix(in srgb, var(--v2-gold) 30%, transparent), 0 0 120px color-mix(in srgb, var(--v2-gold) 80%, transparent); }
 /* Folded: the whole seat (avatar, plate, chips) turns greyscale like its cards; it stays fully opaque. */
-.v2-seat.v2-fold { filter: grayscale(1) brightness(0.8); }
+/* Folded seats go grey; a reaction sticker over it keeps its colour (it speaks for the player, not the hand). */
+.v2-seat.v2-fold > :not(.v2-react) { filter: grayscale(1) brightness(0.8); }
 
 
 /* avatar + turn ring */
@@ -123,28 +124,24 @@ html[data-orient='portrait'] .v2-seat [data-name='D_Token'] { width: 200px !impo
 html[data-orient='portrait'] .v2-pot [data-name='bar'] { scale: 1.75; }
 
 /* ---------------------------------------------------------------- action row (screen canvas, 1920×1080 units) */
-[data-hud='betting'] [data-v2b] > :is(.u-gfx, .u-slice) { display: none !important; }
-/* One style for the row on and off turn (the dark plate pill with a border, like the seats). On your turn the border
-   and label take the room's colours (--tbl-*, per room on <html data-room>): Fold danger, Call the room's secondary,
-   Raise the room's primary (tinted fill), All-in hot. */
+[data-hud='betting'] [data-v2b] > :is(.u-gfx, .u-slice) { display: none !important; } /* Unity's sprite: the plate replaces it */
+/* The plate, the one button style (ui2.css › one button style): a dark fill tinted with the action's hue, a ring in that
+   hue and its soft glow; white labels, Raise in gold like the menus' primary. Fold red, Call blue, Raise gold (--tbl-*),
+   All-in hot. Off turn the row is hidden (below). Canvas units: about 0.75 px each at 1440 wide. */
+[data-hud='betting'] [data-v2b] { --hue: var(--v2-line); }
+[data-hud='betting'] [data-v2b='fold'] { --hue: var(--tbl-fold); }
+[data-hud='betting'] [data-v2b='call'] { --hue: var(--tbl-call); }
+[data-hud='betting'] [data-v2b='raise'] { --hue: var(--tbl-raise); }
+[data-hud='betting'] [data-v2b].v2-allin { --hue: #ff4fa3; }
 [data-hud='betting'] [data-v2b] {
-  border-radius: 200px; transition: filter 0.1s, opacity 0.15s, border-color 0.15s;
-  background: color-mix(in srgb, var(--v2-shade) 90%, transparent); border: 6px solid var(--v2-line);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+  border-radius: 200px;
+  background: linear-gradient(color-mix(in srgb, var(--hue) 30%, var(--v2-panel-solid)), color-mix(in srgb, var(--hue) 12%, var(--v2-panel-solid)));
+  border: 4px solid var(--hue);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--hue) 32%, transparent), inset 0 2px 0 rgba(255, 255, 255, 0.08);
 }
-[data-hud='betting'] [data-v2b] .u-text { font-family: var(--v2-display) !important; font-weight: var(--v2-display-weight) !important; letter-spacing: 0.03em; color: var(--v2-ink2) !important; }
-[data-hud='betting']:not(.v2-off) [data-v2b='fold'] { border-color: var(--tbl-fold); }
-[data-hud='betting']:not(.v2-off) [data-v2b='fold'] .u-text { color: var(--tbl-fold) !important; }
-[data-hud='betting']:not(.v2-off) [data-v2b='call'] { border-color: var(--tbl-call); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4), 0 0 26px color-mix(in srgb, var(--tbl-call) 30%, transparent); }
-[data-hud='betting']:not(.v2-off) [data-v2b='call'] .u-text { color: var(--tbl-call) !important; }
-[data-hud='betting']:not(.v2-off) [data-v2b='raise'] {
-  border-color: var(--tbl-raise); background: color-mix(in srgb, var(--tbl-raise) 22%, color-mix(in srgb, var(--v2-shade) 90%, transparent));
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4), 0 0 30px color-mix(in srgb, var(--tbl-raise) 35%, transparent);
-}
-[data-hud='betting']:not(.v2-off) [data-v2b='raise'] .u-text { color: var(--tbl-raise) !important; }
-[data-hud='betting'] [data-v2b].v2-allin { border-color: #ff4fa3 !important; background: color-mix(in srgb, #ff4fa3 22%, color-mix(in srgb, var(--v2-shade) 90%, transparent)) !important; }
-[data-hud='betting'] [data-v2b].v2-allin .u-text { color: #ff8ad8 !important; }
-[data-hud='betting'] [data-v2b]:hover:not(.v2-dis) { filter: brightness(1.12); }
+[data-hud='betting'] [data-v2b] .u-text { font-family: var(--v2-display) !important; font-weight: var(--v2-display-weight) !important; letter-spacing: 0.03em; color: #fff !important; }
+[data-hud='betting'] [data-v2b='raise']:not(.v2-allin) .u-text { color: var(--v2-gold) !important; }
+[data-hud='betting'] [data-v2b]:hover:not(.v2-dis) { filter: brightness(1.15); }
 [data-hud='betting'] [data-v2b].v2-dis { opacity: 0.45; filter: none; }
 /* Not your turn (including right after you act): the row steps out of the way so it never reads as "press me". */
 [data-hud='betting'] [data-name='Buttons'], [data-hud='betting'] [data-v2b] { transition: opacity 0.18s ease-out, transform 0.18s ease-out, filter 0.1s; }
@@ -153,7 +150,7 @@ html[data-orient='portrait'] .v2-pot [data-name='bar'] { scale: 1.75; }
 /* Your last 5 seconds (seatHud.ts sets html[data-turn-late]; webAudio.ts beeps once a second): your plate and the action
    row glow red with a heartbeat, so a timeout is hard to miss. */
 html[data-turn-late] [data-hud='betting']:not(.v2-off) [data-v2b] { animation: v2hud-late 0.5s ease-in-out infinite alternate; }
-@keyframes v2hud-late { to { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4), 0 0 60px color-mix(in srgb, var(--v2-bad) 75%, transparent); filter: brightness(1.15); } }
+@keyframes v2hud-late { to { box-shadow: 0 0 18px color-mix(in srgb, var(--hue) 32%, transparent), 0 0 60px color-mix(in srgb, var(--v2-bad) 75%, transparent); filter: brightness(1.15); } }
 html[data-turn-late] .v2-seat.v2-turn [data-name='Name_bar'] { border-color: var(--v2-bad) !important; animation: v2hud-late-plate 0.5s ease-in-out infinite alternate; }
 @keyframes v2hud-late-plate { from { box-shadow: 0 0 0 12px color-mix(in srgb, var(--v2-bad) 25%, transparent), 0 0 60px color-mix(in srgb, var(--v2-bad) 45%, transparent); } to { box-shadow: 0 0 0 22px color-mix(in srgb, var(--v2-bad) 40%, transparent), 0 0 130px color-mix(in srgb, var(--v2-bad) 85%, transparent); } }
 @media (prefers-reduced-motion: reduce) { html[data-turn-late] [data-hud='betting']:not(.v2-off) [data-v2b], html[data-turn-late] .v2-seat.v2-turn [data-name='Name_bar'] { animation: none; box-shadow: 0 0 40px var(--v2-bad); } }
@@ -235,21 +232,6 @@ html[data-orient='portrait'] .v2hud-raise { width: calc(100% - 16px); font-size:
    inline from seatHud/potHud; this wins over it). */
 .v2-seat [data-name='Amount_txt'] > .u-text, .v2-pot [data-name='bar'] .u-text { font-family: var(--v2-display) !important; font-weight: var(--v2-display-weight) !important; }
 
-/* ---------------------------------------------------------------- Action row (the game's plate style, polished)
-   A pill filled with a rich tint of the action's colour (Fold red, Call blue, Raise gold, All-in hot), a thin lighter
-   ring, a top highlight and a soft darker base, and a white label centred in the pill. Canvas units (1920 × 1080 ref). */
-[data-hud='betting'] [data-v2b] { --hue: var(--v2-line); border-width: 4px; }
-[data-hud='betting']:not(.v2-off) [data-v2b='fold'] { --hue: var(--tbl-fold); --base: #4a1230; }
-[data-hud='betting']:not(.v2-off) [data-v2b='call'] { --hue: var(--tbl-call); --base: #10286a; }
-[data-hud='betting']:not(.v2-off) [data-v2b='raise'] { --hue: var(--tbl-raise); --base: #6a3c00; }
-[data-hud='betting'] [data-v2b].v2-allin { --hue: #ff4fa3; --base: #5a0a3a; }
-[data-hud='betting']:not(.v2-off) [data-v2b] {
-  /* Each action mixes into its own dark shade (--base), so gold stays gold instead of going brown over violet. */
-  background: linear-gradient(180deg, color-mix(in srgb, var(--hue) 70%, var(--base, #2a1670)) 0%, color-mix(in srgb, var(--hue) 38%, var(--base, #1a0e4c)) 100%) !important;
-  border-color: color-mix(in srgb, var(--hue) 70%, #fff) !important;
-  box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.22), inset 0 -7px 0 rgba(10, 4, 40, 0.28), 0 12px 26px rgba(10, 4, 40, 0.45), 0 0 30px color-mix(in srgb, var(--hue) 35%, transparent);
-}
-[data-hud='betting']:not(.v2-off) [data-v2b] .u-text { color: #fff !important; text-shadow: 0 3px 0 color-mix(in srgb, var(--base, #0a0428) 80%, transparent); }
 /* The label's node keeps Unity's box (offset and wider than the pill): fill the pill and centre the text in it. */
 [data-hud='betting'] [data-v2b] .u-node:has(> .u-text) { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; transform: none !important; }
 [data-hud='betting'] [data-v2b] .u-text { inset: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; line-height: 1 !important; padding: 0 !important; }
@@ -281,3 +263,8 @@ html[data-orient='portrait'] .v2hud-raise { width: calc(100% - 16px); font-size:
 /* Avatar: a real border — white inner line, violet ring, dark outer edge — gold while it's this player's turn. */
 .v2-seat [data-name='U_Icon'] { box-shadow: 0 0 0 12px rgba(255, 255, 255, 0.95), 0 0 0 34px #7c4ff0, 0 0 0 42px rgba(20, 8, 60, 0.55), 0 14px 40px rgba(0, 0, 0, 0.45); }
 .v2-seat.v2-turn [data-name='U_Icon'] { box-shadow: 0 0 0 12px rgba(255, 255, 255, 0.95), 0 0 0 34px var(--v2-gold), 0 0 0 42px rgba(60, 30, 0, 0.55), 0 14px 40px rgba(0, 0, 0, 0.45); }
+/* ---------------------------------------------------------------- reactions (emoji stickers over a seat)
+   The sticker alone (no backdrop), drawn big with a dark shadow round its edge so it reads over any felt, card or room
+   art. Canvas units (about 0.15 px each). */
+.v2-react { z-index: 5; }
+.v2-react > .u-gfx { filter: drop-shadow(0 0 14px rgba(10, 4, 40, 0.75)) drop-shadow(0 18px 16px rgba(10, 4, 40, 0.5)); }

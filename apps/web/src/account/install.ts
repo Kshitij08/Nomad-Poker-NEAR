@@ -14,6 +14,7 @@ import { ApiRequestError, localTokenStore, NomadSession, type WalletSigner } fro
 
 export const API_PRESETS: Record<string, string> = {
   staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev',
+  production: 'https://nomad-poker-api.kshitijiitgn.workers.dev',
   local: 'http://localhost:8788',
 };
 
@@ -53,7 +54,9 @@ export function nomadBackendApi(session: NomadSession) {
 export function apiBase(params: URLSearchParams): string | null {
   const p = params.get('api');
   if (p && API_PRESETS[p]) return API_PRESETS[p];
-  if (!p && params.get('netServer') === 'staging') return API_PRESETS.staging; // the staging game server signs in here
+  // A game server preset signs in at the same stage's API.
+  if (!p && params.get('netServer') === 'staging') return API_PRESETS.staging;
+  if (!p && params.get('netServer') === 'production') return API_PRESETS.production;
   return (p ? endpointParam(params, 'api') : null) ?? buildEndpoint('VITE_API_URL');
 }
 

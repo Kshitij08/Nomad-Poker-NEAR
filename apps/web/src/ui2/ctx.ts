@@ -125,8 +125,9 @@ export function modePill(): string {
  */
 export function topBar(title: string, o: { toggle?: boolean; right?: string; back?: string } = {}): string {
   const mode = o.toggle === true ? modeSeg() : modePill();
-  // Three columns with equal sides (Back | title | mode + coins), so the title sits on the screen's centre line.
-  return `<div class="v2-top"><div class="v2-top-l"><button class="v2-back" data-a="${o.back ? 'go' : 'back'}"${o.back ? ` data-v="${o.back}"` : ''} aria-label="Back">${ico('back', 1.1)}<span class="v2-lbl">Back</span></button></div><h1 class="v2-title"><span class="v2-title-orn">${ico('spade', 0.8)}</span><span class="v2-title-t">${title}</span><span class="v2-title-orn">${ico('spade', 0.8)}</span></h1><div class="v2-top-r">${mode}${o.right ?? coinCap()}</div></div>`;
+  // Three columns with equal sides (Back | title | mode + coins), so the title sits on the screen's centre line. The
+  // title is text only (no icons beside it).
+  return `<div class="v2-top"><div class="v2-top-l"><button class="v2-back" data-a="${o.back ? 'go' : 'back'}"${o.back ? ` data-v="${o.back}"` : ''} aria-label="Back">${ico('back', 1.1)}<span class="v2-lbl">Back</span></button></div><h1 class="v2-title"><span class="v2-title-t">${title}</span></h1><div class="v2-top-r">${mode}${o.right ?? coinCap()}</div></div>`;
 }
 
 /** Runs an async action that returns an error string or null; shows the error in a v2 dialog. */

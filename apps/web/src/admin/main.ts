@@ -9,6 +9,7 @@ import { AdminApi, AdminError, adjustProblem, sessionKey, signed, type AdminRole
 
 const PRESETS: Record<string, string> = {
   staging: 'https://nomad-poker-api-staging.kshitijiitgn.workers.dev',
+  production: 'https://nomad-poker-api.kshitijiitgn.workers.dev',
   local: 'http://localhost:8788',
 };
 

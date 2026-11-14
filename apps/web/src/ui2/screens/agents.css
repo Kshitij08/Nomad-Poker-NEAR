@@ -107,3 +107,4 @@ html[data-orient='portrait'] .v2-ag-main .v2-tab { padding: 0 1em; }
 
 /* Marketplace controls while the Agent service is unreachable: shown, but inert. */
 .v2-ag-mbar.v2-ag-down { opacity: 0.45; pointer-events: none; }
+.v2-ag-off { max-width: 34em; line-height: 1.45; }

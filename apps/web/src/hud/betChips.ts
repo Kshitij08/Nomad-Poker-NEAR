@@ -192,6 +192,11 @@ export class BetChips {
     );
   }
 
+  /** The seats or their cards were laid out again: every bet finds its spot afresh. */
+  resetSpots(): void {
+    for (const c of this.chips) c.spot = null;
+  }
+
   /** Bets cleared without the sweep (new hand, seat hidden). */
   clearAll(): void {
     for (let i = 0; i < this.chips.length; i++) this.setBet(i, 0);
@@ -234,7 +239,10 @@ export class BetChips {
         return;
       }
       potXY ??= pot.screenPivot(camera, w, h);
-      const [sx, sy] = seat.canvas.screenPivot(camera, w, h);
+      // The seat as drawn: its pivot plus the HUD's screen nudge (card clearance, symmetry), so a kept spot moves with it.
+      const piv = seat.canvas.screenPivot(camera, w, h);
+      const sx = piv[0] + seat.canvas.screenOffset[0];
+      const sy = piv[1] + seat.canvas.screenOffset[1];
       const dx = potXY[0] - sx;
       const dy = potXY[1] - sy;
       const d = Math.hypot(dx, dy) || 1;
@@ -260,21 +268,43 @@ export class BetChips {
         const ux = vx / len;
         const uy = vy / len;
         const start = Math.min(PORTRAIT_CHIP_PX * 0.5, len * 0.3);
+        // How far the seat's own box reaches along the line to the pot: a sideways spot starts past it, in front of
+        // the seat (not above or below its plate, which on the top row is off the felt).
+        let reach = 0;
+        for (const r of own) {
+          for (const [cx, cy] of [[r.left, r.top], [r.right, r.top], [r.left, r.bottom], [r.right, r.bottom]] as const) {
+            reach = Math.max(reach, (cx - layerBox.left - ox) * ux + (cy - layerBox.top - oy) * uy);
+          }
+        }
         let at: [number, number] | null = null;
         const spotAt = (dist: number, side: number): [number, number] => [ox + ux * dist - uy * side * (ch + 6), oy + uy * dist + ux * side * (ch + 6)];
-        // A bet keeps the spot it was first placed at for the whole street: cards dealt over it (the blinds sit there
-        // while the hole cards fly out) never push it around. A new bet or a new street finds a spot afresh.
+        // A bet keeps the spot it was first placed at for the whole street: the search already keeps clear of where
+        // every seat's cards will land, so the deal, a status tag or a raise never push it around. Only a new layout
+        // (resetSpots: seats re-placed) or a new street finds a spot afresh.
         if (c.spot) at = [sx + c.spot.dx, sy + c.spot.dy];
-        // Otherwise search again: nearest the seat wins; at each distance the line itself before a nudge to either side.
-        for (let dist = start; dist < len * 0.85 && !at; dist += 4) {
-          for (const side of [0, 1, -1]) {
-            const p = spotAt(dist, side);
-            if (clear(p[0], p[1])) {
-              at = p;
-              c.spot = { dx: p[0] - sx, dy: p[1] - sy };
-              break;
+        // Otherwise search again: on the straight line toward the pot first (past the seat's cards if they're in the
+        // way), and only if the whole line is blocked, nudged to either side, a chip's height further each time (a
+        // pair landing beside its plate can cover the whole line); nearest the seat wins.
+        for (const sides of [[0], [1, -1], [2, -2], [3, -3], [4, -4]]) {
+          for (let dist = start; dist < len * 0.85 && !at; dist += 4) {
+            // Of the two sides, the one nearer the pot first (the felt, not off the table's edge).
+            const order = sides.length < 2 ? sides : [...sides].sort((a, b) => {
+              const pa = spotAt(dist, a);
+              const pb = spotAt(dist, b);
+              return Math.hypot(pa[0] - potXY![0], pa[1] - potXY![1]) - Math.hypot(pb[0] - potXY![0], pb[1] - potXY![1]);
+            });
+            for (const side of order) {
+              const p = spotAt(dist, side);
+              // A sideways spot must still be well on the way to the pot (not round the seat's back, off the felt).
+              if (side && (dist < reach || Math.hypot(p[0] - potXY![0], p[1] - potXY![1]) > len * 0.85)) continue;
+              if (clear(p[0], p[1])) {
+                at = p;
+                c.spot = { dx: p[0] - sx, dy: p[1] - sy };
+                break;
+              }
             }
           }
+          if (at) break;
         }
         if (!at) {
           // Nowhere clear: the spot just past the seat's own box.

@@ -13,23 +13,24 @@
 .v2-mm-right > .v2-seg > button { display: flex; align-items: center; padding: 0 1em; }
 .v2-mm-right > .v2-ib { width: var(--mm-h); }
 .v2-rplayer {
-  background: var(--v2-panel); border: 0.12em solid var(--v2-line); backdrop-filter: blur(0.4em); border-radius: var(--v2-r-lg); padding: 0.55em 0.8em;
+  background: var(--v2-home-panel); border: 0.12em solid var(--v2-line); backdrop-filter: blur(0.4em); border-radius: var(--v2-r-lg); padding: 0.55em 0.8em;
   width: 21em; max-width: 100%; display: flex; flex-direction: column; gap: 0.45em; justify-self: start;
 }
 .v2-rplayer > button { width: 100%; text-align: left; }
 .v2-pl-name { font-size: 1.15em; display: block; }
-/* The Nomad Poker logo (public/assets/menu/galaxy/nomad_poker_logo.webp). */
+/* The flat one-line Nomad Poker logo (public/assets/menu/galaxy/nomad_poker_logo_flat.webp, ~6.6 : 1), as tall as the
+   top bar's player card (the h1's em is 2× the bar's). */
 .v2-rlogo { margin: 0; display: flex; justify-content: center; line-height: 0; }
-.v2-rlogo img { height: 4.8em; width: auto; max-width: 100%; display: block; filter: drop-shadow(0 0.25em 0.6em rgba(0, 0, 0, 0.45)); user-select: none; -webkit-user-drag: none; }
+.v2-rlogo img { height: 1.65em; width: auto; max-width: 100%; display: block; filter: drop-shadow(0 0.25em 0.6em rgba(0, 0, 0, 0.45)); user-select: none; -webkit-user-drag: none; }
 
 /* Dock: one full-width row; the groups share the width so the items spread evenly at any aspect ratio. */
 .v2-rdock { display: flex; gap: 1em; align-items: stretch; flex: 0 0 auto; padding-top: 0.6em; }
 .v2-rdock > .v2-dg { flex: 3 1 0; min-width: 0; }
 .v2-rdock > .v2-dg:nth-child(2) { flex-grow: 4; }
 .v2-rdock > .v2-dg.v2-shopg { flex: 1.1 1 0; }
-.v2-dg { position: relative; display: flex; gap: 0.3em; background: var(--v2-panel); border: 0.12em solid var(--v2-line); backdrop-filter: blur(0.4em); border-radius: var(--v2-r-lg); padding: 1em 0.6em 0.45em; }
+.v2-dg { position: relative; display: flex; gap: 0.3em; background: var(--v2-home-panel); border: 0.12em solid var(--v2-line); backdrop-filter: blur(0.4em); border-radius: var(--v2-r-lg); padding: 1em 0.6em 0.45em; }
 .v2-dg.v2-shopg { border-color: var(--v2-gold); box-shadow: 0 0 1em color-mix(in srgb, var(--v2-gold) 30%, transparent); }
-.v2-dgl { text-transform: uppercase; letter-spacing: 0.1em; position: absolute; left: 1em; top: -0.75em; background: var(--v2-bg-mid); border: 0.1em solid var(--v2-line); border-radius: var(--v2-r-sm); padding: 0.05em 0.6em; font-size: 0.72em; font-weight: 900; letter-spacing: 0.12em; color: var(--v2-ink2); }
+.v2-dgl { text-transform: uppercase; letter-spacing: 0.1em; position: absolute; left: 1em; top: -0.75em; background: var(--v2-home-panel-solid); border: 0.1em solid var(--v2-line); border-radius: var(--v2-r-sm); padding: 0.05em 0.6em; font-size: 0.72em; font-weight: 900; letter-spacing: 0.12em; color: var(--v2-ink2); }
 .v2-dk { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25em; border-radius: var(--v2-r-md); padding: 0.3em 0.2em; }
 .v2-dk:hover { background: rgba(255, 255, 255, 0.06); }
 .v2-dk-i { position: relative; display: inline-flex; }
@@ -61,9 +62,9 @@ html[data-orient='portrait'] .v2-mm-right > .v2-seg { grid-area: seg; }
 html[data-orient='portrait'] .v2-mm-right > .v2-seg > button { flex: 1; justify-content: center; padding: 0 0.6em; min-height: 0; font-size: 0.95em; }
 html[data-orient='portrait'] .v2-mm-right > .v2-ib { grid-area: gear; width: var(--mm-h); align-self: center; }
 html[data-orient='portrait'] .v2-rlogo { grid-area: logo; }
-html[data-orient='portrait'] .v2-rlogo img { height: 4.6em; }
+html[data-orient='portrait'] .v2-rlogo img { height: auto; width: 100%; max-width: 22em; }
 html[data-orient='portrait'] .v2-rplayer { grid-area: player; width: 100%; }
-html[data-orient='portrait'] .v2-rdock { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4em; padding: 0.7em 0.4em 0.3em; background: color-mix(in srgb, var(--v2-shade) 90%, transparent); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-lg); }
+html[data-orient='portrait'] .v2-rdock { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4em; padding: 0.7em 0.4em 0.3em; background: var(--v2-home-panel); border: 0.12em solid var(--v2-line); border-radius: var(--v2-r-lg); }
 html[data-orient='portrait'] .v2-dg { display: contents; }
 html[data-orient='portrait'] .v2-dgl { display: none; }
 html[data-orient='portrait'] .v2-dk { width: auto; min-width: 0; }
@@ -76,3 +77,22 @@ html[data-orient='portrait'] .v2-rplayer > button:last-child { min-height: 40px;
 /* Portrait: the player card shrinks to its column so the coins / mode / settings column never overlaps it. */
 html[data-orient='portrait'] .v2-rplayer { min-width: 0; overflow: hidden; }
 html[data-orient='portrait'] .v2-rplayer .v2-num { white-space: nowrap; }
+
+/* Player card, slim (round 6): one row as tall as the coins / mode / settings row (--mm-h): the avatar fills its height,
+   the name sits over a compact level bar. The account line moved to the card's tooltip and the profile. */
+.v2-mm-top { --mm-h: 3.3em; }
+:root:root .v2-rplayer { flex-direction: row; align-items: center; gap: 0.6em; height: var(--mm-h); padding: 0.3em 0.75em 0.3em 0.3em; box-sizing: border-box; width: 20em; }
+:root:root .v2-rplayer > button { width: auto; min-height: 0; }
+.v2-rplayer > .v2-pl { flex: 0 0 auto; height: 100%; aspect-ratio: 1; padding: 0; display: block; line-height: 0; }
+.v2-rplayer > .v2-pl > * { width: 100% !important; height: 100% !important; }
+.v2-pl-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 0.2em; }
+.v2-pl-nameb { text-align: left; padding: 0; min-width: 0; display: block; width: 100%; line-height: 1.1; }
+.v2-rplayer .v2-pl-name { font-size: 1em; }
+.v2-pl-lv { width: 100%; gap: 0.4em; padding: 0; font-size: 0.85em; min-height: 0 !important; }
+.v2-pl-lv .v2-lvb { padding: 0.05em 0.4em; }
+.v2-pl-lv .v2-bar { flex: 1; }
+:root:root[data-orient='portrait'] .v2-rplayer { width: 100%; height: max(3.3em, 40px); }
+.v2-page[data-screen='main'] { gap: 0.6em; }
+/* More air between the top-bar pieces (coins, Demo / On-chain, Settings) and around the player card. */
+.v2-mm-right { gap: 1.2em; }
+.v2-mm-top { column-gap: 1.6em; }

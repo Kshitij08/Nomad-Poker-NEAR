@@ -38,7 +38,7 @@ const ROOM_ART_HI: Partial<Record<Theme, string>> = {
 };
 
 /** The room's table background art (the scene the table plays in), or null. */
-function roomArt(theme: Theme): string | null {
+export function roomArt(theme: Theme): string | null {
   const hi = ROOM_ART_HI[theme];
   if (hi) return assetUrl(hi);
   try {

@@ -45,6 +45,7 @@ const login: ScreenDef & { sending: boolean } = {
     ${a.signInWithGoogle ? btn(`${GOOGLE_G} Continue with Google`, 'lg-google', { h: 'blue', dis: busy }) : ''}
     ${btn('Sign in with email', 'lg-email', { h: 'ghost', dis: busy })}` : ''}
     <button class="v2-switch${keep ? ' on' : ''}" role="switch" aria-checked="${keep}"${act('lg-keep')}><i></i>Keep me signed in on this device</button>
+    <p class="v2-login-legal">By playing you agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
   </div>
 </div>`;
   },

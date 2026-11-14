@@ -21,8 +21,12 @@ export interface Env {
   WALLET_CHAIN_ID: string;
   /** Comma-separated Google OAuth client ids (web, Android, iOS). Unset: Google sign-in answers not_configured. */
   GOOGLE_CLIENT_IDS?: string;
-  /** '1' on staging only: email sign-in returns the link instead of mailing it (no mail provider yet). */
+  /** '1' on staging and dev: email sign-in returns the link instead of mailing it. */
   EMAIL_DEV_ECHO?: string;
+  /** Cloudflare Email Service (send_email binding): mails the sign-in links. Unset: email sign-in is not_configured. */
+  EMAIL?: SendEmail;
+  /** The sender for those mails, e.g. "Nomad Poker <no-reply@nomadpoker.fun>" (must be on an onboarded domain). */
+  EMAIL_FROM?: string;
   /** Server secret the daily spin's roll is derived from (HMAC of player and day). */
   SPIN_SECRET?: string;
   /** Earliest a new tournament may start, in seconds (default 600; staging shortens it for test runs). */

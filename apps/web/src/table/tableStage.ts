@@ -1,4 +1,4 @@
-import { Box3, SRGBColorSpace, Vector3, WebGLRenderer, type Object3D } from 'three';
+import { Box3, SRGBColorSpace, Vector3, WebGLRenderer, type Mesh, type Object3D } from 'three';
 import { ticker } from '../anim/tween';
 import { buildTableScene, type TableScene } from '../three/tableScene';
 import { CardModelVisual, preloadCardTextures } from '../three/cardModel';
@@ -68,10 +68,21 @@ export class TableStage {
       anchorTmp.project(this.table.camera);
       return [((anchorTmp.x + 1) / 2) * w, ((1 - anchorTmp.y) / 2) * h];
     };
+    // The pot pill lies under every card: its depth goes down to just above the felt, so a card rising out of the
+    // shoe or flying past is never cut by it (seat HUDs keep their own height, Unity's sorting).
+    const felt = this.table.world.getObjectByName('Table_Canvas/Image');
+    const feltPos = new Vector3();
     this.hudDepth = new HudDepthCompositor(this.renderer, () => [
-      { canvas: this.hud.pot.canvas, visible: true },
       ...this.hud.seats.map((s) => ({ canvas: s.canvas, visible: s.visible })),
     ]);
+    this.hudDepth.floor = () => {
+      if (!felt) return null;
+      const rects: DOMRect[] = [];
+      const pill = this.hud.pot.root.el.querySelector<HTMLElement>('[data-name="bar"]');
+      if (pill && getComputedStyle(this.hud.pot.root.el).visibility !== 'hidden') rects.push(pill.getBoundingClientRect());
+      for (const el of (this.hud.screenLayer.parentElement ?? document).querySelectorAll<HTMLElement>('.v2-betchip:not([hidden]), .v2-potchips:not([hidden])')) rects.push(el.getBoundingClientRect());
+      return { rects, y: felt.getWorldPosition(feltPos).y + 0.02 };
+    };
     this.hud.screenLayer.before(this.hudDepth.overlay);
 
     let dealtRoot: { children: readonly Object3D[] } | null = null;
@@ -105,6 +116,8 @@ export class TableStage {
     this.potTokens.root.visible = false;
     this.seatWorld = sceneData.splines.map((s) => s.seatRootWorldPosition);
     this.portrait = new PortraitTable(this);
+    // Landscape side seats' hole cards land beside their plates (hud/tableHud.ts placeCards).
+    this.hud.onCardSpot = (slot, at) => this.portrait.setCardSpot(slot, at);
 
     // Bet chips keep clear of the dealt cards and the shoe (besides the seats and the pot pill): their screen boxes.
     const box = new Box3();
@@ -121,11 +134,33 @@ export class TableStage {
       }
       return new DOMRect(origin.left + x0, origin.top + y0, x1 - x0, y1 - y0);
     };
+    // A landed card's own four corners on screen (its world box is far bigger: the cards lean toward the camera).
+    const cardRect = (card: Object3D, origin: DOMRect): DOMRect | null => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      card.updateWorldMatrix(true, true);
+      card.traverse((o) => {
+        const g = (o as Mesh).isMesh ? (o as Mesh).geometry : null;
+        if (!g || !o.visible) return;
+        if (!g.boundingBox) g.computeBoundingBox();
+        const b = g.boundingBox!;
+        for (let k = 0; k < 8; k++) {
+          corner.set(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z).applyMatrix4(o.matrixWorld).project(this.table.camera);
+          const px = ((corner.x + 1) / 2) * origin.width;
+          const py = ((1 - corner.y) / 2) * origin.height;
+          x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+        }
+      });
+      return x1 > x0 ? new DOMRect(origin.left + x0, origin.top + y0, x1 - x0, y1 - y0) : null;
+    };
+    this.hud.cardRects = (slot) => {
+      const origin = canvas.getBoundingClientRect();
+      return this.portrait.landedCards(slot).flatMap((c) => cardRect(c, origin) ?? []);
+    };
     const shoe = this.table.world.getObjectByName('DealerSlot') ?? null;
-    this.hud.chipObstacles = () => {
+    this.hud.chipObstacles = (cards) => {
       const origin = canvas.getBoundingClientRect();
       const out: DOMRect[] = [];
-      for (const card of this.dealer.dealtRoot.children) {
+      for (const card of cards ? this.dealer.dealtRoot.children : []) {
         if (!card.visible) continue;
         const r = screenRect(card, origin);
         if (r) out.push(r);

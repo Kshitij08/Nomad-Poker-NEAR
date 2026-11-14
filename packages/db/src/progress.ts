@@ -118,15 +118,20 @@ export async function spinRoll(secret: string, playerId: string, day: number): P
   return mac.getUint32(0) % 1000;
 }
 
-export async function spin(db: D1Database, playerId: string, secret: string, now = Date.now()): Promise<SpinResponse> {
+/**
+ * The daily spin. `unlimited` (the API's `development` stage only, for local testing) skips the once-a-day check and
+ * gives each spin its own roll and ledger key; every other stage keeps one spin per UTC day.
+ */
+export async function spin(db: D1Database, playerId: string, secret: string, now = Date.now(), opts: { unlimited?: boolean } = {}): Promise<SpinResponse> {
   const day = today(now);
   const r = await row(db, playerId, now);
-  if (!DailySpinMath.canSpin(r.last_spin_day, day)) {
+  if (!opts.unlimited && !DailySpinMath.canSpin(r.last_spin_day, day)) {
     return { awarded: false, coins: r.last_spin_coins, label: '', error: 'Come back tomorrow for another spin.', progress: await snapshot(db, playerId, now) };
   }
-  const prize = DailySpinMath.pickPrize(await spinRoll(secret, playerId, day));
+  const prize = DailySpinMath.pickPrize(await spinRoll(secret, opts.unlimited ? `${playerId}:${now}` : playerId, day));
+  const key = opts.unlimited ? `daily_spin:${day}:dev:${now}` : `daily_spin:${day}`;
   await db.batch([
-    postingStatement(db, { playerId, currency: 'coins', delta: prize.coins, reason: 'daily_spin', idempotencyKey: `daily_spin:${day}` }, now),
+    postingStatement(db, { playerId, currency: 'coins', delta: prize.coins, reason: 'daily_spin', idempotencyKey: key }, now),
     db.prepare('UPDATE player_progress SET last_spin_day = ?2, last_spin_coins = ?3, updated_at = ?4 WHERE player_id = ?1').bind(playerId, day, prize.coins, now),
   ]);
   return { awarded: true, coins: prize.coins, label: prize.label, error: '', progress: await snapshot(db, playerId, now) };

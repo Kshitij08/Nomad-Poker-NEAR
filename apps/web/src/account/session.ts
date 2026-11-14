@@ -147,6 +147,11 @@ export class NomadSession {
     return out;
   }
 
+  /** Google sign-in with an ID token from Google Identity Services (links Google when a guest is signed in). */
+  google(idToken: string): Promise<void> {
+    return this.run(async () => this.adopt(await this.request<SessionResponse>('POST', Routes.google, { idToken })));
+  }
+
   emailVerify(token: string): Promise<void> {
     return this.run(async () => this.adopt(await this.request<SessionResponse>('POST', Routes.emailVerify, { token })));
   }

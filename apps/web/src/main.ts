@@ -56,7 +56,14 @@ async function boot(): Promise<void> {
   if (params.get('table') !== '1' && router.has('menu')) await router.navigate('menu');
   else await router.navigate('table', {} satisfies TableScreenParams);
 }
-void boot();
+/** The loading cover (index.html #boot) fades out once the first screen is up, or if boot fails. */
+function hideBootCover(): void {
+  const el = document.getElementById('boot');
+  if (!el) return;
+  el.classList.add('out');
+  window.setTimeout(() => el.remove(), 400);
+}
+void boot().finally(hideBootCover);
 
 /** ?demo=1: scripted hand that exercises every card animation without the engine. */
 function runDemoHand(): void {

@@ -240,6 +240,28 @@ describe('email sign-in', () => {
     env.EMAIL_DEV_ECHO = '';
     expect((await call<ApiErrorBody>('POST', Routes.emailStart, { email: 'a@b.co' })).status).toBe(501);
   });
+
+  it('mails the link through the email binding, one a minute per address', async () => {
+    const sent: { to: string; from: string; subject: string; html?: string; text?: string }[] = [];
+    env.EMAIL_DEV_ECHO = '';
+    env.EMAIL = { send: async (m: (typeof sent)[number]) => (sent.push(m), { messageId: 'm1' }) } as unknown as SendEmail;
+    env.EMAIL_FROM = 'Nomad Poker <no-reply@nomadpoker.fun>';
+    try {
+      const start = await call<EmailStartResponse>('POST', Routes.emailStart, { email: 'Carol@Example.com' });
+      expect(start.status).toBe(200);
+      expect(start.body).toEqual({ sent: true });
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!.to).toBe('carol@example.com');
+      const link = /https?:\/\/[^\s]+emailToken=ne_[^\s]+/.exec(sent[0]!.text ?? '')?.[0];
+      expect(link).toBeTruthy();
+      expect((await call<ApiErrorBody>('POST', Routes.emailStart, { email: 'carol@example.com' })).status).toBe(429);
+      const s = await call<SessionResponse>('POST', Routes.emailVerify, { token: new URL(link!).searchParams.get('emailToken') });
+      expect(s.status).toBe(201);
+    } finally {
+      env.EMAIL = undefined;
+      env.EMAIL_FROM = undefined;
+    }
+  });
 });
 
 describe('ledger', () => {

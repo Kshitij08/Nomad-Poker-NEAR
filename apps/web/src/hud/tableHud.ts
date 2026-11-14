@@ -49,7 +49,14 @@ export interface DomTableHud extends TableHud {
   /** The seats or their deal paths moved (seats slid round the ring): measure the card clearance again. */
   refreshCardClear(): void;
   /** Screen rects (client px) the bet chips keep clear of besides the seats: the pot pill, dealt cards, the shoe. */
-  chipObstacles: (() => DOMRect[]) | null;
+  chipObstacles: ((cards: boolean) => DOMRect[]) | null;
+  /**
+   * Landscape: where a side seat's hole cards should land (CSS px), or null for Unity's spot. TableStage bends the
+   * seat's deal paths there (layout/portraitTable.ts setCardSpot).
+   */
+  onCardSpot: ((slot: number, at: [number, number] | null) => void) | null;
+  /** Landscape: the screen rects (client px) of a slot's hole cards that have landed (empty while they fly). */
+  cardRects: ((slot: number) => DOMRect[]) | null;
 }
 
 export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): DomTableHud {
@@ -79,7 +86,9 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
 
   // Per slot: the seat offset that keeps its hole cards visible above the plate (landscape; null = not measured yet).
   const cardClear: (number | null)[] = seats.map(() => null);
-  const hud = { cardAnchor: null as DomTableHud['cardAnchor'], chipObstacles: null as DomTableHud['chipObstacles'] };
+  const hud = { cardAnchor: null as DomTableHud['cardAnchor'], chipObstacles: null as DomTableHud['chipObstacles'], onCardSpot: null as DomTableHud['onCardSpot'], cardRects: null as DomTableHud['cardRects'] };
+  /** Every seat but yours (landscape): its cards are placed explicitly (placeCards), so it needs no push-down. */
+  const SIDE = (i: number) => i !== 0;
   const clearCards = (i: number, w: number, h: number): number => {
     if (document.documentElement.dataset.orient === 'portrait') return 0; // the portrait layout places cards itself
     const known = cardClear[i];
@@ -88,6 +97,7 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
     const at = hud.cardAnchor?.(i, w, h);
     const plate = s.root.el.querySelector<HTMLElement>('[data-name="Name_bar"]');
     if (!at || !plate || i === 0) return (cardClear[i] = 0); // your own cards are drawn large above your plate
+    if (SIDE(i) && hud.onCardSpot) return (cardClear[i] = 0); // cards beside the plate (placeCards below)
     s.canvas.screenOffset = [0, 0];
     s.canvas.update(camera, w, h);
     const r = plate.getBoundingClientRect();
@@ -107,7 +117,8 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
   // Symmetry (landscape): Unity's seat canvases aren't exact mirror images (positions and the mirrored seats' inner
   // layout), so left / right pairs sat a few to ~35 px off. Once both seats of a pair are on screen, their plates are
   // measured and nudged to mirror positions about the pot's centre line (equal distance out, same height); you (bottom)
-  // and the top seat are centred on it. Cached until the next resize.
+  // and the top seat are centred on it. A seat is measured as its avatar and plate together (what reads as "the
+  // seat"), not the plate alone. Cached until the next resize.
   const sym: ([number, number] | null)[] = seats.map(() => null);
   const PAIRS: [number, number][] = [[1, 7], [2, 6], [3, 5]];
   const plateOf = (i: number): DOMRect | null => {
@@ -116,14 +127,107 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
     if (!s?.visible || !plate) return null;
     for (let n: HTMLElement | null = plate; n && n !== s.root.el; n = n.parentElement) if (n.style.transform.includes('scale(')) return null; // mid pop-in
     const r = plate.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 ? r : null;
+    if (!(r.width > 0 && r.height > 0)) return null;
+    const avEl = s.root.el.querySelector<HTMLElement>('[data-name="bg_circle"]');
+    // The avatar pops in on its own clip: measuring it part-way skews the seat's centre (seats 0 / 4 ended up ~60 px
+    // off the pot's line).
+    for (let n: HTMLElement | null = avEl; n && n !== s.root.el; n = n.parentElement) if (n.style.transform.includes('scale(')) return null;
+    const av = avEl?.getBoundingClientRect();
+    if (!av || !av.width) return r;
+    const l = Math.min(r.left, av.left);
+    const tp = Math.min(r.top, av.top);
+    return new DOMRect(l, tp, Math.max(r.right, av.right) - l, Math.max(r.bottom, av.bottom) - tp);
   };
+  // Other seats' hole cards stand just above their plate, on the avatar's side: the pair's bottom edge rests on the
+  // plate's top edge and its near side sits next to the avatar (as if the player holds them). placeCards makes the
+  // first guess; once the pair has landed, checkCards measures it on screen and nudges it to that exact spot.
+  const spots: ([number, number] | null)[] = seats.map(() => null);
+  /** Per slot: how many nudges its landed pair has had (capped), or -1 once it sits where it should. */
+  const checked: number[] = seats.map(() => 0);
+  const seatParts = (i: number) => {
+    const s = seats[i];
+    const plate = s?.root.el.querySelector<HTMLElement>('[data-name="Name_bar"]')?.getBoundingClientRect();
+    const av = s?.root.el.querySelector<HTMLElement>('[data-name="bg_circle"]')?.getBoundingClientRect();
+    if (!plate || !plate.width || !av || !av.width) return null;
+    // The plate runs from the avatar outward: cards go on the plate, right beside the avatar.
+    const dir = av.left + av.width / 2 < plate.left + plate.width / 2 ? 1 : -1;
+    return { plate, av, dir, edge: dir > 0 ? av.right : av.left };
+  };
+  const placeCards = (i: number) => {
+    if (!SIDE(i) || !hud.onCardSpot) return;
+    const parts = seatParts(i);
+    if (!parts || !plateOf(i)) return;
+    const box = root.getBoundingClientRect();
+    const h = root.clientHeight;
+    const pairW = h * 0.115; // first guess at the pair's size on screen; checkCards corrects it once they land
+    const pairH = h * 0.125;
+    const [ox, oy0] = sym[i] ?? [0, 0];
+    let oy = oy0;
+    // A seat too near the top of the screen slides down until its cards fit above it.
+    const need = Math.ceil(h * 0.015 + pairH - (parts.plate.top - box.top));
+    if (need > 0) {
+      oy += need;
+      sym[i] = [ox, oy];
+    }
+    const x = parts.edge + parts.dir * (pairW / 2 + h * 0.01) - box.left;
+    const y = parts.plate.top + (oy - oy0) - pairH / 2 - box.top;
+    spots[i] = [x, y];
+    checked[i] = 0;
+    hud.onCardSpot(i, [Math.round(x), Math.round(y)]);
+    chips.resetSpots();
+  };
+  const checkCards = () => {
+    if (!hud.cardRects || !hud.onCardSpot) return;
+    const h = root.clientHeight;
+    for (let i = 1; i < seats.length; i++) {
+      const at = spots[i];
+      if (!at || !seats[i]!.visible) continue;
+      const rects = hud.cardRects(i);
+      if (rects.length < 2) {
+        if (checked[i]! < 0) checked[i] = 0; // between hands: check the next pair too
+        continue;
+      }
+      if (checked[i]! < 0 || checked[i]! >= 6) continue;
+      const parts = seatParts(i);
+      if (!parts) continue;
+      const l = Math.min(...rects.map((r) => r.left));
+      const r = Math.max(...rects.map((q) => q.right));
+      const bottom = Math.max(...rects.map((q) => q.bottom));
+      const want = parts.edge + parts.dir * ((r - l) / 2 + h * 0.008);
+      const dx = want - (l + r) / 2;
+      const dy = parts.plate.top - h * 0.004 - bottom;
+      if (Math.abs(dx) < 2 && Math.abs(dy) < 2) {
+        checked[i] = -1;
+        continue;
+      }
+      checked[i]!++;
+      at[0] += dx;
+      at[1] += dy;
+      hud.onCardSpot(i, [Math.round(at[0]), Math.round(at[1])]);
+      chips.resetSpots();
+    }
+  };
+  let visibleMask = '';
   const measureSymmetry = () => {
+    // Someone sat down or left: lay the seats (and their cards) out again.
+    const mask = seats.map((s) => (s.visible ? 1 : 0)).join('');
+    if (mask !== visibleMask) {
+      visibleMask = mask;
+      sym.fill(null);
+    }
     if (document.documentElement.dataset.orient === 'portrait') return;
     const pill = pot.root.el.querySelector<HTMLElement>('[data-name="bar"]')?.getBoundingClientRect();
     if (!pill || !pill.width) return;
     const mid = pill.left + pill.width / 2;
     for (const [a, b] of PAIRS) {
+      if (sym[a] && sym[b]) continue;
+      // A seat whose mirror partner is empty keeps its own place.
+      for (const [x, y] of [[a, b], [b, a]] as const) {
+        if (!sym[x] && !seats[y]?.visible && cardClear[x] !== null && plateOf(x)) {
+          sym[x] = [0, 0];
+          placeCards(x);
+        }
+      }
       if (sym[a] && sym[b]) continue;
       if (cardClear[a] === null || cardClear[b] === null) continue;
       const ra = plateOf(a);
@@ -132,16 +236,22 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
       const L = ra.left + ra.width / 2 - mid;
       const R = rb.left + rb.width / 2 - mid;
       const out = (Math.abs(L) + Math.abs(R)) / 2;
-      const ya = ra.top + ra.height / 2;
-      const yb = rb.top + rb.height / 2;
+      // Heights by the plate's line (the avatar can sit lower on one side's art).
+      const ya = ra.bottom;
+      const yb = rb.bottom;
       const y = (ya + yb) / 2;
       sym[a] = [Math.round(-out - L), Math.round(y - ya)];
       sym[b] = [Math.round(out - R), Math.round(y - yb)];
+      placeCards(a);
+      placeCards(b);
     }
     for (const i of [0, 4]) {
       if (sym[i] || cardClear[i] === null) continue;
       const r = plateOf(i);
-      if (r) sym[i] = [Math.round(mid - (r.left + r.width / 2)), 0];
+      if (r) {
+        sym[i] = [Math.round(mid - (r.left + r.width / 2)), 0];
+        placeCards(i);
+      }
     }
   };
 
@@ -149,6 +259,8 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
     const w = root.clientWidth;
     const h = root.clientHeight;
     camera.updateMatrixWorld();
+    // The pot pill sits a little lower than Unity's spot (landscape), clear of the deal slot the cards rise through.
+    pot.canvas.screenOffset = [0, document.documentElement.dataset.orient === 'portrait' ? 0 : Math.round(h * 0.022)];
     pot.canvas.update(camera, w, h);
     seats.forEach((s, i) => {
       if (!s.visible) return;
@@ -158,6 +270,7 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
       s.canvas.update(camera, w, h);
     });
     measureSymmetry();
+    if (document.documentElement.dataset.orient !== 'portrait') checkCards();
     if (!showCards.el.hidden) {
       const me = seats[0];
       const own = me?.visible ? me.occupiedRects() : []; // plate, status chip ("Fold"), D/SB/BB token, avatar
@@ -166,7 +279,20 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
     }
     chips.update(camera, w, h, seats, pot.canvas, () => {
       const pill = pot.root.el.querySelector<HTMLElement>('[data-name="bar"]') ?? pot.root.el;
-      return [pill.getBoundingClientRect(), ...(hud.chipObstacles?.() ?? [])];
+      // Where each seat's hole cards land, cards dealt or not: a bet placed before the deal (the blinds) never ends up
+      // under the cards that fly in later.
+      const box = root.getBoundingClientRect();
+      const landing: DOMRect[] = [];
+      // Landscape sizes the pair by the viewport height; portrait by its width (the phone table is fitted across).
+      const portrait = document.documentElement.dataset.orient === 'portrait';
+      const [pw, ph] = portrait ? [w * 0.17, w * 0.15] : [h * 0.13, h * 0.14];
+      seats.forEach((s, i) => {
+        if (!s.visible) return;
+        const at = hud.cardAnchor?.(i, w, h);
+        const k = i === 0 ? (portrait ? 1.7 : 1.25) : 1; // your own pair is drawn bigger
+        if (at) landing.push(new DOMRect(box.left + at[0] - (pw * k) / 2, box.top + at[1] - (ph * k) / 2, pw * k, ph * k));
+      });
+      return [pill.getBoundingClientRect(), ...landing, ...(hud.chipObstacles?.(!landing.length) ?? [])];
     });
   };
 
@@ -187,6 +313,20 @@ export function createTableHud(root: HTMLElement, camera: PerspectiveCamera): Do
     },
     set chipObstacles(fn) {
       hud.chipObstacles = fn;
+    },
+    get onCardSpot() {
+      return hud.onCardSpot;
+    },
+    set onCardSpot(fn) {
+      hud.onCardSpot = fn;
+      cardClear.fill(null);
+      sym.fill(null);
+    },
+    get cardRects() {
+      return hud.cardRects;
+    },
+    set cardRects(fn) {
+      hud.cardRects = fn;
     },
     seats,
     pot,

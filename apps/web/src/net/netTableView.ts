@@ -25,7 +25,8 @@ import { planSeats, type SeatPlan } from '../table/seatSpread';
 export const LOCAL_PERSPECTIVE_SLOT = 0;
 
 /** Reaction bubble size multiplier over the Unity bubble (360 units). */
-const BUBBLE_SCALE = 1.5;
+/** Reaction stickers drawn this much bigger than Unity's, on a light disc (v2hud.css .v2-react) so they read at a glance. */
+const BUBBLE_SCALE = 2;
 const REACTIONS = (HUD_DATA as unknown as { reactions: { bubbleSeconds: number; popSeconds: number; popFromScale: number; bubbleSize: number; bubbleHeight: number; entries: { id: number; sprite: string }[] } }).reactions;
 
 export class NetTableView implements NetTableViewPort {
@@ -380,6 +381,7 @@ export class ReactionBubbles {
         fillMethod: '', fillAmount: 1, fillOrigin: 0, fillClockwise: true,
       };
       node.el.style.pointerEvents = 'none';
+      node.el.classList.add('v2-react');
       hud.root.add(node); // SetAsLastSibling: over the avatar disc and the win medal
       b = { node, pop: null, timer: null };
       this.bubbles.set(slot, b);

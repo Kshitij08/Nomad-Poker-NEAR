@@ -248,17 +248,26 @@ function tRow(x: TournamentInfo, o: { action?: string; pill?: string } = {}): st
   })();
   const d = new Date(x.startsAtUnix * 1000);
   const date = `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-  return `<div class="v2-trow${exp ? ' exp' : ''}">
-  <div class="v2-tr1"><b class="v2-tn v2-ellip">${esc(x.name)}</b><span class="v2-rtag ${SPEED_CLS[x.speed] ?? 'violet'}">${speedShort(x.speed)}</span>${x.entryFee === 0 ? '<span class="v2-rtag">Freeroll</span>' : ''}${x.visibility === 'private' ? '<span class="v2-rtag">Private</span>' : ''}${o.pill ?? ''}
+  // Card look (styling only): the speed sets the accent hue; "live" (playing now, or your table is ready) glows and
+  // "soon" (under 5 minutes to go) warms the countdown chip.
+  const playing = x.status === 'running' || x.status === 'locked';
+  const left = x.startsAtUnix - Date.now() / 1000;
+  const live = !past(x) && (playing || (isRegistered(x) && x.serverReady));
+  const soon = !past(x) && !playing && left < 300;
+  const state = past(x) ? ' past' : live ? ' live' : soon ? ' soon' : '';
+  const when = past(x) ? `<div class="v2-tc v2-twhen"><small>STATUS</small><b>${x.status === 'cancelled' ? 'Cancelled' : 'Finished'}</b></div>`
+    : `<div class="v2-tc v2-twhen"><small>STARTS IN</small><b class="v2-tcd${playing ? ' on' : soon ? ' warm' : ''}"><i></i>${esc(playing ? 'Playing now' : until(x))}</b></div>`;
+  return `<div class="v2-trow sp-${SPEED_CLS[x.speed] ?? 'violet'}${state}${exp ? ' exp' : ''}">
+  <div class="v2-tr1"><b class="v2-tn v2-ellip">${esc(x.name)}</b><span class="v2-rtag ${SPEED_CLS[x.speed] ?? 'violet'}">${speedShort(x.speed)}</span>${x.entryFee === 0 ? '<span class="v2-rtag free">Freeroll</span>' : ''}${x.visibility === 'private' ? '<span class="v2-rtag">Private</span>' : ''}${o.pill ?? ''}
     <span class="v2-grow"></span><span class="v2-tdate">${ico('cal2', 1.3)} ${esc(date)}</span>
     <button class="v2-ticon"${act('t-share', x.id)} aria-label="Share ${esc(x.name)}">${ico('share', 1.25)}</button>
     <button class="v2-ticon"${act('t-exp', x.id)} aria-label="${exp ? 'Hide' : 'Show'} details" aria-expanded="${exp}">${ico(exp ? 'chevup' : 'chev', 1.3)}</button></div>
   <div class="v2-tr2">
-    <div class="v2-tc"><small>ENTRY FEE</small>${money(x.entryFee)}</div>
-    <div class="v2-tc"><small>PRIZE POOL</small>${prizeMoney(x.prizePool)}</div>
-    <div class="v2-tc"><small>PLAYERS</small><b>${x.players} / ${x.maxPlayers}</b><div class="v2-bar v2-tbar"><i style="width:${fill}%"></i></div></div>
-    ${past(x) ? `<div class="v2-tc"><small>STATUS</small><b>${x.status === 'cancelled' ? 'Cancelled' : 'Finished'}</b></div>` : `<div class="v2-tc"><small>STARTS IN</small><b>${esc(x.status === 'running' || x.status === 'locked' ? 'Playing now' : until(x))}</b></div>`}
-    <div class="v2-tc"><small>BLINDS</small><b>${blindsText(x.speed)}</b></div>
+    <div class="v2-tc v2-tfee"><small>ENTRY FEE</small>${money(x.entryFee)}</div>
+    <div class="v2-tc v2-tprize"><small>PRIZE POOL</small>${prizeMoney(x.prizePool)}</div>
+    <div class="v2-tc v2-tplr"><small>PLAYERS</small><b>${x.players}<span class="v2-tof"> / ${x.maxPlayers}</span></b><div class="v2-bar v2-tbar${fill >= 100 ? ' full' : ''}"><i style="width:${fill}%"></i></div></div>
+    ${when}
+    <div class="v2-tc v2-tbl"><small>BLINDS</small><b>${blindsText(x.speed)}</b></div>
     <div class="v2-tact">${action}</div>
   </div>
   ${exp ? `<div class="v2-tr3">
@@ -273,7 +282,7 @@ function tRow(x: TournamentInfo, o: { action?: string; pill?: string } = {}): st
 
 function head(on: string): string {
   const chain = onchain();
-  return topBar('Tournaments') + tabs([['t-browse', 'Browse', 'tourn-browse'], ['t-mine', 'My tournaments', 'trophy'], ['t-host', 'Host', 'tourn-host'], ['t-code', 'Join by code', 'tourn-code']], on, 'tab', 'v2-ttabs') +
+  return topBar('Tournaments') + tabs([['t-browse', 'Browse'], ['t-mine', 'My tournaments'], ['t-host', 'Host'], ['t-code', 'Join by code']], on, 'tab', 'v2-ttabs') +
     // Offline the list is the practice backend's example data (some already "registered" or "hosted"): say so.
     (!chain && T.list?.length && T.list.every(isDemo) ? `<div class="v2-card v2-row v2-tnote">${ico('trophy', 1.8)}<span class="v2-grow">Practice tournaments: example events to try the flow while the tournament server is offline.</span></div>` : '') +
     (chain ? `<div class="v2-card v2-row v2-tnote">${ico('sol', 1.8)}<span class="v2-grow">These are Coins tournaments. SOL tournaments, paid from your game balance, have their own list.</span>${btn('SOL tournaments', 't-sol', { h: 'violet', c: 'sm' })}</div>` : '');
