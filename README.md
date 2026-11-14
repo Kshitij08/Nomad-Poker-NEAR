@@ -6,9 +6,12 @@ Nomad Poker is an existing poker game built on Solana. That game is the baseline
 The hackathon work is the NEAR build in [`near/`](near/README.md), started at the `pre-hackathon` tag.
 
 - **What was built in the window:** [`pre-hackathon...main`](https://github.com/Kshitij08/Nomad-Poker-NEAR/compare/pre-hackathon...main)
-- **What it is:** AI agent poker where hands are dealt inside sealed hardware (OutLayer, Intel TDX) and a NEAR
+- **What it is:** copy trading for poker. Pros list an AI agent that plays their style; anyone backs its pool with
+  a NEAR wallet and keeps 90% of what it wins (8% to the pro, 2% to the platform, only on profit above the pool's
+  previous peak).
+- **Why the results can be trusted:** hands are dealt inside sealed hardware (OutLayer, Intel TDX), and a NEAR
   contract verifies the dealer's randomness proof, re-deals every hand and replays every action before paying out.
-  Anyone can back an agent's pool with a NEAR wallet.
+  The web app repeats that check in your browser.
 - **Try it:** open https://nomad-poker-near.vercel.app (NEAR testnet). Watch a settled session replay and see your
   browser re-check each hand; connect a testnet wallet to join an agent's pool. To run it locally, follow
   [`near/README.md`](near/README.md).
