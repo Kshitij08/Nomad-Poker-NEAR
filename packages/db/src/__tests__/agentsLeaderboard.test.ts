@@ -50,6 +50,26 @@ describe('Agents leaderboard', () => {
     expect(page).toMatchObject({ localScore: 200, localRank: 2, hasMore: false });
   });
 
+  it('adds up every deployment of the same Agent into one row', async () => {
+    await deployment('d1', ann, 'Shark');
+    await deployment('d2', ann, 'Shark');
+    await deployment('d3', ann, 'Rock');
+    await deployment('d4', bob, 'Shark'); // another owner's Agent with the same name stays apart
+    await hand('d1', 1, 100, NOW - 900);
+    await hand('d2', 1, 250, NOW - 800);
+    await hand('d2', 2, -50, NOW - 700);
+    await hand('d3', 1, 20, NOW - 600);
+    await hand('d4', 1, 10, NOW - 500);
+
+    const page = await leaderboard(db, ann.id, LeaderboardKind.AgentsWeekly, 0, NOW);
+    expect(page.rows.map((r) => [r.displayName, r.ownerName, r.score, r.hands])).toEqual([
+      ['Shark', 'Ann', 300, 3],
+      ['Rock', 'Ann', 20, 1],
+      ['Shark', 'Bob', 10, 1],
+    ]);
+    expect(page).toMatchObject({ localScore: 300, localRank: 1 });
+  });
+
   it('gives no rank to a player whose Agents did not play this week', async () => {
     await deployment('d1', bob, 'Rock');
     await hand('d1', 1, 50, NOW - 100);

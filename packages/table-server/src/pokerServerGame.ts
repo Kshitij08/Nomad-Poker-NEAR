@@ -781,7 +781,10 @@ export class PokerServerGame implements IPokerTableServer {
     if (seat < 0) return;
     const last = this.voiceBySeat.get(seat);
     if (last && last.talking === talking && last.muted === muted) return;
-    if (!this.limiter(this.voiceLimiters, source, VoiceStateBurst, VoiceStateRefillSeconds).tryConsume(this.clock.now())) return;
+    // Only the talking flicker is rate limited: a mute change always gets through, or the seat would show the wrong
+    // state until the next change (the client reports each change once).
+    const muteChanged = !last || last.muted !== muted;
+    if (!muteChanged && !this.limiter(this.voiceLimiters, source, VoiceStateBurst, VoiceStateRefillSeconds).tryConsume(this.clock.now())) return;
     this.voiceBySeat.set(seat, { talking, muted });
     this.replicate({ type: 'VoiceState', seat, isTalking: talking, isMuted: muted });
   }
@@ -806,7 +809,8 @@ export class PokerServerGame implements IPokerTableServer {
 
   private clearVoiceState(seat: number): void {
     if (!this.voiceBySeat.delete(seat)) return;
-    this.replicate({ type: 'VoiceState', seat, isTalking: false, isMuted: false });
+    // Gone from the seat: not talking, and not listening either (shown muted).
+    this.replicate({ type: 'VoiceState', seat, isTalking: false, isMuted: true });
   }
 
   // ---- Lobby commands (owner only) -------------------------------------------------------------
@@ -1891,6 +1895,9 @@ export class PokerServerGame implements IPokerTableServer {
 
   /** A late joiner only sees events from now on: replay the public hand onto that peer alone, out of band. */
   private sendHandViewCatchUp(player: PlayerRef): void {
+    // Voice first (whether or not a hand is on): each seat's mute state is sent once, on a change, so a newcomer would
+    // otherwise see everyone as unmuted.
+    if (this.net) for (const [seat, v] of this.voiceBySeat) this.sendCatchUp(player, { type: 'VoiceState', seat, isTalking: v.talking, isMuted: v.muted });
     if (!this.net || !this.engine.handInProgress) return;
     const table = this.engine.table;
     const seats: SeatSnapshot[] = [];

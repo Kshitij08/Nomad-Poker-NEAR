@@ -15,6 +15,8 @@ const SVG = {
   help: '<circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M18 18a6 6 0 1 1 9 5c-2 1.2-3 2.4-3 5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35" r="2.8" fill="currentColor"/>',
   copy: '<rect x="15" y="15" width="25" height="27" rx="4" fill="none" stroke="currentColor" stroke-width="4"/><path d="M10 33V10a4 4 0 0 1 4-4h18" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
   send: '<path d="M6 24L42 8 32 42l-8-14z" fill="currentColor"/>',
+  mic: '<rect x="17" y="5" width="14" height="24" rx="7" fill="currentColor"/><path d="M11 22a13 13 0 0 0 26 0M24 35v7M17 42h14" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+  micOff: '<rect x="17" y="5" width="14" height="24" rx="7" fill="currentColor"/><path d="M11 22a13 13 0 0 0 26 0M24 35v7M17 42h14" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M8 6l32 36" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/>',
   bot: '<rect x="8" y="14" width="32" height="26" rx="9" fill="currentColor"/><rect x="13" y="20" width="22" height="12" rx="6" fill="#2a1a6e"/><circle cx="19" cy="26" r="2.6" fill="#14f1c5"/><circle cx="29" cy="26" r="2.6" fill="#14f1c5"/><rect x="22.5" y="6" width="3" height="8" fill="currentColor"/>',
 };
 

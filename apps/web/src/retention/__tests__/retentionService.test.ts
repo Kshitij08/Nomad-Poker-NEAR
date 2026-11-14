@@ -131,6 +131,19 @@ describe('PlayerProgression', () => {
     expect(r.levelUps.pending).toEqual([3, 4]);
     expect(r.levelUps.next()).toBe(3);
   });
+  it('does not celebrate a level again when the reading dips and comes back (leaving a table)', () => {
+    const { r, wallet, shown } = setup();
+    r.progression.addXp(100, 'test'); // level 2
+    expect(shown).toEqual([2]);
+    r.levelUps.showing = false;
+    const xp = wallet.xp;
+    wallet.xp = 0; // the wallet reloads
+    r.progression.notifyChanged();
+    wallet.xp = xp;
+    r.progression.notifyChanged();
+    expect(shown).toEqual([2]);
+    expect(r.levelUps.pending).toEqual([]);
+  });
   it('does not celebrate or backfill a hydrated account', () => {
     const { r, wallet, shown } = setup();
     wallet.xp = 1000; // arrives from the cloud

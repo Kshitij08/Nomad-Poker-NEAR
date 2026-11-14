@@ -34,7 +34,7 @@ const T = {
   expanded: '' as string,
   mineTab: 'joined' as MineTab,
   // host form
-  hStart: 1,
+  hStart: 3, // 30 minutes
   hFee: 2,
   hMax: 1,
   hPrize: 0,

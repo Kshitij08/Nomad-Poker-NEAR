@@ -65,26 +65,28 @@ export async function leaderboard(db: D1Database, playerId: string, kind: Leader
 }
 
 /**
- * Agents this week: each Agent (deployment) ranked by the Coins it won in hands played since Monday 00:00 UTC, from
- * agent_hands. The viewer's own line is their best Agent.
+ * Agents this week: each Agent ranked by the Coins it won in hands played since Monday 00:00 UTC, from agent_hands.
+ * An Agent is its owner and its name: every deployment of it this week adds to one row. The viewer's own line is
+ * their best Agent.
  */
 async function agentsLeaderboard(db: D1Database, playerId: string, pageIndex: number, now: number): Promise<LeaderboardPage> {
   const pageSize = FreePlayLeaderboardMath.PageSize;
   const page = Math.max(0, Math.trunc(pageIndex) || 0);
   const since = FreePlayLeaderboardMath.weekStartMs(now);
-  const scores = `SELECT h.deployment_id, SUM(h.net) AS score, COUNT(*) AS hands FROM agent_hands h WHERE h.created_at >= ?2 GROUP BY h.deployment_id`;
+  const scores = `SELECT d.owner_id, d.agent_name, SUM(h.net) AS score, COUNT(*) AS hands
+    FROM agent_hands h JOIN agent_deployments d ON d.id = h.deployment_id WHERE h.created_at >= ?2 GROUP BY d.owner_id, d.agent_name`;
   const [rows, mine] = await Promise.all([
     db
       .prepare(
-        `SELECT s.deployment_id, s.score, s.hands, d.agent_name, d.owner_id, p.display_name AS owner, p.picture
-         FROM (${scores}) s JOIN agent_deployments d ON d.id = s.deployment_id JOIN players p ON p.id = d.owner_id
-         ORDER BY s.score DESC, s.hands DESC, s.deployment_id LIMIT ?3 OFFSET ?4`,
+        `SELECT s.score, s.hands, s.agent_name, s.owner_id, p.display_name AS owner, p.picture
+         FROM (${scores}) s JOIN players p ON p.id = s.owner_id
+         ORDER BY s.score DESC, s.hands DESC, s.owner_id, s.agent_name LIMIT ?3 OFFSET ?4`,
       )
       .bind(playerId, since, pageSize + 1, page * pageSize)
-      .all<{ deployment_id: string; score: number; hands: number; agent_name: string; owner_id: string; owner: string; picture: string | null }>(),
+      .all<{ score: number; hands: number; agent_name: string; owner_id: string; owner: string; picture: string | null }>(),
     db
       .prepare(
-        `WITH s AS (${scores}), best AS (SELECT MAX(s.score) AS score FROM s JOIN agent_deployments d ON d.id = s.deployment_id WHERE d.owner_id = ?1)
+        `WITH s AS (${scores}), best AS (SELECT MAX(s.score) AS score FROM s WHERE s.owner_id = ?1)
          SELECT (SELECT score FROM best) AS mine, (SELECT COUNT(*) FROM s WHERE s.score > COALESCE((SELECT score FROM best), 0)) AS above`,
       )
       .bind(playerId, since)

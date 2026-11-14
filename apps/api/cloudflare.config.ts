@@ -22,7 +22,7 @@ const STAGES = {
     writeLimiterNamespace: '7104',
     emailDevEcho: '1',
     // Test runs: tournaments may start a minute out; market strategies qualify after 100 hands, no waiting days.
-    tournamentMinLead: '60',
+    tournamentMinLead: '45',
     listingMinHands: '100',
     listingMinDays: '0',
     // Local SOL shop tests pay the same devnet treasury as staging, read through Solana's public devnet RPC.
@@ -36,7 +36,7 @@ const STAGES = {
     limiterNamespace: '7102',
     writeLimiterNamespace: '7105',
     emailDevEcho: '1',
-    tournamentMinLead: '60',
+    tournamentMinLead: '45',
     listingMinHands: '100',
     listingMinDays: '0',
     // SOL shop purchases (devnet) pay the PER keeper key, a devnet key the project controls (apps/per health shows it).
@@ -51,7 +51,8 @@ const STAGES = {
     limiterNamespace: '7103',
     writeLimiterNamespace: '7106',
     emailDevEcho: '',
-    tournamentMinLead: '',
+    // A tournament may start a minute from now (the host's "In 1 min"); 45 s leaves room for the request's trip.
+    tournamentMinLead: '45',
     listingMinHands: '',
     listingMinDays: '',
     shopTreasury: '',

@@ -24,7 +24,8 @@ import type { TournamentsService } from '../service';
 type MineTab = 'Joined' | 'Hosting' | 'Past';
 
 /** The server rejects a start sooner than 10 minutes. 15 is the shortest option so a slow request still lands. */
-export const HOST_STARTS = [15, 30, 60, 180, 1440];
+/** Start-time choices in minutes (1 and 5 for a quick game with friends; the API's minimum lead is 45 s). */
+export const HOST_STARTS = [1, 5, 15, 30, 60, 180, 1440];
 export const HOST_FEES = [0, 100, 500, 1000, 5000];
 export const HOST_MAX = [8, 16, 24, 30];
 export const HOST_PRIZES = [0, 1000, 5000, 10000];
@@ -60,7 +61,7 @@ class NomadTournaments {
   private mine: MineResult | null = null;
   private browseListX: number | null = null;
   private mineListX: number | null = null;
-  private hostStart = 0;
+  private hostStart = 3; // 30 minutes
   private hostFee = 2;
   private hostMax = 1;
   private hostPrize = 0;

@@ -20,6 +20,7 @@ import { ico } from '../icons';
 import { ui, host, app, S, onchain, topBar, setMode, signedIn, coins, prompt, friendlyError } from '../ctx';
 import type { ScreenDef } from '../install';
 import { solAgentActions, solAgentClose, solAgentHistory, solAgentOpen, solAgentOverview, solAgentStatus } from './solAgent';
+import { startWatch } from '../../economy/nomad/social';
 import './agents.css';
 
 type J = Record<string, unknown>;
@@ -152,7 +153,7 @@ const overview: ScreenDef = {
     const p = st.progress;
     const copying = marketState.copiedStrategyId ? `<div class="v2-xs v2-goldc">Copying ${esc(marketState.copiedName ?? 'a strategy')} · creator 8%, Nomad 2% of profit</div>` : '';
     const live = st.active
-      ? `<div class="v2-card v2-row" style="gap:.8em">${ico('eye', 2.2, 'color:#2ee38a')}<div class="v2-grow"><div class="v2-cap">Live table</div><div style="font-weight:800">${p ? `${esc(p.AssignedTable || 'Coins table')} · hand ${p.HandsPlayed} / ${p.MaxHands} · <span class="${tone(p.NetPnl)}">${signed(p.NetPnl)}</span>` : 'Looking for a table…'}</div></div></div>`
+      ? `<div class="v2-card v2-row" style="gap:.8em">${ico('eye', 2.2, 'color:#2ee38a')}<div class="v2-grow"><div class="v2-cap">Live table</div><div style="font-weight:800">${p ? `${esc(p.AssignedTable || 'Coins table')} · hand ${p.HandsPlayed} / ${p.MaxHands} · <span class="${tone(p.NetPnl)}">${signed(p.NetPnl)}</span>` : 'Looking for a table…'}</div></div>${p?.AssignedTable && p.phase === 'playing' ? btn(`${ico('eye', 0.9)} Watch live`, 'ag-watch', { h: 'violet', c: 'sm', v: p.AssignedTable }) : ''}</div>`
       : `<div class="v2-card v2-row" style="gap:.8em">${ico('robot', 2.2)}<div class="v2-grow"><div class="v2-cap">Not playing</div><div style="font-weight:800">Deploy to send it to a Coins table</div></div></div>`;
     const field = (k: string, label: string) => `<label class="v2-row v2-ag-field"><span class="v2-grow">${label}</span>${input(k, fields[k] ?? '', '0', { cls: 'v2-num', type: 'text', max: 7 })}</label>`;
     const inner = `<div class="v2-ag-ov">
@@ -172,6 +173,10 @@ const overview: ScreenDef = {
   actions: {
     ...shellActions,
     'ag-deploy': () => deployOrStop(),
+    // Spectate the table your Agent sits at (no seat, no Coins); Leave brings you back to the menu.
+    'ag-watch': (v) => {
+      if (v) startWatch(host(), app(), String(v));
+    },
   },
 };
 

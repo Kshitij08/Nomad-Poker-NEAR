@@ -331,6 +331,10 @@ export class NetTableView implements NetTableViewPort {
     root.setActive(true);
     root.layout();
     m = { root, unmute: root.find('Unmute'), mute: root.find('mute'), graph: root.find('Sound_Graph') };
+    // Until the seat reports otherwise it is not sending audio: show it muted, not live.
+    m.mute?.setActive(true);
+    m.unmute?.setActive(false);
+    m.graph?.setActive(false);
     this.mics.set(slot, m);
     return m;
   }
