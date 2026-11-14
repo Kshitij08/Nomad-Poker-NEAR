@@ -91,3 +91,28 @@ describe('escrow amounts', () => {
     expect(buyInError('51', c, table(), seat)).toMatch(/already bought in 150/);
   });
 });
+
+describe('hosted tables', () => {
+  it('makes ids the game server and escrow accept, at the house stakes', async () => {
+    const { newHostedTableId, isHostedTableId, tableForId, hostedTableLink } = await import('../escrow');
+    const id = newHostedTableId(100, (n) => new Uint8Array(n).fill(3));
+    expect(id).toBe('poker-money-st100-hdddddddd');
+    expect(isHostedTableId(id)).toBe(true);
+    expect(isNearMoneyRoom(id)).toBe(true);
+    expect(isHostedTableId('poker-money-st75-habcdefgh')).toBe(false);
+    expect(isHostedTableId('poker-money-st100-hABCDEFGH')).toBe(false);
+    const t = tableForId(id)!;
+    expect(t.id).toBe(id);
+    expect(t.config).toEqual(HOUSE_TABLES[1]!.config);
+    expect(tableForId('poker-money-st50')).toBe(HOUSE_TABLES[0]);
+    expect(tableForId('poker-free-st50')).toBeNull();
+    expect(hostedTableLink(id, 'https://x.app')).toBe('https://x.app/?neartable=poker-money-st100-hdddddddd');
+  });
+
+  it('reads invite lists', async () => {
+    const { parseInvites } = await import('../escrow');
+    expect(parseInvites('')).toBeNull();
+    expect(parseInvites(' Alice.testnet, bob.testnet;alice.testnet ')).toEqual(['alice.testnet', 'bob.testnet']);
+    expect(() => parseInvites('not an account!')).toThrow(/isn't a NEAR account/);
+  });
+});

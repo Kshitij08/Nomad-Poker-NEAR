@@ -70,6 +70,40 @@ export const withdraw = (yocto: bigint) => nearCall(ESCROW_CONTRACT, 'withdraw',
 export const buyIn = (tableId: string, plan: Pick<BuyInPlan, 'amount' | 'attach'>) =>
   nearCall(ESCROW_CONTRACT, 'buy_in', { table_id: tableId, amount: plan.amount.toString() }, plan.attach, 30n);
 
+// ------------------------------------------------------------------ hosted tables
+
+/** A hosted table's id (and game server room): `poker-money-st<stake>-h<8 of a-z0-9>`; the stake sets the blinds. */
+export const HOSTED_TABLE = /^poker-money-st(50|100|500)-h[a-z0-9]{8}$/;
+export const isHostedTableId = (id: string): boolean => HOSTED_TABLE.test(id);
+
+export function newHostedTableId(stake: number, random: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))): string {
+  const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const code = [...random(8)].map((b) => abc[b % abc.length]).join('');
+  return `poker-money-st${stake}-h${code}`;
+}
+
+/** The stake tier a hosted (or house) table id plays at. */
+export function tableForId(id: string): HouseTable | null {
+  const m = /^poker-money-st(50|100|500)(?:-h[a-z0-9]{8})?$/.exec(id);
+  if (!m) return null;
+  const house = HOUSE_TABLES.find((t) => t.id === `poker-money-st${m[1]}`)!;
+  return isHostedTableId(id) ? { ...house, id, name: `Hosted · ${house.name}` } : house;
+}
+
+/** "alice.testnet, bob.near" → accounts (null for an open table); throws on something that isn't an account id. */
+export function parseInvites(text: string): string[] | null {
+  const ids = text.split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  for (const id of ids) if (!/^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/.test(id) || id.length < 2 || id.length > 64) throw new Error(`"${id}" isn't a NEAR account.`);
+  return ids.length ? [...new Set(ids)] : null;
+}
+
+export const createHostedTable = (t: HouseTable, invites: string[] | null) =>
+  nearCall(ESCROW_CONTRACT, 'create_hosted_table', { table_id: t.id, config: t.config, invites }, 0n, 30n);
+export const closeTable = (tableId: string) => nearCall(ESCROW_CONTRACT, 'close_table', { table_id: tableId }, 0n, 30n);
+
+/** The app's link to a hosted table: opens Play for NEAR with it listed. */
+export const hostedTableLink = (id: string, origin = globalThis.location?.origin ?? ''): string => `${origin}/?neartable=${encodeURIComponent(id)}`;
+
 // ------------------------------------------------------------------ amounts
 
 export const chipsToYocto = (chips: number, chipYocto = CHIP_YOCTO): bigint => BigInt(chips) * chipYocto;
