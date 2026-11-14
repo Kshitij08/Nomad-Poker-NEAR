@@ -65,6 +65,11 @@ export default defineConfig(({ mode }) => {
         DRAIN_TOKEN: bindings.secret(),
         // Room spawns, overflow lookups and Agent starts: 30 a minute per address.
         HTTP_LIMITER: bindings.rateLimit({ namespace: s.limiter, simple: { limit: 30, period: 60 } }),
+        // Operator alerts by email (src/alerts.ts): ledger problems, tables that gave up, a daily all-clear. The inbox is
+        // the ALERT_TO secret (.secrets.production.json), a verified Email Routing destination.
+        ...(stage === 'production'
+          ? { ALERT_EMAIL: bindings.sendEmail({ allowedSenderAddresses: ['alerts@nomadpoker.fun'] }), ALERT_FROM: bindings.text('Nomad Poker alerts <alerts@nomadpoker.fun>'), ALERT_TO: bindings.secret() }
+          : {}),
       },
     },
   };
