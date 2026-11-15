@@ -179,6 +179,23 @@ impl Profile {
         Ok(())
     }
 
+    /// The numbers that decide play, as bytes (the style label is left out): main five, position weight, then each
+    /// street as 0 (main numbers) or 1 and its five.
+    pub fn canonical_bytes(&self) -> Vec<u8> {
+        let mut b = self.main().as_array().to_vec();
+        b.push(self.position_weight);
+        for s in 0..4u8 {
+            match self.streets.get(s as usize).copied().flatten() {
+                Some(n) => {
+                    b.push(1);
+                    b.extend_from_slice(&n.as_array());
+                }
+                None => b.push(0),
+            }
+        }
+        b
+    }
+
     /// The same profile with all-null street overrides dropped, so equal strategies compare equal.
     pub fn normalized(mut self) -> Profile {
         if self.streets.iter().all(Option::is_none) {

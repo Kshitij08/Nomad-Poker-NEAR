@@ -73,6 +73,9 @@ struct Hole {
 #[serde(untagged)]
 enum Output {
     Play { ok: bool, hand_id: String, alpha: String, signature_hex: String, actions: String },
+    /// A session also carries the attestation: OutLayer's VRF signature over `act-<digest>` (see
+    /// poker_core::session::attest_digest), made in this run, binding the actions to the deck proof and request.
+    Session { ok: bool, hand_id: String, alpha: String, signature_hex: String, actions: String, attest_alpha: String, attest_signature_hex: String },
     Deal { ok: bool, hand_id: String, commit: String, holes: Vec<Hole> },
     Showdown { ok: bool, hand_id: String, alpha: String, signature_hex: String, players: usize },
     Error { ok: bool, error: String },
@@ -166,14 +169,17 @@ fn session(input: Input) -> Result<Output, String> {
 
     let s = sealed_for("session", &input.hand_id, n, request)?;
     let seed = seed_of(&s)?;
-    let (start, profiles) = if vrf_seating {
+    let (start, seated) = if vrf_seating {
         let order = core::session::seat_order(&seed, n);
-        (game::Rules { stacks: core::session::seat(&listed.stacks, &order), ..listed }, core::session::seat(&profiles, &order))
+        (game::Rules { stacks: core::session::seat(&listed.stacks, &order), ..listed.clone() }, core::session::seat(&profiles, &order))
     } else {
-        (listed, profiles)
+        (listed.clone(), profiles.clone())
     };
-    let actions = agent::play_session(&profiles, &seed, &start, input.hands)?;
-    Ok(Output::Play { ok: true, hand_id: input.hand_id, alpha: s.alpha, signature_hex: s.signature_hex, actions })
+    let actions = agent::play_session(&seated, &seed, &start, input.hands)?;
+    // Attest the actions in this run: a relayer that changes any of them has no matching signature.
+    let digest = core::session::attest_digest(&input.hand_id, &s.signature_hex, &listed, input.hands, input.seating.as_deref(), &profiles, &actions);
+    let (_, attest_signature_hex, attest_alpha) = vrf::random_bytes(&core::session::attest_label(&digest))?;
+    Ok(Output::Session { ok: true, hand_id: input.hand_id, alpha: s.alpha, signature_hex: s.signature_hex, actions, attest_alpha, attest_signature_hex })
 }
 
 fn deal(input: Input) -> Result<Output, String> {

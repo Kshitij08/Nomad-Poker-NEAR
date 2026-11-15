@@ -19,7 +19,8 @@ export class FakeDealer {
     const signature_hex = sigFor(input.hand_id);
     // Seated sessions ("seating": "vrf") are seated from the proof, as the real dealer does.
     const actions = this.poker.simulate({ signature_hex, ...input });
-    return { output: { ok: true, hand_id: input.hand_id, alpha: `vrf:1:fake:session-${input.hand_id}`, signature_hex, actions }, runMs: 1, cost: "1000" };
+    const attest = createHash("sha256").update(`${input.hand_id}|${actions}`).digest("hex");
+    return { output: { ok: true, hand_id: input.hand_id, alpha: `vrf:1:fake:session-${input.hand_id}`, signature_hex, actions, attest_alpha: `vrf:2:fake:act-${attest}`, attest_signature_hex: sigFor(attest) }, runMs: 1, cost: "1000" };
   }
 }
 
@@ -51,10 +52,13 @@ export class FakeTable {
     return { action: "session", hand_id: sessionId, stacks, profiles, button, sb, bb, hands, seating: "vrf" };
   }
 
-  async submitSession({ sessionId, signature_hex, actions }) {
+  async submitSession({ sessionId, signature_hex, actions, attest_alpha }) {
     const s = this.sessions.get(sessionId);
     if (!s) throw new Error("no session");
     if (s.status !== "Pending") throw new Error("session is not pending");
+    // Stands in for the contract's attestation check: backed sessions need the dealer's signature over these actions.
+    const want = createHash("sha256").update(`${sessionId}|${actions}`).digest("hex");
+    if (this.backed.has(sessionId) && attest_alpha !== `vrf:2:fake:act-${want}`) throw new Error("the attestation does not match these actions");
     const { stacks, button, sb, bb, hands, seating } = s.args;
     const order = seating === "vrf" ? this.poker.seatOrder(signature_hex, stacks.length) : null;
     const seated = order ? order.map((i) => stacks[i]) : stacks;

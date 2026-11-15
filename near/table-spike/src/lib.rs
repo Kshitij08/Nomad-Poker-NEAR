@@ -115,6 +115,37 @@ pub fn verify_seated_session(vrf_pubkey: &[u8; 32], session_id: &str, start: &ga
     Ok((SessionResult { hands_played: out.hands.len() as u32, stacks: out.stacks, totals, actions: actions.to_string() }, order))
 }
 
+/// Checks the dealer's attestation of a session: OutLayer's VRF key signed `act-<digest>` for exactly these actions,
+/// this deck proof and this request, under the same account as the deck proof.
+pub fn verify_attestation(vrf_pubkey: &[u8; 32], session_id: &str, alpha: &str, signature_hex: &str, req: &Value, actions: &str, attest_alpha: &str, attest_signature_hex: &str) -> Result<(), String> {
+    let deck: Vec<&str> = alpha.split(':').collect();
+    let att: Vec<&str> = attest_alpha.split(':').collect();
+    if deck.len() != 4 || att.len() != 4 || att[0] != "vrf" || att[2] != deck[2] {
+        return Err("the attestation is not from the dealer's run".into());
+    }
+    let num = |k: &str| req.get(k).and_then(Value::as_u64).unwrap_or(0);
+    let listed = game::Rules {
+        stacks: req.get("stacks").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_u64).collect()).unwrap_or_default(),
+        button: num("button") as usize,
+        sb: num("sb"),
+        bb: num("bb"),
+    };
+    let mut profiles = vec![];
+    for p in req.get("profiles").and_then(Value::as_array).cloned().unwrap_or_default() {
+        let any: core::profile::AnyProfile = near_sdk::serde_json::from_value(p).map_err(|_| "a recorded profile is unreadable")?;
+        profiles.push(any.into_v2());
+    }
+    let digest = core::session::attest_digest(session_id, signature_hex, &listed, num("hands") as usize, req.get("seating").and_then(Value::as_str), &profiles, actions);
+    if att[3] != core::session::attest_label(&digest) {
+        return Err("the attestation does not match these actions".into());
+    }
+    let sig: [u8; 64] = hex::decode(attest_signature_hex).ok().and_then(|b| b.try_into().ok()).ok_or("the attestation is not a 64-byte signature")?;
+    if !env::ed25519_verify(&sig, attest_alpha.as_bytes(), vrf_pubkey) {
+        return Err("the attestation is not signed by OutLayer's randomness key".into());
+    }
+    Ok(())
+}
+
 /// Refuses a request profile that is neither a valid v2 profile nor a `{tight, aggro}` one.
 fn check_profiles(profiles: &[Value]) {
     for (i, p) in profiles.iter().enumerate() {
@@ -287,7 +318,12 @@ impl Table {
     }
 
     /// Settles a session from the dealer's answer. Anyone may send it; a wrong answer changes nothing.
-    pub fn submit_session(&mut self, session_id: String, alpha: String, signature_hex: String, actions: String) -> Value {
+    ///
+    /// Sessions opened by `open_backed_session` are attested (`"attest": "v1"` in the request): the dealer's answer
+    /// carries `attest_alpha` and `attest_signature_hex`, OutLayer's VRF signature over a digest of the actions, the
+    /// deck proof and the request. Without a matching attestation such a session is refused, so a relayer cannot
+    /// change an action even into another legal one.
+    pub fn submit_session(&mut self, session_id: String, alpha: String, signature_hex: String, actions: String, attest_alpha: Option<String>, attest_signature_hex: Option<String>) -> Value {
         let mut all = sessions();
         let s = all.get_mut(&session_id).unwrap_or_else(|| env::panic_str("no session"));
         if s.status != Status::Pending {
@@ -302,7 +338,17 @@ impl Table {
             bb: num("bb"),
         };
         let vrf_seating = req.get("seating").and_then(Value::as_str) == Some("vrf");
-        let verified = verify_seated_session(&self.vrf_pubkey, &session_id, &start, num("hands") as usize, &alpha, &signature_hex, &actions, vrf_seating);
+        // The deck proof and the betting rules first, then (for attested sessions) the dealer's signature over the
+        // actions; nothing changes unless both pass.
+        let verified = verify_seated_session(&self.vrf_pubkey, &session_id, &start, num("hands") as usize, &alpha, &signature_hex, &actions, vrf_seating).and_then(|v| {
+            if req.get("attest").and_then(Value::as_str) != Some("v1") {
+                return Ok(v);
+            }
+            match (&attest_alpha, &attest_signature_hex) {
+                (Some(a), Some(sig)) => verify_attestation(&self.vrf_pubkey, &session_id, &alpha, &signature_hex, &req, &actions, a, sig).map(|_| v),
+                _ => Err("this session needs the dealer's attestation (attest_alpha, attest_signature_hex)".into()),
+            }
+        });
         let (r, order) = match verified {
             Ok((r, order)) => {
                 s.status = Status::Done;
@@ -641,6 +687,70 @@ mod tests {
         agent::play_session(&core::session::seat(profiles, &order), &f.seed, &start, hands).unwrap()
     }
 
+    /// The dealer's attestation for a pending session's actions, as the test VRF key would sign it in that run.
+    fn attestation(t: &Table, id: &str, f: &Fixture, text: &str) -> (String, String) {
+        let req: Value = near_sdk::serde_json::from_str(&t.get_session(id.into()).unwrap().request).unwrap();
+        let num = |k: &str| req[k].as_u64().unwrap_or(0);
+        let listed = game::Rules { stacks: req["stacks"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect(), button: num("button") as usize, sb: num("sb"), bb: num("bb") };
+        let profiles: Vec<agent::Profile> = req["profiles"].as_array().unwrap().iter().map(|p| near_sdk::serde_json::from_value::<core::profile::AnyProfile>(p.clone()).unwrap().into_v2()).collect();
+        let digest = core::session::attest_digest(id, &f.sig_hex, &listed, num("hands") as usize, req["seating"].as_str(), &profiles, text);
+        let alpha = format!("vrf:98399:table.testnet:{}", core::session::attest_label(&digest));
+        let sig = SigningKey::from_bytes(&[42u8; 32]).sign(alpha.as_bytes()).to_bytes();
+        (alpha, hex::encode(sig))
+    }
+
+    /// Settles a session as the feeder does: the dealer's answer with its attestation.
+    fn submit(t: &mut Table, id: &str, f: &Fixture, text: &str) -> Value {
+        let (a, s) = if t.get_session(id.into()).map_or(false, |s| s.status == Status::Pending) { attestation(t, id, f, text) } else { (String::new(), String::new()) };
+        t.submit_session(id.into(), f.alpha.clone(), f.sig_hex.clone(), text.into(), Some(a), Some(s))
+    }
+
+    #[test]
+    fn an_attested_session_refuses_any_other_actions() {
+        let (mut t, seats, _) = backed_table();
+        as_who("table.near", 0, 2);
+        assert_eq!(t.open_backed_session("at".into(), seats, U64(100), 0, U64(1), U64(2), 20)["attest"], "v1");
+        let (f, text) = session_text("at", 100, 20);
+        let (a, s) = attestation(&t, "at", &f, &text);
+        let try_submit = |t: &mut Table, actions: &str, a: Option<String>, s: Option<String>| t.submit_session("at".into(), f.alpha.clone(), f.sig_hex.clone(), actions.into(), a, s);
+        // No attestation.
+        let out = try_submit(&mut t, &text, None, None);
+        assert!(out["error"].as_str().unwrap().contains("needs the dealer's attestation"), "{out}");
+        // An illegal edit fails the replay; a legal edit (another action that still replays) fails the attestation.
+        let out = try_submit(&mut t, &format!("{text},c"), Some(a.clone()), Some(s.clone()));
+        assert!(out["error"].as_str().is_some() && out["ok"] == false, "{out}");
+        let listed = game::Rules { stacks: vec![100; 4], button: 0, sb: 1, bb: 2 };
+        let hands: Vec<Vec<String>> = text.split(';').map(|h| h.split(',').map(String::from).collect()).collect();
+        let mut legal = None;
+        'search: for (hi, h) in hands.iter().enumerate() {
+            for (ai, act) in h.iter().enumerate() {
+                for alt in ["c", "f", "r4", "r6"] {
+                    if alt == act {
+                        continue;
+                    }
+                    let mut edited = hands.clone();
+                    edited[hi][ai] = alt.to_string();
+                    let cand = edited.iter().map(|h| h.join(",")).collect::<Vec<_>>().join(";");
+                    if verify_seated_session(&f.pk, "at", &listed, 20, &f.alpha, &f.sig_hex, &cand, true).is_ok() {
+                        legal = Some(cand);
+                        break 'search;
+                    }
+                }
+            }
+        }
+        let legal = legal.expect("some single action can be changed legally");
+        let out = try_submit(&mut t, &legal, Some(a.clone()), Some(s.clone()));
+        assert!(out["error"].as_str().unwrap().contains("does not match"), "{out}");
+        // An attestation from another account's run, or signed by another key.
+        let other = a.replace(":table.testnet:", ":mallory.testnet:");
+        assert!(try_submit(&mut t, &text, Some(other), Some(s.clone()))["error"].as_str().unwrap().contains("not from the dealer's run"));
+        let forged = hex::encode(SigningKey::from_bytes(&[7u8; 32]).sign(a.as_bytes()).to_bytes());
+        assert!(try_submit(&mut t, &text, Some(a.clone()), Some(forged))["error"].as_str().unwrap().contains("not signed"));
+        assert_eq!(t.get_session("at".into()).unwrap().status, Status::Pending);
+        // The real answer settles.
+        assert_eq!(try_submit(&mut t, &text, Some(a), Some(s))["ok"], true);
+    }
+
     fn session_text(id: &str, buy_in: u64, hands: usize) -> (Fixture, String) {
         let f = fixture("session", id);
         let profiles: Vec<agent::Profile> = LEGACY.iter().map(|(t, a)| agent::Profile::from_legacy(*t, *a)).collect();
@@ -663,7 +773,7 @@ mod tests {
         assert_eq!(t.get_position(seats[0].backer.clone().unwrap(), "agent-0".into()).unwrap().at_table.0, 3 * NEAR / 10);
 
         let (f, text) = session_text("v1", 300, 30);
-        let out = t.submit_session("v1".into(), f.alpha.clone(), f.sig_hex.clone(), text);
+        let out = submit(&mut t, "v1", &f, &text);
         assert_eq!(out["ok"], true, "{out}");
         // Nothing is created or lost: what backers deposited is now in positions or fee earnings.
         assert_eq!(total_held(&t, &seats), 4 * NEAR);
@@ -685,7 +795,7 @@ mod tests {
         assert_eq!(pro_earnings(&t), pro_fees);
         assert_eq!(t.get_agent("agent-0".into()).unwrap().sessions, 1);
         // Settled once only.
-        assert_eq!(t.submit_session("v1".into(), f.alpha, f.sig_hex, "f".into())["ok"], false);
+        assert_eq!(submit(&mut t, "v1", &f, "f")["ok"], false);
     }
 
     #[test]
@@ -771,7 +881,7 @@ mod tests {
 
         let (f, text) = session_text("p1", 300, 30);
         as_who("anyone.near", 0, 4);
-        let out = t.submit_session("p1".into(), f.alpha, f.sig_hex, text);
+        let out = submit(&mut t, "p1", &f, &text);
         assert_eq!(out["ok"], true, "{out}");
 
         let mut paid_out = 0u128;
@@ -842,7 +952,7 @@ mod tests {
         as_who("table.near", 0, 2);
         t.open_backed_session("v1".into(), seats, U64(300), 0, U64(1), U64(2), 30);
         let (f, text) = session_text("v1", 300, 30);
-        t.submit_session("v1".into(), f.alpha.clone(), f.sig_hex.clone(), text.clone());
+        submit(&mut t, "v1", &f, &text);
         let rec = t.get_session_record("v1".into()).unwrap();
         assert_eq!(rec["signature_hex"], f.sig_hex);
         assert_eq!(rec["actions"], text);
@@ -981,7 +1091,7 @@ mod tests {
         as_who("table.near", 0, 3);
         t.open_backed_session("q1".into(), seats.clone(), U64(100), 0, U64(1), U64(2), 30);
         let (f, text) = session_text("q1", 100, 30);
-        assert_eq!(t.submit_session("q1".into(), f.alpha, f.sig_hex, text)["ok"], true);
+        assert_eq!(submit(&mut t, "q1", &f, &text)["ok"], true);
         let l = t.get_listing("agent-1".into()).unwrap();
         assert!(l.qualified && l.open_to_backers && l.sessions == 1, "{l:?}");
         as_who("alice.near", NEAR, 4);
@@ -1001,7 +1111,7 @@ mod tests {
         let f = fixture("session", "q2");
         let profiles: Vec<agent::Profile> = vec![agent::Profile::from_legacy(10, 80), agent::Profile::preset("Daredevil").unwrap(), agent::Profile::from_legacy(5, 90), agent::Profile::from_legacy(40, 50)];
         let text = seated_text(&f, &profiles, 100, 30);
-        assert_eq!(t.submit_session("q2".into(), f.alpha, f.sig_hex, text)["ok"], true);
+        assert_eq!(submit(&mut t, "q2", &f, &text)["ok"], true);
         assert_eq!(t.get_listing("agent-1".into()).unwrap().sessions, 0);
         assert_eq!(t.get_listing("agent-2".into()).unwrap().sessions, 2);
     }
@@ -1027,7 +1137,7 @@ mod tests {
             let f = fixture("session", &id);
             let profiles = vec![agent::Profile::from_legacy(10, 80), agent::Profile::from_legacy(30, 60)];
             let text = seated_text(&f, &profiles, 100, 20);
-            assert_eq!(t.submit_session(id, f.alpha, f.sig_hex, text)["ok"], true);
+            assert_eq!(submit(&mut t, &id, &f, &text)["ok"], true);
             k += 1;
         }
         let lim = t.get_pool_limits("agent-0".into()).unwrap();

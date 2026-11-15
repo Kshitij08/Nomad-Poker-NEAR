@@ -428,7 +428,7 @@ impl Table {
         if let Err(e) = core::session::check(&start, hands as usize) {
             env::panic_str(&e);
         }
-        let request = json!({ "action": "session", "hand_id": session_id, "stacks": stacks, "profiles": profiles, "button": button, "sb": sb.0, "bb": bb.0, "hands": hands, "seating": "vrf" });
+        let request = json!({ "action": "session", "hand_id": session_id, "stacks": stacks, "profiles": profiles, "button": button, "sb": sb.0, "bb": bb.0, "hands": hands, "seating": "vrf", "attest": "v1" });
         let request_text = request.to_string();
 
         let mut all = sessions();

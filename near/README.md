@@ -20,8 +20,11 @@ action under the betting rules.
 
 ## Live on testnet
 
-- Dealer: OutLayer project `nomad-poker.testnet/nomad-dealer`
-- Contract: `table.nomad-poker.testnet`
+- Dealer: OutLayer project `nomad-poker.testnet/nomad-dealer` (agents v2, version `dd32d428ae`)
+- Contract: `table.nomad-poker.testnet`, operator `feeder.nomad-poker.testnet` (the feeder; see Operator below)
+- Agents: `nomad-a` (pro `pro.nomad-poker.testnet`, Autopilot), `nomad-b` (`pro-b`, Daredevil), `nomad-c` (`pro-c`,
+  Trapper), `nomad-d` (`pro-d`, a custom Guardian), `nomad-e` (`pro`, Guardian; no pool). The pro accounts are
+  `<name>.nomad-poker.testnet`.
 - Escrow (human money tables): `nomad-escrow.testnet`, operator `nomad-poker.testnet`
 
 ## Try it
@@ -29,9 +32,13 @@ action under the betting rules.
 Checks, no accounts needed:
 
 ```bash
-cd poker-core && cargo test --features seal,agent
+cd poker-core && cargo test --release --features seal,agent,serde
 cd table-spike && cargo test
+cd poker-wasm && cargo test --release
+cd feeder && npm test
 ```
+
+Rust builds and tests run in WSL (aws-lc-sys does not build on Windows); Node runs on Windows.
 
 Play and settle a 50-hand session (needs the NEAR and OutLayer CLIs signed in to testnet, an OutLayer payment key for
 the dealer project, and the table's owner key):
@@ -47,11 +54,13 @@ You see the dealer's wait and run time, then the settlement transaction and each
 Anyone can fund a pro's agent and keep 90% of what it wins. It lives in the table contract, so a session's
 verification and every payout happen in one transaction.
 
-1. A pro registers an agent: `register_agent(agent_id, tight, aggro)`. The pro's account receives 8% of profits.
-2. A backer funds it: `back(agent_id, loss_limit?)` with NEAR attached. One position per backer and agent.
-3. The game server opens a backed session: `open_backed_session(session_id, seats, buy_in_chips, ...)`. Each seat
-   buys in from its position, only if losing the whole buy-in stays within the loss limit.
-4. `submit_session` verifies the hands, then cashes out every seat. Fees apply only to profit above the position's
+1. A pro registers an agent with its strategy: `register_agent(agent_id, profile)` (see Agents v2). The pro's account
+   receives 8% of profits.
+2. A backer funds it: `back(agent_id, loss_limit?)` with NEAR attached, once the strategy has a track record (the pro
+   may always fund their own agent). One position per backer and agent.
+3. The feeder (operator) opens a backed session: `open_backed_session(session_id, seats, buy_in_chips, ...)`. Each
+   seat buys in from its position, only if losing the whole buy-in stays within the loss limit.
+4. `submit_session` verifies the hands and the dealer's attestation, then cashes out every seat. Fees apply only to profit above the position's
    previous peak: 8% to the pro, 2% to the platform, the rest to the backer.
 5. Backers `withdraw` idle funds; pros and the platform `claim_earnings`. A session the dealer never answered can be
    cancelled after an hour, returning the buy-ins.
@@ -62,11 +71,160 @@ a session are queued and applied at the value it settles at. Fees apply only to 
 share. A session stakes at most 25% of the pool by default (`set_pool_risk`, up to 50%, set by the pro). Pass a seat
 with no `backer` to seat a pool, or `--pool` to the feeder.
 
-Every step logs a `nomad-vault` event. Try it with the feeder on a backed table:
+Every step logs a `nomad-vault` event. Try it with the feeder on a backed table (pools, 60-chip buy-ins):
 
 ```bash
-node src/cli.mjs --table-id demo --sessions 2 --hands 10 --speed 2 --agents nomad-a,nomad-b,nomad-c,nomad-d --buy-in 100
+node src/cli.mjs --table-id demo --sessions 2 --hands 10 --speed 4 --agents nomad-a,nomad-b,nomad-c,nomad-d --pool --buy-in 60
 ```
+
+## Agents v2
+
+Agents play the Nomad app's Strategy tab (`packages/engine/src/agents`): the "smart" brain (`HeuristicBot.decideV2`:
+Monte-Carlo equity against random hands, a heads-up equivalent, pot odds, stack-to-pot sizing) driven by the five
+numbers, the per-street overrides and the position weight. It lives in `poker-core` (modules `profile` and `agent`) and
+runs only inside the sealed dealer. Every decision is a pure function of (profile, hand seed, action index, table
+state): random draws come from SplitMix64 seeded by SHA-256, and the math uses only IEEE-exact operations (no libm), so
+the dealer, native tests and the WebAssembly build agree (the feeder's tests check a golden session against native).
+
+**Profile JSON** (what `register_agent`, `update_agent`, `get_profile` and `list_agents` use). Numbers are hundredths, so
+the app's 0.35 is `35`:
+
+```json
+{
+  "fold_below": 35, "raise_above": 58, "aggression": 45, "bluff_chance": 3, "raise_size": 60,
+  "position_weight": 0,
+  "streets": [
+    { "fold_below": 10, "raise_above": 55, "aggression": 60, "bluff_chance": 5, "raise_size": 60 },
+    { "fold_below": 50, "raise_above": 70, "aggression": 45, "bluff_chance": 0, "raise_size": 50 },
+    { "fold_below": 50, "raise_above": 70, "aggression": 45, "bluff_chance": 0, "raise_size": 50 },
+    { "fold_below": 50, "raise_above": 70, "aggression": 45, "bluff_chance": 0, "raise_size": 50 }
+  ],
+  "style": "Autopilot"
+}
+```
+
+| Field | App setting | Range |
+| --- | --- | --- |
+| `fold_below` | Fold below (Calling bets) | 10 to 55 |
+| `raise_above` | Raise above (Hands it plays) | 45 to 90 |
+| `aggression` | Aggression (Raise vs call) | 10 to 95 |
+| `bluff_chance` | Bluff chance | 0 to 25 |
+| `raise_size` | Raise size, share of the pot | 30 to 120 |
+| `position_weight` | Position weight (optional, default 0) | 0 to 100 |
+| `streets` | Per-street overrides (optional): `[]`, or four entries [preflop, flop, turn, river], each `null` or its own five numbers | as above |
+| `style` | Display name only (optional, up to 24 letters, digits, spaces or `-_'.`) | |
+
+The ranges are the engine's `BotProfile.clamped`; an out-of-range value is refused with the field's name. The presets
+(`Profile::preset`, `feeder/src/profiles.mjs`): Autopilot `[35,58,45,3,60]` with its own streets (`[10,55,60,5,60]` before
+the flop, `[50,70,45,0,50]` after); Guardian `[40,60,25,2,45]`; Trapper `[30,52,15,0,60]`; Daredevil `[22,52,75,8,90]`.
+
+First-generation agents (`{tight, aggro}`) keep working: they play the v2 profile `Profile::from_legacy` maps them to
+(fold_below 10 + 0.45·tight, raise_above 50 + 0.3·tight, aggression 10 + 0.85·aggro, bluff 0.08·aggro, size 40 +
+aggro/2), `register_agent` still accepts `tight` and `aggro`, and views still return the nearest `tight` and `aggro`.
+Settled sessions verify as before: the contract replays actions and never re-derives decisions.
+
+**Registering from the app** (the player's wallet signs; 30 Tgas, no deposit):
+
+```js
+nearCall("table.nomad-poker.testnet", "register_agent", { agent_id: "my-agent", profile }, 0n, 30n);
+// a new strategy later (a new strategy version; the track record restarts):
+nearCall("table.nomad-poker.testnet", "update_agent", { agent_id: "my-agent", profile }, 0n, 30n);
+```
+
+`profile` is the Strategy tab's numbers times 100: `fold_below = round(values[0] * 100)` through
+`raise_size = round(values[4] * 100)`, `position_weight = round(positionWeight * 100)`, and `streets` from
+`AgentStrategyState.streets` the same way (each `null` or five numbers), or `[]` when no round has its own.
+
+**Rules the contract enforces**
+
+- **Self-play guard.** `open_backed_session` refuses two seats whose agents belong to the same pro. Agents are seated
+  from the session's randomness, not in the order listed: the request says `"seating": "vrf"`, the dealer seats the
+  listed agents by `session::seat_order(seed)`, and settlement applies the same order. Results, payouts and the history
+  record are by table position (`seat_order[p]` is the listed seat at position p).
+- **Listing.** New backers may `join_pool` or `back` an agent only once its current strategy version has a track
+  record: `min_sessions` settled sessions and `min_hands` hands (testnet defaults 3 and 50; the owner sets them with
+  `set_listing_rules`). The pro may always fund their own agent, which is how a record starts. `update_agent` starts a
+  new version and the record over; a session opened before the change does not count toward the new version. Existing
+  backers stay and may leave as usual.
+- **Pool loss limit.** A pool takes no new sessions once its value per share is `loss_limit_bps` below its high-water
+  mark (owner default 5000 = 50%, `set_default_pool_loss_limit`; a pro may set a tighter one with
+  `set_pool_loss_limit(agent_id, bps)`, or `null` for the default). This is on top of the 25% per-session risk cap.
+  Backers can always leave; the pool plays again only if its limit is loosened (up to the default) or the owner raises
+  the default.
+- **Attested actions.** For sessions opened by `open_backed_session` (`"attest": "v1"` in the request), the dealer signs
+  the actions in the same run with OutLayer's VRF key (label `act-<sha256>` over the session id, the deck proof, the
+  request and the actions: `session::attest_digest`). `submit_session(..., attest_alpha, attest_signature_hex)` refuses
+  such a session without a matching attestation, so a relayer cannot change an action, even into another legal one.
+- **Operator.** `set_operator(account)` (owner) names the feeder. It may open sessions (`open_session`,
+  `open_backed_session`, `open_play`) and cancel unanswered ones after an hour, nothing else: every owner-only method
+  refuses it.
+
+**New and changed methods**
+
+| Method | Who | Notes |
+| --- | --- | --- |
+| `register_agent(agent_id, profile?, tight?, aggro?)` → `AgentView` | anyone (becomes the pro) | A profile, or the old two numbers. |
+| `update_agent(agent_id, profile)` → `AgentView` | the agent's pro | A new strategy version; the track record restarts. |
+| `transfer_agent(agent_id, new_owner)` | the agent's pro | Hands the agent and its future pro share to another account. |
+| `set_pool_loss_limit(agent_id, loss_limit_bps?)` | the agent's pro | 1 up to the default; `null` uses the default. |
+| `set_operator(operator?)`, `set_listing_rules(min_sessions, min_hands)`, `set_default_pool_loss_limit(loss_limit_bps)` | owner | |
+| `submit_session(session_id, alpha, signature_hex, actions, attest_alpha?, attest_signature_hex?)` | anyone | Backed sessions need the attestation. |
+| `open_session`, `open_backed_session`, `open_play`, `cancel_session` | owner or operator | Were owner only. |
+
+| View | Returns |
+| --- | --- |
+| `get_agent(agent_id)` | `AgentView`: `{ id, owner, tight, aggro, sessions, hands, net_chips, created_at, profile, strategy_version }` |
+| `get_profile(agent_id)` | the profile JSON above |
+| `get_listing(agent_id)` | `{ agent_id, strategy_version, sessions, hands, min_sessions, min_hands, qualified, open_to_backers }` (`hands` and `min_hands` are strings) |
+| `get_pool_limits(agent_id)` | `{ loss_limit_bps, pro_loss_limit_bps, default_loss_limit_bps, drawdown_bps, price, hwm_price, max_buy_in_bps, accepts_sessions }` |
+| `get_rules()` | `{ operator, min_sessions, min_hands, pool_loss_limit_bps }` (`min_hands` is a number here) |
+| `list_agents(from_index?, limit?)` | `[{ agent: AgentView, pool: PoolView \| null, listing, limits }]` (was `{ agent, pool }`) |
+| `get_session_record(session_id)` | as before plus `seating` and `seat_order`; `stacks` and `profiles` are by table position |
+
+**Upgrading in place.** Everything new is stored under its own keys (`g` rules, `x` agent strategies, `w` strategy
+versions per open session), so the contract deploys over the old one with `near contract deploy ... without-init-call`;
+pools, positions, earnings and history are untouched. This version also fixes the vault config read:
+`set_vault_config` was never read back, because `LazyOption::new(key, None)` does not load storage (none was set on
+testnet).
+
+## Operator: the feeder's limited key
+
+The feeder never holds the owner's key. On testnet:
+
+1. `feeder.nomad-poker.testnet` is its own account, and the owner named it: `set_operator({"operator": "feeder.nomad-poker.testnet"})`.
+2. Its working key is a function-call key for the table and the session methods only (NEAR also refuses any deposit
+   with it):
+
+   ```bash
+   near account add-key feeder.nomad-poker.testnet grant-function-call-access --allowance '1 NEAR' \
+     --contract-account-id table.nomad-poker.testnet \
+     --function-names 'open_backed_session, open_session, submit_session, cancel_session' \
+     use-manually-provided-public-key ed25519:<public key> network-config testnet sign-with-legacy-keychain send
+   ```
+
+3. That key alone sits in its own credentials folder, `~/.near-credentials/feeder/feeder.nomad-poker.testnet.json`, and
+   the feeder reads only that folder. The account's full-access key stays in the normal keychain for top-ups.
+
+```powershell
+$env:NEAR_CREDENTIALS_DIR = '\\wsl.localhost\Ubuntu\home\kshit\.near-credentials\feeder'
+$env:OUTLAYER_KEYS_FILE = '\\wsl.localhost\Ubuntu\home\kshit\.outlayer\testnet\payment-keys.json'
+node src/cli.mjs --table-id v2live --sessions 3 --hands 10 --speed 4 --agents nomad-a,nomad-b,nomad-c,nomad-d --pool --buy-in 60
+```
+
+With that key the feeder cannot withdraw, leave a pool, claim earnings or call an owner method (NEAR refuses before
+the call reaches the contract); signing as its account with any key, the contract refuses those too.
+
+## Proof scripts
+
+Node on Windows with keys from the WSL keychain (see the top of each script):
+
+- `scripts/attack-report.mjs`: the feeder's key, the operator account, a pro and a stranger try to take pool money, call
+  owner-only methods, break the self-play guard, a loss limit, the risk cap or the listing rules, and settle a real
+  session with a forged proof, another session's proof, an illegal or a legal edit of its actions, or no attestation.
+  Every attempt must be refused: [`scripts/reports/attack-report.md`](scripts/reports/attack-report.md).
+- `scripts/soak.mjs [--sessions 3] [--hands 50]`: runs backed sessions of the four pools, then reconciles from the
+  contract's views that pool values, the 8% pro and 2% platform fees and fee earnings add up to the yoctoNEAR, with no
+  rake: [`scripts/reports/soak-report.md`](scripts/reports/soak-report.md).
 
 ## The app
 
@@ -177,8 +335,12 @@ The live run reads the same keys as the scripts (see the top of `feeder/src/cli.
 
 ## Known limits
 
-- Opening a hand or session is owner-only until the dealer signs its answers; until then the relaying server could
-  ask for a hand more than once.
+- Opening a session is limited to the owner and the operator, but the operator could still ask the dealer for a
+  session under several ids and open only the one it likes. Actions are attested by OutLayer's VRF key under the
+  dealer's account; OutLayer's proof does not name the project, so whoever can run another OutLayer program under that
+  account could produce attested sessions of their own.
+- The agent brain is the app's smart brain with deterministic draws and f64 math, so it plays like the app's agents
+  but not bit for bit (the app uses System.Random and float32).
 - The proof reveals the whole deck, so folded hands become public once settled.
 - OutLayer's testnet queue adds 1 to 9 minutes per dealer call.
 - Backed sessions are settled before viewers see them play, so results are on-chain ahead of playback.

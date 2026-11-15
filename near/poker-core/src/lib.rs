@@ -507,6 +507,44 @@ pub mod session {
         order.iter().map(|i| listed[*i].clone()).collect()
     }
 
+    /// What the dealer attests for a session: the session id, the deck proof's signature, the request as the table
+    /// recorded it (listed stacks, button, blinds, hands, seating, each profile's playing numbers) and the actions.
+    /// The dealer asks OutLayer's VRF to sign `act-<hex of this>` in the same run that played the session, so a
+    /// relayer cannot change any action, even into another legal one, without a new signature from OutLayer.
+    pub fn attest_digest(session_id: &str, signature_hex: &str, listed: &Rules, hands: usize, seating: Option<&str>, profiles: &[crate::profile::Profile], actions: &str) -> [u8; 32] {
+        let mut parts: Vec<Vec<u8>> = vec![session_id.as_bytes().to_vec(), signature_hex.as_bytes().to_vec()];
+        let mut nums = vec![];
+        for s in &listed.stacks {
+            nums.extend_from_slice(&s.to_le_bytes());
+        }
+        for v in [listed.button as u64, listed.sb, listed.bb, hands as u64] {
+            nums.extend_from_slice(&v.to_le_bytes());
+        }
+        parts.push(nums);
+        parts.push(seating.unwrap_or("").as_bytes().to_vec());
+        for p in profiles {
+            parts.push(p.canonical_bytes());
+        }
+        parts.push(actions.as_bytes().to_vec());
+        // Each part is length-prefixed, so no two different requests hash the same bytes.
+        let mut h = <sha2::Sha256 as sha2::Digest>::new();
+        sha2::Digest::update(&mut h, b"nomad-attest-v1:");
+        for p in &parts {
+            sha2::Digest::update(&mut h, (p.len() as u32).to_le_bytes());
+            sha2::Digest::update(&mut h, p);
+        }
+        sha2::Digest::finalize(h).into()
+    }
+
+    /// The VRF label the dealer signs for an attested session.
+    pub fn attest_label(digest: &[u8; 32]) -> String {
+        let mut s = String::from("act-");
+        for b in digest {
+            s.push_str(&format!("{b:02x}"));
+        }
+        s
+    }
+
     /// Players who still have chips.
     pub fn active(stacks: &[u64]) -> usize {
         stacks.iter().filter(|s| **s > 0).count()

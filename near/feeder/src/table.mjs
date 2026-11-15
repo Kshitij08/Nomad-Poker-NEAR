@@ -4,7 +4,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Account, JsonRpcProvider, teraToGas } from "near-api-js";
+import { Account, JsonRpcProvider, getTransactionLastResult, teraToGas } from "near-api-js";
 
 /** Reads a key saved by near-cli ("legacy keychain"): <dir>/<account>.json with a `private_key` field. */
 export async function loadKey(accountId, dir = process.env.NEAR_CREDENTIALS_DIR ?? join(homedir(), ".near-credentials", "testnet")) {
@@ -37,12 +37,14 @@ export class TableClient {
    * the contract recorded (stacks and the agents' profiles), which must be sent to the dealer unchanged.
    */
   async openBackedSession({ sessionId, seats, buyIn, button, sb, bb, hands }) {
-    return this.operator.callFunction({
+    const res = await this.operator.callFunctionRaw({
       contractId: this.contractId,
       methodName: "open_backed_session",
       args: { session_id: sessionId, seats, buy_in_chips: String(buyIn), button, sb: String(sb), bb: String(bb), hands },
       gas: teraToGas("100"),
     });
+    // The recorded request (what the dealer must get), plus the transaction for reports. `tx` is not sent on.
+    return Object.defineProperty(getTransactionLastResult(res), "tx", { value: res.transaction?.hash, enumerable: false });
   }
 
   async getPosition(backer, agentId) {
@@ -50,13 +52,15 @@ export class TableClient {
   }
 
   /** Settles a session with the dealer's answer. The contract re-deals and replays every hand before accepting. */
-  async submitSession({ sessionId, alpha, signature_hex, actions }) {
-    const out = await this.settler.callFunction({
+  async submitSession({ sessionId, alpha, signature_hex, actions, attest_alpha = null, attest_signature_hex = null }) {
+    const res = await this.settler.callFunctionRaw({
       contractId: this.contractId,
       methodName: "submit_session",
-      args: { session_id: sessionId, alpha, signature_hex, actions },
+      args: { session_id: sessionId, alpha, signature_hex, actions, attest_alpha, attest_signature_hex },
       gas: teraToGas("300"),
     });
+    const out = getTransactionLastResult(res);
+    if (out && typeof out === "object") out.tx = res.transaction?.hash;
     if (!out?.ok) throw new Error(`the table refused session ${sessionId}: ${out?.error ?? JSON.stringify(out)}`);
     return out;
   }

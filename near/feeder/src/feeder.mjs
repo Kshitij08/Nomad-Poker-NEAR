@@ -132,14 +132,15 @@ export class SessionFeeder extends EventEmitter {
       [, answer] = await Promise.all([this.#retry(`open ${id}`, () => this.table.openSession({ sessionId: id, profiles, ...req }), signal), askDealer({ action: "session", hand_id: id, profiles, ...req })]);
     }
     const fetchedMs = Date.now() - t0;
-    const { alpha, signature_hex, actions } = answer.output;
+    // attest_*: the dealer's VRF signature over the actions; the contract requires it for the sessions it opens.
+    const { alpha, signature_hex, actions, attest_alpha = null, attest_signature_hex = null } = answer.output;
 
     const t1 = Date.now();
     const settled = await this.#retry(
       `settle ${id}`,
       async () => {
         try {
-          return await this.table.submitSession({ sessionId: id, alpha, signature_hex, actions });
+          return await this.table.submitSession({ sessionId: id, alpha, signature_hex, actions, attest_alpha, attest_signature_hex });
         } catch (e) {
           // Settled by an earlier attempt whose answer was lost: the stored result stands.
           if (/not pending/.test(e.message)) return { ok: true, already: true };
@@ -169,7 +170,7 @@ export class SessionFeeder extends EventEmitter {
     const lastButton = detail.hands.at(-1)?.button ?? st.button;
     await this.store.save({ index: st.index + 1, stacks: next, button: (lastButton + 1) % this.seats.length });
 
-    const session = { id, index: st.index, seatOrder: order, hands: detail.hands, startStacks: stacks, endStacks: detail.stacks, rebuys, payouts: settled.payouts ?? null, alpha, signature_hex, fetchedMs, runMs: answer.runMs, cost: answer.cost, settleMs, readyAt: Date.now() };
+    const session = { id, index: st.index, seatOrder: order, settleTx: settled.tx ?? null, hands: detail.hands, startStacks: stacks, endStacks: detail.stacks, rebuys, payouts: settled.payouts ?? null, alpha, signature_hex, fetchedMs, runMs: answer.runMs, cost: answer.cost, settleMs, readyAt: Date.now() };
     this.emit("ready", session);
     return session;
   }
