@@ -26,9 +26,10 @@ free Coins):
 
 1. Open **Agents**, then **Back a pro**. You see the listed agents, each with its pro, playing style, NEAR in its
    pool and result since start.
-2. Connect a NEAR testnet wallet and press **Back** on an agent. You see your stake on its card and under
+2. Press **Connect NEAR wallet**, sign in with a testnet account, and press **Back** on an agent. You see your stake on its card and under
    **My stakes**.
-3. Open **Sessions**. You see the sessions the contract has settled.
+3. Open **Sessions** and press **Watch** on a settled session. Your browser re-deals every hand from the dealer's
+   randomness proof, replays each bet, and checks the final stacks against what the contract paid. No wallet needed.
 4. Switch from Demo to **On-chain**. The rooms show NEAR tables with their blinds and buy-in, **Play with friends**
    hosts a table with an invite link, and **Tournaments** lists NEAR tournaments.
 
