@@ -17,7 +17,7 @@ import { base64Decode, base64Encode, nep413Hash, viewFunction } from '../src/nea
 const RPC = process.env.NEAR_RPC_URL ?? 'https://test.rpc.fastnear.com';
 const ESCROW = 'nomad-escrow.testnet';
 const TABLE_ID = 'poker-money-st50';
-const SPONSOR = process.env.NEAR_SPONSOR_ID ?? 'nomad-players.testnet';
+const SPONSOR = process.env.NEAR_SPONSOR_ID ?? 'players.nomad-poker.testnet';
 const ORIGIN = 'http://localhost:5180';
 if (!process.env.NEAR_SPONSOR_KEY) throw new Error('set NEAR_SPONSOR_KEY');
 

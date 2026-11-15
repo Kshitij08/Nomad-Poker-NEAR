@@ -1,6 +1,6 @@
 /**
  * A NEAR account made for you: its key lives in this browser (localStorage, this origin only), so On-chain works
- * without a wallet. The API creates `<id>.nomad-players.testnet` with this key as its only full-access key; sign-in is
+ * without a wallet. The API creates `<id>.players.nomad-poker.testnet` with this key as its only full-access key; sign-in is
  * the ordinary NEP-413 challenge / verify, signed here; contract calls are NEP-366 delegate actions the API's relayer
  * sends and pays gas for (deposits still come from the account's own NEAR). The key can be backed up as a near-cli
  * style JSON file and restored on another device (or imported into a wallet).

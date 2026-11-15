@@ -77,9 +77,9 @@ NEAR account**:
    gas only. Wallet players are not relayed: their wallet pays, as before. `near_accounts` and `near_relays`
    (migration 0017) record both.
 
-Setup (testnet): the sponsor is `nomad-players.testnet` (`NEAR_SPONSOR_ID` in `cloudflare.config.ts`). Its key is
+Setup (testnet): the sponsor is `players.nomad-poker.testnet` (a sub-account of `nomad-poker.testnet`, funded from it) (`NEAR_SPONSOR_ID` in `cloudflare.config.ts`). Its key is
 the Worker secret `NEAR_SPONSOR_KEY`, never in the repo: the `private_key` from
-`~/.near-credentials/testnet/nomad-players.testnet.json` (WSL), `ed25519:<base58>`. Put it in the git-ignored
+`~/.near-credentials/testnet/players.nomad-poker.testnet.json` (WSL), `ed25519:<base58>`. Put it in the git-ignored
 `.secrets.staging.json` next to `SPIN_SECRET` (`npm run deploy:staging` uploads it) or set it with
 `npx cf secret put NEAR_SPONSOR_KEY --mode staging`. For `npm run dev`, put it in `.dev.vars` (git-ignored). Without
 it the two routes answer 501 and the app offers wallets only. Keep the sponsor topped up: each account costs about

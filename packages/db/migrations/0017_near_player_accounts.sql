@@ -2,7 +2,7 @@
 -- actions it relayed for them (gasless calls paid by the sponsor). One app-made account per player.
 
 CREATE TABLE near_accounts (
-  account_id TEXT    PRIMARY KEY,                 -- <id>.<sponsor>, e.g. k3j9x2ab1q.nomad-players.testnet
+  account_id TEXT    PRIMARY KEY,                 -- <id>.<sponsor>, e.g. k3j9x2ab1q.players.nomad-poker.testnet
   player_id  TEXT    NOT NULL UNIQUE REFERENCES players (id) ON DELETE CASCADE,
   public_key TEXT    NOT NULL,                    -- the browser's key, "ed25519:<base58>" (its only full-access key)
   funded     TEXT    NOT NULL,                    -- yoctoNEAR the sponsor sent with the account

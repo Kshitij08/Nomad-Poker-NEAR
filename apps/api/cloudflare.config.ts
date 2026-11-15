@@ -30,7 +30,7 @@ const STAGES = {
     nearRpc: 'https://test.rpc.fastnear.com',
     nearEscrow: 'nomad-escrow.testnet',
     nearTable: 'table.nomad-poker.testnet',
-    nearSponsor: 'nomad-players.testnet',
+    nearSponsor: 'players.nomad-poker.testnet',
   },
   staging: {
     worker: 'nomad-poker-near-api-staging',
@@ -46,7 +46,7 @@ const STAGES = {
     nearRpc: 'https://test.rpc.fastnear.com',
     nearEscrow: 'nomad-escrow.testnet',
     nearTable: 'table.nomad-poker.testnet',
-    nearSponsor: 'nomad-players.testnet',
+    nearSponsor: 'players.nomad-poker.testnet',
   },
   production: {
     // Not set up yet: create the database and bucket, put the database id here and list the production web origin.
