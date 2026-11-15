@@ -251,7 +251,7 @@ export async function nearHostTable(): Promise<void> {
         })();
       }, 400);
   };
-  const stakes = HOUSE_TABLES.map((h, i) => btn(`${esc(h.name)}<br><span class="v2-xs">blinds ${nearOf(h.config.small_blind)}/${nearOf(h.config.big_blind)} · buy-in ${nearOf(h.config.min_buy_in)}+ NEAR</span>`, `host-st${i}`, { h: 'blue' })).join('');
+  const stakes = HOUSE_TABLES.map((h, i) => btn(`${esc(h.name)}<span class="v2-xs">blinds ${nearOf(h.config.small_blind)}/${nearOf(h.config.big_blind)} · buy-in ${nearOf(h.config.min_buy_in)}+</span>`, `host-st${i}`, { h: 'blue', c: 'v2-b-stack' })).join('');
   const actions: Record<string, () => void> = { 'host-cancel': () => ui().closeDialog() };
   HOUSE_TABLES.forEach((h, i) => (actions[`host-st${i}`] = () => pick(Number(/st(\d+)/.exec(h.id)![1]))));
   ui().openDialog({ title: 'Host a table', body: 'Pick the stakes. Players buy in from their own NEAR wallets; the escrow holds every stake.', buttons: `<div class="v2-btn-grid">${stakes}${btn('Cancel', 'host-cancel', { h: 'ghost' })}</div>`, actions });

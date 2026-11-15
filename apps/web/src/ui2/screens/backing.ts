@@ -15,10 +15,10 @@ import { replaySettled, toAgentReplay } from '../../near/replay';
 import { openCrossChain } from './backingIntents';
 import { getNearAiSigners, verifyNearAiProof } from '../../near/nearAi';
 import { nearAiLabel } from '../agentListing';
-import { nearAccount, nearSigner } from '../../near/wallet';
+import { localAccount, nearAccount } from '../../near/wallet';
 import { btn, esc, fmt, seg } from '../core';
 import { ico } from '../icons';
-import { app, friendlyError, prompt, ui } from '../ctx';
+import { app, connectNear, friendlyError, prompt, ui } from '../ctx';
 import type { ScreenDef } from '../install';
 
 type View = 'pros' | 'mine' | 'sessions';
@@ -51,7 +51,8 @@ async function load(): Promise<void> {
   state.error = '';
   ui().render();
   try {
-    state.account = await nearAccount();
+    // The account made for you in this browser when you play with it, else your connected wallet.
+    state.account = (await localAccount())?.accountId ?? (await nearAccount());
     const [cards, sessions] = await Promise.all([listAgents(), recentSessions(12)]);
     state.cards = cards;
     state.sessions = sessions;
@@ -95,11 +96,12 @@ async function walletAct(pending: string, done: string, fn: () => Promise<void>)
   await load();
 }
 
+/** Sign in with NEAR the app's way (an account made for you, or your wallet), then reload. */
 async function connect(): Promise<void> {
   try {
-    if (await nearSigner.connect()) await load();
+    if (await connectNear()) await load();
   } catch (e) {
-    ui().message('NEAR wallet', esc(friendlyError(e, "Couldn't connect your NEAR wallet. Try again.")));
+    ui().message('NEAR', esc(friendlyError(e, "Couldn't sign in with NEAR. Try again.")));
   }
 }
 
@@ -153,7 +155,7 @@ function prosView(): string {
 function mineView(): string {
   const listBtn = btn(`${ico('plus', 0.9)} List your agent`, 'bk-register', { h: 'violet' });
   if (!state.account)
-    return `<div class="v2-bk-body"><div class="v2-empty">${ico('robot', 5)}Connect a NEAR wallet to see your stakes and list an agent.${btn('Connect NEAR wallet', 'bk-connect', { h: 'gold' })}</div></div>`;
+    return `<div class="v2-bk-body"><div class="v2-empty">${ico('robot', 5)}Sign in with NEAR to see your stakes.${btn('Sign in with NEAR', 'bk-connect', { h: 'gold' })}</div></div>`;
   let total = 0n;
   let pnlSum: bigint | null = null;
   const rows = state.cards
@@ -348,7 +350,7 @@ export function backingScreen(header: (on: string) => string): ScreenDef {
       void load();
     },
     render() {
-      const bar = `<div class="v2-row v2-wrap v2-ag-mbar">${seg([['pros', 'Agents'], ['mine', 'My stakes'], ['sessions', 'Sessions']], state.view, 'bk-view')}<div class="v2-grow"></div>${state.account ? `<span class="v2-pill" title="Your NEAR account">${esc(state.account)}</span>` : btn('Connect NEAR wallet', 'bk-connect', { h: 'gold', c: 'sm' })}</div>`;
+      const bar = `<div class="v2-row v2-wrap v2-ag-mbar">${seg([['pros', 'Agents'], ['mine', 'My stakes'], ['sessions', 'Sessions']], state.view, 'bk-view')}<div class="v2-grow"></div>${state.account ? `<span class="v2-pill" title="Your NEAR account">${esc(state.account)}</span>` : btn('Sign in with NEAR', 'bk-connect', { h: 'gold', c: 'sm' })}</div>`;
       const note = `<div class="v2-xs v2-mut">${state.note ? `<b class="v2-goldc">${esc(state.note)}</b>` : `Back a pro's agent with NEAR: backers get 90% of the profit, the pro 8%, Nomad 2%, never of losses. On NEAR testnet, contract <a href="${NEAR_EXPLORER}/address/${NEAR_CONTRACT}" target="_blank" rel="noopener" class="v2-goldc">${NEAR_CONTRACT}</a>.`}</div>`;
       let body: string;
       if (state.loading && !state.cards.length) body = `<div class="v2-bk-body"><div class="v2-empty">${ico('robot', 5)}Loading from NEAR…</div></div>`;

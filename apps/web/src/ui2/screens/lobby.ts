@@ -74,6 +74,8 @@ const main: ScreenDef & { profile: boolean } = {
   open() {
     this.profile = false;
     syncRoom();
+    // Leaving a NEAR table pays the stack back to the game balance a few seconds later (the server's cash-out).
+    if (onchain() && nearAccountId()) for (const ms of [0, 4000, 12000]) setTimeout(() => void refreshNearBalance(nearAccountId(), () => ui().render()), ms);
   },
   backFirst() {
     if (!this.profile) return false;
