@@ -36,7 +36,6 @@ beforeEach(async () => {
     HANDS: {} as R2Bucket,
     STAGE: 'test',
     ALLOWED_ORIGINS: ORIGIN,
-    WALLET_CHAIN_ID: 'devnet',
     EMAIL_DEV_ECHO: '1',
     SPIN_SECRET: 'test-secret',
     NEAR_RPC_URL: RPC,

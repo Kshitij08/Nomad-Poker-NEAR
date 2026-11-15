@@ -17,8 +17,6 @@ export interface Env {
   STAGE: string;
   /** Comma-separated origins allowed to call the API from a browser (CORS) and to receive email links. */
   ALLOWED_ORIGINS: string;
-  /** Shown in the wallet sign-in message; SOL tables are devnet-only for now. */
-  WALLET_CHAIN_ID: string;
   /**
    * NEAR JSON-RPC the API checks sign-in keys against (testnet in this fork). Unset: NEAR sign-in answers
    * not_configured.
@@ -46,10 +44,6 @@ export interface Env {
   LISTING_MIN_DAYS?: string;
   /** Optional: the coach adds a short note written by Claude. Unset: the computed report only. */
   ANTHROPIC_API_KEY?: string;
-  /** Devnet JSON-RPC the shop reads SOL purchase transactions from (secret). Unset: SOL purchases are closed. */
-  SOLANA_RPC_URL?: string;
-  /** Devnet address SOL shop purchases pay. Unset: SOL purchases are closed. */
-  SHOP_TREASURY?: string;
   COACH_MODEL?: string;
 }
 

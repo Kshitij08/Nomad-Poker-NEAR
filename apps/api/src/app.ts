@@ -5,8 +5,6 @@ import {
   ProgressRoutes,
   ShopRoutes,
   type ShopBuyRequest,
-  type ShopSolIntentRequest,
-  type ShopSolConfirmRequest,
   SocialRoutes,
   StrategyRoutes,
   TournamentRoutes,
@@ -14,7 +12,6 @@ import {
   type ProfileUpdateRequest,
   type PlayerSearchResponse,
   Routes,
-  walletSignInMessage,
   type ApiErrorBody,
   type EmailStartRequest,
   type EmailStartResponse,
@@ -25,9 +22,6 @@ import {
   type LedgerResponse,
   type MeResponse,
   type MissionClaimRequest,
-  type WalletChallengeRequest,
-  type WalletChallengeResponse,
-  type WalletVerifyRequest,
   type NearChallengeRequest,
   type NearChallengeResponse,
   type NearVerifyRequest,
@@ -58,10 +52,10 @@ import * as admin from '@nomad/db/admin';
 import { reconcile } from '@nomad/db/reconcile';
 import { integrityReport } from '@nomad/db/integrity';
 import { AvatarCatalog } from '@nomad/engine/social/avatarCatalog';
-import { ApiError, base58Decode, fail, iso, randomId, readJson, requireString, sha256Hex, utf8 } from '@nomad/db/util';
+import { ApiError, fail, iso, randomId, readJson, requireString, sha256Hex } from '@nomad/db/util';
 
 export const VERSION = '0.1.0';
-const WALLET_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const EMAIL_LINK_TTL_MS = 15 * 60 * 1000;
 const EMAIL_RESEND_MS = 60 * 1000;
 
@@ -154,12 +148,6 @@ const writeLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
 };
 
-/** Tests replace the devnet transaction reader. */
-let shopTxFetcher: shop.FetchParsedTx | null = null;
-export function setShopTxFetcherForTests(f: shop.FetchParsedTx | null): void {
-  shopTxFetcher = f;
-}
-
 export function createApp(): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
@@ -196,56 +184,6 @@ export function createApp(): Hono<AppEnv> {
     return c.json(await session(c.env.DB, player, true, false), 201);
   });
 
-  app.post(Routes.walletChallenge, async (c) => {
-    const { address } = await readJson<WalletChallengeRequest>(c.req.raw);
-    const addr = requireString(address, 'address', 64);
-    if (base58Decode(addr)?.length !== 32) fail(400, 'bad_request', 'Not a Solana address.');
-    const now = Date.now();
-    const nonce = randomId('', 16);
-    const origin = appOrigin(c);
-    const expiresAt = now + WALLET_CHALLENGE_TTL_MS;
-    const message = walletSignInMessage({
-      domain: new URL(origin).host,
-      address: addr,
-      uri: origin,
-      chainId: c.env.WALLET_CHAIN_ID,
-      nonce,
-      issuedAt: iso(now),
-      expiresAt: iso(expiresAt),
-    });
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM auth_challenges WHERE expires_at < ?1').bind(now),
-      c.env.DB.prepare("INSERT INTO auth_challenges (id, kind, subject, payload, created_at, expires_at) VALUES (?1, 'wallet', ?2, ?3, ?4, ?5)").bind(
-        nonce,
-        addr,
-        message,
-        now,
-        expiresAt,
-      ),
-    ]);
-    return c.json<WalletChallengeResponse>({ nonce, message, expiresAt: iso(expiresAt) });
-  });
-
-  app.post(Routes.walletVerify, async (c) => {
-    const body = await readJson<WalletVerifyRequest>(c.req.raw);
-    const address = requireString(body.address, 'address', 64);
-    const nonce = requireString(body.nonce, 'nonce', 64);
-    const signature = base58Decode(requireString(body.signature, 'signature', 128));
-    const pub = base58Decode(address);
-    if (pub?.length !== 32 || signature?.length !== 64) fail(400, 'bad_request', 'Bad address or signature encoding.');
-    // Single use: the challenge is deleted whether or not the signature checks out.
-    const ch = await c.env.DB.prepare("DELETE FROM auth_challenges WHERE id = ?1 AND kind = 'wallet' RETURNING subject, payload, expires_at")
-      .bind(nonce)
-      .first<{ subject: string; payload: string; expires_at: number }>();
-    if (!ch || ch.subject !== address) fail(401, 'unauthorized', 'Unknown or used sign-in challenge; ask for a new one.');
-    if (ch.expires_at <= Date.now()) fail(401, 'expired', 'The sign-in challenge expired; ask for a new one.');
-    const key = await crypto.subtle.importKey('raw', pub, { name: 'Ed25519' }, false, ['verify']);
-    if (!(await crypto.subtle.verify('Ed25519', key, signature, utf8(ch.payload)))) fail(401, 'unauthorized', 'The wallet signature does not match.');
-    const label = address;
-    const res = await completeSignIn(c.env.DB, { provider: 'wallet', subject: address, label }, `${address.slice(0, 4)}…${address.slice(-4)}`, await optionalPlayer(c));
-    return c.json(res, res.created ? 201 : 200);
-  });
-
   // NEAR sign-in: the wallet signs a NEP-413 message (src/near.ts). The key must be a full-access key of the account.
   app.post(Routes.nearChallenge, async (c) => {
     if (!c.env.NEAR_RPC_URL) fail(501, 'not_configured', 'NEAR sign-in is not set up on this server yet.');
@@ -253,7 +191,7 @@ export function createApp(): Hono<AppEnv> {
     const account = requireString(accountId, 'accountId', 64).toLowerCase();
     if (!isAccountId(account)) fail(400, 'bad_request', 'Not a NEAR account id.');
     const now = Date.now();
-    const expiresAt = now + WALLET_CHALLENGE_TTL_MS;
+    const expiresAt = now + CHALLENGE_TTL_MS;
     const nonce = base64Encode(crypto.getRandomValues(new Uint8Array(32)));
     const recipient = new URL(appOrigin(c)).host;
     const message = `Sign in to Nomad Poker as ${account}.\n\nThis signs nothing on chain and costs nothing.\nIssued ${iso(now)}; valid until ${iso(expiresAt)}.`;
@@ -408,28 +346,13 @@ export function createApp(): Hono<AppEnv> {
   });
 
   // ---- Shop (Phase 3) ---------------------------------------------------------------------------
-  // Coins purchases debit the ledger; SOL purchases (devnet) need SOLANA_RPC_URL and SHOP_TREASURY.
+  // Purchases are paid in Coins and debit the ledger.
 
-  const solShop = (env: Env) => !!(env.SOLANA_RPC_URL && env.SHOP_TREASURY && !/mainnet/i.test(env.SOLANA_RPC_URL));
-
-  app.get(ShopRoutes.catalog, requirePlayer, async (c) => c.json(await shop.catalog(c.env.DB, c.get('player').id, solShop(c.env))));
+  app.get(ShopRoutes.catalog, requirePlayer, async (c) => c.json(await shop.catalog(c.env.DB, c.get('player').id)));
 
   app.post(ShopRoutes.buy, requirePlayer, async (c) => {
     const b = await readJson<ShopBuyRequest>(c.req.raw);
     return c.json(await shop.buyWithCoins(c.env.DB, c.get('player').id, requireString(b.itemId, 'itemId', 64), requireString(b.requestId, 'requestId', 64)));
-  });
-
-  app.post(ShopRoutes.solIntent, requirePlayer, async (c) => {
-    if (!solShop(c.env)) fail(501, 'not_configured', 'SOL purchases are not open on this server.');
-    const b = await readJson<ShopSolIntentRequest>(c.req.raw);
-    return c.json(await shop.solIntent(c.env.DB, c.get('player').id, requireString(b.itemId, 'itemId', 64), c.env.SHOP_TREASURY!));
-  });
-
-  app.post(ShopRoutes.solConfirm, requirePlayer, async (c) => {
-    if (!solShop(c.env)) fail(501, 'not_configured', 'SOL purchases are not open on this server.');
-    const b = await readJson<ShopSolConfirmRequest>(c.req.raw);
-    const fetchTx = shopTxFetcher ?? shop.rpcFetchTx(c.env.SOLANA_RPC_URL!);
-    return c.json(await shop.solConfirm(c.env.DB, c.get('player').id, requireString(b.intentId, 'intentId', 64), requireString(b.signature, 'signature', 100), fetchTx));
   });
 
   // ---- Social, profile, leaderboards (Phase 4) ---------------------------------------------------

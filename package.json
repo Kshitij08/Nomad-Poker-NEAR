@@ -7,8 +7,7 @@
     "apps/web",
     "apps/web/server",
     "apps/api",
-    "apps/game-server",
-    "apps/per"
+    "apps/game-server"
   ],
   "scripts": {
     "dev": "npm run dev -w nomad-poker-web",

@@ -2,7 +2,7 @@
  * Tournaments (atlas: Redesign v2 › Tournaments): Browse, My Tournaments, Host, Join by Code, with the Register and
  * Share dialogs. Same data and rules as the Unity screens (tournaments/menu/nomadTournaments.ts): register / join,
  * leave / cancel, host form options, join by code. Coins or NEAR stakes (near/tournaments.ts: the host's and players'
- * wallets pay the escrow, then the API checks it); SOL tournaments are solTourneys.ts.
+ * wallets pay the escrow, then the API checks it). Demo lists the Coins tournaments, On-chain the NEAR ones.
  */
 import { NomadHost } from '../../menu/host';
 import { isDemo, isMine as isMineOf, isOpen, isRegistered, type MineResult, type TournamentInfo } from '../../tournaments/api/tournamentInfo';
@@ -160,7 +160,8 @@ function mineList(): TournamentInfo[] {
 }
 
 function browseList(): TournamentInfo[] {
-  let l = [...(T.list ?? [])];
+  const near = onchain();
+  let l = (T.list ?? []).filter((x) => isNearTournament(x) === near);
   if (T.filter !== 'all') l = l.filter((x) => x.speed === T.filter);
   if (T.sort === 'entry') l.sort((a, b) => a.entryFee - b.entryFee || a.startsAtUnix - b.startsAtUnix);
   else if (T.sort === 'prize') l.sort((a, b) => b.prizePool - a.prizePool);
@@ -391,7 +392,7 @@ function head(on: string): string {
   return topBar('Tournaments') + tabs([['t-browse', 'Browse'], ['t-mine', 'My tournaments'], ['t-host', 'Host'], ['t-code', 'Join by code']], on, 'tab', 'v2-ttabs') +
     // Offline the list is the practice backend's example data (some already "registered" or "hosted"): say so.
     (!chain && T.list?.length && T.list.every(isDemo) ? `<div class="v2-card v2-row v2-tnote">${ico('trophy', 1.8)}<span class="v2-grow">Practice tournaments: example events to try the flow while the tournament server is offline.</span></div>` : '') +
-    (chain ? `<div class="v2-card v2-row v2-tnote">${ico('sol', 1.8)}<span class="v2-grow">These are Coins tournaments. SOL tournaments, paid from your game balance, have their own list.</span>${btn('SOL tournaments', 't-sol', { h: 'violet', c: 'sm' })}</div>` : '');
+    (chain ? `<div class="v2-card v2-row v2-tnote">${ico('near', 1.8)}<span class="v2-grow">NEAR tournaments: entry fees and prizes are held by the escrow on NEAR testnet; 1st takes 60% and 2nd 40%. Switch to Demo for Coins tournaments.</span></div>` : '');
 }
 
 const empty = (icon: string, text: string): string => `<div class="v2-empty">${ico(icon, 6)}<span>${text}</span></div>`;
@@ -408,7 +409,6 @@ const common: Record<string, (v: string) => void | Promise<void>> = {
   't-exp': (v) => {
     T.expanded = T.expanded === v ? '' : v;
   },
-  't-sol': () => ui().show('sol-tourneys'),
 };
 
 // ------------------------------------------------------------------ screens
@@ -534,6 +534,10 @@ function optRowIdx(label: string, items: [number, string][], on: number, a: stri
 const hostScreen: ScreenDef = {
   id: 't-host',
   replaces: ['Tournaments_Host'],
+  open() {
+    // The host form starts in the mode's currency (the Coins / NEAR choice stays on the form).
+    T.hNear = onchain();
+  },
   render() {
     const nearT = T.hNear;
     const fee = (nearT ? NEAR_FEES : HOST_FEES)[T.hFee]!;

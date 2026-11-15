@@ -43,7 +43,7 @@ html[data-orient='portrait'] .v2t { font-size: clamp(11px, 3.3vw, 15px); }
 .v2t-card { background: rgba(255, 255, 255, 0.05); border: 0.1em solid color-mix(in srgb, var(--v2-accent) 45%, transparent); border-radius: 0.9em; padding: 0.6em 0.8em; display: flex; align-items: center; gap: 0.6em; }
 .v2t-pill { display: inline-flex; align-items: center; gap: 0.3em; padding: 0.3em 0.8em; border-radius: 1em; background: color-mix(in srgb, var(--v2-shade) 88%, transparent); border: 0.1em solid var(--v2t-line); font-weight: 800; font-size: 0.92em; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .v2t-pill.ok { background: rgba(18, 61, 46, 0.92); color: var(--v2-good); border-color: color-mix(in srgb, var(--v2-good) 50%, transparent); }
-.v2t-pill.sol { background: var(--v2-grad-sol); border: 0; }
+.v2t-pill.near { background: var(--v2-grad-near); color: #04140d; border: 0; }
 .v2t-pill.gold { background: color-mix(in srgb, var(--v2-gold) 20%, transparent); color: var(--v2-gold); border-color: color-mix(in srgb, var(--v2-gold) 55%, transparent); }
 .v2t-dim { position: absolute; inset: 0; background: color-mix(in srgb, var(--v2-shade) 62%, transparent); pointer-events: auto; display: flex; align-items: center; justify-content: center; padding: 1em; }
 .v2t-dlg { width: min(34em, 100%); background: var(--v2-dlg); border: 0.15em solid var(--v2-accent); border-radius: 1.3em; padding: 1.3em 1.5em; box-shadow: 0 1em 3em rgba(0, 0, 0, 0.5); font-size: 1.05em; }

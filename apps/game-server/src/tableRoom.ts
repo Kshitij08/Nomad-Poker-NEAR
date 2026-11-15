@@ -1,5 +1,4 @@
 import { DurableObject } from 'cloudflare:workers';
-import { SideHost } from './sideHost';
 import { TableAlerts } from './alerts';
 import { realClock } from '@nomad/table-server/clock';
 import type { AgentRow } from '@nomad/db/agents';
@@ -109,7 +108,6 @@ export class TableRoom extends DurableObject<Env> {
       log,
       createHost: async (spec, speed) => {
         this.startSweep();
-        if (spec.kind === 'side') return new SideHost(spec, realClock(speed), log);
         if (spec.kind === 'tournament') {
           const t = await tournamentBySession(env.DB, spec.name);
           if (!t) throw new Error(`Tournament '${spec.name}' was not found.`);

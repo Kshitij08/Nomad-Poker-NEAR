@@ -8,6 +8,8 @@ describe('room names', () => {
     expect(canonicalSession('QA-Soak-1')).toBe('qa-soak-1');
     expect(canonicalSession('../etc')).toBeNull();
     expect(canonicalSession('x'.repeat(65))).toBeNull();
+    // The Solana side-channel rooms (`SC-<base58>`) are gone.
+    expect(canonicalSession('SC-GV5LYvyakPHtjNWENbFKnfyG2NuMLkL6xYPxo6YyEcJw')).toBeNull();
   });
 
   it('opens pools on demand, party rooms only once spawned, qa rooms only where enabled', () => {

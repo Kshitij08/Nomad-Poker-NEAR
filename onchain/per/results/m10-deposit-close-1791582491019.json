@@ -1,9 +1,0 @@
-{
-  "wallet": "DgBcjTRgVqV1jE36u7ghgoyrfoRcgqm4qxHf4KjXNjMT",
-  "depositWithClose": true,
-  "err": "",
-  "spentLamports": 10505000,
-  "beyondTheMoney": 505000,
-  "walletAtaLeft": false,
-  "vaultBalanceInRollup": "0"
-}

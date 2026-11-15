@@ -14,7 +14,7 @@ import { StakeSessionNames } from '@nomad/table-server/sessions';
 import { SocialRoutes, type PlayerSearchResponse, type PlayerSearchResult } from '@nomad/contract';
 import { act, btn, esc, input, tabs } from '../core';
 import { ico } from '../icons';
-import { ui, app, host, S, onchain, onchainApi, avatar, avatarUrl, pictureUrl, myPicture, level, playerName, accountExtras, topBar, run, prompt, copy, setMode } from '../ctx';
+import { ui, app, host, S, avatar, avatarUrl, pictureUrl, myPicture, level, playerName, accountExtras, topBar, run, prompt, copy, setMode } from '../ctx';
 import type { ScreenDef } from '../install';
 import './social.css';
 
@@ -490,12 +490,7 @@ const leaderboard: ScreenDef & { tab: string; board: LeaderboardSnapshot | null;
     // Say what the score is: it's Coins won in the period (not your balance), or hands won.
     const col = hands ? 'Hands won' : 'Coins won';
     let body: string;
-    if (onchain()) {
-      const addr = onchainApi.walletAddress?.();
-      body = !addr
-        ? `<div class="v2-empty">${ico('sol', 6)}<b class="v2-h" style="font-size:1.6em;color:var(--v2-ink)">Connect your wallet</b><span>The on-chain leaderboard ranks players by SOL won.<br>Connect a Solana wallet to see it and your rank.</span>${btn('Connect Wallet', 'lb-connect', { h: 'gold', c: 'lg' })}</div>`
-        : `<div class="v2-empty">${ico('sol', 6)}<b class="v2-h" style="font-size:1.6em;color:var(--v2-ink)">On-chain rankings are coming</b><span>SOL winnings aren't ranked yet. Switch to Demo for the Coins leaderboard.</span>${btn('Show Demo', 'mode', { h: 'violet', v: 'demo' })}</div>`;
-    } else {
+    {
       const b = this.board && this.board.kind === kind ? this.board : null;
       const rows = b ? b.rows.slice(0, 10) : [];
       const list = rows.length
@@ -531,9 +526,6 @@ ${agents && !rows.some((r) => r.isLocal) ? `<div class="v2-lbdiv"></div><div cla
     'lb-tab': (v) => {
       leaderboard.tab = v;
       leaderboard.load();
-    },
-    'lb-connect': async () => {
-      await onchainApi.connectWallet?.();
     },
     mode: (v) => setMode(v),
   },

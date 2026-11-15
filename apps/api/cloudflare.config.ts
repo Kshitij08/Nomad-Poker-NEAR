@@ -27,8 +27,6 @@ const STAGES = {
     tournamentMinLead: '45',
     listingMinHands: '100',
     listingMinDays: '0',
-    // Local SOL shop tests pay the same devnet treasury as staging, read through Solana's public devnet RPC.
-    shopTreasury: 'GV5LYvyakPHtjNWENbFKnfyG2NuMLkL6xYPxo6YyEcJw',
     nearRpc: 'https://test.rpc.fastnear.com',
     nearEscrow: 'nomad-escrow.testnet',
   },
@@ -43,8 +41,6 @@ const STAGES = {
     tournamentMinLead: '45',
     listingMinHands: '100',
     listingMinDays: '0',
-    // SOL shop purchases (devnet) pay the PER keeper key, a devnet key the project controls (apps/per health shows it).
-    shopTreasury: 'GV5LYvyakPHtjNWENbFKnfyG2NuMLkL6xYPxo6YyEcJw',
     nearRpc: 'https://test.rpc.fastnear.com',
     nearEscrow: 'nomad-escrow.testnet',
   },
@@ -61,7 +57,6 @@ const STAGES = {
     tournamentMinLead: '45',
     listingMinHands: '',
     listingMinDays: '',
-    shopTreasury: '',
     nearRpc: '',
     nearEscrow: '',
   },
@@ -86,7 +81,6 @@ export default defineConfig(({ mode }) => {
         WRITE_LIMITER: bindings.rateLimit({ namespace: s.writeLimiterNamespace, simple: { limit: 60, period: 60 } }),
         STAGE: bindings.text(stage),
         ALLOWED_ORIGINS: bindings.text(s.origins.join(',')),
-        WALLET_CHAIN_ID: bindings.text('devnet'),
         // NEAR sign-in checks the signing key against this RPC (testnet in this fork; empty: not configured).
         NEAR_RPC_URL: bindings.text(s.nearRpc),
         // NEAR tournaments: the escrow holding their stakes (read-only here; the game server is its operator).
@@ -103,10 +97,6 @@ export default defineConfig(({ mode }) => {
         TOURNAMENT_MIN_LEAD_SECONDS: bindings.text(s.tournamentMinLead),
         LISTING_MIN_HANDS: bindings.text(s.listingMinHands),
         LISTING_MIN_DAYS: bindings.text(s.listingMinDays),
-        // The shop's SOL purchases (devnet only): the treasury, and the RPC URL as a secret on staging.
-        SHOP_TREASURY: bindings.text(s.shopTreasury),
-        ...(stage === 'staging' ? { SOLANA_RPC_URL: bindings.secret() } : {}),
-        ...(stage === 'development' ? { SOLANA_RPC_URL: bindings.text('https://api.devnet.solana.com') } : {}),
       },
     },
   };

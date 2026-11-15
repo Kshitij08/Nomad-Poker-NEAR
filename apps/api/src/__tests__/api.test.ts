@@ -9,13 +9,12 @@ import {
   type LedgerResponse,
   type MeResponse,
   type SessionResponse,
-  type WalletChallengeResponse,
 } from '@nomad/contract';
 import { createApp } from '../app';
 import type { Env } from '../env';
 import { resetGoogleKeyCache } from '../google';
 import * as ledger from '@nomad/db/ledger';
-import { base58Encode, base64url, utf8 } from '@nomad/db/util';
+import { base64url, utf8 } from '@nomad/db/util';
 import { D1Shim } from '@nomad/db/testing/d1Shim';
 
 const ORIGIN = 'http://localhost:5180';
@@ -28,7 +27,6 @@ beforeEach(async () => {
     HANDS: {} as R2Bucket,
     STAGE: 'test',
     ALLOWED_ORIGINS: `${ORIGIN},https://nomad-poker-near.vercel.app`,
-    WALLET_CHAIN_ID: 'devnet',
     EMAIL_DEV_ECHO: '1',
     GOOGLE_CLIENT_IDS: 'web-client-id',
     SPIN_SECRET: 'test-secret',
@@ -47,19 +45,6 @@ async function call<T>(method: string, path: string, body?: unknown, token?: str
   const res = await app.request(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }, env);
   const text = await res.text();
   return { status: res.status, body: (text ? JSON.parse(text) : null) as T, headers: res.headers };
-}
-
-async function newWallet() {
-  const keys = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify'])) as CryptoKeyPair;
-  const address = base58Encode(new Uint8Array((await crypto.subtle.exportKey('raw', keys.publicKey)) as ArrayBuffer));
-  const sign = async (message: string) => base58Encode(new Uint8Array(await crypto.subtle.sign('Ed25519', keys.privateKey, utf8(message))));
-  return { address, sign };
-}
-
-async function walletSignIn(w: Awaited<ReturnType<typeof newWallet>>, token?: string) {
-  const ch = await call<WalletChallengeResponse>('POST', Routes.walletChallenge, { address: w.address });
-  expect(ch.status).toBe(200);
-  return call<SessionResponse>('POST', Routes.walletVerify, { address: w.address, nonce: ch.body.nonce, signature: await w.sign(ch.body.message) }, token);
 }
 
 describe('guest sign-in', () => {
@@ -101,74 +86,10 @@ describe('guest sign-in', () => {
   });
 });
 
-describe('wallet sign-in', () => {
-  it('signs in a new wallet as a registered player with the starter grant', async () => {
-    const w = await newWallet();
-    const s = await walletSignIn(w);
-    expect(s.status).toBe(201);
-    expect(s.body).toMatchObject({ created: true, linked: false, player: { kind: 'registered' } });
-    const me = await call<MeResponse>('GET', Routes.me, undefined, s.body.token);
-    expect(me.body.identities).toMatchObject([{ provider: 'wallet', label: w.address }]);
-    expect(me.body.balances.coins).toBe(10_000);
-
-    const again = await walletSignIn(w);
-    expect(again.status).toBe(200);
-    expect(again.body).toMatchObject({ created: false, player: { id: s.body.player.id } });
-  });
-
-  it('builds a SIWS-style message for the calling origin and devnet', async () => {
-    const w = await newWallet();
-    const ch = await call<WalletChallengeResponse>('POST', Routes.walletChallenge, { address: w.address });
-    expect(ch.body.message).toContain('localhost:5180 wants you to sign in with your Solana account:');
-    expect(ch.body.message).toContain(`\n${w.address}\n`);
-    expect(ch.body.message).toContain('Chain ID: devnet');
-    expect(ch.body.message).toContain(`Nonce: ${ch.body.nonce}`);
-  });
-
-  it('links a wallet to the guest who asks, keeping the balance', async () => {
-    const g = await call<SessionResponse>('POST', Routes.guest, {});
-    await ledger.post(env.DB, [{ playerId: g.body.player.id, currency: 'coins', delta: -2_500, reason: 'table:buy_in', idempotencyKey: 'b1' }]);
-    const w = await newWallet();
-    const s = await walletSignIn(w, g.body.token);
-    expect(s.body).toMatchObject({ created: false, linked: true, player: { id: g.body.player.id, kind: 'registered' } });
-    const me = await call<MeResponse>('GET', Routes.me, undefined, s.body.token);
-    expect(me.body.balances.coins).toBe(7_500);
-  });
-
-  it('signs a different guest in to the wallet owner instead of linking', async () => {
-    const w = await newWallet();
-    const owner = await walletSignIn(w);
-    const g = await call<SessionResponse>('POST', Routes.guest, {});
-    const s = await walletSignIn(w, g.body.token);
-    expect(s.body).toMatchObject({ linked: false, player: { id: owner.body.player.id } });
-  });
-
-  it('rejects a bad signature, a reused nonce and another address', async () => {
-    const w = await newWallet();
-    const other = await newWallet();
-    const ch = await call<WalletChallengeResponse>('POST', Routes.walletChallenge, { address: w.address });
-    const bad = await call<ApiErrorBody>('POST', Routes.walletVerify, { address: w.address, nonce: ch.body.nonce, signature: await other.sign(ch.body.message) });
-    expect(bad.status).toBe(401);
-    // The nonce was consumed by the failed attempt.
-    const reuse = await call<ApiErrorBody>('POST', Routes.walletVerify, { address: w.address, nonce: ch.body.nonce, signature: await w.sign(ch.body.message) });
-    expect(reuse.status).toBe(401);
-
-    const ch2 = await call<WalletChallengeResponse>('POST', Routes.walletChallenge, { address: w.address });
-    const swapped = await call<ApiErrorBody>('POST', Routes.walletVerify, { address: other.address, nonce: ch2.body.nonce, signature: await other.sign(ch2.body.message) });
-    expect(swapped.status).toBe(401);
-  });
-
-  it('rejects an expired challenge', async () => {
-    const w = await newWallet();
-    const ch = await call<WalletChallengeResponse>('POST', Routes.walletChallenge, { address: w.address });
-    await env.DB.prepare('UPDATE auth_challenges SET expires_at = 1').run();
-    const r = await call<ApiErrorBody>('POST', Routes.walletVerify, { address: w.address, nonce: ch.body.nonce, signature: await w.sign(ch.body.message) });
-    expect(r.body.error.code).toBe('expired');
-  });
-
-  it('rejects malformed addresses', async () => {
-    expect((await call<ApiErrorBody>('POST', Routes.walletChallenge, { address: 'not-base58-0OIl' })).status).toBe(400);
-    expect((await call<ApiErrorBody>('POST', Routes.walletChallenge, { address: base58Encode(new Uint8Array(31).fill(7)) })).status).toBe(400);
+describe('Solana wallet sign-in (removed)', () => {
+  it('no longer answers', async () => {
+    expect((await call<ApiErrorBody>('POST', '/v1/auth/wallet/challenge', { address: 'x' })).status).toBe(404);
+    expect((await call<ApiErrorBody>('POST', '/v1/auth/wallet/verify', { address: 'x', nonce: 'y', signature: 'z' })).status).toBe(404);
   });
 });
 

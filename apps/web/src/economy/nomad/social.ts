@@ -180,7 +180,7 @@ function bindFriends(host: NomadHost, ctx: AppContext): void {
     FriendInvites.joinHandler = async (invite: FriendInvite) => {
       const n = net(ctx);
       if (!n?.joinParty) return 'Go back to the main menu to join.';
-      if (invite.money) return "That's a real-money table. Join it from the SOL tables.";
+      if (invite.money) return "That's a NEAR table. Open Play for NEAR to buy in and join it.";
       void connect(host, () => n.joinParty!(invite.session), n);
       return null;
     };

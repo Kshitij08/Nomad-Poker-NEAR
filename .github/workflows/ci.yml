@@ -15,8 +15,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # The PER container (apps/per/container) is its own npm project: the image installs it from its lockfile.
-      - run: npm ci --prefix apps/per/container --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
       - name: Unit and parity tests
