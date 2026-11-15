@@ -5,7 +5,7 @@ import { Account, JsonRpcProvider, actions, teraToGas } from "../feeder/src/chai
 
 export const env = process.env;
 export const TABLE = env.TABLE ?? "table.nomad-poker.testnet";
-export const RPC = env.RPC ?? "https://rpc.testnet.near.org";
+export const RPC = env.RPC ?? "https://test.rpc.fastnear.com";
 export const CREDS = env.NEAR_CREDENTIALS_DIR ?? "\\\\wsl.localhost\\Ubuntu\\home\\kshit\\.near-credentials\\testnet";
 /** The feeder's own credentials folder: only its function-call key. */
 export const FEEDER_CREDS = env.FEEDER_CREDENTIALS_DIR ?? "\\\\wsl.localhost\\Ubuntu\\home\\kshit\\.near-credentials\\feeder";
@@ -52,18 +52,26 @@ export function returnOf(res) {
  * @returns {{ tx: string|null, failure: string|null, value: any, stage: "chain"|"submission" }}
  */
 export async function attempt(acct, method, args, { deposit = 0n, gas = "100" } = {}) {
-  try {
-    const res = await acct.signAndSendTransaction({
-      receiverId: TABLE,
-      actions: [actions.functionCall(method, args, teraToGas(gas), deposit)],
-      throwOnFailure: false,
-      waitUntil: "FINAL",
-    });
-    return { tx: res.transaction?.hash ?? res.transaction_outcome?.id ?? null, failure: failureOf(res), value: returnOf(res), stage: "chain" };
-  } catch (e) {
-    // Refused before it became a transaction (for example a method the access key does not allow).
-    const msg = String(e?.message ?? e).split("\n")[0];
-    return { tx: null, failure: msg, value: null, stage: "submission" };
+  for (let tries = 0; ; tries++) {
+    try {
+      const res = await acct.signAndSendTransaction({
+        receiverId: TABLE,
+        actions: [actions.functionCall(method, args, teraToGas(gas), deposit)],
+        throwOnFailure: false,
+        waitUntil: "FINAL",
+      });
+      return { tx: res.transaction?.hash ?? res.transaction_outcome?.id ?? null, failure: failureOf(res), value: returnOf(res), stage: "chain" };
+    } catch (e) {
+      const msg = String(e?.message ?? e).split("\n")[0];
+      // A transport problem (rate limit, timeout) is not a refusal: retry, and never report it as one.
+      if (/-429|rate|Too Many|timeout|ECONNRESET|fetch failed|503|502|504/i.test(msg)) {
+        if (tries >= 6) throw new Error(`RPC kept failing for ${method}: ${msg}`);
+        await sleep(3000 * (tries + 1));
+        continue;
+      }
+      // Refused before it became a transaction (for example a method the access key does not allow).
+      return { tx: null, failure: msg, value: null, stage: "submission" };
+    }
   }
 }
 

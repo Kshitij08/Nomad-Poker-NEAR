@@ -14,7 +14,7 @@ export async function loadKey(accountId, dir = process.env.NEAR_CREDENTIALS_DIR 
 }
 
 export class TableClient {
-  constructor({ rpc = "https://rpc.testnet.near.org", contractId, operator, operatorKey, owner, ownerKey, settler, settlerKey }) {
+  constructor({ rpc = "https://test.rpc.fastnear.com", contractId, operator, operatorKey, owner, ownerKey, settler, settlerKey }) {
     this.contractId = contractId;
     this.provider = new JsonRpcProvider({ url: rpc });
     // `owner`/`ownerKey` are the old names for the account that opens sessions.

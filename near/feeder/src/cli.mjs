@@ -10,7 +10,7 @@
 //                                         Its key in NEAR_CREDENTIALS_DIR may be a function-call key limited to
 //                                         open_backed_session, open_session, submit_session, cancel_session.
 //   PROJECT [nomad-poker.testnet/nomad-dealer]
-//   OUTLAYER_API [https://testnet-api.outlayer.ai]   RPC [https://rpc.testnet.near.org]
+//   OUTLAYER_API [https://testnet-api.outlayer.ai]   RPC [https://test.rpc.fastnear.com]
 //   NEAR_CREDENTIALS_DIR [~/.near-credentials/testnet]   keys saved by near-cli
 //   PAYMENT_KEY, or OUTLAYER_KEYS_FILE [~/.outlayer/testnet/payment-keys.json] + KEY_NONCE [1]
 import { readFile } from "node:fs/promises";
