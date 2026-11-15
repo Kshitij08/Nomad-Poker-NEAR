@@ -5,7 +5,7 @@ The Unity stack is never touched by any step here until "Switch off Unity", whic
 
 ## 1. Production, before anyone plays
 
-1. **Decide the domain** (question in `worklog-phases-6-8.md`), then add it to the production `ALLOWED_ORIGINS` in
+1. **Decide the domain**, then add it to the production `ALLOWED_ORIGINS` in
    `apps/api/cloudflare.config.ts` and `apps/game-server/cloudflare.config.ts`, and add a `production` stage to
    `apps/web/scripts/stages.mjs` (the CSP is built from it).
 2. **Secrets** (never in the repo): `apps/api/.secrets.production.json` with `SPIN_SECRET`;
@@ -22,7 +22,7 @@ The Unity stack is never touched by any step here until "Switch off Unity", whic
 
 ## 2. Closed beta
 
-- The web app at a beta URL on production Workers; fresh accounts; coins from the starter grant; SOL tables devnet only.
+- The web app at a beta URL on production Workers; fresh accounts; coins from the starter grant; NEAR tables on testnet only.
 - Gate: the reconciliation stays clean for the whole beta (`GET /v1/admin/reconcile`, hourly in the logs); the load
   test passes at 3× the expected peak (`npx tsx apps/game-server/scripts/load.ts`).
 

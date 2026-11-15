@@ -6,7 +6,7 @@ ledger; the contract (routes, types, error codes) is `packages/contract` (`@noma
 | Route | What it does |
 |---|---|
 | `POST /v1/auth/guest` | New guest player with the starter grant (10,000 coins). |
-| `POST /v1/auth/wallet/challenge` → `/verify` | Sign In With Solana: the server builds the message, the wallet signs it, the server checks the ed25519 signature. Nonces are single-use and last 5 minutes. |
+| `POST /v1/auth/near/challenge` → `/verify` | NEAR sign-in: the wallet signs the server's message as a NEP-413 signed message (recipient = the app's host, a 32-byte nonce); the server checks the ed25519 signature and asks the NEAR RPC (`NEAR_RPC_URL`) that the key is a full-access key of the account. Nonces are single-use and last 5 minutes. |
 | `POST /v1/auth/google` | Google ID token, checked against Google's keys and `GOOGLE_CLIENT_IDS` (not configured yet → 501). |
 | `POST /v1/auth/email/start` → `/verify` | Email link, 15 minutes, single use. No mail provider yet: staging returns the link as `devLink`; production answers 501. |
 | `POST /v1/auth/sign-out` | Ends this session. |
@@ -23,11 +23,10 @@ ledger; the contract (routes, types, error codes) is `packages/contract` (`@noma
 | `POST /v1/missions/claim` `{ id }` | Pays a mission only when the progress the game server counted reaches its target, once per day / week. |
 | `GET /v1/tournaments?filter=upcoming\|running\|finished` · `POST /v1/tournaments` | Public tournaments; host one (the host prize leaves the balance with the record). |
 | `GET /v1/tournaments/code/:code` · `GET /v1/tournaments/:id` · `GET /v1/me/tournaments` | One tournament by join code or id (`{ serverNowUnix, tournament }`); my entries and hosted ones. |
-| `POST /v1/tournaments/:id/register` · `unregister` · `edit` · `raise-prize` · `cancel` · `remove` | Entry fees and refunds move through the ledger in the same batch as the entry. The game server runs the tournament and pays the prizes. |
+| `POST /v1/tournaments/:id/register` · `unregister` · `edit` · `raise-prize` · `cancel` · `remove` · `confirm-escrow` | Coins tournaments: entry fees and refunds move through the ledger in the same batch as the entry. NEAR tournaments: the money is on the escrow (`NEAR_ESCROW`); the API checks the escrow before it lists, registers or unregisters. The game server runs the tournament and pays the prizes (NEAR: the escrow's `settle_tournament`). |
 | `GET /v1/strategies?sort=` · `POST /v1/strategies` · `GET /v1/strategies/:id` · `GET /v1/strategies/mine` · `POST /v1/strategies/:id/unlist` | The Coins copy-strategy marketplace: publish (custom numbers or My Twin), track records from every hand copied Agents played, qualification against Autopilot, the creator's dashboard. |
 | `GET /v1/style/twin` · `GET /v1/style/coach` | My Twin (a profile fitted to the player's recorded decisions) and the coach report. |
 | `GET /v1/shop` · `POST /v1/shop/buy` `{ itemId, requestId }` | The shop (Phase 3, `packages/db/src/shop.ts`, catalogue `SHOP_ITEMS` in the contract): XP pack, Level up, 2× XP boosts (hands recorded while one runs earn double XP), and card backs from the five room themes. Coins purchases are one batch (purchase row, ledger debit, effect); a retried requestId changes nothing. Real-money Coin packs are not sold. |
-| `POST /v1/shop/sol/intent` `{ itemId }` → `/v1/shop/sol/confirm` `{ intentId, signature }` | SOL purchases on devnet: the server quotes an amount, treasury and memo (the intent id); the player's transfer must pay at least that with the memo; the server reads the transaction from `SOLANA_RPC_URL` (staging secret) before applying the item, once per signature. Closed (501) without `SOLANA_RPC_URL` and `SHOP_TREASURY`. |
 | `GET /v1/admin/me` · `GET /v1/admin/players?q=` · `GET /v1/admin/players/:id` · `POST …/:id/adjust` · `…/ban` · `…/unban` · `GET /v1/admin/audit` · `GET /v1/admin/reconcile` | Support tools, for accounts listed in `admin_users` (others get 404): look-ups, balance adjustments (admins only, ledger entries), bans, the audit log of every admin action, and the ledger reconciliation. The web app's support page (`/admin.html`, `apps/web/src/admin/`) and `scripts/admin.mjs` (a terminal) drive them; `infra/add-admin.mjs` adds an admin. |
 
 Writes outside sign-in are limited to 60 a minute per session (`WRITE_LIMITER`); sign-in to 30 a minute per address.
