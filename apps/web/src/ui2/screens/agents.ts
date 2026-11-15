@@ -1,7 +1,7 @@
 /**
  * Agents (atlas: Redesign v2 › Agents). One tab row: Overview · Strategy · History (the Agent's pages, around a
  * "My Agents" list) · My twin · Marketplace · Coach. Twin, Marketplace and Coach were Unity pop-ups
- * (menu/screens/market.ts); they are pages here with the same backend calls and copy / publish rules.
+ * (the old menu's Market dialogs); they are pages here with the same backend calls and copy / publish rules.
  *
  * The backend runs ONE Agent per player: the list shows it, and "New agent" says so. It plays Coins tables in both modes;
  * NEAR copy trading (backing pro agents with NEAR) is the "Back a pro" tab (backing.ts).
@@ -14,12 +14,12 @@ import { stopReasonLabel } from '../../agents/nomad/agentsPartial';
 import {
   applyProfileTo, marketApi, marketState, rememberCopy, solProfile,
   format0Hash, TWIN_MIN_DECISIONS, COACH_MIN_HANDS, type AgentStrategyLike,
-} from '../../menu/screens/market';
+} from '../../menu/market';
 import { btn, esc, fmt, act, tabs, chips, seg, slider, input, outFormats, out, type V2Screen } from '../core';
 import { ico } from '../icons';
 import { ui, host, app, S, topBar, setMode, signedIn, coins, prompt, friendlyError } from '../ctx';
 import type { ScreenDef } from '../install';
-import { startWatch } from '../../economy/nomad/social';
+import { startWatch } from '../../economy/party';
 import { backingScreen } from './backing';
 import './agents.css';
 
@@ -513,7 +513,6 @@ const twin: ScreenDef = {
       const p = (twinLoad.data?.profile ?? {}) as J;
       if (!s) return;
       marketState.copiedStrategyId = null;
-      marketState.copiedSol = null;
       marketState.copiedName = null;
       applyProfileTo(s as unknown as AgentStrategyLike, p);
       ui().message('My Twin', 'Your Agent now plays like you (Custom on the Strategy tab). Deploy it from Overview.', 'Go to Overview', () => ui().show('ag-overview'));
@@ -558,7 +557,6 @@ function copyStrategy(s: J): void {
   const st = strat();
   if (!st) return;
   marketState.copiedStrategyId = null;
-  marketState.copiedSol = null;
   applyProfileTo(st as unknown as AgentStrategyLike, (s.profile ?? {}) as J);
   marketState.copiedStrategyId = String(s.strategyId);
   marketState.copiedName = String(s.name);

@@ -129,7 +129,7 @@ export function install(ctx: AppContext): void {
   ctx.services.agents = agents;
   ctx.services.agentStrategy = strategy;
   installReplayChrome();
-  // NomadUiHost.Agents.cs + NomadUiHost.Strategy.cs on the menu's Nomad host (the Agents_* screens).
+  // The agents module's hooks on the menu's Nomad host (message box, back to Session History, stop copying).
   registerNomadPartial(agentsPartial(agents));
 
   // ?agents=1 opens Agents_Overview once the menu is up (debug).
