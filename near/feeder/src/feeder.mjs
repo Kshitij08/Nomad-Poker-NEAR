@@ -58,7 +58,8 @@ export function sessionId(tableId, n) {
 export class SessionFeeder extends EventEmitter {
   /**
    * @param o.tableId    short id; sessions are named `<tableId>-<n>`
-   * @param o.seats      [{ profile: { tight, aggro }, stack }] in seat order; `stack` is the starting and rebuy stack
+   * @param o.seats      [{ profile, stack }] in seat order; `profile` is a v2 strategy profile (or {tight, aggro}),
+   *                    `stack` the starting and rebuy stack
    * @param o.hands      hands per session
    * @param o.ahead      sessions to keep ready beyond the one playing (1 is enough when playback outlasts a fetch)
    * @param o.dealer     { run(input) -> { output, runMs, cost } }   (OutlayerClient)
@@ -89,7 +90,7 @@ export class SessionFeeder extends EventEmitter {
       } catch (e) {
         if (signal?.aborted) throw e;
         // The contract refused for a reason a retry cannot fix (funds, limits, unknown agents): stop the table.
-        if (/loss limit|below the buy-in|of the pool|too small|lost too much|no position|has no pool|no agent|owner only/.test(e.message)) throw e;
+        if (/loss limit|below the buy-in|of the pool|too small|lost too much|no position|has no pool|no agent|owner only|owner or operator only|self-play|not open to backers|profile/.test(e.message)) throw e;
         this.emit("retry", { what, attempt, error: e.message });
         await sleep(Math.min(this.retryMs * attempt, 60_000), signal);
       }
@@ -105,17 +106,18 @@ export class SessionFeeder extends EventEmitter {
     const t0 = Date.now();
     this.emit("fetching", { id, index: st.index, stacks });
 
-    const askDealer = (profiles) =>
+    const askDealer = (input) =>
       this.#retry(
         `dealer ${id}`,
         async () => {
-          const a = await this.dealer.run({ action: "session", hand_id: id, profiles, ...req });
+          const a = await this.dealer.run(input);
           if (!a.output?.ok) throw new Error(`dealer refused: ${a.output?.error}`);
           return a;
         },
         signal,
       );
     let answer;
+    let seating = null;
     if (this.backed) {
       // The contract locks each buy-in and records the agents' profiles; the dealer gets exactly that request.
       const recorded = await this.#retry(
@@ -123,10 +125,11 @@ export class SessionFeeder extends EventEmitter {
         () => this.table.openBackedSession({ sessionId: id, seats: this.backed.seats, buyIn: this.backed.buyIn, button: req.button, sb: req.sb, bb: req.bb, hands: req.hands }),
         signal,
       );
-      answer = await askDealer(recorded.profiles);
+      seating = recorded.seating ?? null;
+      answer = await askDealer(recorded);
     } else {
       const profiles = this.seats.map((s) => s.profile);
-      [, answer] = await Promise.all([this.#retry(`open ${id}`, () => this.table.openSession({ sessionId: id, profiles, ...req }), signal), askDealer(profiles)]);
+      [, answer] = await Promise.all([this.#retry(`open ${id}`, () => this.table.openSession({ sessionId: id, profiles, ...req }), signal), askDealer({ action: "session", hand_id: id, profiles, ...req })]);
     }
     const fetchedMs = Date.now() - t0;
     const { alpha, signature_hex, actions } = answer.output;
@@ -147,7 +150,9 @@ export class SessionFeeder extends EventEmitter {
     );
     const settleMs = Date.now() - t1;
 
-    const detail = this.poker.replay({ signature_hex, actions, ...req });
+    // A seated session played the listed stacks in the order its proof gives; replay them in that order.
+    const order = seating === "vrf" ? this.poker.seatOrder(signature_hex, stacks.length) : null;
+    const detail = this.poker.replay({ signature_hex, actions, ...req, stacks: order ? order.map((i) => stacks[i]) : stacks });
     if (settled.stacks && settled.stacks.join() !== detail.stacks.join()) {
       throw new Error(`session ${id}: contract recorded ${settled.stacks}, replay gives ${detail.stacks}`);
     }
@@ -164,7 +169,7 @@ export class SessionFeeder extends EventEmitter {
     const lastButton = detail.hands.at(-1)?.button ?? st.button;
     await this.store.save({ index: st.index + 1, stacks: next, button: (lastButton + 1) % this.seats.length });
 
-    const session = { id, index: st.index, hands: detail.hands, startStacks: stacks, endStacks: detail.stacks, rebuys, payouts: settled.payouts ?? null, alpha, signature_hex, fetchedMs, runMs: answer.runMs, cost: answer.cost, settleMs, readyAt: Date.now() };
+    const session = { id, index: st.index, seatOrder: order, hands: detail.hands, startStacks: stacks, endStacks: detail.stacks, rebuys, payouts: settled.payouts ?? null, alpha, signature_hex, fetchedMs, runMs: answer.runMs, cost: answer.cost, settleMs, readyAt: Date.now() };
     this.emit("ready", session);
     return session;
   }

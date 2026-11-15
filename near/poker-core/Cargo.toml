@@ -9,9 +9,12 @@ description = "Deck shuffle, deal layout and hand ranking shared by the OutLayer
 seal = ["dep:x25519-dalek", "dep:chacha20poly1305"]
 # The stand-in agent that plays a hand from a profile. Dealer only.
 agent = []
+# serde derives on the strategy profile (contract, dealer, wasm).
+serde = ["dep:serde"]
 
 [dependencies]
 sha2 = { version = "0.10", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
 x25519-dalek = { version = "2", features = ["static_secrets"], optional = true }
 chacha20poly1305 = { version = "0.10", optional = true }
 

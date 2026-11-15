@@ -19,9 +19,11 @@ use near_sdk::{env, near, require, AccountId, Gas, NearToken, PanicOnDefault, Pr
 use poker_core::{self as core, game};
 
 mod history;
+pub mod strategy;
 mod pool;
 mod vault;
 pub use pool::PoolView;
+pub use strategy::{AgentView, ListingView, PoolLimitsView, Rules};
 pub use vault::{Agent, BackedSeat, BackedSession, Position, PositionView, VaultConfig};
 
 const OUTLAYER_GAS: Gas = Gas::from_tgas(100);
@@ -91,12 +93,41 @@ pub(crate) fn sessions() -> LookupMap<String, Session> {
     LookupMap::new(b"s")
 }
 
-/// Checks a session: the proof gives the session seed, and every hand is re-dealt from it and replayed.
+/// Checks a session: the proof gives the session seed, and every hand is re-dealt from it and replayed. With
+/// `vrf_seating` the listed stacks are first put in the seat order the seed gives; the result is by table position.
 pub fn verify_session(vrf_pubkey: &[u8; 32], session_id: &str, start: &game::Rules, hands: usize, alpha: &str, signature_hex: &str, actions: &str) -> Result<SessionResult, String> {
+    verify_seated_session(vrf_pubkey, session_id, start, hands, alpha, signature_hex, actions, false).map(|(r, _)| r)
+}
+
+pub fn verify_seated_session(vrf_pubkey: &[u8; 32], session_id: &str, start: &game::Rules, hands: usize, alpha: &str, signature_hex: &str, actions: &str, vrf_seating: bool) -> Result<(SessionResult, Option<Vec<usize>>), String> {
     let seed = seed_from_proof(vrf_pubkey, "session", session_id, alpha, signature_hex)?;
+    let order = vrf_seating.then(|| core::session::seat_order(&seed, start.stacks.len()));
+    let seated;
+    let start = match &order {
+        Some(o) => {
+            seated = game::Rules { stacks: core::session::seat(&start.stacks, o), ..start.clone() };
+            &seated
+        }
+        None => start,
+    };
     let out = core::session::replay(start, &seed, hands, actions)?;
     let totals = (0..start.stacks.len()).map(|i| out.stacks[i] as i64 - start.stacks[i] as i64).collect();
-    Ok(SessionResult { hands_played: out.hands.len() as u32, stacks: out.stacks, totals, actions: actions.to_string() })
+    Ok((SessionResult { hands_played: out.hands.len() as u32, stacks: out.stacks, totals, actions: actions.to_string() }, order))
+}
+
+/// Refuses a request profile that is neither a valid v2 profile nor a `{tight, aggro}` one.
+fn check_profiles(profiles: &[Value]) {
+    for (i, p) in profiles.iter().enumerate() {
+        let parsed: Result<core::profile::AnyProfile, _> = near_sdk::serde_json::from_value(p.clone());
+        match parsed.map(|p| p.into_v2()) {
+            Ok(p) => {
+                if let Err(e) = p.validate() {
+                    env::panic_str(&format!("profile {i}: {e}"));
+                }
+            }
+            Err(_) => env::panic_str(&format!("profile {i}: not a strategy profile")),
+        }
+    }
 }
 
 #[near(contract_state)]
@@ -161,12 +192,12 @@ impl Table {
     }
 
     pub fn set_vrf_pubkey(&mut self, vrf_pubkey_hex: String) {
-        require!(env::predecessor_account_id() == self.owner, "owner only");
+        self.require_owner();
         self.vrf_pubkey = Self::parse_key(&vrf_pubkey_hex);
     }
 
     pub fn set_project(&mut self, project_id: String) {
-        require!(env::predecessor_account_id() == self.owner, "owner only");
+        self.require_owner();
         self.project_id = project_id;
     }
 
@@ -202,6 +233,7 @@ impl Table {
     #[payable]
     pub fn play_hand(&mut self, hand_id: String, stacks: Vec<U64>, profiles: Vec<Value>, button: u8, sb: U64, bb: U64) -> Promise {
         require!(profiles.len() == stacks.len(), "one profile per stack");
+        check_profiles(&profiles);
         let stacks: Vec<u64> = stacks.iter().map(|s| s.0).collect();
         let rules = game::Rules { stacks: stacks.clone(), button: button as usize, sb: sb.0, bb: bb.0 };
         if let Err(e) = game::Hand::new(&rules) {
@@ -217,8 +249,9 @@ impl Table {
     /// over HTTPS and sends it to `submit_play`. Owner only: until the dealer signs its answers, the account that
     /// relays them could ask for a hand more than once under different ids and keep the one it prefers.
     pub fn open_play(&mut self, hand_id: String, stacks: Vec<U64>, profiles: Vec<Value>, button: u8, sb: U64, bb: U64) {
-        require!(env::predecessor_account_id() == self.owner, "owner only");
+        self.require_operator();
         require!(profiles.len() == stacks.len(), "one profile per stack");
+        check_profiles(&profiles);
         let stacks: Vec<u64> = stacks.iter().map(|s| s.0).collect();
         let rules = game::Rules { stacks: stacks.clone(), button: button as usize, sb: sb.0, bb: bb.0 };
         if let Err(e) = game::Hand::new(&rules) {
@@ -231,8 +264,9 @@ impl Table {
     /// Opens a session of agent hands. The game server fetches the dealer's answer over HTTPS and sends it to
     /// `submit_session`. Owner only, for the same reason as `open_play`.
     pub fn open_session(&mut self, session_id: String, stacks: Vec<U64>, profiles: Vec<Value>, button: u8, sb: U64, bb: U64, hands: u32) {
-        require!(env::predecessor_account_id() == self.owner, "owner only");
+        self.require_operator();
         require!(profiles.len() == stacks.len(), "one profile per stack");
+        check_profiles(&profiles);
         let stacks: Vec<u64> = stacks.iter().map(|s| s.0).collect();
         let start = game::Rules { stacks: stacks.clone(), button: button as usize, sb: sb.0, bb: bb.0 };
         if let Err(e) = core::session::check(&start, hands as usize) {
@@ -267,21 +301,22 @@ impl Table {
             sb: num("sb"),
             bb: num("bb"),
         };
-        let verified = verify_session(&self.vrf_pubkey, &session_id, &start, num("hands") as usize, &alpha, &signature_hex, &actions);
-        let r = match verified {
-            Ok(r) => {
+        let vrf_seating = req.get("seating").and_then(Value::as_str) == Some("vrf");
+        let verified = verify_seated_session(&self.vrf_pubkey, &session_id, &start, num("hands") as usize, &alpha, &signature_hex, &actions, vrf_seating);
+        let (r, order) = match verified {
+            Ok((r, order)) => {
                 s.status = Status::Done;
                 s.result = Some(r.clone());
-                r
+                (r, order)
             }
             Err(error) => return json!({ "ok": false, "error": error }),
         };
         let request = s.request.clone();
         all.flush();
         // Backed sessions pay out each seat's position in the same transaction.
-        let payouts = self.settle_backed(&session_id, &r);
-        history::record_session(&session_id, &request, &alpha, &signature_hex, &actions, &r.stacks, &payouts);
-        json!({ "ok": true, "hands_played": r.hands_played, "stacks": r.stacks, "totals": r.totals, "payouts": payouts })
+        let payouts = self.settle_backed(&session_id, &r, order.as_deref());
+        history::record_session(&session_id, &request, &alpha, &signature_hex, &actions, &r.stacks, &payouts, order.as_deref());
+        json!({ "ok": true, "hands_played": r.hands_played, "stacks": r.stacks, "totals": r.totals, "payouts": payouts, "seat_order": order })
     }
 
     pub fn get_session(&self, session_id: String) -> Option<Session> {
@@ -478,7 +513,7 @@ mod tests {
 
     fn agent_hand(f: &Fixture, rules: &game::Rules) -> String {
         let n = rules.stacks.len();
-        let profiles: Vec<agent::Profile> = (0..n).map(|i| agent::Profile { tight: 20 + 10 * i as u8, aggro: 70 - 10 * i as u8 }).collect();
+        let profiles: Vec<agent::Profile> = (0..n).map(|i| agent::Profile::from_legacy(20 + 10 * i as u8, 70 - 10 * i as u8)).collect();
         let d = core::deal(&f.seed, n);
         game::format_actions(&agent::play(&profiles, &f.seed, game::Hand::new(rules).unwrap(), &d))
     }
@@ -499,7 +534,7 @@ mod tests {
     fn a_session_replays_and_tampering_is_refused() {
         let f = fixture("session", "s1");
         let start = game::Rules { stacks: vec![300, 300, 300], button: 0, sb: 1, bb: 2 };
-        let profiles = [agent::Profile { tight: 10, aggro: 80 }, agent::Profile { tight: 30, aggro: 60 }, agent::Profile { tight: 5, aggro: 90 }];
+        let profiles = [agent::Profile::from_legacy(10, 80), agent::Profile::preset("Daredevil").unwrap(), agent::Profile::preset("Autopilot").unwrap()];
         let text = agent::play_session(&profiles, &f.seed, &start, 40).unwrap();
         let r = verify_session(&f.pk, "s1", &start, 40, &f.alpha, &f.sig_hex, &text).unwrap();
         assert_eq!(r.totals.iter().sum::<i64>(), 0);
@@ -511,6 +546,25 @@ mod tests {
         if r.hands_played > 1 {
             let short = &text[..text.rfind(';').unwrap()];
             assert!(verify_session(&f.pk, "s1", &start, 40, &f.alpha, &f.sig_hex, short).is_err());
+        }
+    }
+
+    #[test]
+    fn a_seated_session_replays_in_the_seed_s_seat_order() {
+        let f = fixture("session", "s2");
+        // Unequal stacks make the seat order matter to the replay.
+        let start = game::Rules { stacks: vec![100, 200, 300, 400], button: 0, sb: 1, bb: 2 };
+        let order = core::session::seat_order(&f.seed, 4);
+        let seated = game::Rules { stacks: core::session::seat(&start.stacks, &order), ..start.clone() };
+        let profiles = vec![agent::Profile::preset("Guardian").unwrap(); 4];
+        let text = agent::play_session(&profiles, &f.seed, &seated, 20).unwrap();
+        let (r, o) = verify_seated_session(&f.pk, "s2", &start, 20, &f.alpha, &f.sig_hex, &text, true).unwrap();
+        assert_eq!(o, Some(order.clone()));
+        assert_eq!(r.stacks.iter().sum::<u64>(), 1000);
+        // The same actions read in the listed order are a different session: refused or a different result.
+        if order != vec![0, 1, 2, 3] {
+            let plain = verify_seated_session(&f.pk, "s2", &start, 20, &f.alpha, &f.sig_hex, &text, false);
+            assert!(plain.map(|(p, _)| p.stacks != r.stacks || p.totals != r.totals).unwrap_or(true));
         }
     }
 
@@ -535,6 +589,7 @@ mod tests {
     use near_sdk::testing_env;
 
     const NEAR: u128 = 1_000_000_000_000_000_000_000_000;
+    const LEGACY: [(u8, u8); 4] = [(10, 80), (30, 60), (5, 90), (40, 50)];
 
     fn as_who(who: &str, deposit: u128, ts: u64) {
         testing_env!(VMContextBuilder::new()
@@ -550,16 +605,17 @@ mod tests {
         s.parse().unwrap()
     }
 
-    /// A table with four agents from one pro, each backed with 1 NEAR by a different backer.
+    /// A table with four agents from four pros (`pro{i}.near`), each backed with 1 NEAR by a different backer. The
+    /// listing rules are off here (no track record needed); the listing tests turn them on.
     fn backed_table() -> (Table, Vec<BackedSeat>, [u8; 32]) {
         let f = fixture("session", "v1");
         as_who("table.near", 0, 1);
         let mut t = Table::new(acct("outlayer.near"), "pro.near/dealer".into(), hex::encode(f.pk));
-        let profiles = [(10u8, 80u8), (30, 60), (5, 90), (40, 50)];
+        t.set_listing_rules(0, U64(0));
         let mut seats = vec![];
-        for (i, (tight, aggro)) in profiles.iter().enumerate() {
-            as_who("pro.near", 0, 1);
-            t.register_agent(format!("agent-{i}"), *tight, *aggro);
+        for (i, (tight, aggro)) in LEGACY.iter().enumerate() {
+            as_who(&format!("pro{i}.near"), 0, 1);
+            t.register_agent(format!("agent-{i}"), None, Some(*tight), Some(*aggro));
             let backer = format!("backer{i}.near");
             as_who(&backer, NEAR, 1);
             t.back(format!("agent-{i}"), Some(U128(NEAR / 2)));
@@ -568,16 +624,27 @@ mod tests {
         (t, seats, f.pk)
     }
 
+    fn pro_earnings(t: &Table) -> u128 {
+        (0..4).map(|i| t.get_earnings(acct(&format!("pro{i}.near"))).0).sum()
+    }
+
     fn total_held(t: &Table, seats: &[BackedSeat]) -> u128 {
         let positions: u128 = seats.iter().map(|s| { let p = t.get_position(s.backer.clone().unwrap(), s.agent_id.clone()).unwrap(); p.balance.0 + p.at_table.0 }).sum();
-        positions + t.get_earnings(acct("pro.near")).0 + t.get_earnings(acct("table.near")).0
+        positions + pro_earnings(t) + t.get_earnings(acct("table.near")).0
+    }
+
+    /// What the dealer plays for a backed session of agent-0..3 (listed in that order): the agents' profiles, seated
+    /// in the order the session's seed gives.
+    fn seated_text(f: &Fixture, profiles: &[agent::Profile], buy_in: u64, hands: usize) -> String {
+        let order = core::session::seat_order(&f.seed, profiles.len());
+        let start = game::Rules { stacks: vec![buy_in; profiles.len()], button: 0, sb: 1, bb: 2 };
+        agent::play_session(&core::session::seat(profiles, &order), &f.seed, &start, hands).unwrap()
     }
 
     fn session_text(id: &str, buy_in: u64, hands: usize) -> (Fixture, String) {
         let f = fixture("session", id);
-        let start = game::Rules { stacks: vec![buy_in; 4], button: 0, sb: 1, bb: 2 };
-        let profiles = [(10u8, 80u8), (30, 60), (5, 90), (40, 50)].map(|(tight, aggro)| agent::Profile { tight, aggro });
-        let text = agent::play_session(&profiles, &f.seed, &start, hands).unwrap();
+        let profiles: Vec<agent::Profile> = LEGACY.iter().map(|(t, a)| agent::Profile::from_legacy(*t, *a)).collect();
+        let text = seated_text(&f, &profiles, buy_in, hands);
         (f, text)
     }
 
@@ -586,7 +653,8 @@ mod tests {
         let (mut t, seats, _) = backed_table();
         assert_eq!(total_held(&t, &seats), 4 * NEAR);
         as_who("table.near", 0, 2);
-        t.open_backed_session("v1".into(), seats.clone(), U64(300), 0, U64(1), U64(2), 30);
+        let req = t.open_backed_session("v1".into(), seats.clone(), U64(300), 0, U64(1), U64(2), 30);
+        assert_eq!(req["seating"], "vrf");
         // 300 chips at 0.001 NEAR = 0.3 NEAR locked per seat.
         let p0 = t.get_position(seats[0].backer.clone().unwrap(), "agent-0".into()).unwrap();
         assert_eq!((p0.balance.0, p0.at_table.0), (NEAR - 3 * NEAR / 10, 3 * NEAR / 10));
@@ -600,15 +668,21 @@ mod tests {
         // Nothing is created or lost: what backers deposited is now in positions or fee earnings.
         assert_eq!(total_held(&t, &seats), 4 * NEAR);
         let stacks: Vec<u64> = out["stacks"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
+        let order: Vec<usize> = out["seat_order"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as usize).collect();
+        assert_eq!(order, core::session::seat_order(&f.seed, 4));
         let mut pro_fees = 0u128;
-        for (i, s) in seats.iter().enumerate() {
+        for (pos, listed) in order.iter().enumerate() {
+            let s = &seats[*listed];
+            // Payouts are reported by table position.
+            assert_eq!(out["payouts"]["seats"][pos]["agent"], s.agent_id);
             let p = t.get_position(s.backer.clone().unwrap(), s.agent_id.clone()).unwrap();
             assert_eq!(p.at_table.0, 0);
-            let profit = (stacks[i] as u128 * NEAR / 1000).saturating_sub(3 * NEAR / 10);
-            assert_eq!(p.fees_paid.0, profit * 8 / 100 + profit * 2 / 100, "seat {i}");
+            let profit = (stacks[pos] as u128 * NEAR / 1000).saturating_sub(3 * NEAR / 10);
+            assert_eq!(p.fees_paid.0, profit * 8 / 100 + profit * 2 / 100, "seat {pos}");
+            assert_eq!(t.get_earnings(acct(&format!("pro{listed}.near"))).0, profit * 8 / 100);
             pro_fees += profit * 8 / 100;
         }
-        assert_eq!(t.get_earnings(acct("pro.near")).0, pro_fees);
+        assert_eq!(pro_earnings(&t), pro_fees);
         assert_eq!(t.get_agent("agent-0".into()).unwrap().sessions, 1);
         // Settled once only.
         assert_eq!(t.submit_session("v1".into(), f.alpha, f.sig_hex, "f".into())["ok"], false);
@@ -634,7 +708,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "owner only")]
+    #[should_panic(expected = "owner or operator only")]
     fn only_the_server_opens_backed_sessions() {
         let (mut t, seats, _) = backed_table();
         as_who("backer0.near", 0, 2);
@@ -721,7 +795,7 @@ mod tests {
             .map(|i| t.get_position(acct(&format!("backer{i}.near")), format!("agent-{i}")).unwrap())
             .map(|p| p.balance.0 + p.at_table.0)
             .sum();
-        let fees = t.get_earnings(acct("pro.near")).0 + t.get_earnings(acct("table.near")).0;
+        let fees = pro_earnings(&t) + t.get_earnings(acct("table.near")).0;
         assert_eq!(positions + pools_value + fees + paid_out, deposits);
     }
 
@@ -740,8 +814,9 @@ mod tests {
         // The pro may raise the cap to 50%; nobody else may.
         as_who("alice.near", 0, 3);
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.set_pool_risk("agent-0".into(), 5000))).is_err());
-        as_who("pro.near", 0, 3);
+        as_who("pro0.near", 0, 3);
         t.set_pool_risk("agent-0".into(), 5000);
+        as_who("pro1.near", 0, 3);
         t.set_pool_risk("agent-1".into(), 5000);
         as_who("table.near", 0, 4);
         t.open_backed_session("p1".into(), seats, U64(300), 0, U64(1), U64(2), 10);
@@ -780,6 +855,200 @@ mod tests {
         assert_eq!(json!(out.stacks), rec["end_stacks"]);
         let recent = t.recent_sessions(None);
         assert_eq!(recent.len(), 1);
-        assert_eq!(recent[0]["agents"], json!(["agent-0", "agent-1", "agent-2", "agent-3"]));
+        let order = core::session::seat_order(&f.seed, 4);
+        assert_eq!(recent[0]["agents"], json!(order.iter().map(|i| format!("agent-{i}")).collect::<Vec<_>>()));
+        assert_eq!(rec["seat_order"], json!(order));
+    }
+
+    // ---------------------------------------------------------------------------------------- agents v2
+
+    fn panics<R>(f: impl FnOnce() -> R) -> String {
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+        match r {
+            Ok(_) => String::new(),
+            Err(e) => e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_else(|| "panicked".into()),
+        }
+    }
+
+    fn pool_seats(ids: &[&str]) -> Vec<BackedSeat> {
+        ids.iter().map(|a| BackedSeat { backer: None, agent_id: a.to_string() }).collect()
+    }
+
+    #[test]
+    fn v2_profiles_register_update_and_show_in_views() {
+        let (mut t, _, _) = backed_table();
+        as_who("pro9.near", 0, 5);
+        let dare = agent::Profile::preset("Daredevil").unwrap();
+        let v = t.register_agent("dare".into(), Some(dare.clone()), None, None);
+        assert_eq!((v.strategy_version, v.profile.clone()), (1, dare.clone()));
+        // The first-generation numbers are filled in for older clients.
+        assert_eq!((v.tight, v.aggro), dare.legacy_view());
+        // A legacy agent shows the v2 profile it plays.
+        assert_eq!(t.get_profile("agent-0".into()).unwrap(), agent::Profile::from_legacy(10, 80));
+        // Bad values are refused with the field's name.
+        let mut bad = dare.clone();
+        bad.aggression = 99;
+        assert!(panics(|| t.register_agent("bad".into(), Some(bad.clone()), None, None)).contains("aggression"));
+        assert!(panics(|| t.register_agent("none".into(), None, None, None)).contains("give a profile"));
+        // Only the pro updates; the same strategy again is refused; an update is a new version.
+        as_who("pro0.near", 0, 6);
+        assert!(panics(|| t.update_agent("dare".into(), agent::Profile::preset("Guardian").unwrap())).contains("only the agent's pro"));
+        as_who("pro9.near", 0, 6);
+        assert!(panics(|| t.update_agent("dare".into(), dare.clone())).contains("already"));
+        let auto = agent::Profile::preset("Autopilot").unwrap();
+        let v = t.update_agent("dare".into(), auto.clone());
+        assert_eq!((v.strategy_version, v.profile), (2, auto));
+        let card = t.list_agents(None, None).into_iter().find(|c| c.agent.id == "dare").unwrap();
+        assert_eq!(card.listing.strategy_version, 2);
+        assert_eq!(card.limits.loss_limit_bps, strategy::DEFAULT_POOL_LOSS_LIMIT_BPS);
+        // JSON shapes: a profile round-trips, and {tight, aggro} still parses for open_session.
+        let json_profile = near_sdk::serde_json::to_value(&v.strategy_version).unwrap();
+        assert_eq!(json_profile, json!(2));
+        let p: core::profile::AnyProfile = near_sdk::serde_json::from_value(json!({ "tight": 10, "aggro": 80 })).unwrap();
+        assert_eq!(p.into_v2(), agent::Profile::from_legacy(10, 80));
+        let p: core::profile::AnyProfile = near_sdk::serde_json::from_value(json!({ "fold_below": 40, "raise_above": 60, "aggression": 25, "bluff_chance": 2, "raise_size": 45 })).unwrap();
+        assert_eq!(p.into_v2(), agent::Profile::new([40, 60, 25, 2, 45]));
+    }
+
+    #[test]
+    fn a_session_cannot_seat_two_agents_of_one_pro() {
+        let (mut t, mut seats, _) = backed_table();
+        as_who("pro0.near", 0, 2);
+        t.register_agent("agent-0b".into(), Some(agent::Profile::preset("Trapper").unwrap()), None, None);
+        as_who("backer9.near", NEAR, 2);
+        t.back("agent-0b".into(), Some(U128(NEAR)));
+        seats[1] = BackedSeat { backer: Some(acct("backer9.near")), agent_id: "agent-0b".into() };
+        as_who("table.near", 0, 3);
+        let e = panics(|| t.open_backed_session("sp".into(), seats.clone(), U64(100), 0, U64(1), U64(2), 10));
+        assert!(e.contains("self-play") && e.contains("pro0.near"), "{e}");
+        // Handing the agent to another pro makes the table legal.
+        as_who("pro0.near", 0, 4);
+        t.transfer_agent("agent-0b".into(), acct("pro7.near"));
+        as_who("table.near", 0, 5);
+        t.open_backed_session("sp".into(), seats, U64(100), 0, U64(1), U64(2), 10);
+    }
+
+    #[test]
+    fn the_operator_opens_sessions_but_no_owner_method() {
+        let (mut t, seats, _) = backed_table();
+        as_who("feeder.near", 0, 2);
+        assert!(panics(|| t.open_backed_session("o1".into(), seats.clone(), U64(100), 0, U64(1), U64(2), 10)).contains("owner or operator only"));
+        as_who("table.near", 0, 2);
+        t.set_operator(Some(acct("feeder.near")));
+        assert_eq!(t.get_rules().operator, Some(acct("feeder.near")));
+        as_who("feeder.near", 0, 3);
+        t.open_backed_session("o1".into(), seats.clone(), U64(100), 0, U64(1), U64(2), 10);
+        t.open_session("o2".into(), vec![U64(100), U64(100)], vec![json!({ "tight": 10, "aggro": 80 }), json!(agent::Profile::preset("Guardian").unwrap())], 0, U64(1), U64(2), 5);
+        assert!(panics(|| t.open_session("o3".into(), vec![U64(100), U64(100)], vec![json!({ "fold_below": 1 }), json!({ "tight": 1, "aggro": 1 })], 0, U64(1), U64(2), 5)).contains("profile 0"));
+        // Every owner-only method refuses the operator.
+        let owner_only: Vec<Box<dyn Fn(&mut Table)>> = vec![
+            Box::new(|t| t.set_operator(Some(acct("feeder.near")))),
+            Box::new(|t| t.set_listing_rules(0, U64(0))),
+            Box::new(|t| t.set_default_pool_loss_limit(10_000)),
+            Box::new(|t| t.set_vault_config(U128(1), 800, 200, acct("feeder.near"))),
+            Box::new(|t| t.set_project("x/y".into())),
+            Box::new(|t| t.set_vrf_pubkey(hex::encode([1u8; 32]))),
+            Box::new(|t| t.index_agents(vec![])),
+        ];
+        for f in owner_only {
+            assert!(panics(|| f(&mut t)).contains("owner only"));
+        }
+        // It cannot cancel early or move anyone's money either.
+        assert!(panics(|| t.cancel_session("o1".into())).contains("too early"));
+        assert!(panics(|| t.withdraw("agent-0".into(), U128(1))).contains("no position"));
+        assert!(panics(|| t.claim_earnings()).contains("nothing to claim"));
+        // The owner can remove it.
+        as_who("table.near", 0, 4);
+        t.set_operator(None);
+        as_who("feeder.near", 0, 5);
+        assert!(panics(|| t.open_session("o4".into(), vec![U64(100), U64(100)], vec![json!({ "tight": 1, "aggro": 1 }); 2], 0, U64(1), U64(2), 5)).contains("owner or operator only"));
+    }
+
+    #[test]
+    fn backers_wait_for_a_track_record_and_a_strategy_change_restarts_it() {
+        let (mut t, seats, _) = backed_table();
+        as_who("table.near", 0, 1);
+        t.set_listing_rules(1, U64(10));
+        // The pro may always fund their own agent; a stranger may not until it qualifies.
+        as_who("pro0.near", NEAR, 2);
+        t.join_pool("agent-0".into());
+        as_who("alice.near", NEAR, 2);
+        let e = panics(|| t.join_pool("agent-1".into()));
+        assert!(e.contains("not open to backers yet") && e.contains("0 of 1 sessions"), "{e}");
+        assert!(panics(|| t.back("agent-1".into(), None)).contains("not open to backers yet"));
+        assert!(!t.get_listing("agent-1".into()).unwrap().qualified);
+        // One settled session of 30 hands qualifies all four.
+        as_who("table.near", 0, 3);
+        t.open_backed_session("q1".into(), seats.clone(), U64(100), 0, U64(1), U64(2), 30);
+        let (f, text) = session_text("q1", 100, 30);
+        assert_eq!(t.submit_session("q1".into(), f.alpha, f.sig_hex, text)["ok"], true);
+        let l = t.get_listing("agent-1".into()).unwrap();
+        assert!(l.qualified && l.open_to_backers && l.sessions == 1, "{l:?}");
+        as_who("alice.near", NEAR, 4);
+        t.join_pool("agent-1".into());
+        // A new strategy starts over.
+        as_who("pro1.near", 0, 5);
+        t.update_agent("agent-1".into(), agent::Profile::preset("Daredevil").unwrap());
+        let l = t.get_listing("agent-1".into()).unwrap();
+        assert_eq!((l.strategy_version, l.sessions, l.qualified), (2, 0, false));
+        as_who("bob.near", NEAR, 6);
+        assert!(panics(|| t.join_pool("agent-1".into())).contains("strategy v2 has 0 of 1 sessions"));
+        // A session opened before the change does not count toward the new version.
+        as_who("table.near", 0, 7);
+        t.open_backed_session("q2".into(), seats.clone(), U64(100), 0, U64(1), U64(2), 30);
+        as_who("pro1.near", 0, 8);
+        t.update_agent("agent-1".into(), agent::Profile::preset("Guardian").unwrap());
+        let f = fixture("session", "q2");
+        let profiles: Vec<agent::Profile> = vec![agent::Profile::from_legacy(10, 80), agent::Profile::preset("Daredevil").unwrap(), agent::Profile::from_legacy(5, 90), agent::Profile::from_legacy(40, 50)];
+        let text = seated_text(&f, &profiles, 100, 30);
+        assert_eq!(t.submit_session("q2".into(), f.alpha, f.sig_hex, text)["ok"], true);
+        assert_eq!(t.get_listing("agent-1".into()).unwrap().sessions, 0);
+        assert_eq!(t.get_listing("agent-2".into()).unwrap().sessions, 2);
+    }
+
+    #[test]
+    fn a_pool_past_its_loss_limit_takes_no_new_sessions() {
+        let (mut t, _, _) = backed_table();
+        for (who, agent) in [("pro0.near", "agent-0"), ("pro1.near", "agent-1")] {
+            as_who(who, NEAR, 2);
+            t.join_pool(agent.into());
+        }
+        // The default may be set by the owner only; a pro may only tighten it.
+        as_who("pro0.near", 0, 2);
+        assert!(panics(|| t.set_default_pool_loss_limit(100)).contains("owner only"));
+        assert!(panics(|| t.set_pool_loss_limit("agent-0".into(), Some(6000))).contains("only tighten"));
+        assert!(panics(|| t.set_pool_loss_limit("agent-1".into(), Some(100))).contains("only the agent's pro"));
+        // Play sessions until agent-0's pool is down at least 1%, then a 1% limit refuses the next session.
+        let mut k = 0;
+        while t.get_pool_limits("agent-0".into()).unwrap().drawdown_bps < 100 && k < 40 {
+            let id = format!("l{k}");
+            as_who("table.near", 0, 10 + k);
+            t.open_backed_session(id.clone(), pool_seats(&["agent-0", "agent-1"]), U64(100), 0, U64(1), U64(2), 20);
+            let f = fixture("session", &id);
+            let profiles = vec![agent::Profile::from_legacy(10, 80), agent::Profile::from_legacy(30, 60)];
+            let text = seated_text(&f, &profiles, 100, 20);
+            assert_eq!(t.submit_session(id, f.alpha, f.sig_hex, text)["ok"], true);
+            k += 1;
+        }
+        let lim = t.get_pool_limits("agent-0".into()).unwrap();
+        assert!(lim.drawdown_bps >= 100, "agent-0 never lost 1% in {k} sessions: {lim:?}");
+        assert!(lim.accepts_sessions);
+        as_who("pro0.near", 0, 100);
+        t.set_pool_loss_limit("agent-0".into(), Some(100));
+        let lim = t.get_pool_limits("agent-0".into()).unwrap();
+        assert_eq!((lim.loss_limit_bps, lim.pro_loss_limit_bps, lim.accepts_sessions), (100, Some(100), false));
+        as_who("table.near", 0, 101);
+        let e = panics(|| t.open_backed_session("lx".into(), pool_seats(&["agent-0", "agent-1"]), U64(10), 0, U64(1), U64(2), 5));
+        assert!(e.contains("past its loss limit"), "{e}");
+        // The owner's default applies too, and the tighter of the two wins.
+        as_who("pro0.near", 0, 102);
+        t.set_pool_loss_limit("agent-0".into(), None);
+        as_who("table.near", 0, 103);
+        t.set_default_pool_loss_limit(100);
+        assert!(panics(|| t.open_backed_session("ly".into(), pool_seats(&["agent-0", "agent-1"]), U64(10), 0, U64(1), U64(2), 5)).contains("past its loss limit"));
+        // Its backers can still leave.
+        as_who("pro0.near", 0, 104);
+        let shares = t.get_pool("agent-0".into()).unwrap().shares;
+        assert!(t.leave_pool("agent-0".into(), shares)["paid"].as_str().is_some());
     }
 }

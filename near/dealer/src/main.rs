@@ -19,14 +19,9 @@
 //! table's deck: a direct caller only ever reads hands it started itself.
 
 use outlayer::{env, storage, vrf};
+use poker_core::profile::{AnyProfile, Profile};
 use poker_core::{self as core, agent, game};
 use serde::{Deserialize, Serialize};
-
-#[derive(Deserialize)]
-struct ProfileIn {
-    tight: u8,
-    aggro: u8,
-}
 
 #[derive(Deserialize)]
 struct Input {
@@ -35,11 +30,16 @@ struct Input {
     /// deal: each player's X25519 public key, hex.
     #[serde(default)]
     players: Vec<String>,
-    /// play: one stack and one profile per seat, plus the button and blinds.
+    /// play, session: one stack and one strategy profile per seat (v2, or the first `{tight, aggro}`), plus the
+    /// button and blinds.
     #[serde(default)]
     stacks: Vec<u64>,
     #[serde(default)]
-    profiles: Vec<ProfileIn>,
+    profiles: Vec<AnyProfile>,
+    /// session: `"vrf"` seats the listed stacks and profiles in the order the session's randomness gives
+    /// (poker_core::session::seat_order); the table contract applies the same order when it settles.
+    #[serde(default)]
+    seating: Option<String>,
     #[serde(default)]
     button: usize,
     #[serde(default)]
@@ -112,17 +112,36 @@ fn sealed_for(kind: &str, hand_id: &str, players: usize, request: String) -> Res
     Ok(s)
 }
 
-fn play(input: Input) -> Result<Output, String> {
-    let n = input.stacks.len();
-    if input.profiles.len() != n {
+/// The profiles as v2, each checked; refuses the request if any is out of range.
+fn profiles_of(input: &Input) -> Result<Vec<Profile>, String> {
+    if input.profiles.len() != input.stacks.len() {
         return Err("one profile per stack".into());
     }
-    let rules = game::Rules { stacks: input.stacks, button: input.button, sb: input.sb, bb: input.bb };
+    input
+        .profiles
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let p = p.clone().into_v2();
+            p.validate().map_err(|e| format!("profile {i}: {e}"))?;
+            Ok(p)
+        })
+        .collect()
+}
+
+/// A fingerprint of a request, so a repeat for the same hand must ask for exactly the same thing.
+fn fingerprint(rules: &game::Rules, input: &Input) -> String {
+    let profiles = serde_json::to_string(&input.profiles).unwrap_or_default();
+    let text = format!("{:?}|{}|{}|{:?}", rules, profiles, input.hands, input.seating);
+    hex::encode(core::commit(&core::seed_from_signature(text.as_bytes())))
+}
+
+fn play(input: Input) -> Result<Output, String> {
+    let n = input.stacks.len();
+    let profiles = profiles_of(&input)?;
+    let rules = game::Rules { stacks: input.stacks.clone(), button: input.button, sb: input.sb, bb: input.bb };
     let hand = game::Hand::new(&rules)?;
-    let profiles: Vec<agent::Profile> = input.profiles.iter().map(|p| agent::Profile { tight: p.tight, aggro: p.aggro }).collect();
-    let request = hex::encode(core::commit(&core::seed_from_signature(
-        format!("{:?}|{:?}", rules, input.profiles.iter().map(|p| (p.tight, p.aggro)).collect::<Vec<_>>()).as_bytes(),
-    )));
+    let request = fingerprint(&rules, &input);
 
     let s = sealed_for("play", &input.hand_id, n, request)?;
     let seed = seed_of(&s)?;
@@ -131,21 +150,28 @@ fn play(input: Input) -> Result<Output, String> {
     Ok(Output::Play { ok: true, hand_id: input.hand_id, alpha: s.alpha, signature_hex: s.signature_hex, actions: game::format_actions(&acts) })
 }
 
-/// Many hands in one run: one randomness proof, one hand seed per hand derived from it.
+/// Many hands in one run: one randomness proof, one hand seed per hand derived from it. With `"seating": "vrf"`
+/// the agents are seated in the order the proof gives, not the order they were listed.
 fn session(input: Input) -> Result<Output, String> {
     let n = input.stacks.len();
-    if input.profiles.len() != n {
-        return Err("one profile per stack".into());
-    }
-    let start = game::Rules { stacks: input.stacks, button: input.button, sb: input.sb, bb: input.bb };
-    core::session::check(&start, input.hands)?;
-    let profiles: Vec<agent::Profile> = input.profiles.iter().map(|p| agent::Profile { tight: p.tight, aggro: p.aggro }).collect();
-    let request = hex::encode(core::commit(&core::seed_from_signature(
-        format!("{:?}|{:?}|{}", start, input.profiles.iter().map(|p| (p.tight, p.aggro)).collect::<Vec<_>>(), input.hands).as_bytes(),
-    )));
+    let profiles = profiles_of(&input)?;
+    let listed = game::Rules { stacks: input.stacks.clone(), button: input.button, sb: input.sb, bb: input.bb };
+    core::session::check(&listed, input.hands)?;
+    let vrf_seating = match input.seating.as_deref() {
+        None => false,
+        Some("vrf") => true,
+        Some(other) => return Err(format!("unknown seating {other}")),
+    };
+    let request = fingerprint(&listed, &input);
 
     let s = sealed_for("session", &input.hand_id, n, request)?;
     let seed = seed_of(&s)?;
+    let (start, profiles) = if vrf_seating {
+        let order = core::session::seat_order(&seed, n);
+        (game::Rules { stacks: core::session::seat(&listed.stacks, &order), ..listed }, core::session::seat(&profiles, &order))
+    } else {
+        (listed, profiles)
+    };
     let actions = agent::play_session(&profiles, &seed, &start, input.hands)?;
     Ok(Output::Play { ok: true, hand_id: input.hand_id, alpha: s.alpha, signature_hex: s.signature_hex, actions })
 }

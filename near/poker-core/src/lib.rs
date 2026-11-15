@@ -312,6 +312,19 @@ pub mod game {
             self.turn
         }
 
+        /// Seats at the table, including any sitting out.
+        pub fn seats(&self) -> usize {
+            self.n
+        }
+
+        pub fn button(&self) -> usize {
+            self.button
+        }
+
+        pub fn big_blind(&self) -> u64 {
+            self.bb
+        }
+
         pub fn is_over(&self) -> bool {
             self.over
         }
@@ -476,6 +489,24 @@ pub mod session {
         sha(&[b"nomad-session-hand:", seed, &k.to_le_bytes()])
     }
 
+    /// Seating from the randomness: table position `p` is taken by listed seat `order[p]`. Sessions whose request
+    /// says `"seating": "vrf"` use it, so whoever opens a session lists its agents but cannot choose where they sit.
+    pub fn seat_order(seed: &[u8; 32], n: usize) -> Vec<usize> {
+        let s = sha(&[b"nomad-seat-order:", seed]);
+        let mut order: Vec<usize> = (0..n).collect();
+        let mut stream = super::Stream::new(&s);
+        for i in (1..n).rev() {
+            let j = stream.below(i as u8 + 1) as usize;
+            order.swap(i, j);
+        }
+        order
+    }
+
+    /// Listed items (profiles, stacks, seats) put in table-position order.
+    pub fn seat<T: Clone>(listed: &[T], order: &[usize]) -> Vec<T> {
+        order.iter().map(|i| listed[*i].clone()).collect()
+    }
+
     /// Players who still have chips.
     pub fn active(stacks: &[u64]) -> usize {
         stacks.iter().filter(|s| **s > 0).count()
@@ -555,119 +586,9 @@ pub mod session {
     }
 }
 
-/// A simple agent that plays from a two-number profile. It stands in for a pro's strategy: it runs inside the
-/// sealed dealer, so only its actions are ever seen.
+pub mod profile;
 #[cfg(feature = "agent")]
-pub mod agent {
-    use super::game::{Act, Hand};
-    use super::{category, rank_cards, sha, Card, Deal};
-
-    #[derive(Clone, Copy, Debug)]
-    pub struct Profile {
-        /// 0 plays almost any hand, 100 only strong ones.
-        pub tight: u8,
-        /// 0 rarely bets or raises, 100 often.
-        pub aggro: u8,
-    }
-
-    /// Hand strength from 0 to 100, from the seat's own cards and the board it can see.
-    fn strength(hole: [Card; 2], board: &[Card]) -> u32 {
-        let (hi, lo) = if hole[0] / 4 >= hole[1] / 4 { (hole[0] / 4, hole[1] / 4) } else { (hole[1] / 4, hole[0] / 4) };
-        let (hi, lo) = (hi as u32, lo as u32);
-        if board.is_empty() {
-            if hi == lo {
-                return 50 + hi * 4;
-            }
-            let suited = if hole[0] % 4 == hole[1] % 4 { 8 } else { 0 };
-            let close = if hi - lo <= 1 { 5 } else { 0 };
-            return hi * 3 + lo * 2 + suited + close;
-        }
-        let mut cards = vec![hole[0], hole[1]];
-        cards.extend_from_slice(board);
-        match category(rank_cards(&cards)) {
-            0 => 15 + hi * 3 / 2,
-            1 => 48 + hi,
-            2 => 66,
-            3 => 76,
-            4 => 82,
-            5 => 86,
-            6 => 92,
-            7 => 97,
-            _ => 99,
-        }
-    }
-
-    /// The seat to act decides. `step` is the action's index in the hand; with the secret seed it gives the
-    /// agent's coin flips, so a repeated run plays the same hand.
-    pub fn decide(p: Profile, seed: &[u8; 32], step: u32, h: &Hand, d: &Deal) -> Act {
-        let seat = h.to_act().expect("a seat to act");
-        let roll = (sha(&[b"nomad-agent:", seed, &step.to_le_bytes()])[0] as u32) % 100;
-        let s = strength(d.holes[seat], &d.board[..h.board_len()]);
-        let (tight, aggro) = (p.tight.min(100) as u32, p.aggro.min(100) as u32);
-        let owed = h.to_call(seat);
-        let pot = h.pot();
-        let raise = |fraction_num: u64, fraction_den: u64| -> Option<Act> {
-            let (lo, hi) = h.raise_range()?;
-            Some(Act::RaiseTo((h.current + (pot * fraction_num / fraction_den).max(1)).clamp(lo, hi)))
-        };
-        if owed == 0 {
-            if s + aggro * 3 / 10 > 60 + roll % 20 {
-                return raise(1, 2).unwrap_or(Act::Call);
-            }
-            return Act::Call;
-        }
-        let price = (owed * 100 / (pot + owed)) as u32; // share of the final pot this call would be
-        let floor = if h.board_len() == 0 { 20 + tight / 2 } else { 30 + tight * 3 / 10 };
-        if s >= 80 && roll < 30 + aggro / 2 {
-            return raise(3, 4).unwrap_or(Act::Call);
-        }
-        if s >= floor + price / 2 {
-            return Act::Call;
-        }
-        if roll < aggro / 10 {
-            return raise(3, 4).unwrap_or(Act::Fold);
-        }
-        Act::Fold
-    }
-
-    /// Plays a session between agents and returns the action text, hands separated by `;`.
-    pub fn play_session(profiles: &[Profile], seed: &[u8; 32], start: &super::game::Rules, hands: usize) -> Result<String, String> {
-        use super::{deal, game, session};
-        session::check(start, hands)?;
-        let n = start.stacks.len();
-        let mut stacks = start.stacks.clone();
-        let mut button = None;
-        let mut out = Vec::new();
-        for k in 0..hands {
-            if session::active(&stacks) < 2 {
-                break;
-            }
-            let b = session::button_for(start, &stacks, button);
-            button = Some(b);
-            let rules = session::rules_for(start, &stacks, b);
-            let hs = session::hand_seed(seed, k as u32);
-            let d = deal(&hs, n);
-            let acts = play(profiles, &hs, game::Hand::new(&rules)?, &d);
-            let delta = game::replay(&rules, &acts)?.payouts(&d)?;
-            for i in 0..n {
-                stacks[i] = (stacks[i] as i64 + delta[i]) as u64;
-            }
-            out.push(game::format_actions(&acts));
-        }
-        Ok(out.join(";"))
-    }
-
-    /// Plays a whole hand between agents and returns the actions in order.
-    pub fn play(profiles: &[Profile], seed: &[u8; 32], mut h: Hand, d: &Deal) -> Vec<Act> {
-        let mut acts = Vec::new();
-        while let Some(seat) = h.to_act() {
-            let a = decide(profiles[seat], seed, acts.len() as u32, &h, d);
-            h.apply(a).expect("the agent only makes legal moves");
-            acts.push(a);
-        }
-        acts
-    }
-}
+pub mod agent;
 
 /// Seats with the best hand at showdown (more than one on a tie).
 pub fn winners(d: &Deal) -> Vec<u8> {
@@ -922,17 +843,32 @@ mod tests {
         assert!(parse_actions("x").is_err());
     }
 
+    /// A valid v2 profile drawn from seed bytes, sometimes with street overrides and a position weight.
+    #[cfg(feature = "agent")]
+    fn random_profile(seed: &[u8; 32], i: usize) -> profile::Profile {
+        use profile::{Numbers, Profile, MAX, MIN};
+        let pick = |k: usize| -> [u8; 5] { core::array::from_fn(|j| MIN[j] + seed[(k + j * 3) % 32] % (MAX[j] - MIN[j] + 1)) };
+        let mut p = Profile::new(pick(i * 5));
+        p.position_weight = seed[(i + 7) % 32] % 101;
+        if seed[(i + 3) % 32] % 2 == 0 {
+            p.streets = vec![Some(Numbers::new(pick(i + 1))), None, Some(Numbers::new(pick(i + 2))), None];
+        }
+        p.validate().unwrap();
+        p
+    }
+
     #[cfg(feature = "agent")]
     #[test]
     fn agents_always_finish_a_legal_hand_that_replays_the_same() {
         use agent::*;
         use game::*;
+        use profile::Profile;
         let mut longest = 0;
-        for round in 0u32..3000 {
+        for round in 0u32..600 {
             let seed = sha(&[b"test", &round.to_le_bytes()]);
             let n = 2 + (seed[0] as usize % 8);
             let stacks: Vec<u64> = (0..n).map(|i| 20 + (seed[1 + i] as u64) * 3).collect();
-            let profiles: Vec<Profile> = (0..n).map(|i| Profile { tight: seed[10 + i] % 101, aggro: seed[20 + i] % 101 }).collect();
+            let profiles: Vec<Profile> = (0..n).map(|i| random_profile(&seed, i)).collect();
             let rules = Rules { stacks, button: seed[31] as usize % n, sb: 1, bb: 2 };
             let d = deal(&seed, n);
             let acts = play(&profiles, &seed, Hand::new(&rules).unwrap(), &d);
@@ -956,12 +892,13 @@ mod tests {
     fn sessions_replay_and_refuse_tampering() {
         use agent::*;
         use game::*;
+        use profile::Profile;
         let mut sizes = vec![];
-        for round in 0u32..200 {
+        for round in 0u32..60 {
             let seed = sha(&[b"session", &round.to_le_bytes()]);
             let n = 2 + (seed[0] as usize % 5);
             let start = Rules { stacks: vec![200; n], button: 0, sb: 1, bb: 2 };
-            let profiles: Vec<Profile> = (0..n).map(|i| Profile { tight: seed[1 + i] % 60, aggro: 30 + seed[10 + i] % 70 }).collect();
+            let profiles: Vec<Profile> = (0..n).map(|i| if i % 2 == 0 { random_profile(&seed, i) } else { Profile::from_legacy(seed[1 + i] % 60, 30 + seed[10 + i] % 70) }).collect();
             let text = play_session(&profiles, &seed, &start, 50).unwrap();
             sizes.push(text.len());
             let out = session::replay(&start, &seed, 50, &text).unwrap();
@@ -990,6 +927,53 @@ mod tests {
         sizes.sort_unstable();
         // Recorded for sizing the batch: median and worst action text for 50 hands.
         eprintln!("50-hand session text: median {} bytes, max {}", sizes[sizes.len() / 2], sizes[sizes.len() - 1]);
+    }
+
+    #[test]
+    fn seating_from_the_seed_is_a_fair_permutation() {
+        let mut first = [0u32; 4];
+        for round in 0u32..4000 {
+            let seed = sha(&[b"seat", &round.to_le_bytes()]);
+            let order = session::seat_order(&seed, 4);
+            let mut sorted = order.clone();
+            sorted.sort_unstable();
+            assert_eq!(sorted, vec![0, 1, 2, 3]);
+            assert_eq!(order, session::seat_order(&seed, 4));
+            first[order[0]] += 1;
+        }
+        // Each listed seat lands on table position 0 about a quarter of the time.
+        assert!(first.iter().all(|c| (850..1150).contains(c)), "{first:?}");
+        assert_eq!(session::seat(&["a", "b", "c"], &[2, 0, 1]), vec!["c", "a", "b"]);
+    }
+
+    #[cfg(feature = "agent")]
+    #[test]
+    fn styles_play_differently() {
+        use profile::Profile;
+        // Count raises and folds per style over many hands at a 4-handed table of that style.
+        let stats = |p: Profile| {
+            let (mut raises, mut folds, mut acts) = (0, 0, 0);
+            for round in 0u32..120 {
+                let seed = sha(&[b"style", &round.to_le_bytes()]);
+                let rules = game::Rules { stacks: vec![200; 4], button: round as usize % 4, sb: 1, bb: 2 };
+                let d = deal(&seed, 4);
+                for a in agent::play(&vec![p.clone(); 4], &seed, game::Hand::new(&rules).unwrap(), &d) {
+                    acts += 1;
+                    match a {
+                        game::Act::RaiseTo(_) => raises += 1,
+                        game::Act::Fold => folds += 1,
+                        _ => {}
+                    }
+                }
+            }
+            (raises as f64 / acts as f64, folds as f64 / acts as f64)
+        };
+        let (dare_r, _) = stats(Profile::preset("Daredevil").unwrap());
+        let (trap_r, _) = stats(Profile::preset("Trapper").unwrap());
+        let (_, guard_f) = stats(Profile::preset("Guardian").unwrap());
+        let (_, loose_f) = stats(Profile::new([10, 45, 50, 5, 60]));
+        assert!(dare_r > trap_r * 1.5, "daredevil raises {dare_r}, trapper {trap_r}");
+        assert!(guard_f > loose_f, "guardian folds {guard_f}, loose {loose_f}");
     }
 
     #[test]

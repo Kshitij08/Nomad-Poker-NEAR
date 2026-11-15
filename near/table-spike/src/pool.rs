@@ -235,8 +235,9 @@ impl Table {
     pub fn join_pool(&mut self, agent_id: String) -> Value {
         let amount = env::attached_deposit().as_yoctonear();
         require!(amount >= MIN_DEPOSIT, "deposit at least 0.01 NEAR");
-        require!(agents().contains_key(&agent_id), "no such agent");
         let who = env::predecessor_account_id();
+        let agent = agents().get(&agent_id).cloned().unwrap_or_else(|| env::panic_str("no such agent"));
+        crate::strategy::require_listed(&agent, &who);
         let mut all = pools();
         let p = all.entry(agent_id.clone()).or_default();
         require!(p.open_to_joins(), "this pool lost too much to take new money; its backers can still leave");

@@ -10,10 +10,12 @@
 //! Money is NEAR in yoctoNEAR; chips convert at `chip_yocto` per chip.
 
 use crate::pool::{self, pools, holdings};
+use crate::strategy::{self, AgentView};
 use crate::{sessions, SessionResult, Status, Table, TableExt};
+use poker_core::profile::Profile;
 use near_sdk::json_types::{I128, U128, U64};
 use near_sdk::serde_json::{json, Value};
-use near_sdk::store::{LazyOption, LookupMap};
+use near_sdk::store::LookupMap;
 use near_sdk::{env, near, require, AccountId, NearToken, Promise};
 use poker_core::{self as core, game};
 
@@ -172,8 +174,12 @@ pub fn settle(p: &mut Position, buy_in: u128, cash_out: u128, pro_bps: u32, plat
     Split { gross, fee_base, pro_fee, platform_fee, to_backer }
 }
 
-fn config_store() -> LazyOption<VaultConfig> {
-    LazyOption::new(b"c".to_vec(), None)
+const CONFIG_KEY: &[u8] = b"c";
+
+/// Read directly: `LazyOption::new(key, None)` caches None and never reads storage, so a config set before this
+/// version was never applied (none was set on testnet).
+fn stored_config() -> Option<VaultConfig> {
+    env::storage_read(CONFIG_KEY).and_then(|b| near_sdk::borsh::from_slice::<VaultConfig>(&b).ok())
 }
 pub(crate) fn agents() -> LookupMap<String, Agent> {
     LookupMap::new(b"a")
@@ -202,7 +208,7 @@ pub(crate) fn event(name: &str, data: Value) {
 
 impl Table {
     fn vault_config(&self) -> VaultConfig {
-        config_store().get().clone().unwrap_or(VaultConfig {
+        stored_config().unwrap_or(VaultConfig {
             chip_yocto: U128(DEFAULT_CHIP_YOCTO),
             pro_bps: DEFAULT_PRO_BPS,
             platform_bps: DEFAULT_PLATFORM_BPS,
@@ -212,9 +218,18 @@ impl Table {
 
     /// Pays out every backed seat of a session that just verified. Returns each seat's split, or None for a
     /// session without backing.
-    pub(crate) fn settle_backed(&mut self, session_id: &str, r: &SessionResult) -> Option<Value> {
+    /// `order`: the session was seated from its randomness; table position p is listed seat `order[p]`, and
+    /// `r` is by table position. Payout seats are reported by table position.
+    pub(crate) fn settle_backed(&mut self, session_id: &str, r: &SessionResult, order: Option<&[usize]>) -> Option<Value> {
         let mut all = backed();
-        let b = all.remove(session_id)?;
+        let mut b = all.remove(session_id)?;
+        let mut vers = strategy::session_versions();
+        let mut versions = vers.remove(session_id);
+        vers.flush();
+        if let Some(o) = order {
+            b.seats = core::session::seat(&b.seats, o);
+            versions = versions.map(|v| core::session::seat(&v, o));
+        }
         let cfg = self.vault_config();
         let buy_in = b.buy_in_chips as u128 * b.chip_yocto.0;
         let mut pos = positions();
@@ -246,6 +261,7 @@ impl Table {
             agent.sessions += 1;
             agent.hands += r.hands_played as u64;
             agent.net_chips += r.totals[i];
+            strategy::count_session(agent, versions.as_ref().and_then(|v| v.get(i).copied()), r.hands_played);
             let pro = agent.owner.clone();
             if s.pro_fee > 0 {
                 *earn.entry(pro.clone()).or_insert(0) += s.pro_fee;
@@ -278,32 +294,47 @@ impl Table {
 #[near]
 impl Table {
     pub fn set_vault_config(&mut self, chip_yocto: U128, pro_bps: u32, platform_bps: u32, platform: AccountId) {
-        require!(env::predecessor_account_id() == self.owner, "owner only");
+        self.require_owner();
         require!(chip_yocto.0 > 0 && pro_bps + platform_bps <= 5_000, "bad config");
-        let mut c = config_store();
-        c.set(Some(VaultConfig { chip_yocto, pro_bps, platform_bps, platform }));
-        c.flush();
+        env::storage_write(CONFIG_KEY, &near_sdk::borsh::to_vec(&VaultConfig { chip_yocto, pro_bps, platform_bps, platform }).unwrap());
     }
 
     pub fn get_vault_config(&self) -> VaultConfig {
         self.vault_config()
     }
 
-    /// A pro lists an agent. `tight` and `aggro` (0 to 100) are its strategy profile.
-    pub fn register_agent(&mut self, agent_id: String, tight: u8, aggro: u8) {
+    /// A pro lists an agent with its strategy: a v2 `profile` (the Nomad app's Strategy tab), or the first-generation
+    /// `tight` and `aggro` (0 to 100), which play the v2 profile they map to. The registering account is the pro.
+    pub fn register_agent(&mut self, agent_id: String, profile: Option<Profile>, tight: Option<u8>, aggro: Option<u8>) -> AgentView {
         require!(valid_agent_id(&agent_id), "agent id: 1 to 32 of a-z, 0-9, -");
-        require!(tight <= 100 && aggro <= 100, "profile values are 0 to 100");
+        let profile = match (profile, tight, aggro) {
+            (Some(p), _, _) => strategy::checked(p),
+            (None, Some(t), Some(a)) => {
+                require!(t <= 100 && a <= 100, "profile values are 0 to 100");
+                Profile::from_legacy(t, a)
+            }
+            _ => env::panic_str("give a profile, or tight and aggro"),
+        };
         let mut all = agents();
         require!(!all.contains_key(&agent_id), "agent id taken");
         let owner = env::predecessor_account_id();
-        all.insert(agent_id.clone(), Agent { id: agent_id.clone(), owner: owner.clone(), tight, aggro, sessions: 0, hands: 0, net_chips: 0, created_at: U64(env::block_timestamp()) });
+        let (tight, aggro) = match (tight, aggro) {
+            (Some(t), Some(a)) => (t, a),
+            _ => profile.legacy_view(),
+        };
+        let a = Agent { id: agent_id.clone(), owner: owner.clone(), tight, aggro, sessions: 0, hands: 0, net_chips: 0, created_at: U64(env::block_timestamp()) };
+        all.insert(agent_id.clone(), a.clone());
         all.flush();
+        let x = strategy::AgentExt { profile_json: strategy::canonical(&profile), version: 1, version_sessions: 0, version_hands: 0, updated_at: env::block_timestamp(), pool_loss_limit_bps: None };
+        strategy::save_ext(&agent_id, x.clone());
         crate::history::index_agent(&agent_id);
-        event("agent_registered", json!({ "agent": agent_id, "pro": owner }));
+        event("agent_registered", json!({ "agent": agent_id, "pro": owner, "strategy_version": 1 }));
+        strategy::agent_view(&a, &x)
     }
 
-    pub fn get_agent(&self, agent_id: String) -> Option<Agent> {
-        agents().get(&agent_id).cloned()
+    /// The agent with its v2 profile and strategy version (and the nearest `tight`/`aggro` for older clients).
+    pub fn get_agent(&self, agent_id: String) -> Option<AgentView> {
+        agents().get(&agent_id).map(|a| strategy::agent_view(a, &strategy::ext_of(a)))
     }
 
     /// Back an agent: the attached NEAR goes into this account's position on it. `loss_limit` (yoctoNEAR) caps how
@@ -312,8 +343,9 @@ impl Table {
     pub fn back(&mut self, agent_id: String, loss_limit: Option<U128>) -> PositionView {
         let amount = env::attached_deposit().as_yoctonear();
         require!(amount >= MIN_DEPOSIT, "deposit at least 0.01 NEAR");
-        require!(agents().contains_key(&agent_id), "no such agent");
         let backer = env::predecessor_account_id();
+        let agent = agents().get(&agent_id).cloned().unwrap_or_else(|| env::panic_str("no such agent"));
+        strategy::require_listed(&agent, &backer);
         let mut all = positions();
         let p = all.entry(position_key(&backer, &agent_id)).or_default();
         p.balance += amount;
@@ -368,24 +400,35 @@ impl Table {
         U128(earnings().get(&account).copied().unwrap_or(0))
     }
 
-    /// Opens a session in which every seat is an agent bought in from its backer's position. Owner only (the game
-    /// server). Repeating the identical request is accepted and locks nothing more.
+    /// Opens a session in which every seat is an agent bought in from its backer's position or its pool. The owner
+    /// or the operator (the feeder). Repeating the identical request is accepted and locks nothing more.
+    ///
+    /// No two seats may belong to the same pro. The listed order does not decide where agents sit: the dealer seats
+    /// them from the session's randomness (`"seating": "vrf"`), and settlement applies the same order.
     pub fn open_backed_session(&mut self, session_id: String, seats: Vec<BackedSeat>, buy_in_chips: U64, button: u8, sb: U64, bb: U64, hands: u32) -> Value {
-        require!(env::predecessor_account_id() == self.owner, "owner only");
+        self.require_operator();
         let n = seats.len();
         let ags = agents();
         let mut profiles = Vec::with_capacity(n);
+        let mut versions = Vec::with_capacity(n);
+        let mut pros: Vec<AccountId> = Vec::with_capacity(n);
         for (i, s) in seats.iter().enumerate() {
             require!(!seats[..i].iter().any(|t| t.agent_id == s.agent_id), "an agent can take only one seat");
             let a = ags.get(&s.agent_id).unwrap_or_else(|| env::panic_str(&format!("no agent {}", s.agent_id)));
-            profiles.push(json!({ "tight": a.tight, "aggro": a.aggro }));
+            if pros.contains(&a.owner) {
+                env::panic_str(&format!("self-play: {} and another seat both belong to {}", s.agent_id, a.owner));
+            }
+            pros.push(a.owner.clone());
+            let x = strategy::ext_of(a);
+            profiles.push(near_sdk::serde_json::from_str::<Value>(&x.profile_json).unwrap());
+            versions.push(x.version);
         }
         let stacks = vec![buy_in_chips.0; n];
         let start = game::Rules { stacks: stacks.clone(), button: button as usize, sb: sb.0, bb: bb.0 };
         if let Err(e) = core::session::check(&start, hands as usize) {
             env::panic_str(&e);
         }
-        let request = json!({ "action": "session", "hand_id": session_id, "stacks": stacks, "profiles": profiles, "button": button, "sb": sb.0, "bb": bb.0, "hands": hands });
+        let request = json!({ "action": "session", "hand_id": session_id, "stacks": stacks, "profiles": profiles, "button": button, "sb": sb.0, "bb": bb.0, "hands": hands, "seating": "vrf" });
         let request_text = request.to_string();
 
         let mut all = sessions();
@@ -409,7 +452,7 @@ impl Table {
                 }
                 None => {
                     let pl = pls.get_mut(&s.agent_id).unwrap_or_else(|| env::panic_str(&format!("{} has no pool", s.agent_id)));
-                    if let Err(e) = pool::can_seat(pl, buy_in) {
+                    if let Err(e) = pool::can_seat(pl, buy_in).and_then(|_| strategy::pool_loss_check(ags.get(&s.agent_id).unwrap(), pl)) {
                         env::panic_str(&format!("pool {}: {e}", s.agent_id));
                     }
                     pool::lock(pl, buy_in);
@@ -420,6 +463,9 @@ impl Table {
         all.insert(session_id.clone(), crate::Session { status: Status::Pending, request: request_text, started_at: U64(env::block_timestamp()), result: None });
         let mut b = backed();
         b.insert(session_id.clone(), BackedSession { seats, buy_in_chips: buy_in_chips.0, chip_yocto: cfg.chip_yocto });
+        let mut vers = strategy::session_versions();
+        vers.insert(session_id.clone(), versions);
+        vers.flush();
         all.flush();
         pos.flush();
         b.flush();
@@ -434,7 +480,7 @@ impl Table {
     /// Returns the buy-ins of a backed session the dealer never answered. Only after `CANCEL_AFTER_NS`, so a
     /// session cannot be dropped soon after its result could be known.
     pub fn cancel_session(&mut self, session_id: String) {
-        require!(env::predecessor_account_id() == self.owner, "owner only");
+        self.require_operator();
         let mut all = sessions();
         let s = all.get_mut(&session_id).unwrap_or_else(|| env::panic_str("no session"));
         require!(s.status == Status::Pending, "session is not pending");
@@ -467,6 +513,9 @@ impl Table {
             pls.flush();
             held.flush();
         }
+        let mut vers = strategy::session_versions();
+        vers.remove(&session_id);
+        vers.flush();
         all.flush();
         b.flush();
         event("session_cancelled", json!({ "session_id": session_id }));

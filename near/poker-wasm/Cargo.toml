@@ -8,7 +8,7 @@ description = "poker-core's session replay for JavaScript: the exact code the ta
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-poker-core = { path = "../poker-core", features = ["agent"] }
+poker-core = { path = "../poker-core", features = ["agent", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hex = "0.4"

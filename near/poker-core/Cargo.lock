@@ -178,6 +178,7 @@ version = "0.1.0"
 dependencies = [
  "chacha20poly1305",
  "hex",
+ "serde",
  "sha2",
  "x25519-dalek",
 ]

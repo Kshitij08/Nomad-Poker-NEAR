@@ -30,11 +30,19 @@ export async function loadPoker(path = process.env.POKER_WASM ?? DEFAULT_WASM) {
     return out;
   }
 
+  const simulateSeated = ({ signature_hex, stacks, profiles, button, sb, bb, hands, seating = null }) => {
+    const out = call("simulate_session", { signature_hex, stacks, profiles, button, sb, bb, hands, seating });
+    return { actions: out.actions, seat_order: out.seat_order ?? null };
+  };
+
   return {
     /** Per-hand detail of a session: cards, actions, stacks before and each seat's result. Refuses what the contract refuses. */
     replay: ({ signature_hex, stacks, button, sb, bb, hands, actions }) => call("replay_session", { signature_hex, stacks, button, sb, bb, hands, actions }),
-    /** Plays a session locally as the dealer would for this proof. Tests and offline demos only. */
-    simulate: ({ signature_hex, stacks, profiles, button, sb, bb, hands }) =>
-      call("simulate_session", { signature_hex, stacks, profiles: profiles.map((p) => [p.tight, p.aggro]), button, sb, bb, hands }).actions,
+    /** Plays a session locally as the dealer would for this proof (v2 or {tight, aggro} profiles). Tests and offline demos only. */
+    simulate: (input) => simulateSeated(input).actions,
+    /** The same, also returning the seat order when `seating` is "vrf" (table position p = listed seat seat_order[p]). */
+    simulateSeated,
+    /** The seat order a proof gives n listed seats. */
+    seatOrder: (signature_hex, n) => call("seat_order_of", { signature_hex, n }).seat_order,
   };
 }

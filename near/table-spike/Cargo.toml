@@ -9,13 +9,13 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 near-sdk = "5"
-poker-core = { path = "../poker-core" }
+poker-core = { path = "../poker-core", features = ["serde"] }
 serde_json = "1.0"
 hex = "0.4"
 uint = { version = "0.10", default-features = false }
 
 [dev-dependencies]
-poker-core = { path = "../poker-core", features = ["agent"] }
+poker-core = { path = "../poker-core", features = ["agent", "serde"] }
 near-sdk = { version = "5", features = ["unit-testing"] }
 ed25519-dalek = "2"
 
