@@ -243,9 +243,10 @@ export async function nearHostTable(): Promise<void> {
           return ui().message('Host a table', esc((e as Error).message));
         }
         void (async () => {
-          if (await send(r.local, 'Confirm the new table in your wallet…', 'Your table is open. Copy its link to invite players.', () => createHostedTable(t, invites))) {
+          if (await send(r.local, 'Confirm the new table in your wallet…', 'Your table is open.', () => createHostedTable(t, invites))) {
             rememberHostedTable(t.id);
             void hostedTables.load();
+            shareHostedTable(t, invites);
           }
         })();
       }, 400);
@@ -254,6 +255,25 @@ export async function nearHostTable(): Promise<void> {
   const actions: Record<string, () => void> = { 'host-cancel': () => ui().closeDialog() };
   HOUSE_TABLES.forEach((h, i) => (actions[`host-st${i}`] = () => pick(Number(/st(\d+)/.exec(h.id)![1]))));
   ui().openDialog({ title: 'Host a table', body: 'Pick the stakes. Players buy in from their own NEAR wallets; the escrow holds every stake.', buttons: `<div class="v2-btn-grid">${stakes}${btn('Cancel', 'host-cancel', { h: 'ghost' })}</div>`, actions });
+}
+
+/** Right after hosting: the invite link to copy, and a way to sit down. The table also stays under Your tables. */
+function shareHostedTable(t: HouseTable, invites: string[] | null): void {
+  const link = hostedTableLink(t.id);
+  const who = invites?.length ? `Only ${invites.map(esc).join(', ')} can join (and you).` : 'Anyone with the link can join.';
+  ui().openDialog({
+    title: 'Your table is open',
+    body: `<div class="v2-col" style="gap:.6em"><div>Send this link to your friends. ${who}</div><input class="v2-field" style="width:100%" readonly value="${esc(link)}"><div class="v2-xs v2-mut">You'll also find it under Your tables on Play with friends, with Close when you're done.</div></div>`,
+    buttons: btn('Close', 'sh-close', { h: 'ghost' }) + btn('Sit down', 'sh-sit', { h: 'blue' }) + btn('Copy link', 'sh-copy', { h: 'gold' }),
+    actions: {
+      'sh-close': () => ui().closeDialog(),
+      'sh-copy': () => void nearCopyLink(t.id),
+      'sh-sit': () => {
+        ui().closeDialog();
+        void nearSitAt(t.id);
+      },
+    },
+  });
 }
 
 /** A table's link or id, as typed into Join: the table id, or null. */

@@ -537,7 +537,7 @@ export function createApp(): Hono<AppEnv> {
   });
   app.get(StrategyRoutes.twin, requirePlayer, async (c) => c.json(await strategies.twin(c.env.DB, c.get('player').id)));
   app.get(StrategyRoutes.coach, requirePlayer, async (c) =>
-    c.json(await strategies.coachReport(c.env.DB, c.get('player').id, { apiKey: c.env.ANTHROPIC_API_KEY, model: c.env.COACH_MODEL })),
+    c.json(await strategies.coachReport(c.env.DB, c.get('player').id, { apiKey: c.env.NEAR_AI_API_KEY, model: c.env.COACH_MODEL })),
   );
 
   // ---- Support tools (admins listed in admin_users) ---------------------------------------------

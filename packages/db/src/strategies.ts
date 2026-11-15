@@ -1,6 +1,6 @@
 import type { StreetProfileSnapshot } from '@nomad/engine/agents';
 import type { AgentStrategy } from './agents';
-import { claudeNote, coach, type HandResult, type Report } from './style/coach';
+import { coach, coachNote, type HandResult, type Report } from './style/coach';
 import { clampProfile, PRESETS, STREETS, tags, type Profile } from './style/profile';
 import { fitTwin, type Action, type Decision, type Twin } from './style/style';
 import { alike, behaviour, distance, styleCell, type Behaviour } from './style/styleTags';
@@ -123,14 +123,15 @@ export async function twin(db: D1Database, playerId: string): Promise<Twin & { t
   return { ...t, tags: tags(t.profile) };
 }
 
-const coachCache = new Map<string, { at: number; report: Report & { note: string | null } }>();
+type CoachOut = Report & { note: string | null; noteModel: string | null };
+const coachCache = new Map<string, { at: number; report: CoachOut }>();
 
-/** Stats, leaks and advice; with a Claude note when a key is configured (cached 10 minutes per player per isolate). */
+/** Stats, leaks and advice; with a NEAR AI note when a key is configured (cached 10 minutes per player per isolate). */
 export async function coachReport(
   db: D1Database,
   playerId: string,
   opts: { apiKey?: string | null; model?: string | null; now?: number } = {},
-): Promise<Report & { note: string | null }> {
+): Promise<CoachOut> {
   const now = opts.now ?? Date.now();
   const cached = coachCache.get(playerId);
   if (cached && now - cached.at < 10 * 60_000) return cached.report;
@@ -143,8 +144,8 @@ export async function coachReport(
     table: h.table_name, handNo: h.hand_no, position: h.position, bigBlind: h.big_blind, net: h.net, showdown: !!h.showdown, won: !!h.won,
   }));
   const report = coach(ds, hands);
-  const note = await claudeNote(report, { apiKey: opts.apiKey, model: opts.model });
-  const out = { ...report, note };
+  const n = await coachNote(report, { apiKey: opts.apiKey, model: opts.model });
+  const out: CoachOut = { ...report, note: n?.text ?? null, noteModel: n?.model ?? null };
   coachCache.set(playerId, { at: now, report: out });
   return out;
 }
