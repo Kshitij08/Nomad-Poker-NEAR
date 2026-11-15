@@ -163,6 +163,60 @@ pub fn holding_key(who: &AccountId, agent_id: &str) -> String {
     format!("{who}:{agent_id}")
 }
 
+/// Cost basis, for P&L = value + withdrawn - deposited. Kept beside the holdings and pools (keys `u` per holding,
+/// `v` per pool), so their stored layouts are unchanged. A holding or pool with no basis yet (it existed before this
+/// was added) starts from its value at the moment it is first touched or migrated (`init_cost_basis`): deposited =
+/// that value, withdrawn = 0, so its P&L starts at 0 then.
+#[near(serializers = [borsh])]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct Basis {
+    /// NEAR that became shares: joins, and queued joins at the value they were applied at.
+    pub deposited: u128,
+    /// NEAR paid out by leaves, immediate or queued.
+    pub withdrawn: u128,
+}
+
+pub(crate) fn holding_basis() -> LookupMap<String, Basis> {
+    LookupMap::new(b"u")
+}
+pub(crate) fn pool_basis() -> LookupMap<String, Basis> {
+    LookupMap::new(b"v")
+}
+
+/// What a holding's shares are worth now.
+pub fn value_of(p: &Pool, shares: u128) -> u128 {
+    if p.shares == 0 {
+        0
+    } else {
+        mul_div(shares, p.value(), p.shares)
+    }
+}
+
+/// Adds to a basis, first starting it at `value_before` if it has none.
+fn add_basis(map: &mut LookupMap<String, Basis>, key: &str, value_before: u128, deposited: u128, withdrawn: u128) {
+    let b = map.entry(key.to_string()).or_insert(Basis { deposited: value_before, withdrawn: 0 });
+    b.deposited += deposited;
+    b.withdrawn += withdrawn;
+}
+
+/// Records a join (`deposited`) or a leave (`withdrawn`) for a holder and the pool. Call before the shares move.
+pub(crate) fn record_flow(p: &Pool, agent_id: &str, who: &AccountId, held_shares: u128, deposited: u128, withdrawn: u128) {
+    let mut hb = holding_basis();
+    add_basis(&mut hb, &holding_key(who, agent_id), value_of(p, held_shares), deposited, withdrawn);
+    hb.flush();
+    let mut pb = pool_basis();
+    add_basis(&mut pb, agent_id, p.value(), deposited, withdrawn);
+    pb.flush();
+}
+
+/// A basis as views show it: stored, or (not yet started) the current value with nothing withdrawn.
+pub fn basis_or(map: &LookupMap<String, Basis>, key: &str, value_now: u128) -> (Basis, bool) {
+    match map.get(key) {
+        Some(b) => (*b, true),
+        None => (Basis { deposited: value_now, withdrawn: 0 }, false),
+    }
+}
+
 /// Applies queued leaves, then queued joins, at the pool's settled value. Returns the payouts to send.
 pub(crate) fn apply_pending(p: &mut Pool, agent_id: &str, held: &mut LookupMap<String, u128>) -> (Vec<(AccountId, u128)>, Vec<Value>) {
     let mut payouts = vec![];
@@ -174,6 +228,7 @@ pub(crate) fn apply_pending(p: &mut Pool, agent_id: &str, held: &mut LookupMap<S
         if shares == 0 {
             continue;
         }
+        record_flow(p, agent_id, &who, own, 0, value_of(p, shares));
         let amount = redeem(p, shares);
         held.insert(key, own - shares);
         log.push(json!({ "account": who, "left_shares": U128(shares), "paid": U128(amount) }));
@@ -185,6 +240,7 @@ pub(crate) fn apply_pending(p: &mut Pool, agent_id: &str, held: &mut LookupMap<S
             payouts.push((who, amount));
             continue;
         }
+        record_flow(p, agent_id, &who, held.get(&holding_key(&who, agent_id)).copied().unwrap_or(0), amount, 0);
         let shares = mint(p, amount);
         *held.entry(holding_key(&who, agent_id)).or_insert(0) += shares;
         log.push(json!({ "account": who, "joined": U128(amount), "shares": U128(shares) }));
@@ -207,6 +263,19 @@ pub struct PoolView {
     pub sessions: u32,
     pub pending_in: U128,
     pub pending_out_shares: U128,
+    /// All NEAR that joined the pool and all it paid out (the pool's P&L = value + withdrawn - deposited). Pools
+    /// that existed before this was tracked count their value when it started as deposited.
+    pub deposited: U128,
+    pub withdrawn: U128,
+}
+
+/// A pool's view with its cost basis.
+pub fn pool_view(agent_id: &str, p: &Pool) -> PoolView {
+    let mut v = PoolView::from(p);
+    let (b, _) = basis_or(&pool_basis(), agent_id, p.value());
+    v.deposited = U128(b.deposited);
+    v.withdrawn = U128(b.withdrawn);
+    v
 }
 
 impl From<&Pool> for PoolView {
@@ -223,6 +292,8 @@ impl From<&Pool> for PoolView {
             sessions: p.sessions,
             pending_in: U128(p.pending_in.iter().map(|(_, a)| a).sum()),
             pending_out_shares: U128(p.pending_out.iter().map(|(_, s)| s).sum()),
+            deposited: U128(0),
+            withdrawn: U128(0),
         }
     }
 }
@@ -245,8 +316,9 @@ impl Table {
             p.pending_in.push((who.clone(), amount));
             json!({ "queued": true, "amount": U128(amount) })
         } else {
-            let shares = mint(p, amount);
             let mut held = holdings();
+            record_flow(p, &agent_id, &who, held.get(&holding_key(&who, &agent_id)).copied().unwrap_or(0), amount, 0);
+            let shares = mint(p, amount);
             *held.entry(holding_key(&who, &agent_id)).or_insert(0) += shares;
             held.flush();
             json!({ "queued": false, "shares": U128(shares) })
@@ -269,6 +341,7 @@ impl Table {
             p.pending_out.push((who.clone(), shares.0));
             json!({ "queued": true, "shares": shares })
         } else {
+            record_flow(p, &agent_id, &who, own, 0, value_of(p, shares.0));
             let amount = redeem(p, shares.0);
             held.insert(key, own - shares.0);
             Promise::new(who.clone()).transfer(NearToken::from_yoctonear(amount)).detach();
@@ -278,6 +351,36 @@ impl Table {
         held.flush();
         event("pool_left", json!({ "account": who, "agent": agent_id, "shares": shares, "result": out }));
         out
+    }
+
+    /// Owner only: starts the cost basis of holdings and pools that existed before it was tracked, at their value
+    /// now (deposited = value, withdrawn = 0, so their P&L starts at 0). Entries that already have one are skipped.
+    /// Returns how many were started.
+    pub fn init_cost_basis(&mut self, holdings_of: Vec<(AccountId, String)>, pool_ids: Vec<String>) -> u32 {
+        self.require_owner();
+        let all = pools();
+        let held = holdings();
+        let mut hb = holding_basis();
+        let mut pb = pool_basis();
+        let mut n = 0;
+        for (who, agent_id) in holdings_of {
+            let key = holding_key(&who, &agent_id);
+            let (Some(p), Some(shares)) = (all.get(&agent_id), held.get(&key)) else { continue };
+            if !hb.contains_key(&key) {
+                hb.insert(key, Basis { deposited: value_of(p, *shares), withdrawn: 0 });
+                n += 1;
+            }
+        }
+        for agent_id in pool_ids {
+            let Some(p) = all.get(&agent_id) else { continue };
+            if !pb.contains_key(&agent_id) {
+                pb.insert(agent_id, Basis { deposited: p.value(), withdrawn: 0 });
+                n += 1;
+            }
+        }
+        hb.flush();
+        pb.flush();
+        n
     }
 
     /// The pro sets how much of the pool one session may stake (basis points, at most 50%).
@@ -291,7 +394,7 @@ impl Table {
     }
 
     pub fn get_pool(&self, agent_id: String) -> Option<PoolView> {
-        pools().get(&agent_id).map(PoolView::from)
+        pools().get(&agent_id).map(|p| pool_view(&agent_id, p))
     }
 
     /// An account's share of a pool: shares held, their value now, and anything queued.
@@ -299,10 +402,13 @@ impl Table {
         let shares = holdings().get(&holding_key(&account, &agent_id)).copied().unwrap_or(0);
         let all = pools();
         let p = all.get(&agent_id);
-        let value = p.filter(|p| p.shares > 0).map(|p| mul_div(shares, p.value(), p.shares)).unwrap_or(0);
+        let value = p.map(|p| value_of(p, shares)).unwrap_or(0);
+        let (b, _) = basis_or(&holding_basis(), &holding_key(&account, &agent_id), value);
         json!({
             "shares": U128(shares),
             "value": U128(value),
+            "deposited": U128(b.deposited),
+            "withdrawn": U128(b.withdrawn),
             "pending_in": U128(p.map(|p| p.pending_in_of(&account)).unwrap_or(0)),
             "pending_out_shares": U128(p.map(|p| p.pending_out_of(&account)).unwrap_or(0)),
         })

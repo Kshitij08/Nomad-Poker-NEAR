@@ -62,7 +62,9 @@ pub(crate) fn index_agent(agent_id: &str) {
 /// Everything in the record is by table position. For a session seated from its randomness, `seat_order[p]` is the
 /// listed seat that sat at position p, and `stacks` and `profiles` are already in table order, so a replay needs no
 /// reordering.
-pub(crate) fn record_session(session_id: &str, request: &str, alpha: &str, signature_hex: &str, actions: &str, stacks: &[u64], payouts: &Option<Value>, order: Option<&[usize]>) {
+///
+/// `near_ai`: the model proofs of NEAR-AI seats (`seat` is the listed seat; `seat_order` maps it to a position).
+pub(crate) fn record_session(session_id: &str, request: &str, alpha: &str, signature_hex: &str, actions: &str, stacks: &[u64], payouts: &Option<Value>, order: Option<&[usize]>, near_ai: &[crate::nearai::NearAiProof]) {
     let req: Value = near_sdk::serde_json::from_str(request).unwrap_or(Value::Null);
     let by_position = |v: &Value| match (order, v.as_array()) {
         (Some(o), Some(a)) if a.len() == o.len() => Value::Array(poker_core::session::seat(a, o)),
@@ -73,6 +75,7 @@ pub(crate) fn record_session(session_id: &str, request: &str, alpha: &str, signa
         "settled_at": U64(env::block_timestamp()),
         "seating": req["seating"],
         "seat_order": order,
+        "near_ai": near_ai,
         "stacks": by_position(&req["stacks"]),
         "profiles": by_position(&req["profiles"]),
         "button": req["button"],
@@ -119,7 +122,7 @@ impl Table {
                 let pool = pls.get(id);
                 Some(AgentCard {
                     agent: strategy::agent_view(a, &x),
-                    pool: pool.map(PoolView::from),
+                    pool: pool.map(|p| crate::pool::pool_view(id, p)),
                     listing: strategy::listing_of(a, &x, &r, pool),
                     limits: strategy::pool_limits_of(a, &pool.cloned().unwrap_or_default()),
                 })

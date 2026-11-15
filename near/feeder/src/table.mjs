@@ -52,11 +52,11 @@ export class TableClient {
   }
 
   /** Settles a session with the dealer's answer. The contract re-deals and replays every hand before accepting. */
-  async submitSession({ sessionId, alpha, signature_hex, actions, attest_alpha = null, attest_signature_hex = null }) {
+  async submitSession({ sessionId, alpha, signature_hex, actions, attest_alpha = null, attest_signature_hex = null, near_ai = null }) {
     const res = await this.settler.callFunctionRaw({
       contractId: this.contractId,
       methodName: "submit_session",
-      args: { session_id: sessionId, alpha, signature_hex, actions, attest_alpha, attest_signature_hex },
+      args: { session_id: sessionId, alpha, signature_hex, actions, attest_alpha, attest_signature_hex, near_ai },
       gas: teraToGas("300"),
     });
     const out = getTransactionLastResult(res);

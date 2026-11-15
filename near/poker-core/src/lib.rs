@@ -9,12 +9,17 @@ pub type Card = u8;
 
 pub const MAX_PLAYERS: usize = 9;
 
-fn sha(parts: &[&[u8]]) -> [u8; 32] {
+pub(crate) fn sha(parts: &[&[u8]]) -> [u8; 32] {
     let mut h = Sha256::new();
     for p in parts {
         h.update(p);
     }
     h.finalize().into()
+}
+
+/// Plain SHA-256.
+pub fn sha256(data: &[u8]) -> [u8; 32] {
+    sha(&[data])
 }
 
 /// The deck seed is the hash of the randomness proof (an Ed25519 signature), as OutLayer's VRF defines its output.
@@ -675,7 +680,43 @@ pub mod seal {
         let cipher = ChaCha20Poly1305::new_from_slice(&key(shared.as_bytes(), &eph, &player_pk)).ok()?;
         cipher.decrypt(Nonce::from_slice(&[0u8; 12]), ct).ok()?.try_into().ok()
     }
+
+    fn strategy_key(shared: &[u8; 32], eph: &[u8; 32], recipient_pk: &[u8; 32]) -> [u8; 32] {
+        sha(&[b"nomad-strategy-key:", shared, eph, recipient_pk])
+    }
+
+    /// A pro's private strategy text sealed to the dealer's X25519 key (ECIES: a one-time key per message, so the
+    /// nonce is zero; `aad` is the agent id, so a ciphertext cannot be moved onto another agent). Browsers do the same
+    /// with @noble (feeder/src/nearai.ts).
+    pub fn seal_strategy(eph_secret: [u8; 32], dealer_pk: [u8; 32], text: &[u8], aad: &[u8]) -> Sealed {
+        use chacha20poly1305::aead::Payload;
+        let eph_secret = StaticSecret::from(eph_secret);
+        let eph = *PublicKey::from(&eph_secret).as_bytes();
+        let shared = eph_secret.diffie_hellman(&PublicKey::from(dealer_pk));
+        let cipher = ChaCha20Poly1305::new_from_slice(&strategy_key(shared.as_bytes(), &eph, &dealer_pk)).expect("32-byte key");
+        let ct = cipher.encrypt(Nonce::from_slice(&[0u8; 12]), Payload { msg: text, aad }).expect("seal");
+        Sealed { eph, ct }
+    }
+
+    pub fn open_strategy(dealer_sk: [u8; 32], eph: [u8; 32], ct: &[u8], aad: &[u8]) -> Option<Vec<u8>> {
+        use chacha20poly1305::aead::Payload;
+        let sk = StaticSecret::from(dealer_sk);
+        let pk = *PublicKey::from(&sk).as_bytes();
+        let shared = sk.diffie_hellman(&PublicKey::from(eph));
+        let cipher = ChaCha20Poly1305::new_from_slice(&strategy_key(shared.as_bytes(), &eph, &pk)).ok()?;
+        cipher.decrypt(Nonce::from_slice(&[0u8; 12]), Payload { msg: ct, aad }).ok()
+    }
+
+    pub fn public_key(sk: [u8; 32]) -> [u8; 32] {
+        *PublicKey::from(&StaticSecret::from(sk)).as_bytes()
+    }
 }
+
+/// A NEAR-AI agent: once per session the sealed dealer asks a private model on NEAR AI Cloud (in a TEE) to turn the
+/// pro's private strategy text into that session's profile, then plays it deterministically like any other agent.
+/// The model's signed reply is published, so anyone can check the model chose the profile; the private text is not.
+#[cfg(feature = "nearai")]
+pub mod nearai;
 
 pub fn card_name(c: Card) -> String {
     let r = b"23456789TJQKA"[(c / 4) as usize] as char;
@@ -758,6 +799,19 @@ mod tests {
         let mut bad = s.ct.clone();
         bad[0] ^= 1;
         assert_eq!(seal::open_hole(sk, s.eph, &bad), None);
+    }
+
+    #[cfg(feature = "seal")]
+    #[test]
+    fn only_the_dealer_opens_a_private_strategy_and_only_for_its_agent() {
+        let dealer_sk = [5u8; 32];
+        let pk = seal::public_key(dealer_sk);
+        let s = seal::seal_strategy([6u8; 32], pk, b"play tight early, loosen up when ahead", b"nomad-b");
+        assert_eq!(seal::open_strategy(dealer_sk, s.eph, &s.ct, b"nomad-b").unwrap(), b"play tight early, loosen up when ahead");
+        assert!(seal::open_strategy(dealer_sk, s.eph, &s.ct, b"nomad-c").is_none(), "moved onto another agent");
+        assert!(seal::open_strategy([7u8; 32], s.eph, &s.ct, b"nomad-b").is_none(), "another key");
+        // The vector the TypeScript encryptor is tested against (feeder/test/nearai.test.ts).
+        eprintln!("STRATEGY_VECTOR pk {} eph {} ct {}", hex::encode(pk), hex::encode(s.eph), hex::encode(&s.ct));
     }
 
     fn board(names: [&str; 5]) -> [Card; 5] {

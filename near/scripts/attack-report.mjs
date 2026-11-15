@@ -113,7 +113,7 @@ await expectRefused("feeder key", "stake more than 25% of nomad-c's pool in one 
 const sid = `atk-${Date.now().toString(36)}`;
 const recorded = (await step(`feeder opens backed session ${sid} (pools of nomad-a and nomad-c, 10 chips, 4 hands)`, feederKey, "open_backed_session", { session_id: sid, seats: [{ agent_id: "nomad-a" }, { agent_id: "nomad-c" }], buy_in_chips: "10", button: 0, sb: "1", bb: "2", hands: 4 }, { gas: "100" })).value;
 const keys = JSON.parse(await readFile(env.OUTLAYER_KEYS_FILE ?? join(homedir(), ".outlayer", "testnet", "payment-keys.json"), "utf8"));
-const dealer = new OutlayerClient({ api: env.OUTLAYER_API, project: env.PROJECT ?? "nomad-poker.testnet/nomad-dealer", paymentKey: keys[`testnet:${OWNER}:payment-key:${env.KEY_NONCE ?? 1}`] });
+const dealer = new OutlayerClient({ api: env.OUTLAYER_API, project: env.PROJECT ?? "nomad-poker.testnet/nomad-dealer", paymentKey: keys[`testnet:${OWNER}:payment-key:${env.KEY_NONCE ?? 1}`], secretsRef: { profile: env.SECRETS_PROFILE ?? "default", account_id: OWNER } });
 console.log(`asking the dealer for ${sid} (OutLayer's queue can take minutes)...`);
 const t0 = Date.now();
 const answer = (await dealer.run(recorded)).output;

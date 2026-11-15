@@ -19,8 +19,9 @@ use near_sdk::{env, near, require, AccountId, Gas, NearToken, PanicOnDefault, Pr
 use poker_core::{self as core, game};
 
 mod history;
+pub mod nearai;
 pub mod strategy;
-mod pool;
+pub mod pool;
 mod vault;
 pub use pool::PoolView;
 pub use strategy::{AgentView, ListingView, PoolLimitsView, Rules};
@@ -117,7 +118,8 @@ pub fn verify_seated_session(vrf_pubkey: &[u8; 32], session_id: &str, start: &ga
 
 /// Checks the dealer's attestation of a session: OutLayer's VRF key signed `act-<digest>` for exactly these actions,
 /// this deck proof and this request, under the same account as the deck proof.
-pub fn verify_attestation(vrf_pubkey: &[u8; 32], session_id: &str, alpha: &str, signature_hex: &str, req: &Value, actions: &str, attest_alpha: &str, attest_signature_hex: &str) -> Result<(), String> {
+/// `played`: NEAR-AI seats whose profile came from their model this session (listed seat, profile).
+pub fn verify_attestation(vrf_pubkey: &[u8; 32], session_id: &str, alpha: &str, signature_hex: &str, req: &Value, actions: &str, attest_alpha: &str, attest_signature_hex: &str, played: &[(usize, core::profile::Profile)]) -> Result<(), String> {
     let deck: Vec<&str> = alpha.split(':').collect();
     let att: Vec<&str> = attest_alpha.split(':').collect();
     if deck.len() != 4 || att.len() != 4 || att[0] != "vrf" || att[2] != deck[2] {
@@ -134,6 +136,11 @@ pub fn verify_attestation(vrf_pubkey: &[u8; 32], session_id: &str, alpha: &str, 
     for p in req.get("profiles").and_then(Value::as_array).cloned().unwrap_or_default() {
         let any: core::profile::AnyProfile = near_sdk::serde_json::from_value(p).map_err(|_| "a recorded profile is unreadable")?;
         profiles.push(any.into_v2());
+    }
+    for (seat, p) in played {
+        if let Some(slot) = profiles.get_mut(*seat) {
+            *slot = p.clone();
+        }
     }
     let digest = core::session::attest_digest(session_id, signature_hex, &listed, num("hands") as usize, req.get("seating").and_then(Value::as_str), &profiles, actions);
     if att[3] != core::session::attest_label(&digest) {
@@ -323,7 +330,9 @@ impl Table {
     /// carries `attest_alpha` and `attest_signature_hex`, OutLayer's VRF signature over a digest of the actions, the
     /// deck proof and the request. Without a matching attestation such a session is refused, so a relayer cannot
     /// change an action even into another legal one.
-    pub fn submit_session(&mut self, session_id: String, alpha: String, signature_hex: String, actions: String, attest_alpha: Option<String>, attest_signature_hex: Option<String>) -> Value {
+    ///
+    /// `near_ai`: for NEAR-AI seats, the model's signed reply that chose the profile the dealer played (see nearai.rs).
+    pub fn submit_session(&mut self, session_id: String, alpha: String, signature_hex: String, actions: String, attest_alpha: Option<String>, attest_signature_hex: Option<String>, near_ai: Option<Vec<nearai::NearAiProof>>) -> Value {
         let mut all = sessions();
         let s = all.get_mut(&session_id).unwrap_or_else(|| env::panic_str("no session"));
         if s.status != Status::Pending {
@@ -341,11 +350,15 @@ impl Table {
         // The deck proof and the betting rules first, then (for attested sessions) the dealer's signature over the
         // actions; nothing changes unless both pass.
         let verified = verify_seated_session(&self.vrf_pubkey, &session_id, &start, num("hands") as usize, &alpha, &signature_hex, &actions, vrf_seating).and_then(|v| {
+            let played = nearai::verify_proofs(&req, near_ai.as_deref().unwrap_or(&[]))?;
             if req.get("attest").and_then(Value::as_str) != Some("v1") {
+                if !played.is_empty() {
+                    return Err("model proofs need an attested session".into());
+                }
                 return Ok(v);
             }
             match (&attest_alpha, &attest_signature_hex) {
-                (Some(a), Some(sig)) => verify_attestation(&self.vrf_pubkey, &session_id, &alpha, &signature_hex, &req, &actions, a, sig).map(|_| v),
+                (Some(a), Some(sig)) => verify_attestation(&self.vrf_pubkey, &session_id, &alpha, &signature_hex, &req, &actions, a, sig, &played).map(|_| v),
                 _ => Err("this session needs the dealer's attestation (attest_alpha, attest_signature_hex)".into()),
             }
         });
@@ -361,7 +374,7 @@ impl Table {
         all.flush();
         // Backed sessions pay out each seat's position in the same transaction.
         let payouts = self.settle_backed(&session_id, &r, order.as_deref());
-        history::record_session(&session_id, &request, &alpha, &signature_hex, &actions, &r.stacks, &payouts, order.as_deref());
+        history::record_session(&session_id, &request, &alpha, &signature_hex, &actions, &r.stacks, &payouts, order.as_deref(), near_ai.as_deref().unwrap_or(&[]));
         json!({ "ok": true, "hands_played": r.hands_played, "stacks": r.stacks, "totals": r.totals, "payouts": payouts, "seat_order": order })
     }
 
@@ -689,10 +702,17 @@ mod tests {
 
     /// The dealer's attestation for a pending session's actions, as the test VRF key would sign it in that run.
     fn attestation(t: &Table, id: &str, f: &Fixture, text: &str) -> (String, String) {
+        attestation_played(t, id, f, text, &[])
+    }
+
+    fn attestation_played(t: &Table, id: &str, f: &Fixture, text: &str, played: &[(usize, agent::Profile)]) -> (String, String) {
         let req: Value = near_sdk::serde_json::from_str(&t.get_session(id.into()).unwrap().request).unwrap();
         let num = |k: &str| req[k].as_u64().unwrap_or(0);
         let listed = game::Rules { stacks: req["stacks"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect(), button: num("button") as usize, sb: num("sb"), bb: num("bb") };
-        let profiles: Vec<agent::Profile> = req["profiles"].as_array().unwrap().iter().map(|p| near_sdk::serde_json::from_value::<core::profile::AnyProfile>(p.clone()).unwrap().into_v2()).collect();
+        let mut profiles: Vec<agent::Profile> = req["profiles"].as_array().unwrap().iter().map(|p| near_sdk::serde_json::from_value::<core::profile::AnyProfile>(p.clone()).unwrap().into_v2()).collect();
+        for (seat, p) in played {
+            profiles[*seat] = p.clone();
+        }
         let digest = core::session::attest_digest(id, &f.sig_hex, &listed, num("hands") as usize, req["seating"].as_str(), &profiles, text);
         let alpha = format!("vrf:98399:table.testnet:{}", core::session::attest_label(&digest));
         let sig = SigningKey::from_bytes(&[42u8; 32]).sign(alpha.as_bytes()).to_bytes();
@@ -702,7 +722,7 @@ mod tests {
     /// Settles a session as the feeder does: the dealer's answer with its attestation.
     fn submit(t: &mut Table, id: &str, f: &Fixture, text: &str) -> Value {
         let (a, s) = if t.get_session(id.into()).map_or(false, |s| s.status == Status::Pending) { attestation(t, id, f, text) } else { (String::new(), String::new()) };
-        t.submit_session(id.into(), f.alpha.clone(), f.sig_hex.clone(), text.into(), Some(a), Some(s))
+        t.submit_session(id.into(), f.alpha.clone(), f.sig_hex.clone(), text.into(), Some(a), Some(s), None)
     }
 
     #[test]
@@ -712,7 +732,7 @@ mod tests {
         assert_eq!(t.open_backed_session("at".into(), seats, U64(100), 0, U64(1), U64(2), 20)["attest"], "v1");
         let (f, text) = session_text("at", 100, 20);
         let (a, s) = attestation(&t, "at", &f, &text);
-        let try_submit = |t: &mut Table, actions: &str, a: Option<String>, s: Option<String>| t.submit_session("at".into(), f.alpha.clone(), f.sig_hex.clone(), actions.into(), a, s);
+        let try_submit = |t: &mut Table, actions: &str, a: Option<String>, s: Option<String>| t.submit_session("at".into(), f.alpha.clone(), f.sig_hex.clone(), actions.into(), a, s, None);
         // No attestation.
         let out = try_submit(&mut t, &text, None, None);
         assert!(out["error"].as_str().unwrap().contains("needs the dealer's attestation"), "{out}");
@@ -1160,5 +1180,203 @@ mod tests {
         as_who("pro0.near", 0, 104);
         let shares = t.get_pool("agent-0".into()).unwrap().shares;
         assert!(t.leave_pool("agent-0".into(), shares)["paid"].as_str().is_some());
+    }
+
+    // ---------------------------------------------------------------------------------------- NEAR-AI agents
+
+    const MODEL: &str = "Qwen/Qwen3.6-35B-A3B-FP8";
+
+    /// A stand-in for the model's TEE key: signs EIP-191 like NEAR AI Cloud. Returns (address, sign fn).
+    fn model_key(seed: u8) -> (String, impl Fn(&str) -> String) {
+        let sk = k256::ecdsa::SigningKey::from_bytes(&[seed; 32].into()).unwrap();
+        let pk = sk.verifying_key().to_encoded_point(false);
+        let address = format!("0x{}", hex::encode(&env::keccak256(&pk.as_bytes()[1..])[12..]));
+        let sign = move |text: &str| {
+            let hash = env::keccak256(&core::nearai::eip191_message(text));
+            let (sig, rec) = sk.sign_prehash_recoverable(&hash).unwrap();
+            let mut b = sig.to_bytes().to_vec();
+            b.push(27 + rec.to_byte());
+            format!("0x{}", hex::encode(b))
+        };
+        (address, sign)
+    }
+
+    fn model_reply(chat_id: &str, content: &str) -> String {
+        json!({ "id": chat_id, "object": "chat.completion", "model": MODEL, "choices": [{ "index": 0, "message": { "role": "assistant", "content": content }, "finish_reason": "stop" }] }).to_string()
+    }
+
+    #[test]
+    fn a_near_ai_agent_plays_the_profile_its_model_signed() {
+        let (mut t, seats, _) = backed_table();
+        let (address, sign) = model_key(9);
+        let dealer_sk = [3u8; 32];
+        as_who("table.near", 0, 2);
+        t.set_strategy_key(hex::encode(core::seal::public_key(dealer_sk)));
+        // A model needs an attested signer before a pro can choose it.
+        as_who("pro1.near", 0, 2);
+        let sealed = core::seal::seal_strategy([4u8; 32], core::seal::public_key(dealer_sk), b"Bluff more when the table is passive.", b"agent-1");
+        assert!(panics(|| t.set_private_strategy("agent-1".into(), MODEL.into(), hex::encode(sealed.eph), hex::encode(&sealed.ct))).contains("no attested signer"));
+        as_who("table.near", 0, 2);
+        t.set_near_ai_signer(MODEL.into(), address.to_uppercase().replace("0X", "0x"), true);
+        as_who("pro0.near", 0, 2);
+        assert!(panics(|| t.set_private_strategy("agent-1".into(), MODEL.into(), hex::encode(sealed.eph), hex::encode(&sealed.ct))).contains("only the agent's pro"));
+        as_who("pro1.near", 0, 2);
+        assert_eq!(t.set_private_strategy("agent-1".into(), MODEL.into(), hex::encode(sealed.eph), hex::encode(&sealed.ct)), 2, "a new strategy version");
+        let view = t.get_agent("agent-1".into()).unwrap().private_strategy.unwrap();
+        assert_eq!((view.model.as_str(), view.sealed_bytes as usize), (MODEL, sealed.ct.len()));
+
+        // The request carries the sealed text, which only the dealer opens.
+        as_who("table.near", 0, 3);
+        let req = t.open_backed_session("ai1".into(), seats.clone(), U64(100), 0, U64(1), U64(2), 20);
+        let block = &req["profiles"][1]["private"];
+        assert_eq!(block["agent_id"], "agent-1");
+        let text = core::seal::open_strategy(dealer_sk, hex::decode(block["eph"].as_str().unwrap()).unwrap().try_into().unwrap(), &hex::decode(block["ct"].as_str().unwrap()).unwrap(), b"agent-1").unwrap();
+        assert_eq!(text, b"Bluff more when the table is passive.");
+        assert!(!req.to_string().contains("Bluff"), "the strategy never appears in the clear");
+
+        // The dealer asks the model; the model's signed reply chooses agent-1's profile; the dealer plays it.
+        let response = model_reply("chat-42", r#"{"fold_below":25,"raise_above":50,"aggression":70,"bluff_chance":15,"raise_size":80,"position_weight":30}"#);
+        let chosen = core::nearai::profile_from_response(response.as_bytes()).unwrap();
+        let sig_text = format!("{MODEL}:{}:{}", "a".repeat(64), hex::encode(env::sha256(response.as_bytes())));
+        let proof = nearai::NearAiProof { seat: 1, agent_id: "agent-1".into(), model: MODEL.into(), chat_id: "chat-42".into(), response: response.clone(), signature_text: sig_text.clone(), signature: sign(&sig_text), signing_address: address.clone(), profile: chosen.clone() };
+        let f = fixture("session", "ai1");
+        let mut listed: Vec<agent::Profile> = LEGACY.iter().map(|(t, a)| agent::Profile::from_legacy(*t, *a)).collect();
+        listed[1] = chosen.clone();
+        let actions = seated_text(&f, &listed, 100, 20);
+        let (a, s) = attestation_played(&t, "ai1", &f, &actions, &[(1, chosen.clone())]);
+        let sub = |t: &mut Table, proofs: Option<Vec<nearai::NearAiProof>>| t.submit_session("ai1".into(), f.alpha.clone(), f.sig_hex.clone(), actions.clone(), Some(a.clone()), Some(s.clone()), proofs);
+        let err = |v: Value| v["error"].as_str().unwrap_or("").to_string();
+
+        // Dropping the proof (claiming the fallback was played) breaks the dealer's attestation.
+        assert!(err(sub(&mut t, None)).contains("attestation does not match"));
+        // A reply edited after signing, a profile that is not the reply's, a signer that is not attested, a forged signature.
+        let mut edited = proof.clone();
+        edited.response = edited.response.replace("\\\"aggression\\\":70", "\\\"aggression\\\":95");
+        edited.profile = core::nearai::profile_from_response(edited.response.as_bytes()).unwrap();
+        assert!(err(sub(&mut t, Some(vec![edited]))).contains("another response"));
+        let mut other = proof.clone();
+        other.profile.aggression = 95;
+        assert!(err(sub(&mut t, Some(vec![other]))).contains("not what the model's reply says"));
+        let (stranger_addr, stranger_sign) = model_key(10);
+        let mut unlisted = proof.clone();
+        unlisted.signing_address = stranger_addr.clone();
+        unlisted.signature = stranger_sign(&sig_text);
+        assert!(err(sub(&mut t, Some(vec![unlisted]))).contains("not an attested signing address"));
+        let mut forged = proof.clone();
+        forged.signature = stranger_sign(&sig_text);
+        assert!(err(sub(&mut t, Some(vec![forged]))).contains("not from"));
+        let mut wrong_seat = proof.clone();
+        wrong_seat.seat = 2;
+        assert!(err(sub(&mut t, Some(vec![wrong_seat]))).contains("not a NEAR-AI seat"));
+        assert_eq!(t.get_session("ai1".into()).unwrap().status, Status::Pending);
+
+        // The true proof settles, and the record keeps it for anyone to check.
+        let out = sub(&mut t, Some(vec![proof.clone()]));
+        assert_eq!(out["ok"], true, "{out}");
+        let rec = t.get_session_record("ai1".into()).unwrap();
+        assert_eq!(rec["near_ai"][0]["signature"], proof.signature);
+        assert_eq!(rec["near_ai"][0]["profile"]["aggression"], 70);
+        assert_eq!(nearai::recover_address(rec["near_ai"][0]["signature_text"].as_str().unwrap(), rec["near_ai"][0]["signature"].as_str().unwrap()).unwrap(), address);
+        assert_eq!(t.get_near_ai_signers()[0]["signing_addresses"][0], address);
+        // Back to a plain profile is another new version.
+        as_who("pro1.near", 0, 5);
+        assert_eq!(t.clear_private_strategy("agent-1".into()), 3);
+        assert!(t.get_agent("agent-1".into()).unwrap().private_strategy.is_none());
+    }
+
+    // ---------------------------------------------------------------------------------------- cost basis (P&L)
+
+    fn big(v: &Value) -> i128 {
+        v.as_str().unwrap().parse::<i128>().unwrap()
+    }
+
+    fn pnl(t: &Table, who: &str, agent: &str) -> (i128, i128, i128, i128) {
+        let h = t.get_holding(acct(who), agent.into());
+        let (value, dep, wd) = (big(&h["value"]), big(&h["deposited"]), big(&h["withdrawn"]));
+        (value, dep, wd, value + wd - dep)
+    }
+
+    #[test]
+    fn holdings_and_pools_track_what_went_in_and_out() {
+        let (mut t, _, _) = backed_table();
+        as_who("alice.near", NEAR, 1);
+        t.join_pool("agent-0".into());
+        as_who("bob.near", NEAR / 2, 1);
+        t.join_pool("agent-0".into());
+        as_who("pro1.near", NEAR, 1);
+        t.join_pool("agent-1".into());
+        assert_eq!(pnl(&t, "alice.near", "agent-0"), (NEAR as i128, NEAR as i128, 0, 0));
+
+        // A session moves the pool's value; queued joins and leaves happen at the settled value.
+        as_who("table.near", 0, 2);
+        t.open_backed_session("cb1".into(), pool_seats(&["agent-0", "agent-1"]), U64(200), 0, U64(1), U64(2), 30);
+        as_who("carol.near", 3 * NEAR / 10, 3);
+        assert_eq!(t.join_pool("agent-0".into())["queued"], true);
+        let bob_shares: u128 = t.get_holding(acct("bob.near"), "agent-0".into())["shares"].as_str().unwrap().parse().unwrap();
+        as_who("bob.near", 0, 3);
+        t.leave_pool("agent-0".into(), U128(bob_shares / 2));
+        // Queued money is not deposited yet.
+        assert_eq!(big(&t.get_holding(acct("carol.near"), "agent-0".into())["deposited"]), 0);
+        let f = fixture("session", "cb1");
+        let text = seated_text(&f, &[agent::Profile::from_legacy(10, 80), agent::Profile::from_legacy(30, 60)], 200, 30);
+        let out = submit(&mut t, "cb1", &f, &text);
+        assert_eq!(out["ok"], true, "{out}");
+        let paid_bob: i128 = out["payouts"]["seats"].as_array().unwrap().iter().flat_map(|s| s["pool_moves"].as_array().cloned().unwrap_or_default()).filter_map(|m| m["paid"].as_str().map(|p| p.parse::<i128>().unwrap())).sum();
+
+        let pool = t.get_pool("agent-0".into()).unwrap();
+        let (alice, bob, carol) = (pnl(&t, "alice.near", "agent-0"), pnl(&t, "bob.near", "agent-0"), pnl(&t, "carol.near", "agent-0"));
+        // Carol joined at the settled value: her P&L is 0 (give or take share rounding).
+        assert_eq!(carol.1, (3 * NEAR / 10) as i128);
+        assert!(carol.3.abs() < 1_000_000, "carol {carol:?}");
+        // Bob's leave is withdrawn, exactly what he was paid.
+        assert_eq!(bob.2, paid_bob);
+        // Holdings add up to the pool: deposits, withdrawals and value.
+        assert_eq!(pool.deposited.0 as i128, alice.1 + bob.1 + carol.1);
+        assert_eq!(pool.withdrawn.0 as i128, alice.2 + bob.2 + carol.2);
+        assert!((pool.value.0 as i128 - (alice.0 + bob.0 + carol.0)).abs() < 10, "pool value is the holders' values up to rounding");
+        // Alice and Bob each gained or lost the same share of the session's result per NEAR still in.
+        let pool_pnl = pool.value.0 as i128 + pool.withdrawn.0 as i128 - pool.deposited.0 as i128;
+        assert!((pool_pnl - (alice.3 + bob.3 + carol.3)).abs() < 10);
+
+        // An immediate leave of everything: value 0, P&L = what came out minus what went in.
+        let alice_shares: u128 = t.get_holding(acct("alice.near"), "agent-0".into())["shares"].as_str().unwrap().parse().unwrap();
+        as_who("alice.near", 0, 4);
+        let paid: i128 = t.leave_pool("agent-0".into(), U128(alice_shares))["paid"].as_str().unwrap().parse().unwrap();
+        let after = pnl(&t, "alice.near", "agent-0");
+        assert_eq!((after.0, after.2, after.3), (0, paid, paid - NEAR as i128));
+        assert_eq!(after.3, alice.3, "leaving does not change P&L");
+    }
+
+    #[test]
+    fn holdings_from_before_the_upgrade_start_at_their_value() {
+        let (mut t, _, _) = backed_table();
+        as_who("alice.near", NEAR, 1);
+        t.join_pool("agent-0".into());
+        // Simulate a holding and pool from before cost basis existed.
+        let mut hb = pool::holding_basis();
+        hb.remove(&pool::holding_key(&acct("alice.near"), "agent-0"));
+        hb.flush();
+        let mut pb = pool::pool_basis();
+        pb.remove("agent-0");
+        pb.flush();
+        // Views fall back to the value now, so P&L reads 0.
+        assert_eq!(pnl(&t, "alice.near", "agent-0").3, 0);
+        // The pool's value drifts (a stand-in for sessions settled before the upgrade).
+        let mut ps = pool::pools();
+        ps.get_mut("agent-0").unwrap().balance += NEAR / 10;
+        ps.flush();
+        // Only the owner migrates; it pins deposited at the value now, once.
+        as_who("alice.near", 0, 2);
+        assert!(panics(|| t.init_cost_basis(vec![], vec![])).contains("owner only"));
+        as_who("table.near", 0, 2);
+        assert_eq!(t.init_cost_basis(vec![(acct("alice.near"), "agent-0".into()), (acct("nobody.near"), "agent-0".into())], vec!["agent-0".into(), "agent-9".into()]), 2);
+        assert_eq!(t.init_cost_basis(vec![(acct("alice.near"), "agent-0".into())], vec!["agent-0".into()]), 0, "already started");
+        let (value, dep, wd, p) = pnl(&t, "alice.near", "agent-0");
+        assert_eq!((dep, wd, p), (value, 0, 0));
+        assert_eq!(t.get_pool("agent-0".into()).unwrap().deposited.0, 11 * NEAR / 10);
+        // From then on joins add to it.
+        as_who("alice.near", NEAR, 3);
+        t.join_pool("agent-0".into());
+        assert_eq!(pnl(&t, "alice.near", "agent-0").1, value + NEAR as i128);
     }
 }

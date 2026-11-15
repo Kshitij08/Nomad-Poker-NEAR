@@ -12,6 +12,7 @@
 //   PROJECT [nomad-poker.testnet/nomad-dealer]
 //   OUTLAYER_API [https://testnet-api.outlayer.ai]   RPC [https://test.rpc.fastnear.com]
 //   NEAR_CREDENTIALS_DIR [~/.near-credentials/testnet]   keys saved by near-cli
+//   SECRETS_PROFILE [default], SECRETS_ACCOUNT [OWNER]   OutLayer secrets attached to dealer runs (NEAR_AI_API_KEY)
 //   PAYMENT_KEY, or OUTLAYER_KEYS_FILE [~/.outlayer/testnet/payment-keys.json] + KEY_NONCE [1]
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -54,7 +55,9 @@ async function paymentKey() {
 }
 
 const poker = await loadPoker();
-const dealer = new OutlayerClient({ api: env.OUTLAYER_API, project: env.PROJECT ?? "nomad-poker.testnet/nomad-dealer", paymentKey: await paymentKey() });
+// NEAR-AI agents need the dealer's NEAR_AI_API_KEY secret attached to each run (SECRETS_PROFILE=none to skip).
+const secretsRef = env.SECRETS_PROFILE === "none" ? null : { profile: env.SECRETS_PROFILE ?? "default", account_id: env.SECRETS_ACCOUNT ?? OWNER };
+const dealer = new OutlayerClient({ api: env.OUTLAYER_API, project: env.PROJECT ?? "nomad-poker.testnet/nomad-dealer", paymentKey: await paymentKey(), secretsRef });
 const table = new TableClient({
   rpc: env.RPC,
   contractId: TABLE,
@@ -105,6 +108,10 @@ feeder.on("ready", (s) => {
     console.log(`${clock()}      paid ${p.agent} (${p.backer ? `backer ${p.backer}` : "pool"}): bought in ${nearOf(p.buy_in)}, cashed out ${nearOf(p.cash_out)} NEAR (${Number(result) / 1e6 >= 0 ? "+" : ""}${(Number(result) / 1e6).toFixed(4)}); pro ${nearOf(p.pro_fee)}, platform ${nearOf(p.platform_fee)}, backer ${nearOf(p.to_backer)}`);
     for (const m of p.pool_moves ?? []) console.log(`${clock()}        pool: ${JSON.stringify(m)}`);
   }
+});
+feeder.on("ready", (s) => {
+  for (const p of s.nearAi ?? []) console.log(`${clock()}      NEAR AI: ${p.agent_id} played ${JSON.stringify({ fold_below: p.profile.fold_below, raise_above: p.profile.raise_above, aggression: p.profile.aggression, bluff_chance: p.profile.bluff_chance, raise_size: p.profile.raise_size, position_weight: p.profile.position_weight })}, chosen by ${p.model} (chat ${p.chat_id}, signer ${p.signing_address})`);
+  for (const e of s.nearAiErrors ?? []) console.log(`${clock()}      NEAR AI: ${e.agent_id} played its fallback profile: ${e.error}`);
 });
 feeder.on("session-end", (e) => {
   const rebuys = e.rebuys.length ? `, rebuys: ${e.rebuys.map((r) => `seat ${r.seat}`).join(", ")}` : "";
