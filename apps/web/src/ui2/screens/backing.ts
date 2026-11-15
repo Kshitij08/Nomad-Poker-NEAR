@@ -8,7 +8,7 @@
 import { replaySession } from '../../agents/replaySession';
 import {
   NEAR_CONTRACT, NEAR_EXPLORER, claimEarnings, earnings, formatNear, holding, joinPool, leavePool, listAgents, parseNear, position, priceChangePct,
-  recentSessions, sessionRecord, styleWords, wholeOf,
+  recentSessions, sessionRecord, styleWords, agentName, wholeOf,
   type AgentCard, type Holding, type Position, type SessionRecord, type SessionSummary, withdrawPosition,
 } from '../../near/backing';
 import { replaySettled, toAgentReplay } from '../../near/replay';
@@ -172,7 +172,7 @@ function proCard(c: AgentCard, i: number): string {
     ? `<div class="v2-card v2-grow v2-xs v2-mut v2-bk-closed">${closed}</div>`
     : btn(mine ? 'Add stake' : 'Stake', 'bk-join', { h: 'gold', c: 'v2-grow', v: i }))
     + (mine ? btn(leaving ? 'Withdrawing…' : 'Withdraw', 'bk-leave', { h: 'violet', c: 'v2-grow', v: i, dis: !!leaving }) : '');
-  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(a.id)}</b><div class="v2-xs v2-mut v2-ellip">by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div></div><div class="v2-row v2-wrap" style="gap:.35em"><span class="v2-pill" style="width:max-content">${esc(a.private_strategy ? 'Private strategy' : styleWords(a.tight, a.aggro))}</span>${a.private_strategy ? `<span class="v2-pill v2-ai-pill" title="${AI_CARD_TIP}">${nearAiLabel(a.private_strategy.model)}</span>` : ''}</div><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div><div class="v2-row" style="gap:.4em">${action}</div>${closed ? '' : btn('Stake from another chain', 'bk-xchain', { h: 'ghost', c: 'sm w', v: i })}</div>`;
+  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(agentName(a.id))}</b><div class="v2-xs v2-mut v2-ellip">${agentName(a.id) !== a.id ? `${esc(a.id)} · ` : ''}by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div></div><div class="v2-row v2-wrap" style="gap:.35em"><span class="v2-pill" style="width:max-content">${esc(a.private_strategy ? 'Private strategy' : styleWords(a.tight, a.aggro))}</span>${a.private_strategy ? `<span class="v2-pill v2-ai-pill" title="${AI_CARD_TIP}">${nearAiLabel(a.private_strategy.model)}</span>` : ''}</div><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div><div class="v2-row" style="gap:.4em">${action}</div>${closed ? '' : btn('Stake from another chain', 'bk-xchain', { h: 'ghost', c: 'sm w', v: i })}</div>`;
 }
 
 function prosView(): string {
@@ -204,7 +204,7 @@ function mineView(): string {
       const actions = (staked(h) && !(big(h!.pending_out_shares) > 0n) ? btn('Withdraw', 'bk-leave', { h: 'violet', c: 'sm', v: i }) : '')
         + (p && big(p.balance) > 0n ? btn('Withdraw own', 'bk-vwithdraw', { h: 'ghost', c: 'sm', v: i }) : '')
         + btn('Add stake', 'bk-join', { h: 'gold', c: 'sm', v: i });
-      return `<div class="v2-bk-st v2-ag-row"><div><b>${esc(agent.id)}</b>${notes.length ? `<div class="v2-xs v2-mut">${notes.join(' · ')}</div>` : ''}</div><span class="v2-num"><span class="v2-ag-k">Stake </span>${formatNear(inPool + own + joining)} NEAR</span><b class="v2-num"><span class="v2-ag-k">P&amp;L </span>${pnlText(pnl)}</b><span class="v2-row" style="gap:.35em;justify-content:flex-end">${actions}</span></div>`;
+      return `<div class="v2-bk-st v2-ag-row"><div><b>${esc(agentName(agent.id))}</b>${notes.length ? `<div class="v2-xs v2-mut">${notes.join(' · ')}</div>` : ''}</div><span class="v2-num"><span class="v2-ag-k">Stake </span>${formatNear(inPool + own + joining)} NEAR</span><b class="v2-num"><span class="v2-ag-k">P&amp;L </span>${pnlText(pnl)}</b><span class="v2-row" style="gap:.35em;justify-content:flex-end">${actions}</span></div>`;
     })
     .join('');
   const mine = state.cards.filter((c) => c.agent.owner === state.account);
@@ -251,12 +251,12 @@ function sessionsView(): string {
         moved += nets.reduce((t, n) => t + (n.net > 0n ? n.net : 0n), 0n);
         for (const n of nets) if (yours(n.agent)) yourNet = (yourNet ?? 0n) + n.net;
         result = top && top.net !== 0n
-          ? `${esc(top.agent)} <b class="${tone(top.net)}">${signedNear(top.net)}</b>`
+          ? `${esc(agentName(top.agent))} <b class="${tone(top.net)}">${signedNear(top.net)}</b>`
           : '<span class="v2-mut">Even</span>';
       }
       const ai = state.aiOk.get(s.session_id);
       const aiMark = ai === undefined ? '' : ` <span class="v2-pill ${ai ? 'v2-ai-pill' : 'bad'}" title="${ai ? AI_OK_TIP : AI_BAD_TIP}">NEAR AI ${ai ? '✓' : '✗'}</span>`;
-      const agents = s.agents.map((a) => (yours(a) ? `<b class="v2-goldc">${esc(a)}</b>` : esc(a))).join(' vs ') + aiMark;
+      const agents = s.agents.map((a) => (yours(a) ? `<b class="v2-goldc">${esc(agentName(a))}</b>` : esc(agentName(a)))).join(' vs ') + aiMark;
       return `<div class="v2-bk-ss v2-ag-row"><b><span class="v2-ag-k">Session </span>${esc(s.session_id)}</b><span class="v2-ellip">${agents}</span><span class="v2-num"><span class="v2-ag-k">Hands </span>${s.hands}</span><span class="v2-sm">${esc(when.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))}</span><span><span class="v2-ag-k">Top </span>${result}</span><span style="justify-self:end">${btn(`${ico('eye', 0.9)} Watch`, 'bk-watch', { h: 'violet', c: 'sm', v: i })}</span></div>`;
     })
     .join('');
@@ -272,10 +272,10 @@ function join(i: number): void {
   if (!c) return;
   if (!state.account) return void connect();
   const closed = closedReason(c);
-  if (closed) return ui().message(`Stake on ${esc(c.agent.id)}`, esc(closed));
+  if (closed) return ui().message(`Stake on ${esc(agentName(c.agent.id))}`, esc(closed));
   const playing = c.pool && big(c.pool.at_table) > 0n;
   const other = `<div class="v2-xs v2-mut" style="margin-top:.5em">Holding crypto on another chain? ${btn('See a live quote', 'bk-xchain', { h: 'ghost', c: 'sm', v: i })}</div>`;
-  prompt(`Stake on ${c.agent.id}`, (playing
+  prompt(`Stake on ${agentName(c.agent.id)}`, (playing
     ? 'The pool is playing a session now: your NEAR joins at the value it settles at.'
     : "You get pool shares at today's value. At most 25% of the pool plays in any one session. Backers get 90% of the profit; the pro 8%, Nomad 2%; never of losses.") + other,
   'Amount in NEAR, e.g. 0.5', '', 'Stake', (v) => {
@@ -284,9 +284,9 @@ function join(i: number): void {
       amount = parseNear(v);
       if (amount <= 0n) throw new Error('Enter an amount above 0.');
     } catch (e) {
-      return ui().message('Stake on ' + esc(c.agent.id), esc((e as Error).message));
+      return ui().message('Stake on ' + esc(agentName(c.agent.id)), esc((e as Error).message));
     }
-    void walletAct('Confirm in your wallet to stake…', `You staked ${formatNear(amount)} NEAR on ${c.agent.id}.`, () => joinPool(c.agent.id, amount));
+    void walletAct('Confirm in your wallet to stake…', `You staked ${formatNear(amount)} NEAR on ${agentName(c.agent.id)}.`, () => joinPool(c.agent.id, amount));
   }, 14);
 }
 
@@ -297,7 +297,7 @@ function leave(i: number): void {
   if (!c || !h || !staked(h)) return;
   const value = big(h.value);
   const playing = c.pool && big(c.pool.at_table) > 0n;
-  const title = `Withdraw from ${esc(c.agent.id)}`;
+  const title = `Withdraw from ${esc(agentName(c.agent.id))}`;
   prompt(title, `Your stake is worth ${formatNear(value)} NEAR. It goes back to your wallet${playing ? ' once the session playing now settles, at the value it settles at' : ''}.`, 'Amount in NEAR', formatNear(value), 'Withdraw', (v) => {
     let amount: bigint;
     try {
@@ -320,7 +320,7 @@ function withdrawOwn(i: number): void {
   const p = c && state.positions.get(c.agent.id);
   if (!c || !p) return;
   const idle = big(p.balance);
-  const title = `Withdraw from ${esc(c.agent.id)}`;
+  const title = `Withdraw from ${esc(agentName(c.agent.id))}`;
   if (idle <= 0n) return ui().message(title, 'Nothing idle to withdraw: it is at a table. It comes back when the session settles.');
   prompt(title, `${formatNear(idle)} NEAR is idle in your own position and can go back to your wallet.`, 'Amount in NEAR', formatNear(idle), 'Withdraw', (v) => {
     let amount: bigint;
@@ -350,7 +350,7 @@ async function watch(i: number): Promise<void> {
     const owned = names.findIndex((n) => state.cards.some((c) => c.agent.id === n && c.agent.owner === state.account));
     const backed = names.findIndex((n) => big(state.holdings.get(n)?.shares) > 0n || big(state.holdings.get(n)?.pending_out_shares) > 0n);
     const focus = owned >= 0 ? owned : backed >= 0 ? backed : 0;
-    const hands = out.hands.map((h) => toAgentReplay(h, names, rec.sb, rec.bb, focus));
+    const hands = out.hands.map((h) => toAgentReplay(h, names.map(agentName), rec.sb, rec.bb, focus));
     state.note = '';
     if (ai === false) return ui().message('NEAR AI proof does not check out', `A private model's signed choice in ${esc(s.session_id)} doesn't match what was played, or isn't from an attested NEAR AI signer. Don't trust this session.`);
     if (!verified) return ui().message('Replay does not match', `Your browser's replay of ${esc(s.session_id)} ends with different stacks than the contract recorded. Don't trust this session.`);
@@ -400,7 +400,7 @@ export function backingScreen(header: (on: string) => string): ScreenDef {
       'bk-vwithdraw': (v) => withdrawOwn(Number(v)),
       'bk-xchain': (v) => {
         const c = state.cards[Number(v)];
-        if (c) openCrossChain(c.agent.id, () => join(Number(v)));
+        if (c) openCrossChain(agentName(c.agent.id), () => join(Number(v)));
       },
       'bk-claim': () => void walletAct('Confirm in your wallet to claim…', 'Earnings sent to your wallet.', () => claimEarnings()),
       'bk-register': () => ui().show('ag-overview'),
