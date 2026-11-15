@@ -97,10 +97,13 @@ async function connect(): Promise<void> {
 
 // ------------------------------------------------------------------ views
 
-/** Your profit or loss on a pool stake: value + taken out − put in. Null until the contract reports cost basis. */
+/**
+ * Your profit or loss on a pool stake: value + taken out − put in. A join queued during a session (`pending_in`) is in
+ * neither `value` nor `deposited` until it becomes shares, so it doesn't count. Null when the contract has no cost basis.
+ */
 function holdingPnl(h: Holding | undefined): bigint | null {
   if (!h || h.deposited == null) return null;
-  return big(h.value) + big(h.pending_in) + big(h.withdrawn) - big(h.deposited);
+  return big(h.value) + big(h.withdrawn) - big(h.deposited);
 }
 
 /** Your P&L on an agent: the pool stake plus your own (vault) position. Null when neither is known. */
