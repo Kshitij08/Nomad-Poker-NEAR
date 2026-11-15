@@ -78,6 +78,15 @@ export function formatNear(y: string | bigint, digits = 4): string {
   return `${neg ? '-' : ''}${s.slice(0, -digits)}.${s.slice(-digits)}`.replace(/\.?0+$/, '') || '0';
 }
 
+/**
+ * An amount typed into a "withdraw up to `total`" box, shown to 4 decimals: anything that rounds to the whole of it
+ * (within half of 0.0001 NEAR, either way) means all of it, so the rounded prefill takes everything and leaves no dust.
+ */
+export function wholeOf(amount: bigint, total: bigint): bigint {
+  const HALF_STEP = 50_000_000_000_000_000_000n; // 0.00005 NEAR
+  return amount + HALF_STEP >= total && amount <= total + HALF_STEP ? total : amount;
+}
+
 /** "0.5" to yoctoNEAR; throws on anything else. */
 export function parseNear(text: string): bigint {
   const m = text.trim().match(/^(\d+)(?:\.(\d{1,24}))?$/);

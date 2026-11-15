@@ -182,7 +182,7 @@ function registerOrJoin(x: TournamentInfo | null): void {
   if (!isOpen(x)) return ui().message(esc(x.name), 'Registration is closed.');
   if (isNearTournament(x)) {
     if (!nearIdentity()) return continueWithNear('This tournament is played for NEAR. Sign in with your NEAR account to enter; your wallet pays the entry fee.');
-    const nfee = x.entryFee === 0 ? "It's free to enter." : `Entry fee: <b>${nearText(x.entryFee)}</b> (${N0(x.entryFee)} chips), paid from your wallet to the escrow.`;
+    const nfee = x.entryFee === 0 ? "It's free to enter." : `Entry fee: <b>${nearText(x.entryFee)}</b>, paid from your wallet to the escrow.`;
     return ui().message(esc(x.name), `${nfee} Register?`, 'Register', () =>
       runNear(() => nearStep(() => escrowRegister(x), () => svc().register(x.id)), () => {
         void loadList();
