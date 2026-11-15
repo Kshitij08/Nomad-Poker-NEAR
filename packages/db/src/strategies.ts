@@ -124,17 +124,16 @@ export async function twin(db: D1Database, playerId: string): Promise<Twin & { t
 }
 
 type CoachOut = Report & { note: string | null; noteModel: string | null };
-const coachCache = new Map<string, { at: number; report: CoachOut }>();
+/** The last note per player (per isolate), reused while the player has played no new hands, for up to 30 minutes. */
+const noteCache = new Map<string, { at: number; hands: number; text: string | null; model: string | null }>();
 
-/** Stats, leaks and advice; with a NEAR AI note when a key is configured (cached 10 minutes per player per isolate). */
+/** Stats, leaks and advice, always from the latest hands; with a NEAR AI note when a key is configured (asked again once new hands are in). */
 export async function coachReport(
   db: D1Database,
   playerId: string,
   opts: { apiKey?: string | null; model?: string | null; now?: number } = {},
 ): Promise<CoachOut> {
   const now = opts.now ?? Date.now();
-  const cached = coachCache.get(playerId);
-  if (cached && now - cached.at < 10 * 60_000) return cached.report;
   const ds = await decisions(db, playerId, 2000);
   const r = await db
     .prepare('SELECT * FROM style_hands WHERE player_id = ?1 ORDER BY created_at DESC LIMIT 500')
@@ -144,10 +143,11 @@ export async function coachReport(
     table: h.table_name, handNo: h.hand_no, position: h.position, bigBlind: h.big_blind, net: h.net, showdown: !!h.showdown, won: !!h.won,
   }));
   const report = coach(ds, hands);
+  const cached = noteCache.get(playerId);
+  if (cached && cached.hands === report.hands && now - cached.at < 30 * 60_000) return { ...report, note: cached.text, noteModel: cached.model };
   const n = await coachNote(report, { apiKey: opts.apiKey, model: opts.model });
-  const out: CoachOut = { ...report, note: n?.text ?? null, noteModel: n?.model ?? null };
-  coachCache.set(playerId, { at: now, report: out });
-  return out;
+  if (report.hands >= 20) noteCache.set(playerId, { at: now, hands: report.hands, text: n?.text ?? null, model: n?.model ?? null });
+  return { ...report, note: n?.text ?? null, noteModel: n?.model ?? null };
 }
 
 // ---- The marketplace ------------------------------------------------------------------------------------------------

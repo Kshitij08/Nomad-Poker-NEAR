@@ -76,6 +76,8 @@ const main: ScreenDef & { profile: boolean } = {
     syncRoom();
     // Leaving a NEAR table pays the stack back to the game balance a few seconds later (the server's cash-out).
     if (onchain() && nearAccountId()) for (const ms of [0, 4000, 12000]) setTimeout(() => void refreshNearBalance(nearAccountId(), () => ui().render()), ms);
+    // Leaving a Coins table pays the stack back on the server: the Coins total again, once it has landed.
+    if (!onchain()) for (const ms of [1500, 6000]) setTimeout(() => void (S('nomadProgress') as { refresh?: () => Promise<void> } | undefined)?.refresh?.().then(() => ui().render()), ms);
   },
   backFirst() {
     if (!this.profile) return false;

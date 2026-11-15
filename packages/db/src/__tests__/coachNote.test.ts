@@ -27,3 +27,14 @@ describe('coachNote (NEAR AI Cloud)', () => {
     expect(await coachNote(report, { apiKey: 'k', fetch: boom })).toBeNull();
   });
 });
+
+describe('shortNote', () => {
+  it('keeps at most 3 sentences and 70 words', async () => {
+    const { shortNote } = await import('../style/coach');
+    const long = 'One two three. Four five six! Seven eight nine? Ten eleven twelve. Thirteen.';
+    expect(shortNote(long)).toBe('One two three. Four five six! Seven eight nine?');
+    const wordy = Array.from({ length: 50 }, () => 'word').join(' ') + '. ' + Array.from({ length: 50 }, () => 'more').join(' ') + '.';
+    expect(shortNote(wordy).split(' ').length).toBeLessThanOrEqual(70);
+    expect(shortNote('<think>x</think> Fold more.')).toBe('Fold more.');
+  });
+});

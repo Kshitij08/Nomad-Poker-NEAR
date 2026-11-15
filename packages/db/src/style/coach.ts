@@ -101,6 +101,25 @@ export function coach(decisions: Decision[], hands: HandResult[]): Report {
   return { hands: hands.length, decisions: decisions.length, stats, working, notWorking: leaks, tryNext, summary };
 }
 
+export const COACH_PROMPT =
+  "You are a friendly poker coach in a casual mobile poker game. Write at most 3 short sentences (under 55 words) to the player, " +
+  "in plain everyday words: what is going well (only if workingWell lists something), the one thing to fix (from toFix, if any), " +
+  "and what to try next. Never use poker abbreviations or jargon such as VPIP, PFR, bb/100 or aggression factor. " +
+  "Use only the facts given; don't invent numbers or praise anything the facts don't list. No headings, lists or emoji.";
+
+/** The model's note, cleaned and capped at 3 sentences / 70 words so it never becomes a wall of text. */
+export function shortNote(raw: string): string {
+  const t = raw.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/\s+/g, " ").trim();
+  const sentences = t.match(/[^.!?]+[.!?]+(\s|$)/g)?.map((x) => x.trim()) ?? (t ? [t] : []);
+  let out = "";
+  for (const s of sentences.slice(0, 3)) {
+    const next = out ? `${out} ${s}` : s;
+    if (next.split(" ").length > 70) break;
+    out = next;
+  }
+  return out || t.split(" ").slice(0, 70).join(" ");
+}
+
 /** NEAR AI Cloud's OpenAI-compatible chat endpoint and the default private (TEE) model, as the dealer uses. */
 export const NEAR_AI_CHAT = "https://cloud-api.near.ai/v1/chat/completions";
 export const COACH_DEFAULT_MODEL = "Qwen/Qwen3.6-35B-A3B-FP8";
@@ -118,17 +137,28 @@ export async function coachNote(
   if (!key || report.hands < 20) return null;
   const model = opts.model?.trim() || COACH_DEFAULT_MODEL;
   const fetchImpl = opts.fetch ?? fetch;
-  const facts = JSON.stringify({ hands: report.hands, stats: report.stats, working: report.working,
-    notWorking: report.notWorking.map((l) => ({ title: l.title, detail: l.detail, advice: l.advice })), tryNext: report.tryNext });
+  // Plain names and whole percentages, so the note can't echo poker jargon (VPIP, PFR, bb/100) back at the player.
+  const s = report.stats;
+  const pctOf = (x: number) => Math.round(x * 100);
+  const facts = JSON.stringify({
+    hands: report.hands,
+    handsPlayedPct: pctOf(s.vpip),
+    handsRaisedBeforeFlopPct: pctOf(s.pfr),
+    showdownsWonPct: pctOf(s.wonAtShowdown),
+    bigBlindsWonPer100Hands: Math.round(s.bbPer100),
+    workingWell: report.working,
+    toFix: report.notWorking.map((l) => ({ title: l.title, detail: l.detail, advice: l.advice })),
+    tryNext: report.tryNext,
+  });
   try {
     const res = await fetchImpl(NEAR_AI_CHAT, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model, max_tokens: 350, temperature: 0.4,
+        model, max_tokens: 160, temperature: 0.3,
         chat_template_kwargs: { enable_thinking: false },
         messages: [
-          { role: "system", content: "You are a friendly poker coach in a casual mobile poker game. Write 2 short paragraphs (under 110 words total) for the player: what is working, what is not, and one concrete thing to try next. Use only the facts given; do not invent numbers, hands or stats. No headings, no lists." },
+          { role: "system", content: COACH_PROMPT },
           { role: "user", content: `Facts about my recent play (JSON): ${facts}` },
         ],
       }),
@@ -136,7 +166,7 @@ export async function coachNote(
     });
     if (!res.ok) return null;
     const body: any = await res.json();
-    const text = String(body?.choices?.[0]?.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    const text = shortNote(String(body?.choices?.[0]?.message?.content ?? ""));
     return text ? { text, model } : null;
   } catch {
     return null;
