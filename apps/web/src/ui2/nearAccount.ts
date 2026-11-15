@@ -28,7 +28,7 @@ export async function chooseNear(wallet: () => Promise<boolean>): Promise<boolea
     ui().openDialog({
       title: 'Play on NEAR',
       dismiss: false,
-      body: `<p>On-chain plays for NEAR on testnet. We can make you a NEAR account in one tap: it's free, the game pays every move's network fee, and its key stays in this browser (you can back it up).</p>${keptLine}<p class="v2-xs">Have a NEAR wallet? Connect it instead.</p>`,
+      body: `<p>On-chain plays for NEAR on testnet. We can make you a NEAR account in one tap: it's free, the game pays the network fees for your moves (deposits cost a tiny fee from the account), and its key stays in this browser (you can back it up).</p>${keptLine}<p class="v2-xs">Have a NEAR wallet? Connect it instead.</p>`,
       buttons: `<div class="v2-btn-grid">${
         kept?.accountId ? btn(`Continue as ${esc(short(kept.accountId))}`, 'nc-kept', { h: 'gold' }) : btn('Create my NEAR account', 'nc-create', { h: 'gold' })
       }${btn('Connect a wallet', 'nc-wallet', { h: 'blue' })}${btn('Restore a backup', 'nc-restore', { h: 'ghost' })}${btn('Not now', 'nc-cancel', { h: 'ghost' })}</div>`,
@@ -141,7 +141,7 @@ function signedInChanged(): void {
 function ready(k: LocalKey): void {
   ui().openDialog({
     title: 'Your NEAR account is ready',
-    body: `<p><b>${esc(k.accountId ?? '')}</b></p><p>It starts with ${formatNear(10n ** 23n)} NEAR (testnet) to deposit and buy in with, and the game pays every move's network fee. Its key lives in this browser: back it up to keep the account if you clear this browser or switch devices.</p>`,
+    body: `<p><b>${esc(k.accountId ?? '')}</b></p><p>It starts with ${formatNear(10n ** 23n)} NEAR (testnet) to deposit and buy in with, and the game pays the network fees for your moves. Its key lives in this browser: back it up to keep the account if you clear this browser or switch devices.</p>`,
     buttons: btn('Back up key', 'nk-backup', { h: 'ghost' }) + btn('Play', 'nk-ok', { h: 'gold' }),
     actions: {
       'nk-backup': () => void nearBackup(),
