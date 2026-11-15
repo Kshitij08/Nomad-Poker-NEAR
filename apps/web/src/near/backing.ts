@@ -67,6 +67,21 @@ export const registerAgent = (agentId: string, profile: AgentProfile) => nearCal
 /** A new strategy version for an agent you listed (backers see the change). */
 export const updateAgent = (agentId: string, profile: AgentProfile) => nearCall(NEAR_CONTRACT, 'update_agent', { agent_id: agentId, profile }, 0n, 30n);
 
+/**
+ * Display names for the house agents. The contract keys each pool, stake, session and NEAR AI strategy by the agent's id,
+ * which can't change, so the app shows these names instead (with the id in small print where it matters).
+ */
+export const AGENT_NAMES: Readonly<Record<string, string>> = {
+  'nomad-a': 'Granite',
+  'nomad-b': 'Riverhawk',
+  'nomad-c': 'Quiet Storm',
+  'nomad-d': 'Glacier',
+  'nomad-e': 'Patience',
+};
+
+/** The name to show for an agent: its display name, or its id. */
+export const agentName = (id: string): string => AGENT_NAMES[id] ?? id;
+
 /** The contract's rule for agent ids. */
 export const validAgentId = (id: string): boolean => /^[a-z0-9-]{1,32}$/.test(id);
 
