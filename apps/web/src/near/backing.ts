@@ -17,7 +17,9 @@ const YOCTO = 10n ** 24n;
 /** `profile`, `strategy_version` and `private_strategy` (a NEAR-AI agent: its sealed text's model and size) come with agents v2. */
 export type Agent = { id: string; owner: string; tight: number; aggro: number; sessions: number; hands: number; net_chips: number; profile?: AgentProfile; strategy_version?: number; private_strategy?: PrivateStrategyView | null };
 export type Pool = { shares: string; value: string; price: string; hwm_price: string; at_table: string; max_buy_in_bps: number; sessions: number; pending_in: string };
-export type AgentCard = { agent: Agent; pool: Pool | null };
+/** Whether new backers may join: the current strategy's track record against the table's minimums (agents v2). */
+export type Listing = { agent_id: string; strategy_version: number; sessions: number; hands: string; min_sessions: number; min_hands: string; qualified: boolean; open_to_backers: boolean };
+export type AgentCard = { agent: Agent; pool: Pool | null; listing?: Listing };
 /** `deposited` / `withdrawn` (yoctoNEAR, all time) come with the contract's cost-basis views; P&L shows once they do. */
 export type Holding = { shares: string; value: string; pending_in: string; pending_out_shares: string; deposited?: string; withdrawn?: string };
 export type Position = { balance: string; at_table: string; net: string; deposited: string; sessions: number };

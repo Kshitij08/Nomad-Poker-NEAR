@@ -43,7 +43,13 @@ const state = {
 };
 
 const big = (s: string | undefined | null): bigint => BigInt(s ?? '0');
-const signedNear = (y: bigint): string => (y > 0n ? '+' : y < 0n ? '−' : '') + formatNear(y < 0n ? -y : y);
+/** "+0.0123" / "−0.0123"; an amount that rounds to 0 (pool-share dust) is just "0". */
+const signedNear = (y: bigint): string => {
+  const n = formatNear(y < 0n ? -y : y);
+  return n === '0' ? '0' : (y > 0n ? '+' : '−') + n;
+};
+/** Above or below zero once rounded to 4 decimals. */
+const toneNear = (y: bigint): string => (formatNear(y < 0n ? -y : y) === '0' ? '' : tone(y));
 const tone = (v: number | bigint): string => (v > 0 ? 'v2-good' : v < 0 ? 'v2-badc' : '');
 
 async function load(): Promise<void> {
@@ -91,7 +97,8 @@ async function walletAct(pending: string, done: string, fn: () => Promise<void>)
     state.note = done;
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);
-    state.note = /cancel|reject|closed|denied/i.test(msg) ? '' : friendlyError(e, "The wallet couldn't send it. Try again.");
+    const said = /Smart contract panicked:\s*([^\n"}]+)/.exec(msg)?.[1]?.trim();
+    state.note = /cancel|reject|closed|denied/i.test(msg) ? '' : said ? said.charAt(0).toUpperCase() + said.slice(1) + (said.endsWith('.') ? '' : '.') : friendlyError(e, "The wallet couldn't send it. Try again.");
   }
   await load();
 }
@@ -124,8 +131,26 @@ function agentPnl(id: string): bigint | null {
   return hp === null && vp === null ? null : (hp ?? 0n) + (vp ?? 0n);
 }
 
-const pnlText = (v: bigint | null): string => (v === null ? '—' : `<span class="${tone(v)}">${signedNear(v)}</span>`);
+const pnlText = (v: bigint | null): string => (v === null ? '—' : `<span class="${toneNear(v)}">${signedNear(v)}</span>`);
 const staked = (h: Holding | undefined): boolean => !!h && big(h.shares) > 0n;
+
+const isPro = (c: AgentCard): boolean => !!state.account && c.agent.owner === state.account;
+
+/**
+ * Why new backers can't join this agent yet, in plain words, or null when they can. A new strategy version must play
+ * the table's minimum sessions and hands first; a pool past its loss limit takes no new money. Its pro may always fund it.
+ */
+function closedReason(c: AgentCard): string | null {
+  const l = c.listing;
+  if (!l || l.open_to_backers || isPro(c)) return null;
+  if (!l.qualified) {
+    const s = Math.max(0, l.min_sessions - l.sessions);
+    const h = Math.max(0, Number(l.min_hands) - Number(l.hands));
+    const left = [s ? `${s} more session${s === 1 ? '' : 's'}` : '', h ? `${h} more hand${h === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+    return `Opens to backers after ${left}: strategy v${l.strategy_version} is building its track record.`;
+  }
+  return 'Closed to new stakes for now: the pool is past its loss limit.';
+}
 
 function proCard(c: AgentCard, i: number): string {
   const a = c.agent;
@@ -142,9 +167,12 @@ function proCard(c: AgentCard, i: number): string {
     [mine || state.positions.has(a.id) ? pnlText(agentPnl(a.id)) : '—', 'your P&amp;L'],
   ].map(([v, l]) => `<div><b>${v}</b><div class="v2-xs v2-mut">${l}</div></div>`).join('');
   const leaving = h && big(h.pending_out_shares) > 0n;
-  const action = btn(mine ? 'Add stake' : 'Stake', 'bk-join', { h: 'gold', c: 'v2-grow', v: i })
+  const closed = closedReason(c);
+  const action = (closed
+    ? `<div class="v2-card v2-grow v2-xs v2-mut v2-bk-closed">${closed}</div>`
+    : btn(mine ? 'Add stake' : 'Stake', 'bk-join', { h: 'gold', c: 'v2-grow', v: i }))
     + (mine ? btn(leaving ? 'Withdrawing…' : 'Withdraw', 'bk-leave', { h: 'violet', c: 'v2-grow', v: i, dis: !!leaving }) : '');
-  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(a.id)}</b><div class="v2-xs v2-mut v2-ellip">by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div></div><div class="v2-row v2-wrap" style="gap:.35em"><span class="v2-pill" style="width:max-content">${esc(a.private_strategy ? 'Private strategy' : styleWords(a.tight, a.aggro))}</span>${a.private_strategy ? `<span class="v2-pill v2-ai-pill" title="${AI_CARD_TIP}">${nearAiLabel(a.private_strategy.model)}</span>` : ''}</div><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div><div class="v2-row" style="gap:.4em">${action}</div>${btn('Stake from another chain', 'bk-xchain', { h: 'ghost', c: 'sm w', v: i })}</div>`;
+  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(a.id)}</b><div class="v2-xs v2-mut v2-ellip">by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div></div><div class="v2-row v2-wrap" style="gap:.35em"><span class="v2-pill" style="width:max-content">${esc(a.private_strategy ? 'Private strategy' : styleWords(a.tight, a.aggro))}</span>${a.private_strategy ? `<span class="v2-pill v2-ai-pill" title="${AI_CARD_TIP}">${nearAiLabel(a.private_strategy.model)}</span>` : ''}</div><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div><div class="v2-row" style="gap:.4em">${action}</div>${closed ? '' : btn('Stake from another chain', 'bk-xchain', { h: 'ghost', c: 'sm w', v: i })}</div>`;
 }
 
 function prosView(): string {
@@ -243,6 +271,8 @@ function join(i: number): void {
   const c = state.cards[i];
   if (!c) return;
   if (!state.account) return void connect();
+  const closed = closedReason(c);
+  if (closed) return ui().message(`Stake on ${esc(c.agent.id)}`, esc(closed));
   const playing = c.pool && big(c.pool.at_table) > 0n;
   const other = `<div class="v2-xs v2-mut" style="margin-top:.5em">Holding crypto on another chain? ${btn('See a live quote', 'bk-xchain', { h: 'ghost', c: 'sm', v: i })}</div>`;
   prompt(`Stake on ${c.agent.id}`, (playing
