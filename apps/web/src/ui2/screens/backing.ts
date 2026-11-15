@@ -8,16 +8,15 @@
 import { replaySession } from '../../agents/replaySession';
 import {
   NEAR_CONTRACT, NEAR_EXPLORER, claimEarnings, earnings, formatNear, holding, joinPool, leavePool, listAgents, parseNear, position, priceChangePct,
-  recentSessions, registerAgent, sessionRecord, styleWords, validAgentId,
+  recentSessions, sessionRecord, styleWords,
   type AgentCard, type Holding, type Position, type SessionRecord, type SessionSummary, withdrawPosition,
 } from '../../near/backing';
 import { replaySettled, toAgentReplay } from '../../near/replay';
 import { openCrossChain } from './backingIntents';
 import { nearAccount, nearSigner } from '../../near/wallet';
-import { AgentStrategyWords as W } from '@nomad/engine/agents';
 import { btn, esc, fmt, seg } from '../core';
 import { ico } from '../icons';
-import { app, friendlyError, prompt, S, ui } from '../ctx';
+import { app, friendlyError, prompt, ui } from '../ctx';
 import type { ScreenDef } from '../install';
 
 type View = 'pros' | 'mine' | 'sessions';
@@ -281,25 +280,6 @@ function withdrawOwn(i: number): void {
   }, 30);
 }
 
-/** The Strategy tab's settings as the contract's profile: tight (plays few hands) and aggro, 0–100. */
-function profileFromStrategy(): { tight: number; aggro: number } {
-  const s = S('agentStrategy') as { values?: readonly number[]; streets?: unknown } | undefined;
-  if (!s?.values) return { tight: 50, aggro: 50 };
-  const hands = W.dialForHands(s.values as never);
-  const pressure = W.dialForPressure(W.after(s.values as never, s.streets as never) as never);
-  return { tight: Math.round((1 - hands) * 100), aggro: Math.round(pressure * 100) };
-}
-
-function register(): void {
-  if (!state.account) return void connect();
-  const p = profileFromStrategy();
-  prompt('List your agent', `It plays your Strategy tab's style (${esc(styleWords(p.tight, p.aggro))}). Backers can then put NEAR behind it, and you earn 8% of the profit it makes them. Name it with lowercase letters, digits and dashes.`, 'my-agent', '', 'List agent', (v) => {
-    const id = v.trim().toLowerCase();
-    if (!validAgentId(id)) return ui().message('List your agent', 'Use 1 to 32 lowercase letters, digits or dashes.');
-    void walletAct('Confirm in your wallet to list the agent…', `${id} is listed.`, () => registerAgent(id, p.tight, p.aggro));
-  }, 32);
-}
-
 async function watch(i: number): Promise<void> {
   const s = state.sessions[i];
   if (!s) return;
@@ -345,7 +325,7 @@ export function backingScreen(header: (on: string) => string): ScreenDef {
     },
     render() {
       const bar = `<div class="v2-row v2-wrap v2-ag-mbar">${seg([['pros', 'Agents'], ['mine', 'My stakes'], ['sessions', 'Sessions']], state.view, 'bk-view')}<div class="v2-grow"></div>${state.account ? `<span class="v2-pill" title="Your NEAR account">${esc(state.account)}</span>` : btn('Connect NEAR wallet', 'bk-connect', { h: 'gold', c: 'sm' })}</div>`;
-      const note = `<div class="v2-xs v2-mut">${state.note ? `<b class="v2-goldc">${esc(state.note)}</b>` : `Back a pro's agent with NEAR: backers get 90% of the profit, the pro 8%, Nomad 2%, never of losses. On NEAR testnet, contract <a href="${NEAR_EXPLORER}/address/${NEAR_CONTRACT}" target="_blank" rel="noopener">${NEAR_CONTRACT}</a>.`}</div>`;
+      const note = `<div class="v2-xs v2-mut">${state.note ? `<b class="v2-goldc">${esc(state.note)}</b>` : `Back a pro's agent with NEAR: backers get 90% of the profit, the pro 8%, Nomad 2%, never of losses. On NEAR testnet, contract <a href="${NEAR_EXPLORER}/address/${NEAR_CONTRACT}" target="_blank" rel="noopener" class="v2-goldc">${NEAR_CONTRACT}</a>.`}</div>`;
       let body: string;
       if (state.loading && !state.cards.length) body = `<div class="v2-bk-body"><div class="v2-empty">${ico('robot', 5)}Loading from NEAR…</div></div>`;
       else if (state.error) body = `<div class="v2-bk-body"><div class="v2-empty">${esc(state.error)}${btn('Try again', 'bk-reload', { h: 'gold' })}</div></div>`;
@@ -367,7 +347,7 @@ export function backingScreen(header: (on: string) => string): ScreenDef {
         if (c) openCrossChain(c.agent.id, () => join(Number(v)));
       },
       'bk-claim': () => void walletAct('Confirm in your wallet to claim…', 'Earnings sent to your wallet.', () => claimEarnings()),
-      'bk-register': () => register(),
+      'bk-register': () => ui().show('ag-overview'),
       'bk-watch': (v) => void watch(Number(v)),
     },
   };
