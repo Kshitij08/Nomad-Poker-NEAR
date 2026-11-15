@@ -11,7 +11,8 @@ import { ui, host, app, S, onchain, topBar, signedIn, needCoins, getCoinsRoute }
 import type { ScreenDef } from '../install';
 import { hostedTables, forgetHostedTable, nearCloseHosted, nearCopyLink, nearHostTable, nearSitAt, rememberHostedTable, tableIdFrom } from '../nearPlay';
 import { nearAccountId } from '../ctx';
-import { yoctoToChips } from '../../near/escrow';
+import { chipsToYocto, yoctoToChips } from '../../near/escrow';
+import { formatNear } from '../../near/backing';
 import './play.css';
 
 /** The five rooms (Unity TableSelect cards), cheapest first. */
@@ -191,6 +192,9 @@ const party: ScreenDef = {
   },
 };
 
+/** Blinds in NEAR (a chip is 0.001 NEAR), e.g. "0.001 / 0.002 NEAR". */
+const nearBlinds = (sb: number, bb: number): string => `${formatNear(chipsToYocto(sb), 3)} / ${formatNear(chipsToYocto(bb), 3)} NEAR`;
+
 /** Play with friends in On-chain: host a NEAR table, join one by its link, and the tables you host or joined. */
 function nearParty(code: string): string {
   const me = nearAccountId();
@@ -200,7 +204,7 @@ function nearParty(code: string): string {
     const iHost = !!table?.host && table.host === me;
     const status = mine ? `<span class="v2-good">your seat: ${formatN0(mine)} chips</span>` : !table ? 'not found on NEAR' : table.closed ? 'closed' : `${table.seated} / ${table.config.seats} seated`;
     const who = table ? (iHost ? 'hosted by you' : `hosted by ${esc(table.host ?? '?')}`) + (table.invite_only ? ' · invite-only' : '') : '';
-    return `<div class="v2-card v2-col" style="gap:.45em"><div><b>${esc(t.name.replace('Hosted · ', ''))}</b> <span class="v2-xs v2-mut">${t.config.small_blind} / ${t.config.big_blind}</span><div class="v2-xs v2-mut">${who}${who ? ' · ' : ''}${status}</div></div><div class="v2-row v2-wrap" style="gap:.4em">${open || mine ? btn(mine ? 'Sit' : 'Buy in & sit', 'nh-sit', { h: 'gold', c: 'sm', v: t.id }) : ''}${open ? btn('Copy link', 'nh-link', { h: 'violet', c: 'sm', v: t.id }) : ''}${iHost && open ? btn('Close', 'nh-close', { h: 'ghost', c: 'sm', v: t.id }) : ''}${!open && !mine ? btn('Remove', 'nh-forget', { h: 'ghost', c: 'sm', v: t.id }) : ''}</div></div>`;
+    return `<div class="v2-card v2-col" style="gap:.45em"><div><b>${esc(t.name.replace('Hosted · ', ''))}</b> <span class="v2-xs v2-mut">${nearBlinds(t.config.small_blind, t.config.big_blind)}</span><div class="v2-xs v2-mut">${who}${who ? ' · ' : ''}${status}</div></div><div class="v2-row v2-wrap" style="gap:.4em">${open || mine ? btn(mine ? 'Sit' : 'Buy in & sit', 'nh-sit', { h: 'gold', c: 'sm', v: t.id }) : ''}${open ? btn('Copy link', 'nh-link', { h: 'violet', c: 'sm', v: t.id }) : ''}${iHost && open ? btn('Close', 'nh-close', { h: 'ghost', c: 'sm', v: t.id }) : ''}${!open && !mine ? btn('Remove', 'nh-forget', { h: 'ghost', c: 'sm', v: t.id }) : ''}</div></div>`;
   }).join('');
   const list = hostedTables.loading && !hostedTables.list.length
     ? '<div class="v2-empty">Loading from NEAR…</div>'

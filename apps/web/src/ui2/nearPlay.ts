@@ -14,7 +14,7 @@ import {
   getTable, hostedTableLink, isHostedTableId, newHostedTableId, parseInvites, tableForId, withdraw, yoctoToChips,
   type EscrowConfig, type EscrowSeat, type EscrowTable, type HouseTable,
 } from '../near/escrow';
-import { formatNear, parseNear } from '../near/backing';
+import { formatNear, parseNear, wholeOf } from '../near/backing';
 import { refreshNearBalance } from '../near/balance';
 import { localAccount, nearAccount, nearSigner } from '../near/wallet';
 import { btn, esc } from './core';
@@ -150,10 +150,10 @@ export async function nearWithdraw(): Promise<void> {
   if (!r) return;
   const balance = await getBalance(r.account).catch(() => 0n);
   if (balance <= 0n) return ui().message('Withdraw NEAR', 'Your game balance is empty. Chips at a table come back to it when you leave the table.');
-  prompt('Withdraw NEAR', `Sends NEAR from your game balance (${formatNear(balance)} NEAR) back to your wallet.`, 'Amount in NEAR', formatNear(balance, 24), 'Withdraw', (v) => {
+  prompt('Withdraw NEAR', `Sends NEAR from your game balance (${formatNear(balance)} NEAR) back to your wallet.`, 'Amount in NEAR', formatNear(balance), 'Withdraw', (v) => {
     let amount: bigint;
     try {
-      amount = parseNear(v);
+      amount = wholeOf(parseNear(v), balance);
       if (amount <= 0n) throw new Error('Enter an amount above 0.');
       if (amount > balance) throw new Error(`You have ${formatNear(balance)} NEAR to withdraw.`);
     } catch (e) {
@@ -233,7 +233,7 @@ export async function nearHostTable(): Promise<void> {
     ui().closeDialog();
     const t = tableForId(newHostedTableId(stake))!;
     prompt(`Host a table: ${t.name.replace('Hosted · ', '')}`,
-      `Blinds ${t.config.small_blind} / ${t.config.big_blind}, buy-in ${formatN0(t.config.min_buy_in)}–${formatN0(t.config.max_buy_in)} chips, ${t.config.seats} seats. Invite NEAR accounts to make it invite-only (comma separated), or leave it empty for anyone with the link. Hosting costs nothing; the house takes ${rakeBps() / 100}% of each buy-in, as at house tables.`,
+      `Blinds ${nearOf(t.config.small_blind)} / ${nearOf(t.config.big_blind)} NEAR, buy-in ${nearOf(t.config.min_buy_in)}–${nearOf(t.config.max_buy_in)} NEAR, ${t.config.seats} seats. Invite NEAR accounts to make it invite-only (comma separated), or leave it empty for anyone with the link. Hosting costs nothing; the house takes ${rakeBps() / 100}% of each buy-in, as at house tables.`,
       'alice.testnet, bob.testnet (optional)', '', 'Create table',
       (v) => {
         let invites: string[] | null;
@@ -250,7 +250,7 @@ export async function nearHostTable(): Promise<void> {
         })();
       }, 400);
   };
-  const stakes = HOUSE_TABLES.map((h, i) => btn(`${esc(h.name)}<br><span class="v2-xs">${h.config.small_blind}/${h.config.big_blind} · ${nearOf(h.config.min_buy_in)}+ NEAR</span>`, `host-st${i}`, { h: 'blue' })).join('');
+  const stakes = HOUSE_TABLES.map((h, i) => btn(`${esc(h.name)}<br><span class="v2-xs">blinds ${nearOf(h.config.small_blind)}/${nearOf(h.config.big_blind)} · buy-in ${nearOf(h.config.min_buy_in)}+ NEAR</span>`, `host-st${i}`, { h: 'blue' })).join('');
   const actions: Record<string, () => void> = { 'host-cancel': () => ui().closeDialog() };
   HOUSE_TABLES.forEach((h, i) => (actions[`host-st${i}`] = () => pick(Number(/st(\d+)/.exec(h.id)![1]))));
   ui().openDialog({ title: 'Host a table', body: 'Pick the stakes. Players buy in from their own NEAR wallets; the escrow holds every stake.', buttons: `<div class="v2-btn-grid">${stakes}${btn('Cancel', 'host-cancel', { h: 'ghost' })}</div>`, actions });

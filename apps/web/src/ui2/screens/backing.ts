@@ -8,7 +8,7 @@
 import { replaySession } from '../../agents/replaySession';
 import {
   NEAR_CONTRACT, NEAR_EXPLORER, claimEarnings, earnings, formatNear, holding, joinPool, leavePool, listAgents, parseNear, position, priceChangePct,
-  recentSessions, sessionRecord, styleWords,
+  recentSessions, sessionRecord, styleWords, wholeOf,
   type AgentCard, type Holding, type Position, type SessionRecord, type SessionSummary, withdrawPosition,
 } from '../../near/backing';
 import { replaySettled, toAgentReplay } from '../../near/replay';
@@ -266,10 +266,10 @@ function leave(i: number): void {
   const value = big(h.value);
   const playing = c.pool && big(c.pool.at_table) > 0n;
   const title = `Withdraw from ${esc(c.agent.id)}`;
-  prompt(title, `Your stake is worth ${formatNear(value)} NEAR. It goes back to your wallet${playing ? ' once the session playing now settles, at the value it settles at' : ''}.`, 'Amount in NEAR', formatNear(value, 24), 'Withdraw', (v) => {
+  prompt(title, `Your stake is worth ${formatNear(value)} NEAR. It goes back to your wallet${playing ? ' once the session playing now settles, at the value it settles at' : ''}.`, 'Amount in NEAR', formatNear(value), 'Withdraw', (v) => {
     let amount: bigint;
     try {
-      amount = parseNear(v);
+      amount = wholeOf(parseNear(v), value);
       if (amount <= 0n) throw new Error('Enter an amount above 0.');
       if (amount > value) throw new Error(`Your stake is worth ${formatNear(value)} NEAR.`);
     } catch (e) {
@@ -290,10 +290,10 @@ function withdrawOwn(i: number): void {
   const idle = big(p.balance);
   const title = `Withdraw from ${esc(c.agent.id)}`;
   if (idle <= 0n) return ui().message(title, 'Nothing idle to withdraw: it is at a table. It comes back when the session settles.');
-  prompt(title, `${formatNear(idle)} NEAR is idle in your own position and can go back to your wallet.`, 'Amount in NEAR', formatNear(idle, 24), 'Withdraw', (v) => {
+  prompt(title, `${formatNear(idle)} NEAR is idle in your own position and can go back to your wallet.`, 'Amount in NEAR', formatNear(idle), 'Withdraw', (v) => {
     let amount: bigint;
     try {
-      amount = parseNear(v);
+      amount = wholeOf(parseNear(v), idle);
       if (amount <= 0n || amount > idle) throw new Error(`Enter up to ${formatNear(idle)} NEAR.`);
     } catch (e) {
       return ui().message(title, esc((e as Error).message));

@@ -180,7 +180,7 @@ function peek(i: number, side: 'prev' | 'next'): string {
   const t = roomTier(r.theme);
   const locked = !onchain() && host().stakes.coins < t.startingStack;
   const n = nearTableOf(ROOMS.indexOf(r)).config;
-  const stake = onchain() ? `${n.small_blind} / ${n.big_blind} · NEAR` : `${t.displayName} · ${t.blindsLabel}`;
+  const stake = onchain() ? `${nearOf(n.small_blind)}/${nearOf(n.big_blind)} NEAR` : `${t.displayName} · ${t.blindsLabel}`;
   return `<button class="v2-rm-peek ${side}${locked ? ' locked' : ''}" style="${bgArt(r.theme, r.color)}"${act('room-step', side === 'prev' ? -1 : 1)} aria-label="${esc(r.name)} room${locked ? ', locked' : ''}">${locked ? `<span class="v2-rm-peek-lock">${ico('lock', 1.1)}</span>` : ''}<b>${esc(r.name)}</b><small>${esc(stake)}</small></button>`;
 }
 
@@ -193,10 +193,10 @@ export function roomStage(): string {
   const tier = roomTier(rooms.theme);
   const near = nearTableOf(i);
   const locked = !chain && stakes.coins < tier.startingStack;
-  const stakeLine = chain ? `${esc(near.name)} · ${near.config.small_blind} / ${near.config.big_blind}` : `${esc(tier.displayName)} stakes · ${esc(tier.blindsLabel)}`;
+  const stakeLine = chain ? esc(near.name) : `${esc(tier.displayName)} stakes · ${esc(tier.blindsLabel)}`;
   // One fixed buy-in per room, the same for every player.
   const buyLine = chain
-    ? `Buy-in ${nearOf(near.config.min_buy_in)}–${nearOf(near.config.max_buy_in)} NEAR · on NEAR testnet`
+    ? `Blinds ${nearOf(near.config.small_blind)}/${nearOf(near.config.big_blind)} · buy-in ${nearOf(near.config.min_buy_in)}–${nearOf(near.config.max_buy_in)} NEAR`
     : locked
       ? `Buy-in ${formatN0(tier.startingStack)} Coins · you have ${formatN0(stakes.coins)}`
       : `Buy-in ${formatN0(tier.startingStack)} Coins`;
