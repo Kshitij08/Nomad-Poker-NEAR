@@ -196,7 +196,7 @@ function nearOverview(s: AgentStrategyState): string {
     <div class="v2-card v2-col" style="gap:.4em"><div class="v2-cap">Your Agents on NEAR</div>${rows}${mine.length ? btn('Open Back a pro', 'tab', { h: 'ghost', c: 'sm', v: 'ag-back' }) : ''}</div>
   </div>
   <div class="v2-card v2-col v2-ag-setup"><div class="v2-cap">List on NEAR</div>
-    <div class="v2-sm">Others stake NEAR on your Agent and it plays them on NEAR. You earn 8% of the profit it makes them.</div>
+    <div class="v2-sm">Others stake NEAR on your Agent and it plays for them on NEAR. You earn 8% of the profit it makes them.</div>
     <div class="v2-xs v2-mut">Plays your Strategy tab. Listing again updates it. In Demo, it plays Coins tables instead.</div>
     <div class="v2-grow"></div>
     ${btn(mine.length ? 'Review &amp; Update on NEAR' : 'Review &amp; List on NEAR', 'ag-list-near', { h: 'gold', c: 'lg w' })}
