@@ -17,7 +17,8 @@ import {
 } from '../../menu/market';
 import { btn, esc, fmt, act, tabs, chips, seg, slider, input, outFormats, out, type V2Screen } from '../core';
 import { ico } from '../icons';
-import { ui, host, app, S, topBar, setMode, signedIn, coins, prompt, friendlyError } from '../ctx';
+import { ui, host, app, S, topBar, setMode, signedIn, coins, prompt, friendlyError, onchain } from '../ctx';
+import { listOnNear, myListings } from '../agentListing';
 import type { ScreenDef } from '../install';
 import { startWatch } from '../../economy/party';
 import { backingScreen } from './backing';
@@ -135,11 +136,13 @@ const overview: ScreenDef = {
   open() {
     startPolling();
     void agents()?.refreshHistory().then(() => ui().render());
+    if (onchain()) void myListings.load();
   },
   close: stopPolling,
   render() {
     const svc = agents();
     const s = strat();
+    if (svc && s && onchain()) return nearOverview(s);
     if (!svc || !s) return agMain('ag-overview') + `<div class="v2-panel v2-empty">${ico('robot', 6)}Agents aren't available right now. Try again later.</div>`;
     const st = svc.status();
     const sessions = svc.history?.Sessions ?? [];
@@ -169,12 +172,36 @@ const overview: ScreenDef = {
   actions: {
     ...shellActions,
     'ag-deploy': () => deployOrStop(),
+    'ag-list-near': () => {
+      const s = strat();
+      if (s) void listOnNear(s);
+    },
     // Spectate the table your Agent sits at (no seat, no Coins); Leave brings you back to the menu.
     'ag-watch': (v) => {
       if (v) startWatch(host(), app(), String(v));
     },
   },
 };
+
+/** Overview in On-chain: the Agent is listed on NEAR for backers instead of sent to a Coins table. */
+function nearOverview(s: AgentStrategyState): string {
+  const mine = myListings.list;
+  const rows = mine.length
+    ? mine.map((a) => `<div class="v2-row v2-ag-field"><b class="v2-grow">${esc(a.id)}</b><span class="v2-sm v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · <span class="${tone(a.net_chips)}">${signed(a.net_chips)} chips</span></span></div>`).join('')
+    : `<div class="v2-sm v2-mut">${myListings.loading ? 'Checking NEAR…' : myListings.account ? "You haven't listed an Agent yet." : 'Sign in with NEAR to list your Agent.'}</div>`;
+  const inner = `<div class="v2-ag-ov">
+  <div class="v2-col v2-ag-ovl">
+    <button class="v2-card v2-ag-strat"${act('tab', 'ag-strategy')}><div class="v2-cap">Current strategy</div><div style="font-size:1.3em;font-weight:900">${esc(s.styleName)}</div><div class="v2-mut v2-sm">${esc(s.shortSummary)}</div></button>
+    <div class="v2-card v2-col" style="gap:.4em"><div class="v2-cap">Your Agents on NEAR</div>${rows}${mine.length ? btn('Open Back a pro', 'tab', { h: 'ghost', c: 'sm', v: 'ag-back' }) : ''}</div>
+  </div>
+  <div class="v2-card v2-col v2-ag-setup"><div class="v2-cap">List on NEAR</div>
+    <div class="v2-sm">Your Agent plays agent-vs-agent sessions dealt on NEAR testnet with the strategy from the Strategy tab. Others stake NEAR on it from Back a pro; backers get 90% of the profit, you 8%, Nomad 2%, never of losses.</div>
+    <div class="v2-xs v2-mut">Listing an id you already own updates its strategy (a new version backers can see). Switch to Demo to send your Agent to a Coins table instead.</div>
+    <div class="v2-grow"></div>
+    ${btn(mine.length ? 'Review &amp; Update on NEAR' : 'Review &amp; List on NEAR', 'ag-list-near', { h: 'gold', c: 'lg w' })}
+  </div></div>`;
+  return agShell('ag-overview', inner);
+}
 
 function deployOrStop(): void {
   const svc = agents();
