@@ -21,7 +21,7 @@ use poker_core::{self as core, game};
 mod history;
 pub mod nearai;
 pub mod strategy;
-mod pool;
+pub mod pool;
 mod vault;
 pub use pool::PoolView;
 pub use strategy::{AgentView, ListingView, PoolLimitsView, Rules};
@@ -1282,5 +1282,101 @@ mod tests {
         as_who("pro1.near", 0, 5);
         assert_eq!(t.clear_private_strategy("agent-1".into()), 3);
         assert!(t.get_agent("agent-1".into()).unwrap().private_strategy.is_none());
+    }
+
+    // ---------------------------------------------------------------------------------------- cost basis (P&L)
+
+    fn big(v: &Value) -> i128 {
+        v.as_str().unwrap().parse::<i128>().unwrap()
+    }
+
+    fn pnl(t: &Table, who: &str, agent: &str) -> (i128, i128, i128, i128) {
+        let h = t.get_holding(acct(who), agent.into());
+        let (value, dep, wd) = (big(&h["value"]), big(&h["deposited"]), big(&h["withdrawn"]));
+        (value, dep, wd, value + wd - dep)
+    }
+
+    #[test]
+    fn holdings_and_pools_track_what_went_in_and_out() {
+        let (mut t, _, _) = backed_table();
+        as_who("alice.near", NEAR, 1);
+        t.join_pool("agent-0".into());
+        as_who("bob.near", NEAR / 2, 1);
+        t.join_pool("agent-0".into());
+        as_who("pro1.near", NEAR, 1);
+        t.join_pool("agent-1".into());
+        assert_eq!(pnl(&t, "alice.near", "agent-0"), (NEAR as i128, NEAR as i128, 0, 0));
+
+        // A session moves the pool's value; queued joins and leaves happen at the settled value.
+        as_who("table.near", 0, 2);
+        t.open_backed_session("cb1".into(), pool_seats(&["agent-0", "agent-1"]), U64(200), 0, U64(1), U64(2), 30);
+        as_who("carol.near", 3 * NEAR / 10, 3);
+        assert_eq!(t.join_pool("agent-0".into())["queued"], true);
+        let bob_shares: u128 = t.get_holding(acct("bob.near"), "agent-0".into())["shares"].as_str().unwrap().parse().unwrap();
+        as_who("bob.near", 0, 3);
+        t.leave_pool("agent-0".into(), U128(bob_shares / 2));
+        // Queued money is not deposited yet.
+        assert_eq!(big(&t.get_holding(acct("carol.near"), "agent-0".into())["deposited"]), 0);
+        let f = fixture("session", "cb1");
+        let text = seated_text(&f, &[agent::Profile::from_legacy(10, 80), agent::Profile::from_legacy(30, 60)], 200, 30);
+        let out = submit(&mut t, "cb1", &f, &text);
+        assert_eq!(out["ok"], true, "{out}");
+        let paid_bob: i128 = out["payouts"]["seats"].as_array().unwrap().iter().flat_map(|s| s["pool_moves"].as_array().cloned().unwrap_or_default()).filter_map(|m| m["paid"].as_str().map(|p| p.parse::<i128>().unwrap())).sum();
+
+        let pool = t.get_pool("agent-0".into()).unwrap();
+        let (alice, bob, carol) = (pnl(&t, "alice.near", "agent-0"), pnl(&t, "bob.near", "agent-0"), pnl(&t, "carol.near", "agent-0"));
+        // Carol joined at the settled value: her P&L is 0 (give or take share rounding).
+        assert_eq!(carol.1, (3 * NEAR / 10) as i128);
+        assert!(carol.3.abs() < 1_000_000, "carol {carol:?}");
+        // Bob's leave is withdrawn, exactly what he was paid.
+        assert_eq!(bob.2, paid_bob);
+        // Holdings add up to the pool: deposits, withdrawals and value.
+        assert_eq!(pool.deposited.0 as i128, alice.1 + bob.1 + carol.1);
+        assert_eq!(pool.withdrawn.0 as i128, alice.2 + bob.2 + carol.2);
+        assert!((pool.value.0 as i128 - (alice.0 + bob.0 + carol.0)).abs() < 10, "pool value is the holders' values up to rounding");
+        // Alice and Bob each gained or lost the same share of the session's result per NEAR still in.
+        let pool_pnl = pool.value.0 as i128 + pool.withdrawn.0 as i128 - pool.deposited.0 as i128;
+        assert!((pool_pnl - (alice.3 + bob.3 + carol.3)).abs() < 10);
+
+        // An immediate leave of everything: value 0, P&L = what came out minus what went in.
+        let alice_shares: u128 = t.get_holding(acct("alice.near"), "agent-0".into())["shares"].as_str().unwrap().parse().unwrap();
+        as_who("alice.near", 0, 4);
+        let paid: i128 = t.leave_pool("agent-0".into(), U128(alice_shares))["paid"].as_str().unwrap().parse().unwrap();
+        let after = pnl(&t, "alice.near", "agent-0");
+        assert_eq!((after.0, after.2, after.3), (0, paid, paid - NEAR as i128));
+        assert_eq!(after.3, alice.3, "leaving does not change P&L");
+    }
+
+    #[test]
+    fn holdings_from_before_the_upgrade_start_at_their_value() {
+        let (mut t, _, _) = backed_table();
+        as_who("alice.near", NEAR, 1);
+        t.join_pool("agent-0".into());
+        // Simulate a holding and pool from before cost basis existed.
+        let mut hb = pool::holding_basis();
+        hb.remove(&pool::holding_key(&acct("alice.near"), "agent-0"));
+        hb.flush();
+        let mut pb = pool::pool_basis();
+        pb.remove("agent-0");
+        pb.flush();
+        // Views fall back to the value now, so P&L reads 0.
+        assert_eq!(pnl(&t, "alice.near", "agent-0").3, 0);
+        // The pool's value drifts (a stand-in for sessions settled before the upgrade).
+        let mut ps = pool::pools();
+        ps.get_mut("agent-0").unwrap().balance += NEAR / 10;
+        ps.flush();
+        // Only the owner migrates; it pins deposited at the value now, once.
+        as_who("alice.near", 0, 2);
+        assert!(panics(|| t.init_cost_basis(vec![], vec![])).contains("owner only"));
+        as_who("table.near", 0, 2);
+        assert_eq!(t.init_cost_basis(vec![(acct("alice.near"), "agent-0".into()), (acct("nobody.near"), "agent-0".into())], vec!["agent-0".into(), "agent-9".into()]), 2);
+        assert_eq!(t.init_cost_basis(vec![(acct("alice.near"), "agent-0".into())], vec!["agent-0".into()]), 0, "already started");
+        let (value, dep, wd, p) = pnl(&t, "alice.near", "agent-0");
+        assert_eq!((dep, wd, p), (value, 0, 0));
+        assert_eq!(t.get_pool("agent-0".into()).unwrap().deposited.0, 11 * NEAR / 10);
+        // From then on joins add to it.
+        as_who("alice.near", NEAR, 3);
+        t.join_pool("agent-0".into());
+        assert_eq!(pnl(&t, "alice.near", "agent-0").1, value + NEAR as i128);
     }
 }

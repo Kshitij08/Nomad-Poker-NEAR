@@ -122,7 +122,7 @@ impl Table {
                 let pool = pls.get(id);
                 Some(AgentCard {
                     agent: strategy::agent_view(a, &x),
-                    pool: pool.map(PoolView::from),
+                    pool: pool.map(|p| crate::pool::pool_view(id, p)),
                     listing: strategy::listing_of(a, &x, &r, pool),
                     limits: strategy::pool_limits_of(a, &pool.cloned().unwrap_or_default()),
                 })
