@@ -42,8 +42,8 @@ Rewards are the server's decisions (Phase 3): the rules are the engine's catalog
 Phase 5 moved the backend's tournament, strategies, twin and coach services here (`packages/db/src/tournaments.ts`,
 `strategies.ts`, `style/`). Staging lets tournaments start a minute out (`TOURNAMENT_MIN_LEAD_SECONDS`) and qualifies
 market strategies after 100 hands (`LISTING_MIN_HANDS`, `LISTING_MIN_DAYS`); production keeps 10 minutes, 2,000 hands
-and 7 days. The coach's written note needs `ANTHROPIC_API_KEY`, which is not configured; the computed report works
-without it. Agent sessions are on the game server (`/v1/agents/*`).
+and 7 days. The coach's written note comes from a private model on NEAR AI Cloud (`NEAR_AI_API_KEY`, model `COACH_MODEL`,
+default Qwen/Qwen3.6-35B-A3B-FP8); without the key the computed report works on its own. Agent sessions are on the game server (`/v1/agents/*`).
 
 The ledger (`packages/db/migrations/0001_init.sql`) is append-only. A trigger applies each entry to `balances` in the same
 statement, and `balances.amount >= 0` is a CHECK, so an overdraft aborts the entry: the two tables cannot disagree.

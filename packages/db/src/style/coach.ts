@@ -1,5 +1,5 @@
 // Coaching: stats and leaks computed from a player's decisions and hands (the numbers are the source of truth);
-// an optional Claude note only puts them into words.
+// an optional note by a private model on NEAR AI Cloud only puts them into words.
 import type { Decision } from "./style";
 
 export type HandResult = { position: number; bigBlind: number; net: number; showdown: boolean; won: boolean; handNo: number; table: string };
@@ -14,7 +14,7 @@ export type Report = {
   working: string[];
   notWorking: Leak[];
   tryNext: string;
-  summary: string; // rule-based text; replaced by the Claude note when one is written
+  summary: string; // rule-based text; the NEAR AI note, when written, comes beside it
 };
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -101,32 +101,43 @@ export function coach(decisions: Decision[], hands: HandResult[]): Report {
   return { hands: hands.length, decisions: decisions.length, stats, working, notWorking: leaks, tryNext, summary };
 }
 
-/** A short friendly coaching note from the computed report, by Claude. Null without a key or on any error. */
-export async function claudeNote(
+/** NEAR AI Cloud's OpenAI-compatible chat endpoint and the default private (TEE) model, as the dealer uses. */
+export const NEAR_AI_CHAT = "https://cloud-api.near.ai/v1/chat/completions";
+export const COACH_DEFAULT_MODEL = "Qwen/Qwen3.6-35B-A3B-FP8";
+
+/**
+ * A short friendly coaching note from the computed report, written by a private model on NEAR AI Cloud (it runs in a
+ * secure enclave, so the player's stats aren't seen by the provider). Only the computed facts go in; the model only
+ * words them. Null without a key, under 20 hands, or on any error (the rule-based summary stays).
+ */
+export async function coachNote(
   report: Report,
   opts: { apiKey?: string | null; model?: string | null; fetch?: typeof fetch } = {},
-): Promise<string | null> {
+): Promise<{ text: string; model: string } | null> {
   const key = opts.apiKey?.trim();
   if (!key || report.hands < 20) return null;
-  const model = opts.model?.trim() || "claude-haiku-5-5";
+  const model = opts.model?.trim() || COACH_DEFAULT_MODEL;
   const fetchImpl = opts.fetch ?? fetch;
   const facts = JSON.stringify({ hands: report.hands, stats: report.stats, working: report.working,
     notWorking: report.notWorking.map((l) => ({ title: l.title, detail: l.detail, advice: l.advice })), tryNext: report.tryNext });
   try {
-    const res = await fetchImpl("https://api.anthropic.com/v1/messages", {
+    const res = await fetchImpl(NEAR_AI_CHAT, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model, max_tokens: 350,
-        system: "You are a friendly poker coach in a casual mobile poker game. Write 2 short paragraphs (under 110 words total) for the player: what is working, what is not, and one concrete thing to try next. Use only the facts given; do not invent numbers, hands or stats. No headings, no lists.",
-        messages: [{ role: "user", content: `Facts about my recent play (JSON): ${facts}` }],
+        model, max_tokens: 350, temperature: 0.4,
+        chat_template_kwargs: { enable_thinking: false },
+        messages: [
+          { role: "system", content: "You are a friendly poker coach in a casual mobile poker game. Write 2 short paragraphs (under 110 words total) for the player: what is working, what is not, and one concrete thing to try next. Use only the facts given; do not invent numbers, hands or stats. No headings, no lists." },
+          { role: "user", content: `Facts about my recent play (JSON): ${facts}` },
+        ],
       }),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return null;
     const body: any = await res.json();
-    const text = (body?.content ?? []).filter((c: any) => c?.type === "text").map((c: any) => c.text).join("\n").trim();
-    return text || null;
+    const text = String(body?.choices?.[0]?.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    return text ? { text, model } : null;
   } catch {
     return null;
   }

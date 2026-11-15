@@ -55,8 +55,9 @@ export interface Env {
   /** What a market strategy needs before others may copy it (defaults: 2000 hands, 7 days). */
   LISTING_MIN_HANDS?: string;
   LISTING_MIN_DAYS?: string;
-  /** Optional: the coach adds a short note written by Claude. Unset: the computed report only. */
-  ANTHROPIC_API_KEY?: string;
+  /** Optional: the coach adds a short note written by a private model on NEAR AI Cloud. Unset: the computed report only. */
+  NEAR_AI_API_KEY?: string;
+  /** The NEAR AI model for the coach note (default Qwen/Qwen3.6-35B-A3B-FP8, a private TEE model). */
   COACH_MODEL?: string;
   /**
    * NEAR AI Agent Market (agentMarket.ts): the `webhook_secret` set on the listed agent (HMAC of its hire callbacks)

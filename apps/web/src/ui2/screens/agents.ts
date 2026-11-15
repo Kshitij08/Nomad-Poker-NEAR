@@ -706,7 +706,7 @@ const coach: ScreenDef = {
     const working = ((r.working as string[] | undefined) ?? []).map((t) => `<div class="v2-card">${esc(t)}</div>`).join('') || '<div class="v2-card v2-mut">Nothing stands out yet.</div>';
     const leaks = arr(r.notWorking).map((l) => `<div class="v2-card"><b>${esc(l.title)}</b><div class="v2-sm v2-mut">${esc(l.detail)}</div><div class="v2-sm" style="color:#9fe3ff">Try: ${esc(l.advice)}</div></div>`).join('') || '<div class="v2-card v2-mut">No leaks found.</div>';
     const col = (h: string, c: string, icon: string, n: number, inner: string) => `<div class="v2-panel v2-col v2-scroll"><div class="v2-row">${ico(icon, 2.2)}<b class="v2-h v2-grow">${h}</b><span class="v2-pill ${c}">${n}</span></div>${inner}</div>`;
-    return agMain('ag-coach') + `${typeof r.note === 'string' && r.note ? `<div class="v2-card">${esc(r.note)}</div>` : ''}<div class="v2-ag-cstats">${stats}</div>
+    return agMain('ag-coach') + `${typeof r.note === 'string' && r.note ? `<div class="v2-card">${esc(r.note)}<div class="v2-xs v2-mut" style="margin-top:.4em"><span class="v2-pill v2-ai-pill">NEAR AI</span> Written by a private model on NEAR AI Cloud${typeof r.noteModel === 'string' ? ` (${esc(r.noteModel.split('/').pop()!.split('-')[0]!)})` : ''} from the stats below.</div></div>` : ''}<div class="v2-ag-cstats">${stats}</div>
   <div class="v2-ag-ccols">${col('Working well', 'ok', 'check', ((r.working as unknown[]) ?? []).length, working)}${col('Leak to fix', 'bad', 'eye', arr(r.notWorking).length, leaks)}${col('Try next', 'gold', 'bolt', r.tryNext ? 1 : 0, `<div class="v2-card">${esc(r.tryNext ?? 'Keep playing: the coach updates as you go.')}</div>`)}</div>`;
   },
   actions: {
