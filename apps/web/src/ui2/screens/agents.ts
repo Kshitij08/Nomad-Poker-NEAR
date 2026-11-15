@@ -18,7 +18,7 @@ import {
 import { btn, esc, fmt, act, tabs, chips, seg, slider, input, outFormats, out, type V2Screen } from '../core';
 import { ico } from '../icons';
 import { ui, host, app, S, topBar, setMode, signedIn, coins, prompt, friendlyError, onchain } from '../ctx';
-import { listOnNear, myListings } from '../agentListing';
+import { listOnNear, myListings, nearAiLabel, privateStrategyDialog } from '../agentListing';
 import type { ScreenDef } from '../install';
 import { startWatch } from '../../economy/party';
 import { backingScreen } from './backing';
@@ -172,6 +172,7 @@ const overview: ScreenDef = {
   actions: {
     ...shellActions,
     'ag-deploy': () => deployOrStop(),
+    'ag-private': (v) => void privateStrategyDialog(String(v)),
     'ag-list-near': () => {
       const s = strat();
       if (s) void listOnNear(s);
@@ -187,7 +188,7 @@ const overview: ScreenDef = {
 function nearOverview(s: AgentStrategyState): string {
   const mine = myListings.list;
   const rows = mine.length
-    ? mine.map((a) => `<div class="v2-row v2-ag-field"><b class="v2-grow">${esc(a.id)}</b><span class="v2-sm v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · <span class="${tone(a.net_chips)}">${signed(a.net_chips)} chips</span></span></div>`).join('')
+    ? mine.map((a) => `<div class="v2-col v2-ag-field" style="gap:.3em"><div class="v2-row" style="gap:.4em"><b class="v2-grow">${esc(a.id)}</b>${a.private_strategy ? `<span class="v2-pill v2-ai-pill">${nearAiLabel(a.private_strategy.model)}</span>` : ''}${btn(a.private_strategy ? 'Edit private strategy' : 'Private strategy', 'ag-private', { h: 'violet', c: 'sm', v: a.id })}</div><span class="v2-xs v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · <span class="${tone(a.net_chips)}">${signed(a.net_chips)} chips</span>${a.strategy_version ? ` · strategy v${a.strategy_version}` : ''}</span></div>`).join('')
     : `<div class="v2-sm v2-mut">${myListings.loading ? 'Checking NEAR…' : myListings.account ? "You haven't listed an Agent yet." : 'Sign in with NEAR to list your Agent.'}</div>`;
   const inner = `<div class="v2-ag-ov">
   <div class="v2-col v2-ag-ovl">
@@ -196,7 +197,7 @@ function nearOverview(s: AgentStrategyState): string {
   </div>
   <div class="v2-card v2-col v2-ag-setup"><div class="v2-cap">List on NEAR</div>
     <div class="v2-sm">Your Agent plays agent-vs-agent sessions dealt on NEAR testnet with the strategy from the Strategy tab. Others stake NEAR on it from Back a pro; backers get 90% of the profit, you 8%, Nomad 2%, never of losses.</div>
-    <div class="v2-xs v2-mut">Listing an id you already own updates its strategy (a new version backers can see). Switch to Demo to send your Agent to a Coins table instead.</div>
+    <div class="v2-xs v2-mut">Listing an id you already own updates its strategy (a new version backers can see). Or give a listed Agent a <b>private strategy</b>: plain-words instructions only the sealed dealer reads, turned into each session's settings by a private model on NEAR AI. Switch to Demo to send your Agent to a Coins table instead.</div>
     <div class="v2-grow"></div>
     ${btn(mine.length ? 'Review &amp; Update on NEAR' : 'Review &amp; List on NEAR', 'ag-list-near', { h: 'gold', c: 'lg w' })}
   </div></div>`;
