@@ -12,6 +12,7 @@ import {
   type AgentCard, type Holding, type Position, type SessionSummary,
 } from '../../near/backing';
 import { replaySettled, toAgentReplay } from '../../near/replay';
+import { openCrossChain } from './backingIntents';
 import { nearAccount, nearSigner } from '../../near/wallet';
 import { AgentStrategyWords as W } from '@nomad/engine/agents';
 import { btn, esc, fmt, seg } from '../core';
@@ -107,7 +108,7 @@ function proCard(c: AgentCard, i: number): string {
   ].map(([v, l]) => `<div><b>${v}</b><div class="v2-xs v2-mut">${l}</div></div>`).join('');
   const action = btn(h && big(h.shares) > 0n ? 'Add more' : 'Back', 'bk-join', { h: 'gold', c: 'w', v: i });
   const leave = h && big(h.shares) > 0n ? btn('Leave', 'bk-leave', { h: 'ghost', c: 'sm', v: i }) : '';
-  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(a.id)}</b><div class="v2-xs v2-mut v2-ellip">by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div>${leave}</div><span class="v2-pill" style="width:max-content">${esc(styleWords(a.tight, a.aggro))}</span><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div>${action}</div>`;
+  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(a.id)}</b><div class="v2-xs v2-mut v2-ellip">by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div>${leave}</div><span class="v2-pill" style="width:max-content">${esc(styleWords(a.tight, a.aggro))}</span><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div>${action}${btn('From another chain', 'bk-xchain', { h: 'ghost', c: 'sm w', v: i })}</div>`;
 }
 
 function prosView(): string {
@@ -155,9 +156,10 @@ function join(i: number): void {
   if (!c) return;
   if (!state.account) return void connect();
   const playing = c.pool && big(c.pool.at_table) > 0n;
-  prompt(`Back ${c.agent.id}`, playing
+  const other = `<div class="v2-xs v2-mut" style="margin-top:.5em">Holding crypto on another chain? ${btn('See a live quote', 'bk-xchain', { h: 'ghost', c: 'sm', v: i })}</div>`;
+  prompt(`Back ${c.agent.id}`, (playing
     ? 'The pool is playing a session now: your NEAR joins at the value it settles at.'
-    : "You get pool shares at today's value. At most 25% of the pool plays in any one session. Backers get 90% of the profit; the pro 8%, Nomad 2%; never of losses.",
+    : "You get pool shares at today's value. At most 25% of the pool plays in any one session. Backers get 90% of the profit; the pro 8%, Nomad 2%; never of losses.") + other,
   'Amount in NEAR, e.g. 0.5', '', 'Join pool', (v) => {
     let amount: bigint;
     try {
@@ -260,6 +262,10 @@ export function backingScreen(header: (on: string) => string): ScreenDef {
       'bk-connect': () => void connect(),
       'bk-join': (v) => join(Number(v)),
       'bk-leave': (v) => leave(Number(v)),
+      'bk-xchain': (v) => {
+        const c = state.cards[Number(v)];
+        if (c) openCrossChain(c.agent.id, () => join(Number(v)));
+      },
       'bk-claim': () => void walletAct('Confirm in your wallet to claim…', 'Earnings sent to your wallet.', () => claimEarnings()),
       'bk-register': () => register(),
       'bk-watch': (v) => void watch(Number(v)),
