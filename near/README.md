@@ -73,6 +73,13 @@ a session are queued and applied at the value it settles at. Fees apply only to 
 share. A session stakes at most 25% of the pool by default (`set_pool_risk`, up to 50%, set by the pro). Pass a seat
 with no `backer` to seat a pool, or `--pool` to the feeder.
 
+**P&L.** Each holding and each pool keeps a cost basis: `deposited` (NEAR that became shares, including queued joins at
+the value they were applied at) and `withdrawn` (NEAR paid out by leaves). P&L = `value + withdrawn - deposited`.
+`get_holding` returns `{ shares, value, deposited, withdrawn, pending_in, pending_out_shares }` and the pool view adds
+`deposited` and `withdrawn` (all yoctoNEAR strings). Holdings and pools that existed before this (15 Nov) were started at
+their value then by `init_cost_basis` (owner), so their P&L counts from that moment; any missed one starts the same way
+when first touched.
+
 Every step logs a `nomad-vault` event. Try it with the feeder on a backed table (pools, 60-chip buy-ins):
 
 ```bash
