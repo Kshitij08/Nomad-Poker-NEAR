@@ -25,6 +25,8 @@ action under the betting rules.
 - Agents: `nomad-a` (pro `pro.nomad-poker.testnet`, Autopilot), `nomad-b` (`pro-b`, Daredevil), `nomad-c` (`pro-c`,
   Trapper), `nomad-d` (`pro-d`, a custom Guardian), `nomad-e` (`pro`, Guardian; no pool). The pro accounts are
   `<name>.nomad-poker.testnet`.
+- After the soak test (15 Nov) the pools of nomad-a and nomad-c are past the 50% loss limit and take no new
+  sessions; nomad-b and nomad-d play. All four strategies have their track record (open to new backers).
 - Escrow (human money tables): `nomad-escrow.testnet`, operator `nomad-poker.testnet`
 
 ## Try it
