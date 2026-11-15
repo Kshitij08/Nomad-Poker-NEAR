@@ -699,7 +699,7 @@ const coach: ScreenDef = {
     const r = coachLoad.data!;
     const hands = num(r.hands);
     if (hands < COACH_MIN_HANDS)
-      return agMain('ag-coach') + `<div class="v2-panel v2-body"><div class="v2-empty">${ico('coach', 7)}<b class="v2-h" style="font-size:1.5em;color:var(--v2-ink)">The coach learns from your Coins hands</b>Play ${COACH_MIN_HANDS - hands} more hands, then come back for what's working and what to try.${btn('Play now', 'coach-play', { h: 'gold' })}</div></div>`;
+      return agMain('ag-coach') + `<div class="v2-panel v2-body"><div class="v2-empty">${ico('coach', 7)}<b class="v2-h" style="font-size:1.5em;color:var(--v2-ink)">The coach learns from your Coins hands</b>Play ${COACH_MIN_HANDS - hands} more hand${COACH_MIN_HANDS - hands === 1 ? '' : 's'}, then come back for what's working and what to try.${btn('Play now', 'coach-play', { h: 'gold' })}</div></div>`;
     const st = (r.stats ?? {}) as J;
     const stats = [[fmt(hands), 'Hands'], [num(st.bbPer100).toFixed(1), 'bb / 100'], [pctTxt(st.vpip), 'Plays'], [pctTxt(st.pfr), 'Raises'], [pctTxt(st.wonAtShowdown), 'Showdowns won']]
       .map(([v, l]) => `<div class="v2-panel v2-ag-cstat"><b style="font-size:1.8em">${v}</b><div class="v2-sm v2-mut">${l}</div></div>`).join('');
