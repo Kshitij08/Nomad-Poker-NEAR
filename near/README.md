@@ -77,8 +77,10 @@ with no `backer` to seat a pool, or `--pool` to the feeder.
 the value they were applied at) and `withdrawn` (NEAR paid out by leaves). P&L = `value + withdrawn - deposited`.
 `get_holding` returns `{ shares, value, deposited, withdrawn, pending_in, pending_out_shares }` and the pool view adds
 `deposited` and `withdrawn` (all yoctoNEAR strings). Holdings and pools that existed before this (15 Nov) were started at
-their value then by `init_cost_basis` (owner), so their P&L counts from that moment; any missed one starts the same way
-when first touched.
+their value then by `init_cost_basis` (owner), then corrected from their history by `correct_cost_basis` (owner, once;
+`scripts/cost-basis-history.mjs` reads every join and leave from the contract's events), so their P&L counts from their
+first join: [cost-basis-backfill.md](scripts/reports/cost-basis-backfill.md). A holding missed by both would start at
+its value when first touched.
 
 Every step logs a `nomad-vault` event. Try it with the feeder on a backed table (pools, 60-chip buy-ins):
 
