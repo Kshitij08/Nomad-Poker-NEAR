@@ -76,7 +76,14 @@ feeder.on("ready", (s) => {
   sessions.push(s);
   console.log(`${((Date.now() - t0) / 1000).toFixed(0)}s ${s.id}: ${s.hands.length} hands, dealer ${(s.fetchedMs / 1000).toFixed(0)}s, settled ${s.settleTx}`);
 });
-await feeder.run({ sessions: SESSIONS });
+// A refusal (a pool past its loss limit, say) stops the table; what settled before it is still reconciled.
+let stopped = null;
+try {
+  await feeder.run({ sessions: SESSIONS });
+} catch (e) {
+  stopped = String(e.message ?? e).replace(/^.*Contract panicked: /s, "").split("\n")[0];
+  console.log(`table stopped: ${stopped}`);
+}
 const runSecs = (Date.now() - t0) / 1000;
 const after = await snapshot();
 
@@ -101,8 +108,10 @@ for (const s of sessions) {
     const [b, c, pf, plf, tb] = [p.buy_in, p.cash_out, p.pro_fee, p.platform_fee, p.to_backer].map(BigInt);
     const gain = c > b ? c - b : 0n;
     // pro = floor(base * 8%), platform = floor(base * 2%) for one fee base no larger than the gain.
-    const lo = [pf * 125n, plf * 500n].reduce((x, y) => (x > y ? x : y));
-    const hi = [(pf + 1n) * 125n, (plf + 1n) * 500n].reduce((x, y) => (x < y ? x : y));
+    // floor(base * 800 / 10000) = pf  <=>  base in [ceil(pf * 12.5), ceil((pf + 1) * 12.5));  same for 200 / 10000 and 50.
+    const ceilHalf = (x) => (x + 1n) / 2n;
+    const lo = [ceilHalf(pf * 25n), plf * 50n].reduce((x, y) => (x > y ? x : y));
+    const hi = [ceilHalf((pf + 1n) * 25n), (plf + 1n) * 50n].reduce((x, y) => (x < y ? x : y));
     const splitOk = tb + pf + plf === c && lo < hi && lo <= gain;
     check(`${s.id} ${p.agent}: 90/8/2 split`, splitOk, `cash-out ${near(c)} = backers ${near(tb)} + pro ${near(pf)} + platform ${near(plf)}; gain ${near(gain)}`);
     const acc = perPool[p.agent];
@@ -145,7 +154,7 @@ const md = `# Soak report: table.nomad-poker.testnet
 
 Run ${new Date().toISOString()} against \`${TABLE}\` (agents v2). Script: \`near/scripts/soak.mjs\`.
 
-**${sessions.length} sessions, ${hands} hands, ${runSecs.toFixed(0)} s. Reconciliation: ${checks.filter((c) => c.ok).length} of ${checks.length} checks pass${ok ? "" : " — SOME FAILED"}.**
+**${sessions.length} sessions, ${hands} hands, ${runSecs.toFixed(0)} s.${stopped ? ` The table stopped early: the contract refused the next session (${stopped}).` : ""} Reconciliation: ${checks.filter((c) => c.ok).length} of ${checks.length} checks pass${ok ? "" : " — SOME FAILED"}.**
 
 Setup: the pools of ${agents.map((x) => `\`${x}\``).join(", ")} (four different pros), each staking ${buyIn} chips
 (${near(BigInt(buyIn) * chip)} NEAR, 15% of the smallest pool) per session, up to ${HANDS} hands, blinds 1/2. Sessions are
