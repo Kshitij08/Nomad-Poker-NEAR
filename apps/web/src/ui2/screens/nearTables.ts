@@ -15,10 +15,11 @@ import {
   type EscrowConfig, type EscrowSeat, type EscrowTable, type HouseTable,
 } from '../../near/escrow';
 import { NEAR_EXPLORER, formatNear, parseNear } from '../../near/backing';
-import { nearAccount, nearSigner } from '../../near/wallet';
+import { localAccount, nearAccount, nearSigner } from '../../near/wallet';
+import { nearBackup } from '../nearAccount';
 import { btn, esc } from '../core';
 import { ico } from '../icons';
-import { app, friendlyError, onchain, prompt, S, setMode, topBar, ui } from '../ctx';
+import { app, connectNear, friendlyError, onchain, prompt, S, setMode, topBar, ui } from '../ctx';
 import type { ScreenDef } from '../install';
 
 const state = {
@@ -26,8 +27,10 @@ const state = {
   error: '',
   /** The NEAR account you're signed in to Nomad with (the game server seats this one). */
   account: null as string | null,
-  /** The account the NEAR wallet is connected as (transactions come from it). */
+  /** The account transactions come from: the NEAR wallet's, or the account made for you (sent by the relayer). */
   wallet: null as string | null,
+  /** `wallet` is the account made for you (its key is in this browser; no wallet, no gas). */
+  local: false,
   balance: 0n,
   config: null as EscrowConfig | null,
   tables: new Map<string, EscrowTable | null>(),
@@ -93,7 +96,9 @@ async function load(): Promise<void> {
   ui().render();
   try {
     state.account = nearIdentity();
-    state.wallet = await nearAccount();
+    const local = await localAccount();
+    state.local = !!local;
+    state.wallet = local?.accountId ?? (await nearAccount());
     const me = state.account;
     const list = allTables();
     const [config, tables, balance, seats] = await Promise.all([
@@ -122,7 +127,8 @@ const cancelled = (e: unknown): boolean => /cancel|reject|closed|denied/i.test(S
 
 /** Runs a wallet transaction with a status line, then reloads. True when it went through. */
 async function walletAct(pending: string, done: string, fn: () => Promise<void>): Promise<boolean> {
-  state.note = pending;
+  // An account made for you has no wallet to confirm in: the move is signed here and relayed.
+  state.note = state.local ? 'Sending to NEAR…' : pending;
   ui().render();
   let ok = false;
   try {
@@ -130,20 +136,15 @@ async function walletAct(pending: string, done: string, fn: () => Promise<void>)
     state.note = done;
     ok = true;
   } catch (e) {
-    state.note = cancelled(e) ? '' : friendlyError(e, "The wallet couldn't send it. Try again.");
+    state.note = cancelled(e) ? '' : friendlyError(e, state.local ? "NEAR didn't take it. Try again." : "The wallet couldn't send it. Try again.");
   }
   await load();
   return ok;
 }
 
+/** NEAR sign-in: a NEAR account made for you, or your wallet (the "Play on NEAR" chooser). */
 async function signIn(): Promise<void> {
-  const acc = app().services.account as unknown as { signInWithNear?: () => Promise<void> };
-  if (!acc.signInWithNear) return ui().message('NEAR tables', 'NEAR sign-in needs the Nomad server, which this build does not set.');
-  try {
-    await acc.signInWithNear();
-  } catch (e) {
-    ui().message('Continue with NEAR', esc(friendlyError(e, "Couldn't sign in with NEAR. Try again.")));
-  }
+  await connectNear();
   await load();
 }
 
@@ -153,6 +154,9 @@ async function walletReady(): Promise<boolean> {
     void signIn();
     return false;
   }
+  const local = await localAccount();
+  state.local = !!local;
+  if (local) return true;
   state.wallet = (await nearAccount()) ?? (await nearSigner.connect().catch(() => null));
   if (!state.wallet) return false;
   if (state.wallet !== state.account) {
@@ -314,10 +318,10 @@ async function sit(i: number): Promise<void> {
 
 function balanceCard(): string {
   if (!state.account) {
-    return `<div class="v2-card v2-col"><b style="font-size:1.2em">Play for NEAR</b><div class="v2-sm v2-mut">Sign in with your NEAR account to buy in. The game seats the account you sign in with.</div>${btn('Continue with NEAR', 'nt-signin', { h: 'gold' })}</div>`;
+    return `<div class="v2-card v2-col"><b style="font-size:1.2em">Play for NEAR</b><div class="v2-sm v2-mut">Get a NEAR account in one tap (or connect your wallet) to buy in. The game seats the account you sign in with.</div>${btn('Continue with NEAR', 'nt-signin', { h: 'gold' })}</div>`;
   }
   const mismatch = state.wallet && state.wallet !== state.account ? `<div class="v2-xs v2-badc">Your wallet is connected as ${esc(state.wallet)}. Switch it to ${esc(state.account)} to buy in.</div>` : '';
-  return `<div class="v2-card v2-row v2-wrap"><div class="v2-grow"><b style="font-size:1.5em">${formatNear(state.balance)} NEAR</b><div class="v2-xs v2-mut">Game balance on the escrow · ${esc(state.account)}</div>${mismatch}</div>${btn(`${ico('plus', 0.9)} Deposit`, 'nt-deposit', { h: 'gold', c: 'sm' })}${btn('Withdraw', 'nt-withdraw', { h: 'ghost', c: 'sm' })}</div>`;
+  return `<div class="v2-card v2-row v2-wrap"><div class="v2-grow"><b style="font-size:1.5em">${formatNear(state.balance)} NEAR</b><div class="v2-xs v2-mut">Game balance on the escrow · ${esc(state.account)}${state.local ? ' · made for you, no wallet needed' : ''}</div>${mismatch}</div>${btn(`${ico('plus', 0.9)} Deposit`, 'nt-deposit', { h: 'gold', c: 'sm' })}${btn('Withdraw', 'nt-withdraw', { h: 'ghost', c: 'sm' })}${state.local ? btn('Back up key', 'nt-backup', { h: 'ghost', c: 'sm' }) : ''}</div>`;
 }
 
 function tableCard(t: HouseTable, i: number): string {
@@ -374,6 +378,7 @@ export const nearTablesScreen: ScreenDef = {
   actions: {
     'nt-reload': () => void load(),
     'nt-signin': () => void signIn(),
+    'nt-backup': () => void nearBackup(),
     'nt-deposit': () => depositNear(),
     'nt-withdraw': () => withdrawNear(),
     'nt-sit': (v) => void sit(Number(v)),

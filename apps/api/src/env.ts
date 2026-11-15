@@ -27,6 +27,19 @@ export interface Env {
    * check a tournament was created there and who registered. Unset (or no NEAR_RPC_URL): NEAR tournaments are off.
    */
   NEAR_ESCROW?: string;
+  /** The table / vault contract (table.nomad-poker.testnet): the relayer also calls it for app-made accounts. */
+  NEAR_TABLE_CONTRACT?: string;
+  /**
+   * NEAR accounts made for players and gasless moves (src/nearAccounts.ts): the sponsor account that creates
+   * `<id>.<sponsor>` accounts and pays the relayed transactions, and its key ("ed25519:<base58>", a secret). Either
+   * unset: those routes answer not_configured and players connect a wallet.
+   */
+  NEAR_SPONSOR_ID?: string;
+  NEAR_SPONSOR_KEY?: string;
+  /** yoctoNEAR a new account gets (default 0.1 NEAR, never more than 0.5). */
+  NEAR_NEW_ACCOUNT_YOCTO?: string;
+  /** New accounts a day across all players (default 50). */
+  NEAR_NEW_ACCOUNTS_PER_DAY?: string;
   /** Comma-separated Google OAuth client ids (web, Android, iOS). Unset: Google sign-in answers not_configured. */
   GOOGLE_CLIENT_IDS?: string;
   /** '1' on staging and dev: email sign-in returns the link instead of mailing it. */
@@ -53,7 +66,6 @@ export interface Env {
   AGENT_MARKET_TOKEN?: string;
   /** Defaults: https://market.near.ai, table.nomad-poker.testnet, https://nomad-poker-near.vercel.app. */
   AGENT_MARKET_API?: string;
-  NEAR_TABLE_CONTRACT?: string;
   APP_URL?: string;
 }
 

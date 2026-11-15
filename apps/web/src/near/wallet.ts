@@ -3,6 +3,7 @@
  * NEAR Connect loads on first use, so the game's first screen stays light. Testnet in this fork.
  */
 import type { NearConnector } from '@hot-labs/near-connect';
+import type { NearRelayResponse } from '@nomad/contract';
 
 export const NEAR_NETWORK = 'testnet' as const;
 
@@ -51,8 +52,35 @@ export const nearSigner: NearSigner = {
   },
 };
 
-/** Calls a contract method through the player's wallet (connecting first if needed). `deposit` is in yoctoNEAR. */
+/**
+ * How contract calls go out for an account made for you (localKey.ts): who you're signed in as with NEAR, and the
+ * API's relayer. Set by account/install.ts; unset (no Nomad server), every call goes through a wallet.
+ */
+export const nearRoute: { identity: () => string | null; relay: ((signedDelegate: string) => Promise<NearRelayResponse>) | null } = {
+  identity: () => null,
+  relay: null,
+};
+
+/** The account made for you, when it's the one you're signed in with (calls go through the relayer); else null. */
+export async function localAccount(): Promise<import('./localKey').LocalKey | null> {
+  const who = nearRoute.identity();
+  if (!who || !nearRoute.relay) return null;
+  const k = (await import('./localKey')).loadLocalKey();
+  return k?.accountId === who ? k : null;
+}
+
+/**
+ * Calls a contract method as the NEAR account you play with. `deposit` is in yoctoNEAR. An account made for you signs
+ * here: the API's relayer sends calls with no NEAR attached (gasless), the account sends the rest itself. Otherwise the
+ * wallet sends it (connecting first if needed).
+ */
 export async function nearCall(contractId: string, methodName: string, args: Record<string, unknown>, deposit = 0n, tgas = 50n): Promise<void> {
+  const local = await localAccount();
+  if (local) {
+    const { localCall } = await import('./localKey');
+    await localCall(local, nearRoute.relay!, contractId, methodName, args, deposit, tgas);
+    return;
+  }
   const c = await load();
   const w = await c.wallet().catch(() => c.connect());
   await w.signAndSendTransaction({

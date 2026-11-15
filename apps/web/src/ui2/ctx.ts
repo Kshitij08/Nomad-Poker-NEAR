@@ -141,9 +141,20 @@ export async function setMode(v: string, connect = true): Promise<void> {
 
 let connecting: Promise<boolean> | null = null;
 
-/** NEAR sign-in through the wallet picker (it links to the account you're playing as). True once signed in with NEAR. */
+/**
+ * NEAR sign-in (it links to the account you're playing as): the "Play on NEAR" chooser offers a NEAR account made for
+ * you (no wallet; ui2/nearAccount.ts) or your wallet. True once signed in with NEAR.
+ */
 export function connectNear(): Promise<boolean> {
-  connecting ??= (async () => {
+  connecting ??= import('./nearAccount')
+    .then((m) => m.chooseNear(walletSignIn))
+    .finally(() => (connecting = null));
+  return connecting;
+}
+
+/** NEAR sign-in through the wallet picker. */
+function walletSignIn(): Promise<boolean> {
+  return (async () => {
     const acc = accountExtras(_ctx);
     if (!acc.signInWithNear) {
       _ui.message('On-chain', 'NEAR sign-in needs the Nomad server, which this build does not set.');
@@ -162,8 +173,7 @@ export function connectNear(): Promise<boolean> {
     } else void refreshNearBalance(nearAccountId(), () => _ui.render());
     _ui.render();
     return ok;
-  })().finally(() => (connecting = null));
-  return connecting;
+  })();
 }
 
 /** The play mode as a small pill (sub-screens): the switch itself lives on the main menu and the profile popover. */

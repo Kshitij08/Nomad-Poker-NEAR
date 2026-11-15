@@ -11,6 +11,7 @@ import { VirtualEconomy } from '../economy/virtualEconomy';
 import { AccountScreen } from './accountScreen';
 import { NomadProgress, NomadWallet } from './progress';
 import { ApiRequestError, localTokenStore, NomadSession } from './session';
+import { Routes } from '@nomad/contract';
 
 export const API_PRESETS: Record<string, string> = {
   staging: 'https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev',
@@ -79,6 +80,11 @@ export function install(ctx: AppContext): void {
   ctx.router.register('nomad-account', (c) => new AccountScreen(c, { session, stage: base ? stageLabel(base) : 'off', near }));
 
   if (!session) return;
+  // An account made for you (near/localKey.ts) sends its contract calls through this API's relayer.
+  void import('../near/wallet').then(({ nearRoute }) => {
+    nearRoute.identity = () => session.me?.identities.find((i) => i.provider === 'near')?.label ?? null;
+    nearRoute.relay = (signedDelegate) => session.call('POST', Routes.nearRelay, { signedDelegate });
+  });
   // With a Nomad server, it owns the economy: balances, items and every reward (Phase 3). The wallet becomes a
   // read-only view of the server's figures and retention asks the server (retention/install wires the backend).
   const progress = new NomadProgress(session, ctx.events);

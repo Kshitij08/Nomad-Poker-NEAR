@@ -6,7 +6,9 @@ ledger; the contract (routes, types, error codes) is `packages/contract` (`@noma
 | Route | What it does |
 |---|---|
 | `POST /v1/auth/guest` | New guest player with the starter grant (10,000 coins). |
-| `POST /v1/auth/near/challenge` → `/verify` | NEAR sign-in: the wallet signs the server's message as a NEP-413 signed message (recipient = the app's host, a 32-byte nonce); the server checks the ed25519 signature and asks the NEAR RPC (`NEAR_RPC_URL`) that the key is a full-access key of the account. Nonces are single-use and last 5 minutes. |
+| `POST /v1/auth/near/challenge` → `/verify` | NEAR sign-in: the wallet (or the key an app-made account keeps in the browser) signs the server's message as a NEP-413 signed message (recipient = the app's host, a 32-byte nonce); the server checks the ed25519 signature and asks the NEAR RPC (`NEAR_RPC_URL`) that the key is a full-access key of the account. Nonces are single-use and last 5 minutes. |
+| `POST /v1/near/account` `{ publicKey }` | Create my NEAR account (see below): `<id>.<sponsor>` with the browser's key, funded by the sponsor. |
+| `POST /v1/near/relay` `{ signedDelegate }` | Gasless moves for app-made accounts: a NEP-366 SignedDelegateAction (borsh, base64), checked and sent as a meta-transaction the sponsor pays for. |
 | `POST /v1/auth/google` | Google ID token, checked against Google's keys and `GOOGLE_CLIENT_IDS` (not configured yet → 501). |
 | `POST /v1/auth/email/start` → `/verify` | Email link, 15 minutes, single use. No mail provider yet: staging returns the link as `devLink`; production answers 501. |
 | `POST /v1/auth/sign-out` | Ends this session. |
@@ -46,6 +48,42 @@ without it. Agent sessions are on the game server (`/v1/agents/*`).
 The ledger (`packages/db/migrations/0001_init.sql`) is append-only. A trigger applies each entry to `balances` in the same
 statement, and `balances.amount >= 0` is a CHECK, so an overdraft aborts the entry: the two tables cannot disagree.
 Every entry has an idempotency key per player, so retries never double-pay.
+
+## NEAR without a wallet (`src/nearAccounts.ts`)
+
+On-chain mode needs a NEAR account. Players with a wallet connect it (NEAR Connect). Everyone else taps **Create my
+NEAR account**:
+
+1. The browser makes an ed25519 key pair and keeps it in localStorage for this origin (`apps/web/src/near/localKey.ts`;
+   the player can back it up as a near-cli JSON file, restore it on another device, or import it into a wallet).
+2. `POST /v1/near/account` with the public key. The sponsor account creates `<10 of a-z0-9>.<sponsor>` (a sub-account,
+   so no faucet call per player) with that key as its only full-access key and sends it `NEAR_NEW_ACCOUNT_YOCTO`
+   (default **0.1 NEAR**, capped at 0.5): storage (~0.002 NEAR) plus a starting amount for deposits and buy-ins.
+   One account per player; at most `NEAR_NEW_ACCOUNTS_PER_DAY` (default 50) a day across everyone. Asking again with
+   the same key returns the same account.
+3. The browser signs in with that key through the ordinary NEP-413 challenge / verify, which links the account to the
+   player (guest, Google or email) like a wallet's. The player keeps their display name.
+4. Contract calls that attach no NEAR are NEP-366 delegate actions signed in the browser and sent to
+   `POST /v1/near/relay`. Calls that attach NEAR (deposit, a buy-in topped up from the account, tournament entry,
+   join_pool, back) go as ordinary transactions signed in the browser and paid from the account (gas is a fraction of
+   a millinear): in a meta-transaction **the relayer pays the delegate's deposit**, so relaying those would spend the
+   sponsor's NEAR (seen in the first live run). The relayer
+   refuses anything that isn't the caller's own app-made account and its registered key, a call to `NEAR_ESCROW`
+   (`deposit`, `withdraw`, `buy_in`, `create_hosted_table`, `close_table`, `reclaim`, `register`, `leave`,
+   `create_tournament`, `cancel_tournament`) or `NEAR_TABLE_CONTRACT` (`join_pool`, `leave_pool`, `claim_earnings`,
+   `register_agent`, `back`, `withdraw`, `set_loss_limit`), any attached NEAR, more than 100 Tgas a call or 250 Tgas in all, a move that expired or is valid for more than 600 blocks, a
+   bad signature, or a move it already relayed (by its NEP-366 hash, before paying anything). 30 moves per player in
+   10 minutes, 300 a day. It wraps the move in a transaction the sponsor signs (`send_tx`, waiting for execution) and
+   returns a contract panic in the contract's own words. The sponsor pays gas only (unused gas is refunded to it). Wallet players are not relayed: their wallet pays, as before. `near_accounts` and `near_relays`
+   (migration 0018) record both.
+
+Setup (testnet): the sponsor is `players.nomad-poker.testnet` (a sub-account of `nomad-poker.testnet`, funded from it) (`NEAR_SPONSOR_ID` in `cloudflare.config.ts`). Its key is
+the Worker secret `NEAR_SPONSOR_KEY`, never in the repo: the `private_key` from
+`~/.near-credentials/testnet/players.nomad-poker.testnet.json` (WSL), `ed25519:<base58>`. Put it in the git-ignored
+`.secrets.staging.json` next to `SPIN_SECRET` (`npm run deploy:staging` uploads it) or set it with
+`npx cf secret put NEAR_SPONSOR_KEY --mode staging`. For `npm run dev`, put it in `.dev.vars` (git-ignored). Without
+it the two routes answer 501 and the app offers wallets only. Keep the sponsor topped up: live on testnet, an account
+cost 0.1 NEAR plus ~0.003 NEAR gas and a relayed move ~0.002 NEAR after refunds.
 
 ## Commands (in this folder)
 

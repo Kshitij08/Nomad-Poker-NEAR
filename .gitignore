@@ -13,3 +13,6 @@ obj/
 .load-guests*.json
 infra/backups/
 .local-per.sqlite*
+
+# Local Worker secrets (cf dev)
+.dev.vars*
