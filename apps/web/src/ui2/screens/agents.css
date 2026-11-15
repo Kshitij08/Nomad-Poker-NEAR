@@ -126,3 +126,5 @@ html[data-orient='portrait'] .v2-bk-st.v2-ag-row > :last-child { justify-content
 .v2-pill.v2-ai-pill { width: max-content; color: #7ff7d0; border-color: color-mix(in srgb, #2ee3a8 55%, transparent); background: color-mix(in srgb, #2ee3a8 14%, transparent); }
 /* Back a pro: an agent not open to new backers yet says why, where its Stake button would be. */
 .v2-bk-closed { padding: 0.6em 0.8em; text-align: center; line-height: 1.35; }
+/* Coach: the NEAR AI note on the same purple panel as the stats and columns below it. */
+.v2-ag-note { padding: 0.8em 1.1em; line-height: 1.4; }
