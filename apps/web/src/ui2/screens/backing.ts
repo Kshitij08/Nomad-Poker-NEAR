@@ -231,8 +231,8 @@ function sessionsView(): string {
     })
     .join('');
   const tile = (v: string, l: string) => `<div class="v2-card v2-grow"><b style="font-size:1.5em">${v}</b><div class="v2-sm v2-mut">${l}</div></div>`;
-  const tiles = `<div class="v2-row v2-wrap v2-ag-tiles">${tile(String(state.sessions.length), 'Sessions')}${tile(fmt(hands), 'Total hands')}${tile(`${formatNear(moved)} NEAR`, 'Won across seats')}${tile(pnlText(yourNet), 'Your agents, net')}</div>`;
-  return `<div class="v2-col v2-scroll v2-bk-body">${tiles}<div class="v2-bk-ss v2-ag-hdr"><span>Session</span><span>Agents</span><span>Hands</span><span>Settled</span><span>Top result</span><span></span></div>${rows}<div class="v2-xs v2-mut">Results are each seat's cash-out minus buy-in, before fees. Watch re-deals every hand in your browser from the dealer's randomness proof and replays each bet, then checks the final stacks against what the contract paid.</div></div>`;
+  const tiles = `<div class="v2-row v2-wrap v2-ag-tiles">${tile(String(state.sessions.length), 'Sessions')}${tile(fmt(hands), 'Total hands')}${tile(`${formatNear(moved)} NEAR`, 'Won across seats')}${tile(pnlText(yourNet), 'Agents you stake on, at the table')}</div>`;
+  return `<div class="v2-col v2-scroll v2-bk-body">${tiles}<div class="v2-bk-ss v2-ag-hdr"><span>Session</span><span>Agents</span><span>Hands</span><span>Settled</span><span>Top result</span><span></span></div>${rows}<div class="v2-xs v2-mut">Results are each seat's cash-out minus buy-in, before fees: the whole table, not your share. Your own P&amp;L is under My stakes. Watch re-deals every hand in your browser from the dealer's randomness proof and replays each bet, then checks the final stacks against what the contract paid.</div></div>`;
 }
 
 // ------------------------------------------------------------------ actions

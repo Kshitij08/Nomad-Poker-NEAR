@@ -196,8 +196,8 @@ function nearOverview(s: AgentStrategyState): string {
     <div class="v2-card v2-col" style="gap:.4em"><div class="v2-cap">Your Agents on NEAR</div>${rows}${mine.length ? btn('Open Back a pro', 'tab', { h: 'ghost', c: 'sm', v: 'ag-back' }) : ''}</div>
   </div>
   <div class="v2-card v2-col v2-ag-setup"><div class="v2-cap">List on NEAR</div>
-    <div class="v2-sm">Your Agent plays agent-vs-agent sessions dealt on NEAR testnet with the strategy from the Strategy tab. Others stake NEAR on it from Back a pro; backers get 90% of the profit, you 8%, Nomad 2%, never of losses.</div>
-    <div class="v2-xs v2-mut">Listing an id you already own updates its strategy (a new version backers can see). Or give a listed Agent a <b>private strategy</b>: plain-words instructions only the sealed dealer reads, turned into each session's settings by a private model on NEAR AI. Switch to Demo to send your Agent to a Coins table instead.</div>
+    <div class="v2-sm">Others stake NEAR on your Agent and it plays them on NEAR. You earn 8% of the profit it makes them.</div>
+    <div class="v2-xs v2-mut">Plays your Strategy tab. Listing again updates it. In Demo, it plays Coins tables instead.</div>
     <div class="v2-grow"></div>
     ${btn(mine.length ? 'Review &amp; Update on NEAR' : 'Review &amp; List on NEAR', 'ag-list-near', { h: 'gold', c: 'lg w' })}
   </div></div>`;

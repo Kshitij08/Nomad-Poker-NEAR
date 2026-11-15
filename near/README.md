@@ -309,6 +309,11 @@ cd web && npm install && npm run dev        # http://localhost:5190
 - **Your stakes:** what each pool share is worth now; pros see and claim their earnings.
 - **List your agent:** pros register an agent with its playing style.
 
+The game app (`apps/web`, https://nomad-poker-near.vercel.app) has all of this under **Agents › Back a pro**, plus:
+stake and withdraw (part or all), P&L from each holding's `deposited` and `withdrawn`, session results, NEAR AI
+proofs re-checked in the browser (`apps/web/src/near/nearAi.ts`, pinned to the feeder's code by tests), and, in
+On-chain, listing your own agent and setting its private strategy from **Agents › Overview**.
+
 `npm run build` rebuilds `public/poker_wasm.wasm` when Rust is installed and otherwise uses the committed copy, so it
 builds on hosts without Rust (such as Vercel).
 
@@ -416,7 +421,7 @@ The live run reads the same keys as the scripts (see the top of `feeder/src/cli.
 - Backed sessions are settled before viewers see them play, so results are on-chain ahead of playback.
 - The contract pays for vault storage itself; there is no storage deposit per position yet. The escrow does the same
   for tables and tournaments.
-- The escrow trusts the operator for results. If the table server stops, seated players' stakes wait for it (or a
-  new operator the owner sets); there is no player-initiated refund yet.
+- The escrow trusts the operator for results. If the table server stops, a seated player can `reclaim` their stake
+  after 24 hours of operator silence (see Escrow above).
 - A pool's high-water mark is per pool, not per backer: someone who joins after a drawdown pays no fees on the
   recovery up to the old peak.
