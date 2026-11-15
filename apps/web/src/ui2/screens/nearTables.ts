@@ -18,7 +18,7 @@ import { NEAR_EXPLORER, formatNear, parseNear } from '../../near/backing';
 import { nearAccount, nearSigner } from '../../near/wallet';
 import { btn, esc } from '../core';
 import { ico } from '../icons';
-import { app, friendlyError, prompt, S, topBar, ui } from '../ctx';
+import { app, friendlyError, onchain, prompt, S, setMode, topBar, ui } from '../ctx';
 import type { ScreenDef } from '../install';
 
 const state = {
@@ -353,6 +353,8 @@ export const nearTablesScreen: ScreenDef = {
   back: 'main',
   /** `arg`: a table id to sit at once loaded (the lobby's Sit Down in On-chain). */
   open(arg) {
+    // NEAR tables are On-chain play: arriving from Demo (an invite link, the coin capsule) switches the mode.
+    if (!onchain()) void setMode('chain');
     void load().then(() => {
       const i = typeof arg === 'string' ? allTables().findIndex((t) => t.id === arg) : -1;
       if (i >= 0 && state.account) void sit(i);
