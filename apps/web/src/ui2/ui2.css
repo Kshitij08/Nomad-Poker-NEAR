@@ -38,7 +38,7 @@
   --v2-grad-red: linear-gradient(#ff7d8a, #d8304a);
   --v2-grad-green: linear-gradient(#6af0a0, #1fb563);
   --v2-grad-hot: linear-gradient(135deg, #ff8ad8, #ff4fa3, #ff6a2b);
-  --v2-grad-sol: linear-gradient(90deg, #9945ff, #14f195);
+  --v2-grad-near: linear-gradient(90deg, #00a86b, #00ec97);
   --v2-on-gold: #3a2200;
   --v2-badge: #ff3355; /* notification dots and counts */
   --v2-grad-ribbon: linear-gradient(#ff8a8a, #f0435a); /* shop ribbons (POPULAR, HOT, BEST VALUE) */
@@ -244,7 +244,7 @@ h1.v2-title { margin: 0; }
 .v2-pill.ok { background: color-mix(in srgb, var(--v2-good) 20%, transparent); color: var(--v2-good); }
 .v2-pill.bad { background: color-mix(in srgb, var(--v2-bad) 20%, transparent); color: var(--v2-bad); }
 .v2-pill.gold { background: color-mix(in srgb, var(--v2-gold) 20%, transparent); color: var(--v2-gold); }
-.v2-pill.sol { background: var(--v2-grad-sol); color: #fff; }
+.v2-pill.near { background: var(--v2-grad-near); color: #04140d; }
 .v2-kv { display: flex; justify-content: space-between; gap: 1em; font-size: 1.05em; padding: 0.35em 0; border-bottom: 0.08em solid color-mix(in srgb, var(--v2-accent) 25%, transparent); }
 .v2-kv > span { color: var(--v2-mut); }
 .v2-bar { height: 0.55em; border-radius: var(--v2-r-pill); background: rgba(255, 255, 255, 0.18); overflow: hidden; flex: 1; min-width: 2em; }

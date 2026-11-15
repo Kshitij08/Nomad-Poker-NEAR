@@ -3,7 +3,9 @@ import type { AppContext } from '../app/app';
 import { PokerSound } from '@nomad/engine';
 import type { NomadHost } from '../menu/host';
 import { svc, progressionOf, canSpin, canClaimLogin, accountExtras } from '../menu/deps';
-import { NomadPlayMode, onchainApi } from '../chain/menu';
+import { NomadPlayMode } from '../menu/playMode';
+import { nearBalance, nearIdentityOf, refreshNearBalance } from '../near/balance';
+import { formatNear } from '../near/backing';
 import { esc, fmt, btn, type V2 } from './core';
 import { ico } from './icons';
 
@@ -25,9 +27,15 @@ export const host = (): NomadHost => _host;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const S = (name: string): any => (_ctx?.services as unknown as Record<string, unknown>)?.[name];
 
-export { svc, progressionOf, canSpin, canClaimLogin, accountExtras, onchainApi };
+export { svc, progressionOf, canSpin, canClaimLogin, accountExtras };
 
-export const onchain = (): boolean => !!_host?.onchain;
+/** On-chain mode: real NEAR stakes (testnet). Demo: Coins. Remembered between visits. */
+export const onchain = (): boolean => NomadPlayMode.onchain;
+
+/** The NEAR account you signed in to Nomad with, or null. */
+export function nearAccountId(): string | null {
+  return nearIdentityOf(S('nomadApi')?.me);
+}
 /** Plays a sound effect through the game's audio (SFX volume); silent when audio isn't up. */
 export const sfx = (s: PokerSound): void => void _ctx?.audio?.play(s);
 export const signedIn = (): boolean => !!_ctx?.services.account.signedIn;
@@ -97,17 +105,15 @@ export function level(): { level: number; p: number; into: number; next: number 
   return { level: lv, p: p01, into, next: into + toNext };
 }
 
-/** Coins or SOL capsule (with +): Coins → Shop, SOL → profile wallet. */
+/** Coins or NEAR capsule (with +): Coins → get more; NEAR → Play for NEAR (game balance, deposit, tables). */
 export function coinCap(): string {
   if (onchain()) {
-    // Connected wallet → its game balance; a wallet the account knows but hasn't reconnected yet (after a reload) or a
-    // balance not read yet → "—" (beside the SOL icon); no wallet at all → "Connect".
-    const live = onchainApi.walletAddress?.() ?? (S('solana')?.address as string | null | undefined) ?? null;
-    const known = live ?? ((_ctx?.services.account as unknown as { walletAddress?: string | null })?.walletAddress ?? null);
-    const raw = live ? (onchainApi.balanceText?.() ?? _host.solShort ?? '').split(' (')[0].split(' · ')[0].replace(/^◎\s*/, '').replace(/\s*SOL(\s+in wallet)?$/i, '') : known ? '—' : 'Connect';
-    // Before the balance is read the partial says "Tap to load balance" / "Not connected" — too long for a capsule.
-    const t = !raw || /tap to load|not connected/i.test(raw) ? '—' : raw;
-    return `<button class="v2-coin" data-a="profile-open" aria-label="SOL balance and wallet">${ico('sol', 1.9)}<b class="v2-num">${esc(t || '—')}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
+    // Signed in with NEAR → the escrow game balance (read in the background, "—" until then); otherwise "Sign in".
+    const account = nearAccountId();
+    const yocto = nearBalance(account);
+    if (account && yocto === null) void refreshNearBalance(account, () => _ui?.render());
+    const t = !account ? 'Sign in' : yocto === null ? '—' : formatNear(yocto, 3);
+    return `<button class="v2-coin" data-a="go" data-v="near-tables" aria-label="NEAR game balance">${ico('near', 1.9)}<b class="v2-num">${esc(t)}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
   }
   return `<button class="v2-coin" data-a="get-coins" aria-label="Coins, get more">${ico('coin', 1.9)}<b class="v2-num">${fmt(heldCoins ?? coins())}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
 }
@@ -118,21 +124,18 @@ export function modeSeg(): string {
   return `<div class="v2-seg" role="group" aria-label="Play mode"><button class="${on ? '' : 'on'}" data-a="mode" data-v="demo">Demo</button><button class="${on ? 'on' : ''}" data-a="mode" data-v="chain">On-chain</button></div>`;
 }
 
-/** Switches play mode (On-chain connects a wallet first). Register as the screen's `mode` action. */
+/** Switches play mode. Register as the screen's `mode` action. On-chain asks for NEAR sign-in where it's needed. */
 export async function setMode(v: string): Promise<void> {
   const want = v === 'chain';
   if (want === onchain()) return;
-  if (onchainApi.toggleMode) await onchainApi.toggleMode();
-  else {
-    NomadPlayMode.onchain = want;
-    _host.onchain = want;
-  }
+  NomadPlayMode.onchain = want;
+  if (want) void refreshNearBalance(nearAccountId(), () => _ui.render());
   _ui.render();
 }
 
 /** The play mode as a small pill (sub-screens): the switch itself lives on the main menu and the profile popover. */
 export function modePill(): string {
-  return onchain() ? `<span class="v2-pill sol v2-mode-pill">On-chain</span>` : `<span class="v2-pill v2-mode-pill">Demo</span>`;
+  return onchain() ? `<span class="v2-pill near v2-mode-pill">On-chain</span>` : `<span class="v2-pill v2-mode-pill">Demo</span>`;
 }
 
 /**

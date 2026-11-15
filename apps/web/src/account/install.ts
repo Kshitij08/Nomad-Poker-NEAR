@@ -10,7 +10,7 @@ import { buildEndpoint, endpointParam } from '../app/flags';
 import { VirtualEconomy } from '../economy/virtualEconomy';
 import { AccountScreen } from './accountScreen';
 import { NomadProgress, NomadWallet } from './progress';
-import { ApiRequestError, localTokenStore, NomadSession, type WalletSigner } from './session';
+import { ApiRequestError, localTokenStore, NomadSession } from './session';
 
 export const API_PRESETS: Record<string, string> = {
   staging: 'https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev',
@@ -75,16 +75,8 @@ export function install(ctx: AppContext): void {
   const session = base ? new NomadSession(base, localTokenStore(base), ctx.events) : null;
   ctx.services.nomadApi = session;
 
-  const wallet = (): WalletSigner | null => {
-    const solana = ctx.services.solana;
-    if (!solana) return null;
-    return {
-      connect: async () => ((await solana.connect()) ? solana.address : null),
-      signMessage: (m) => solana.signMessage(m),
-    };
-  };
-
-  ctx.router.register('nomad-account', (c) => new AccountScreen(c, { session, stage: base ? stageLabel(base) : 'off', wallet }));
+  const near = () => import('../near/wallet').then((m) => m.nearSigner);
+  ctx.router.register('nomad-account', (c) => new AccountScreen(c, { session, stage: base ? stageLabel(base) : 'off', near }));
 
   if (!session) return;
   // With a Nomad server, it owns the economy: balances, items and every reward (Phase 3). The wallet becomes a
@@ -93,7 +85,7 @@ export function install(ctx: AppContext): void {
   const serverWallet = new NomadWallet(progress, session);
   ctx.services.nomadProgress = progress;
   // The market dialogs (strategies, My Twin, coach) call the backend through `backendApi`: the Nomad API answers the
-  // Coins marketplace's paths. The SOL marketplace (/sol-strategies) moves over with on-chain tables (Phase 6).
+  // Coins marketplace's paths.
   (ctx.services as unknown as Record<string, unknown>).backendApi = nomadBackendApi(session);
   let lastPlayer: string | null = null;
   ctx.events.on('nomad:changed', () => {

@@ -5,13 +5,15 @@
  */
 import type { LedgerEntry } from '@nomad/contract';
 import type { AppContext, Screen } from '../app/app';
-import type { NomadSession, WalletSigner } from './session';
+import type { NomadSession } from './session';
+import type { NearSigner } from '../near/wallet';
 
 export interface AccountScreenDeps {
   session: NomadSession | null;
   /** Stage label shown in the header ('staging', 'local', or the host). */
   stage: string;
-  wallet: () => WalletSigner | null;
+  /** The NEAR wallet (NEAR Connect), loaded on first use. */
+  near: () => Promise<NearSigner>;
 }
 
 const fmt = new Intl.NumberFormat('en-US');
@@ -76,7 +78,7 @@ export class AccountScreen implements Screen {
     const b = this.body;
     b.append(el('p', 'na-note', 'Sign in to keep your coins and progress on the server.'));
     b.append(this.button('Play as guest', () => s.guest(), 'na-primary'));
-    b.append(this.walletButton(s, 'Sign in with wallet'));
+    b.append(this.nearButton(s, 'Continue with NEAR'));
     b.append(this.emailForm(s));
     const g = this.button('Sign in with Google', () => Promise.resolve());
     g.disabled = true;
@@ -101,9 +103,9 @@ export class AccountScreen implements Screen {
       b.append(ids);
     }
 
-    const hasWallet = me.identities.some((i) => i.provider === 'wallet');
+    const hasNear = me.identities.some((i) => i.provider === 'near');
     const hasEmail = me.identities.some((i) => i.provider === 'email');
-    if (!hasWallet) b.append(this.walletButton(s, me.player.kind === 'guest' ? 'Save progress with a wallet' : 'Link a wallet'));
+    if (!hasNear) b.append(this.nearButton(s, me.player.kind === 'guest' ? 'Save progress with NEAR' : 'Link a NEAR account'));
     if (!hasEmail) b.append(this.emailForm(s, me.player.kind === 'guest' ? 'Save progress with email' : 'Link an email'));
 
     b.append(el('h3', 'na-sub', 'Recent activity'));
@@ -135,14 +137,8 @@ export class AccountScreen implements Screen {
     }
   }
 
-  private walletButton(s: NomadSession, text: string): HTMLButtonElement {
-    const signer = this.deps.wallet();
-    const btn = this.button(text, () => (signer ? s.wallet(signer) : Promise.resolve()));
-    if (!signer) {
-      btn.disabled = true;
-      btn.title = 'The wallet module is not available in this build';
-    }
-    return btn;
+  private nearButton(s: NomadSession, text: string): HTMLButtonElement {
+    return this.button(text, async () => s.near(await this.deps.near()));
   }
 
   private emailForm(s: NomadSession, text = 'Email me a sign-in link'): HTMLElement {

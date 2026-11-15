@@ -351,8 +351,12 @@ function tableCard(t: HouseTable, i: number): string {
 export const nearTablesScreen: ScreenDef = {
   id: 'near-tables',
   back: 'main',
-  open() {
-    void load();
+  /** `arg`: a table id to sit at once loaded (the lobby's Sit Down in On-chain). */
+  open(arg) {
+    void load().then(() => {
+      const i = typeof arg === 'string' ? allTables().findIndex((t) => t.id === arg) : -1;
+      if (i >= 0 && state.account) void sit(i);
+    });
   },
   render() {
     const note = `<div class="v2-xs v2-mut">${state.note ? `<b class="v2-goldc">${esc(state.note)}</b>` : `Real stakes on NEAR testnet: your buy-in is held by the escrow contract <a href="${NEAR_EXPLORER}/address/${ESCROW_CONTRACT}" target="_blank" rel="noopener">${ESCROW_CONTRACT}</a> and paid back to your game balance when you leave. Every deal is committed before it's dealt: check it with Verify at the table.`}</div>`;

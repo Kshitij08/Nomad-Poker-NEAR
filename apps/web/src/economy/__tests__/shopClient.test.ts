@@ -57,7 +57,7 @@ describe('ShopClient catalogue loading', () => {
     c.ensure(() => undefined, true);
     c.ensure(() => undefined);
     expect(call).toHaveBeenCalledTimes(1);
-    resolve({ items: [], owned: [], xpBoostUntil: null, solEnabled: false });
+    resolve({ items: [], owned: [], xpBoostUntil: null });
     await flush();
     expect(c.catalog?.owned).toEqual([]);
   });

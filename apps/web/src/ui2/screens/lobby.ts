@@ -4,7 +4,7 @@ import { PokerAudio } from '../../menu/audio';
 import { btn, esc, fmt, slider, out, act } from '../core';
 import { ico, preloadArt } from '../icons';
 import {
-  ui, host, app, S, onchain, onchainApi, avatar, level, coinCap, modeSeg, setMode, playerName, accountExtras,
+  ui, host, app, S, onchain, nearAccountId, avatar, level, coinCap, modeSeg, setMode, playerName, accountExtras,
   canSpin, prompt, run, openUrl, signedIn,
 } from '../ctx';
 import type { ScreenDef } from '../install';
@@ -82,10 +82,10 @@ const main: ScreenDef & { profile: boolean } = {
     const [wSub, wDot] = weeklySub();
     const miss = claimableMissions();
     const dot = '<i class="v2-dot"></i>';
-    const addr = onchainApi.walletAddress?.();
+    const addr = nearAccountId();
     return `
 <div class="v2-mm-top">
-  <div class="v2-rplayer" title="${esc(chain && addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : (accountExtras(app()).isGuest ?? true) ? 'Guest account' : 'Signed in')}">
+  <div class="v2-rplayer" title="${esc(chain && addr ? addr : (accountExtras(app()).isGuest ?? true) ? 'Guest account' : 'Signed in')}">
     <button class="v2-pl"${act('profile')} aria-label="Profile">${avatar('', undefined, 'width:100%;height:100%')}</button>
     <div class="v2-pl-txt">
       <button class="v2-pl-nameb"${act('profile')} aria-label="Profile"><b class="v2-ellip v2-pl-name">${esc(playerName())}</b></button>
@@ -104,11 +104,11 @@ ${roomStage()}
   </div>
   <div class="v2-dg"><span class="v2-dgl">Community</span>
     ${dockItem('friends', 'Friends', friendsSub(), 'unity', 'Friends', Number(S('friends')?.incomingCount ?? 0) ? dot : '')}
-    ${dockItem('robot', 'Agents', agentSub(), 'unity', 'Agents_Overview')}
+    ${chain ? dockItem('robot', 'Agents', 'Back a pro', 'go', 'ag-back') : dockItem('robot', 'Agents', agentSub(), 'unity', 'Agents_Overview')}
     ${dockItem('podium', 'Leaderboard', 'Weekly', 'unity', 'Leaderboard')}
     ${dockItem('trophy', 'Tournaments', 'Browse', 'unity', 'Tournaments_Browse')}
   </div>
-  <div class="v2-dg v2-shopg">${dockItem('bag', 'Shop', chain ? 'SOL items' : 'Coins & more', 'go', 'shop')}</div>
+  <div class="v2-dg v2-shopg">${dockItem('bag', 'Shop', 'Coins & more', 'go', 'shop')}</div>
 </div>
 ${this.profile ? profilePanel() : ''}`;
   },
@@ -131,18 +131,19 @@ ${this.profile ? profilePanel() : ''}`;
       ui().show('friends', 'edit');
     },
     'pf-rename': () => renameDialog(),
-    'pf-deposit': () => {
-      if (!onchainApi.walletAddress?.()) return void onchainApi.connectWallet?.();
-      return void onchainApi.deposit?.();
+    'pf-near': () => {
+      main.profile = false;
+      ui().show('near-tables');
     },
-    'pf-withdraw': () => void onchainApi.withdraw?.(),
-    'pf-wallet': () => onchainApi.copyWallet?.(),
-    'pf-balance': () => void onchainApi.refreshSol?.(),
+    'pf-near-signin': () => {
+      main.profile = false;
+      void accountExtras(app()).signInWithNear?.();
+    },
   },
 };
 
 function profilePanel(): string {
-  const addr = onchainApi.walletAddress?.() ?? null;
+  const addr = nearAccountId();
   return `<div class="v2-pop-dim"${act('profile-close')}></div>
 <div class="v2-profile v2-panel" role="dialog" aria-label="Profile">
   <div class="v2-row" style="gap:1em">
@@ -152,10 +153,9 @@ function profilePanel(): string {
   </div>
   <div class="v2-cap" style="margin-top:.9em">Play mode</div>
   ${modeSeg()}
-  <div class="v2-cap" style="margin-top:.9em">Wallet (SOL · test network)</div>
-  <button class="v2-card v2-row" style="width:100%;text-align:left"${act('pf-wallet')}>${addr ? `${esc(addr.slice(0, 4))}…${esc(addr.slice(-4))}` : 'Not connected'}<span class="v2-grow"></span><span class="v2-xs v2-mut">${addr ? 'Copy' : 'Connect'}</span></button>
-  ${addr ? `<button class="v2-card" style="width:100%;text-align:left;margin-top:.4em"${act('pf-balance')}><span class="v2-xs v2-mut">Game balance</span><div>${esc(onchainApi.balanceText?.() ?? '')}</div></button>` : ''}
-  <div class="v2-row" style="margin-top:.8em">${btn(addr ? 'Deposit' : 'Connect wallet', 'pf-deposit', { h: 'gold', c: 'v2-grow' })}${addr ? btn('Withdraw', 'pf-withdraw', { h: 'ghost', c: 'v2-grow' }) : ''}</div>
+  <div class="v2-cap" style="margin-top:.9em">NEAR account (testnet)</div>
+  <div class="v2-card v2-row" style="gap:.5em">${ico('near', 1.4)}<span class="v2-ellip v2-grow">${addr ? esc(addr) : 'Not signed in with NEAR'}</span></div>
+  <div class="v2-row" style="margin-top:.8em">${addr ? btn('Game balance &amp; tables', 'pf-near', { h: 'gold', c: 'v2-grow' }) : btn('Continue with NEAR', 'pf-near-signin', { h: 'gold', c: 'v2-grow' })}</div>
 </div>`;
 }
 
@@ -236,7 +236,7 @@ main.slide = (k, v) => void settingsSlide(k, v);
 
 export function lobbyScreens(): ScreenDef[] {
   installRoomGestures();
-  // The SOL capsule on any top bar opens the profile popover (wallet, balance, Deposit / Withdraw).
+  // The profile popover from any top bar (play mode, NEAR account).
   ui().globalActions['profile-open'] = () => {
     if (ui().currentId !== 'main') ui().show('main');
     main.profile = true;

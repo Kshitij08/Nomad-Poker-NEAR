@@ -47,39 +47,41 @@ describe('NomadSession', () => {
     expect(log).toEqual([`POST ${Routes.guest}`, `GET ${Routes.me}`]);
   });
 
-  it('signs a wallet challenge and sends a base58 signature the server can verify', async () => {
-    const keys = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify'])) as CryptoKeyPair;
-    const pub = new Uint8Array((await crypto.subtle.exportKey('raw', keys.publicKey)) as ArrayBuffer);
+  it('signs the NEAR challenge (NEP-413) and links it to the guest signed in here', async () => {
     const store = memoryStore('np_guest');
     let sent: Record<string, string> | null = null;
     let sentAuth: string | null = null;
-    const bs58 = (await import('bs58')).default;
+    let signed: { message: string; recipient: string; nonce: Uint8Array } | null = null;
+    const nonce = btoa(String.fromCharCode(...new Uint8Array(32).fill(7)));
     const s = new NomadSession(BASE, store, events, fakeFetch(({ path, body, auth }) => {
-      if (path === Routes.walletChallenge) return [200, { nonce: 'n1', message: `sign ${body!.address}`, expiresAt: '' }];
-      if (path === Routes.walletVerify) {
+      if (path === Routes.nearChallenge) return [200, { message: `Sign in as ${body!.accountId}`, recipient: 'localhost:5183', nonce, expiresAt: '' }];
+      if (path === Routes.nearVerify) {
         sent = body;
         sentAuth = auth;
-        return [200, { token: 'np_w', expiresAt: '', player: me('p1').player, created: false, linked: true }];
+        return [200, { token: 'np_n', expiresAt: '', player: me('p1').player, created: false, linked: true }];
       }
       if (path === Routes.me) return [200, me('p1')];
       return [404, {}];
     }));
-    await s.wallet({
-      connect: async () => bs58.encode(pub),
-      signMessage: async (m) => new Uint8Array(await crypto.subtle.sign('Ed25519', keys.privateKey, m)),
+    await s.near({
+      connect: async () => 'alice.testnet',
+      signMessage: async (m) => {
+        signed = m;
+        return { accountId: 'alice.testnet', publicKey: 'ed25519:abc', signature: 'c2ln' };
+      },
     });
-    expect(sent).toMatchObject({ address: bs58.encode(pub), nonce: 'n1' });
-    const challenge = new TextEncoder().encode(`sign ${bs58.encode(pub)}`);
-    expect(await crypto.subtle.verify('Ed25519', keys.publicKey, bs58.decode(sent!.signature), challenge)).toBe(true);
+    expect(signed).toMatchObject({ message: 'Sign in as alice.testnet', recipient: 'localhost:5183' });
+    expect([...signed!.nonce]).toEqual(new Array(32).fill(7));
+    expect(sent).toEqual({ accountId: 'alice.testnet', publicKey: 'ed25519:abc', signature: 'c2ln', nonce });
     expect(sentAuth).toBe('Bearer np_guest'); // the guest token rides along, so the API links instead of creating
-    expect(store.value).toBe('np_w');
+    expect(store.value).toBe('np_n');
     expect(s.signedIn).toBe(true);
   });
 
-  it('reports a cancelled wallet without calling the API', async () => {
+  it('reports a cancelled NEAR wallet without calling the API', async () => {
     const log: string[] = [];
     const s = new NomadSession(BASE, memoryStore(), events, fakeFetch(() => [500, {}], log));
-    await s.wallet({ connect: async () => null, signMessage: async () => new Uint8Array() });
+    await s.near({ connect: async () => null, signMessage: async () => ({ accountId: '', publicKey: '', signature: '' }) });
     expect(s.error).toBe('Wallet connection cancelled.');
     expect(log).toEqual([]);
   });

@@ -2,10 +2,8 @@
  * Shop (Phase 3). The Nomad API owns the catalogue, prices and effects (packages/contract SHOP_ITEMS, sold by
  * packages/db/src/shop.ts); this screen shows it (the server's copy when online) and buys through ShopClient.
  *
- *   - Demo: XP items and card backs for Coins (a ledger debit on the server).
- *   - On-chain: the same items for devnet SOL (a wallet transfer the server checks on chain), plus Coins (chip) packs
- *     for SOL, credited to the Coins balance.
- *   - Demo's Coin packs are real-money items: "Coming soon" until an app-store / Stripe account exists.
+ *   - XP items and card backs for Coins (a ledger debit on the server), in Demo and On-chain alike: NEAR is for stakes.
+ *   - Coin packs are real-money items: "Coming soon" until an app-store / Stripe account exists.
  * Room themes aren't sold (they'd change the room backgrounds). Card backs are worn at every table once owned; without
  * one, every table shows the free Nomad back ("Default · Free").
  */
@@ -15,7 +13,7 @@ import { cardBackPreview, equipCardBack, equippedCardBack } from '../../theming/
 import type { ThemeId } from '../../theming/themeData';
 import { btn, esc, tabs } from '../core';
 import { ico, coinStack, ui2Art } from '../icons';
-import { ui, app, host, onchain, onchainApi, topBar, setMode, sfx } from '../ctx';
+import { ui, app, host, topBar, setMode, sfx } from '../ctx';
 import { PokerSound } from '@nomad/engine';
 import type { ScreenDef } from '../install';
 import './shop.css';
@@ -23,7 +21,7 @@ import './shopPurchase.css';
 
 export type ShopCategory = 'featured' | 'coins' | 'xp' | 'skins';
 
-/** Demo's real-money items: shown, not sold yet (no app-store / Stripe account). On-chain sells server packs for SOL. */
+/** Real-money items: shown, not sold yet (no app-store / Stripe account). */
 const COIN_PACKS: { id: string; name: string; blurb: string; demo: string; ribbon?: string; stack: number }[] = [
   { id: 'coins-5k', name: 'Pocket pile', blurb: '5,000 Coins', demo: '$0.99', stack: 1 },
   { id: 'coins-25k', name: 'Big stack', blurb: '25,000 Coins', demo: '$3.99', ribbon: 'HOT', stack: 2 },
@@ -32,9 +30,6 @@ const COIN_PACKS: { id: string; name: string; blurb: string; demo: string; ribbo
 ];
 
 const fmtCoins = (n: number) => n.toLocaleString('en-US');
-const fmtSol = (lamports: number) => `${(lamports / 1e9).toFixed(lamports % 1_000_000 === 0 ? 3 : 4).replace(/0+$/, '').replace(/\.$/, '')} SOL`;
-/** A SOL price with the SOL icon (like Coins prices carry the coin), for buttons. */
-const solPrice = (lamports: number) => `${ico('sol', 1.1)} ${esc(fmtSol(lamports))}`;
 
 const items = (): ShopItemInfo[] => shopClient(app()).catalog?.items ?? [...SHOP_ITEMS];
 const byCat = (cat: 'xp' | 'skins' | 'coins') => items().filter((i) => i.category === cat);
@@ -101,10 +96,9 @@ function action(it: ShopItemInfo, wide = true): string {
     const wearing = equippedCardBack() === t;
     return btn(wearing ? `${ico('check', 1.1)} Wearing` : 'Wear at tables', wearing ? 'unwear' : 'wear', { h: wearing ? 'ghost' : 'blue', c: wide ? 'w' : '', v: t });
   }
-  const chain = onchain();
-  const price = chain ? it.priceLamports : it.priceCoins;
+  const price = it.priceCoins;
   if (price === null) return btn('Not sold here', 'noop', { h: 'ghost', c: `${wide ? 'w ' : ''}dis`, dis: true });
-  const label = chain ? solPrice(price) : `${ico('coin', 1.1)} ${fmtCoins(price)}`;
+  const label = `${ico('coin', 1.1)} ${fmtCoins(price)}`;
   return btn(label, 'buy', { h: 'gold', c: `v2-sh-buy${wide ? ' w' : ''}`, v: it.id });
 }
 
@@ -142,7 +136,6 @@ function notice(): string {
   const c = shopClient(app());
   if (!c.hasServer) return `<div class="v2-sh-note v2-sh-offline">${ico('lock', 1.4)}<span>This version plays offline, so the Shop is for browsing only.</span></div>`;
   if (!c.online) return `<div class="v2-sh-note v2-sh-offline">${ico('lock', 1.4)}<span>Sign in to buy. You can still look around.</span>${btn('Sign in', 'signin', { h: 'blue', c: 'sm' })}</div>`;
-  if (onchain() && c.catalog && !c.catalog.solEnabled) return `<div class="v2-sh-note v2-sh-offline">${ico('sol', 1.4)}<span>SOL purchases aren't open right now. Switch to Demo to buy with Coins.</span></div>`;
   return boostNote();
 }
 
@@ -177,11 +170,7 @@ const shop: ScreenDef & { cat: ShopCategory; busy: string | null } = {
   <div class="v2-col v2-sh-side">${side.map((it) => `<div class="v2-scard v2-scard-row" style="--glow:${glowOf(it)}">${cardBg()}${artBox(art(it))}<div class="v2-col v2-grow" style="gap:.3em;align-items:flex-start"><b class="v2-sname">${esc(it.name)}</b><small>${esc(it.blurb)}</small>${action(it, false)}</div></div>`).join('')}</div>
 </div>`;
     } else if (cat === 'coins') {
-      // One state at a time: the notice above already says when buying isn't possible (offline / signed out).
-      const canSell = shopClient(app()).hasServer && shopClient(app()).online;
-      body = onchain()
-        ? `${canSell ? `<div class="v2-sh-note">${ico('sol', 1.4)}<span>Buy Coins with SOL on the Solana test network. They go straight to your Coins balance.</span></div>` : ''}<div class="v2-sh-grid">${byCat('coins').map(card).join('')}</div>`
-        : `<div class="v2-sh-note">${ico('coin', 1.4)}<span>Coin packs open soon. Switch to On-chain to buy Coins with SOL, or claim the Daily spin and Weekly rewards for free Coins.</span></div><div class="v2-sh-grid">${COIN_PACKS.map(packCard).join('')}</div>`;
+      body = `<div class="v2-sh-note">${ico('coin', 1.4)}<span>Coin packs open soon. Claim the Daily spin and Weekly rewards for free Coins.</span></div><div class="v2-sh-grid">${COIN_PACKS.map(packCard).join('')}</div>`;
     } else if (cat === 'skins') {
       body = `<div class="v2-sh-grid">${freeDeckCard()}${byCat('skins').map(card).join('')}</div>`;
     } else {
@@ -217,32 +206,24 @@ function confirmBuy(id: string): void {
   if (!it) return;
   if (!c.hasServer) return ui().message('Browsing only', 'This version plays offline, so nothing can be bought here.');
   if (!c.online) return ui().message('Sign in to buy', 'Sign in (a guest account works) and your purchase is one tap away.', 'Sign in', () => host().show('Login'), 'Not now');
-  const chain = onchain();
-  const price = chain ? it.priceLamports : it.priceCoins;
+  const price = it.priceCoins;
   if (price === null) return;
-  if (chain && c.catalog && !c.catalog.solEnabled) return ui().message('SOL purchases are closed', "SOL purchases aren't open right now. Switch to Demo to buy with Coins.");
-  if (chain && !onchainApi.walletAddress?.()) {
-    ui().message('Connect a wallet to buy', 'SOL purchases are paid from your Solana wallet (on the test network). Connect one, then tap Buy again.', 'Connect wallet', () => {
-      void onchainApi.connectWallet?.().then(() => ui().render());
-    }, 'Not now');
-    return;
-  }
-  const how = chain ? `${fmtSol(price)} on the Solana test network, paid from your wallet` : `${fmtCoins(price)} Coins from your balance`;
+  const how = `${fmtCoins(price)} Coins from your balance`;
   ui().openDialog({
     title: `Buy ${esc(it.name)}`,
     body: `<div class="v2-row" style="gap:1.2em"><div class="v2-sh-mini">${art(it)}</div><div><b style="font-size:1.2em">${esc(blurbOf(it))}</b><div class="v2-mut">${esc(how)}</div></div></div>`,
-    buttons: btn('Cancel', 'sb-cancel', { h: 'ghost' }) + btn(chain ? `Pay ${solPrice(price)}` : `Buy for ${ico('coin', 1.1)} ${fmtCoins(price)}`, 'sb-ok', { h: 'gold' }),
+    buttons: btn('Cancel', 'sb-cancel', { h: 'ghost' }) + btn(`Buy for ${ico('coin', 1.1)} ${fmtCoins(price)}`, 'sb-ok', { h: 'gold' }),
     actions: {
       'sb-cancel': () => ui().closeDialog(),
       'sb-ok': () => {
         ui().closeDialog();
-        void runBuy(it, chain);
+        void runBuy(it);
       },
     },
   });
 }
 
-async function runBuy(it: ShopItemInfo, chain: boolean): Promise<void> {
+async function runBuy(it: ShopItemInfo): Promise<void> {
   const c = shopClient(app());
   // The busy dialog gets the guide's ghost "Hide": the purchase carries on, and its result still shows when it lands.
   let hidden = false;
@@ -256,9 +237,9 @@ async function runBuy(it: ShopItemInfo, chain: boolean): Promise<void> {
       dismiss: false,
     });
   };
-  busy(chain ? 'Getting a price…' : 'Buying…');
+  busy('Buying…');
   try {
-    const r = chain ? await c.buyWithSol(it.id, busy) : await c.buyWithCoins(it.id);
+    const r = await c.buyWithCoins(it.id);
     if (!hidden) ui().closeDialog();
     sfx(PokerSound.ChipsToWinner);
     const t = deckTheme(it);
@@ -274,25 +255,11 @@ async function runBuy(it: ShopItemInfo, chain: boolean): Promise<void> {
     if (err.code === 'insufficient_funds')
       ui().message('Not enough Coins', `${esc(it.name)} costs ${fmtCoins(it.priceCoins ?? 0)} Coins. Claim today's Daily spin and Weekly reward for more.`);
     else if (err.code === 'declined') ui().message('Payment cancelled', esc(err.message));
-    else if (err.signature) {
-      // After the transfer was sent: never say "nothing was charged". Show the transaction on the devnet explorer.
-      const url = `https://explorer.solana.com/tx/${encodeURIComponent(err.signature)}?cluster=devnet`;
-      ui().message(
-        err.code === 'unconfirmed' ? 'Payment sent' : 'Payment failed',
-        `${esc(err.message)}<div class="v2-sh-sig"><a href="${esc(url)}" target="_blank" rel="noopener">View the transaction</a><code>${esc(err.signature.slice(0, 10))}…${esc(err.signature.slice(-6))}</code></div>`,
-      );
-    } else if (chain) ui().message("That didn't go through", `${esc(err.message || 'Something went wrong.')} No SOL left your wallet.`);
     else ui().message("That didn't go through", `${esc(err.message || 'Something went wrong.')} No Coins were spent.`);
   }
   ui().render();
 }
 
 export function shopScreens(): ScreenDef[] {
-  // A SOL payment that was sent earlier but confirmed only now (retried when the Shop loads).
-  app().events.on('shop:credited', (p: unknown) => {
-    const it = items().find((x) => x.id === (p as { itemId?: string })?.itemId);
-    ui().toast(`${it?.name ?? 'Your purchase'} came through`, 2600);
-    ui().render();
-  });
   return [shop];
 }

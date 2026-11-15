@@ -1,2 +1,0 @@
-# Copied at build time from ../shared/idl/poker_escrow.json
-# Run: npm run copy-idl --prefix backend

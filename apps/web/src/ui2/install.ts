@@ -22,9 +22,7 @@ import { shopScreens } from './screens/shop';
 import { tournamentScreens } from './screens/tournaments';
 import { agentScreens } from './screens/agents';
 import { entryScreens, installEntryOverlays } from './screens/entry';
-import { solScreens, installSolOverlays } from './screens/sol';
 import { openNearTableLink } from './screens/nearTables';
-import { solTourneyScreens } from './screens/solTourneys';
 
 declare module '../app/app' {
   interface Services {
@@ -62,8 +60,6 @@ export function install(ctx: AppContext): void {
     ...tournamentScreens(),
     ...agentScreens(),
     ...entryScreens(),
-    ...solScreens(),
-    ...solTourneyScreens(),
   ];
   const byUnity = new Map<string, string>();
   for (const d of defs) {
@@ -72,7 +68,6 @@ export function install(ctx: AppContext): void {
   }
   wire(ctx, host, ui, byUnity);
   installEntryOverlays(ctx, host, ui);
-  installSolOverlays(ctx, host, ui);
   openNearTableLink(ctx.params, ui);
 }
 

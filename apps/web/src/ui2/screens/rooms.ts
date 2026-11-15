@@ -1,6 +1,6 @@
 /**
  * Main menu "rooms" (replaces the TABLES / QUICK PLAY / PARTY tiles). The centre of the menu is the room you'd play
- * in: swipe (or ‹ ›, arrow keys, dots) through Solana → Neon City (it wraps round); the room sets the stake. The
+ * in: swipe (or ‹ ›, arrow keys, dots) through Nomad → Neon City (it wraps round); the room sets the stake. The
  * card's own bar carries the actions: "Sit down" is Quick Play at that room's stake, "With friends" opens Party.
  */
 import { StakeTableSkin, type Theme } from '../../menu/stakes';
@@ -8,7 +8,9 @@ import { joinFreePlay } from '../../menu/screens/mainMenu';
 import { formatN0, type StakeTier } from '@nomad/engine';
 import { esc, act, btn } from '../core';
 import { ico } from '../icons';
-import { ui, host, S, onchain, onchainApi, signedIn, needCoins } from '../ctx';
+import { ui, host, S, onchain, signedIn, needCoins } from '../ctx';
+import { HOUSE_TABLES, type HouseTable } from '../../near/escrow';
+import { formatNear } from '../../near/backing';
 import { ROOMS, bgArt, levelOf, roomArt } from './play';
 import './rooms.css';
 
@@ -159,18 +161,25 @@ export function step(dir: number): void {
   select(ROOMS[n]!.theme, dir < 0 ? -1 : 1);
 }
 
-/** The room we'd suggest: the richest one whose buy-in the player covers (Solana when none). */
+/** The room we'd suggest: the richest one whose buy-in the player covers (the first when none). */
 export function recommendedRoom(): Theme {
   const coins = host().stakes.coins;
   const ok = ROOMS.filter((r) => coins >= roomTier(r.theme).startingStack);
   return (ok[ok.length - 1] ?? ROOMS[0]!).theme;
 }
 
+/** On-chain: the NEAR house table a room stands for (five rooms over three stakes: 2 Micro, 2 Low, 1 Mid). */
+export function nearTableOf(roomIndex: number): HouseTable {
+  return HOUSE_TABLES[Math.min(HOUSE_TABLES.length - 1, Math.floor((roomIndex * HOUSE_TABLES.length) / ROOMS.length))]!;
+}
+const nearOf = (chips: number): string => formatNear(BigInt(chips) * 10n ** 21n, 3);
+
 function peek(i: number, side: 'prev' | 'next'): string {
   const r = ROOMS[(i + ROOMS.length) % ROOMS.length]!;
   const t = roomTier(r.theme);
   const locked = !onchain() && host().stakes.coins < t.startingStack;
-  const stake = onchain() ? onchainApi.tableStakes?.(ROOMS.indexOf(r))?.blinds ?? '' : `${t.displayName} · ${t.blindsLabel}`;
+  const n = nearTableOf(ROOMS.indexOf(r)).config;
+  const stake = onchain() ? `${n.small_blind} / ${n.big_blind} · NEAR` : `${t.displayName} · ${t.blindsLabel}`;
   return `<button class="v2-rm-peek ${side}${locked ? ' locked' : ''}" style="${bgArt(r.theme, r.color)}"${act('room-step', side === 'prev' ? -1 : 1)} aria-label="${esc(r.name)} room${locked ? ', locked' : ''}">${locked ? `<span class="v2-rm-peek-lock">${ico('lock', 1.1)}</span>` : ''}<b>${esc(r.name)}</b><small>${esc(stake)}</small></button>`;
 }
 
@@ -181,12 +190,12 @@ export function roomStage(): string {
   const r = ROOMS[i]!;
   const stakes = host().stakes;
   const tier = roomTier(rooms.theme);
-  const sol = chain ? onchainApi.tableStakes?.(i) : null;
+  const near = nearTableOf(i);
   const locked = !chain && stakes.coins < tier.startingStack;
-  const stakeLine = chain ? `${esc(sol?.label.split(' ')[0] ?? tier.displayName)} stakes · ${esc(sol?.blinds ?? '')}` : `${esc(tier.displayName)} stakes · ${esc(tier.blindsLabel)}`;
+  const stakeLine = chain ? `${esc(near.name)} · ${near.config.small_blind} / ${near.config.big_blind}` : `${esc(tier.displayName)} stakes · ${esc(tier.blindsLabel)}`;
   // One fixed buy-in per room, the same for every player.
   const buyLine = chain
-    ? `Buy-in ${esc(sol?.minBuyIn ?? '')} · on-chain`
+    ? `Buy-in ${nearOf(near.config.min_buy_in)}–${nearOf(near.config.max_buy_in)} NEAR · on NEAR testnet`
     : locked
       ? `Buy-in ${formatN0(tier.startingStack)} Coins · you have ${formatN0(stakes.coins)}`
       : `Buy-in ${formatN0(tier.startingStack)} Coins`;
@@ -196,7 +205,7 @@ export function roomStage(): string {
     ${peek(i - 1, 'prev')}
     <div class="v2-rm-card${locked ? ' locked' : ''}" style="${bgArt(r.theme, r.color)}">
       ${locked ? `<span class="v2-rm-lock">${ico('lock', 1.4)} Locked</span>` : !chain && rooms.theme === recommendedRoom() ? `<span class="v2-rm-lock v2-rm-rec">${ico('star', 1.2)} Recommended</span>` : ''}
-      ${btn(`Play for NEAR ${ico('next', 0.7)}`, 'go', { h: 'blue', c: 'sm v2-rm-near', v: 'near-tables', title: 'Real stakes on NEAR testnet' })}
+      ${chain ? '' : btn(`Play for NEAR ${ico('next', 0.7)}`, 'go', { h: 'blue', c: 'sm v2-rm-near', v: 'near-tables', title: 'Real stakes on NEAR testnet' })}
       <button class="v2-rm-arrow prev"${act('room-step', -1)} aria-label="Previous room">${ico('back', 1.2)}</button>
       <button class="v2-rm-arrow next"${act('room-step', 1)} aria-label="Next room">${ico('back', 1.2, 'transform:scaleX(-1)')}</button>
       <div class="v2-rm-bar">
@@ -218,6 +227,8 @@ export const roomActions = {
   'room-pick': (v: string) => select(v as Theme),
   'room-friends': () => {
     applyTheme();
+    // On-chain: host or join a NEAR table (Play for NEAR has Host a table and invite links).
+    if (onchain()) return ui().show('near-tables');
     host().show('PartyMenu');
   },
   'room-sit': () => {
@@ -225,7 +236,7 @@ export const roomActions = {
     const h = host();
     if (!signedIn()) return h.show('Login');
     const i = levelOf(rooms.theme);
-    if (onchain()) return void onchainApi.quickPlay?.(i);
+    if (onchain()) return ui().show('near-tables', nearTableOf(i).id);
     const tier = roomTier(rooms.theme);
     if (needCoins(tier.startingStack, `The ${ROOMS[i]!.name} room`)) return;
     void joinFreePlay(h, tier, tier.startingStack, 'quick');

@@ -1,9 +1,9 @@
 /**
- * The player's Nomad API session (apps/api): sign-in (guest, wallet, email link), the signed-in profile and the
+ * The player's Nomad API session (apps/api): sign-in (guest, NEAR, Google, email link), the signed-in profile and the
  * ledger balance. One instance per page as `ctx.services.nomadApi`; emits 'nomad:changed' whenever state moves.
  *
  * The token lives in localStorage per API base URL, so staging and local sessions never mix. Signing in with a
- * wallet or email while holding a guest token links that identity to the guest (the API keeps its balance).
+ * NEAR, Google or email while holding a guest token links that identity to the guest (the API keeps its balance).
  */
 import {
   Routes,
@@ -13,7 +13,6 @@ import {
   type MeResponse,
   type NearChallengeResponse,
   type SessionResponse,
-  type WalletChallengeResponse,
 } from '@nomad/contract';
 import type { NearSigner } from '../near/wallet';
 
@@ -51,37 +50,6 @@ export function localTokenStore(base: string): TokenStore {
       }
     },
   };
-}
-
-/** What wallet sign-in needs: the web3 module's SolanaService fits (connect + signMessage). */
-export interface WalletSigner {
-  /** Connects (showing the picker if needed); the base58 address, or null when cancelled. */
-  connect(): Promise<string | null>;
-  signMessage(message: Uint8Array): Promise<Uint8Array>;
-}
-
-const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-function base58(bytes: Uint8Array): string {
-  const d: number[] = [];
-  for (const b of bytes) {
-    let c = b;
-    for (let i = 0; i < d.length; i++) {
-      c += d[i] << 8;
-      d[i] = c % 58;
-      c = (c / 58) | 0;
-    }
-    while (c) {
-      d.push(c % 58);
-      c = (c / 58) | 0;
-    }
-  }
-  let s = '';
-  for (const b of bytes) {
-    if (b) break;
-    s += '1';
-  }
-  for (let i = d.length - 1; i >= 0; i--) s += B58[d[i]];
-  return s;
 }
 
 export interface NomadEvents {
@@ -128,16 +96,6 @@ export class NomadSession {
 
   guest(displayName?: string): Promise<void> {
     return this.run(async () => this.adopt(await this.request<SessionResponse>('POST', Routes.guest, displayName ? { displayName } : {})));
-  }
-
-  wallet(signer: WalletSigner): Promise<void> {
-    return this.run(async () => {
-      const address = await signer.connect();
-      if (!address) throw new ApiRequestError(0, 'cancelled', 'Wallet connection cancelled.');
-      const ch = await this.request<WalletChallengeResponse>('POST', Routes.walletChallenge, { address });
-      const signature = await signer.signMessage(new TextEncoder().encode(ch.message));
-      await this.adopt(await this.request<SessionResponse>('POST', Routes.walletVerify, { address, nonce: ch.nonce, signature: base58(signature) }));
-    });
   }
 
   /**

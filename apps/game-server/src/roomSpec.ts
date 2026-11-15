@@ -30,7 +30,7 @@ export function nearRoomStake(session: string): number {
  * - `qa-…` rooms exist only where QA rooms are switched on (staging): Quick Play tables for test harnesses, at the
  *   default stake or at the one a `-st<stake>` suffix names (`qa-soak-1-st100`);
  * - hosted tournaments (`TRN` + 10) are one room each, holding every table of the tournament;
- * - money pools stay off until on-chain tables move over (Phase 6).
+ * - NEAR money tables (`poker-money-st<stake>`, hosted `-h<id>`) open only on a NEAR escrow operator.
  * Every room here is a "child": it closes after idling empty, and the next join opens it again.
  */
 
@@ -45,8 +45,6 @@ export interface RoomSpecOptions {
 export type RoomSpecResult = { ok: true; spec: RoomSpec } | { ok: false; reason: JoinFailReason; message: string };
 
 const QA_ROOM = /^qa-[a-z0-9-]{1,40}$/;
-/** A side channel for an on-chain table: `SC-` + its base58 account address (chat, reactions, voice only). */
-const SIDE_ROOM = /^SC-[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 /** The canonical spelling of a session name (its Durable Object name), or null when it can never be a room. */
 export function canonicalSession(raw: string | null | undefined): string | null {
@@ -56,7 +54,6 @@ export function canonicalSession(raw: string | null | undefined): string | null 
   if (PartyCodes.isValid(s.toUpperCase())) return s.toUpperCase();
   if (QA_ROOM.test(s.toLowerCase())) return s.toLowerCase();
   if (isTournamentSessionName(s.toUpperCase())) return s.toUpperCase();
-  if (SIDE_ROOM.test(s)) return s; // base58 is case-sensitive
   if (isNearHostedRoom(s.toLowerCase())) return s.toLowerCase();
   return null;
 }
@@ -96,7 +93,6 @@ export function roomSpecFor(session: string, opts: RoomSpecOptions): RoomSpecRes
     if (!opts.qaRooms) return { ok: false, reason: 'GameNotFound', message: `Room '${session}' was not found.` };
     return { ok: true, spec: quick(qaStake(session)) };
   }
-  if (SIDE_ROOM.test(session)) return { ok: true, spec: { name: session, kind: 'side', child: true, maxPlayers: 16, properties: { [ChainTableMode.KindProperty]: 'side' } } };
   return { ok: false, reason: 'InvalidArguments', message: 'Bad session name.' };
 }
 

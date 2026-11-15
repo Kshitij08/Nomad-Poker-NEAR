@@ -3,8 +3,8 @@
  * "My Agents" list) · My twin · Marketplace · Coach. Twin, Marketplace and Coach were Unity pop-ups
  * (menu/screens/market.ts); they are pages here with the same backend calls and copy / publish rules.
  *
- * The backend runs ONE Agent per player: the list shows it, and "New agent" says so. In On-chain mode Overview and History
- * show the SOL Agent instead (solAgent.ts): its limits, Deploy / Stop and its sessions; it plays the Strategy tab.
+ * The backend runs ONE Agent per player: the list shows it, and "New agent" says so. It plays Coins tables in both modes;
+ * NEAR copy trading (backing pro agents with NEAR) is the "Back a pro" tab (backing.ts).
  */
 import { AgentStrategyWords as W, STRATEGY_BLURBS, STRATEGY_NAMES, STRATEGY_PRESETS, BRAIN_SMART, readNumberField, type AgentDeploymentSummary } from '@nomad/engine/agents';
 import type { AgentsService } from '../../agents/agentsService';
@@ -12,14 +12,13 @@ import { StakeCatalog } from '@nomad/engine/stakes/stakes';
 import type { AgentStrategyState } from '@nomad/engine/agents';
 import { stopReasonLabel } from '../../agents/nomad/agentsPartial';
 import {
-  applyProfileTo, marketApi, marketOnchain, marketState, rememberCopy, solCopyIsOwn, solCopyMessage, solCopyOf, solProfile,
+  applyProfileTo, marketApi, marketState, rememberCopy, solProfile,
   format0Hash, TWIN_MIN_DECISIONS, COACH_MIN_HANDS, type AgentStrategyLike,
 } from '../../menu/screens/market';
 import { btn, esc, fmt, act, tabs, chips, seg, slider, input, outFormats, out, type V2Screen } from '../core';
 import { ico } from '../icons';
-import { ui, host, app, S, onchain, topBar, setMode, signedIn, coins, prompt, friendlyError } from '../ctx';
+import { ui, host, app, S, topBar, setMode, signedIn, coins, prompt, friendlyError } from '../ctx';
 import type { ScreenDef } from '../install';
-import { solAgentActions, solAgentClose, solAgentHistory, solAgentOpen, solAgentOverview, solAgentStatus } from './solAgent';
 import { startWatch } from '../../economy/nomad/social';
 import { backingScreen } from './backing';
 import './agents.css';
@@ -59,10 +58,9 @@ const common: Record<string, (v: string) => void | Promise<void>> = {
 let pollTimer = 0;
 function startPolling(): void {
   stopPolling();
-  solAgentOpen();
   const tick = () => {
     const svc = agents();
-    if (!svc || onchain()) return;
+    if (!svc) return;
     void svc.deploy.refreshProgress();
     if (svc.agentActive) void svc.deploy.pollAndSettle();
   };
@@ -70,7 +68,6 @@ function startPolling(): void {
   pollTimer = window.setInterval(tick, 5000);
 }
 function stopPolling(): void {
-  solAgentClose();
   window.clearInterval(pollTimer);
   pollTimer = 0;
 }
@@ -83,10 +80,10 @@ function agentColor(pill: string): string {
 function agShell(sub: string, inner: string): string {
   const svc = agents();
   const s = strat();
-  const st = onchain() ? { active: false, ...solAgentStatus(), progress: null } : svc?.status() ?? { active: false, pill: 'Idle', line: 'Not playing', progress: null };
+  const st = svc?.status() ?? { active: false, pill: 'Idle', line: 'Not playing', progress: null };
   const name = s?.agentName ?? 'Agent';
   const net = st.progress ? st.progress.NetPnl : sumNet();
-  const card = `<button class="v2-ag-card on"${act('tab', 'ag-overview')}><div class="v2-row" style="gap:.6em"><div class="v2-ag-badge" style="background:${agentColor(st.pill)}">${ico('robot', 2)}</div><div class="v2-grow"><b class="v2-ellip" style="display:block">${esc(name)}</b><div class="v2-xs ${st.pill === 'Playing' ? 'v2-good' : 'v2-mut'}">${st.pill === 'Playing' ? ico('dot', 0.7) + ' ' : ''}${esc(st.pill)}</div></div></div><div class="v2-row v2-xs v2-mut v2-ag-cardf"><span>${esc(s?.styleName ?? '')}</span>${onchain() ? '<span class="v2-pill sol">SOL</span>' : `<b class="${tone(net)}">${signed(net)}</b>`}</div></button>`;
+  const card = `<button class="v2-ag-card on"${act('tab', 'ag-overview')}><div class="v2-row" style="gap:.6em"><div class="v2-ag-badge" style="background:${agentColor(st.pill)}">${ico('robot', 2)}</div><div class="v2-grow"><b class="v2-ellip" style="display:block">${esc(name)}</b><div class="v2-xs ${st.pill === 'Playing' ? 'v2-good' : 'v2-mut'}">${st.pill === 'Playing' ? ico('dot', 0.7) + ' ' : ''}${esc(st.pill)}</div></div></div><div class="v2-row v2-xs v2-mut v2-ag-cardf"><span>${esc(s?.styleName ?? '')}</span><b class="${tone(net)}">${signed(net)}</b></div></button>`;
   const color = st.pill === 'Playing' ? 'v2-good' : 'v2-mut';
   return agMain(sub) + `<div class="v2-ag-shell">
   <div class="v2-panel v2-ag-list"><b class="v2-h">My Agents <span class="v2-sm v2-mut" style="font-family:var(--v2-ui)">1</span></b>${card}</div>
@@ -118,7 +115,6 @@ const shellActions: Record<string, (v: string) => void | Promise<void>> = {
   },
   'ag-new': () =>
     ui().message('One Agent for now', 'Each account runs one Agent for now. Change its name, playstyle and budget on Overview and Strategy; more Agents per account are coming.', 'OK'),
-  ...solAgentActions,
 };
 
 // ------------------------------------------------------------------ Overview
@@ -144,7 +140,6 @@ const overview: ScreenDef = {
   render() {
     const svc = agents();
     const s = strat();
-    if (onchain()) return agShell('ag-overview', solAgentOverview());
     if (!svc || !s) return agMain('ag-overview') + `<div class="v2-panel v2-empty">${ico('robot', 6)}Agents aren't available right now. Try again later.</div>`;
     const st = svc.status();
     const sessions = svc.history?.Sessions ?? [];
@@ -391,7 +386,6 @@ const history: ScreenDef = {
   close: stopPolling,
   render() {
     const svc = agents();
-    if (onchain()) return agShell('ag-history', solAgentHistory());
     const sessions: AgentDeploymentSummary[] = svc?.history?.Sessions ?? [];
     const total = svc?.history?.Total ?? sessions.length;
     let hands = 0;
@@ -475,25 +469,6 @@ async function fetchInto(l: Load, method: string, path: string, json: string | n
   ui().render();
 }
 
-/** On-chain marketplace (web3 partial's LoadSol: its own busy / error boxes). */
-function fetchSol(l: Load, title: string, path: string, signed = false, data: J | null = null): void {
-  if (!marketOnchain.loadSol) {
-    l.state = 'error';
-    l.error = 'The SOL marketplace needs the web3 module.';
-    return;
-  }
-  l.state = 'loading';
-  marketOnchain.loadSol(title, path, (j) => {
-    l.data = j;
-    l.state = 'ok';
-    ui().render();
-  }, signed, data, (message) => {
-    l.state = 'error';
-    l.error = message || "Couldn't load the marketplace.";
-    ui().render();
-  });
-}
-
 function loadBody(l: Load, icon: string): string | null {
   if (l.state === 'loading' || l.state === 'idle') return `<div class="v2-empty">${ico(icon, 5)}Loading…</div>`;
   if (l.state === 'off') return `<div class="v2-empty">${ico(icon, 5)}<span class="v2-ag-off">${esc(l.error)}</span></div>`;
@@ -551,23 +526,6 @@ const twin: ScreenDef = {
 // ---- Publish (Twin or the Strategy tab)
 
 function publish(fromTwin: boolean): void {
-  if (onchain()) {
-    if (fromTwin) return ui().message('Publish', "Your twin learns from Coins hands: publish it in Demo, or publish your Strategy tab's settings here.");
-    prompt('Publish a SOL strategy', "Name the strategy on your Strategy tab. Copiers' Agents pay 8% of the profit they make with it into your game balance, on chain.", 'Strategy name', '', 'Publish', (name) => {
-      if (!name) return;
-      const l = newLoad();
-      fetchSol(l, 'Publish', '/sol-strategies/publish', true, { name, profile: solProfile(strat() as unknown as AgentStrategyLike) });
-      const check = window.setInterval(() => {
-        if (l.state !== 'ok') return;
-        window.clearInterval(check);
-        const r = l.data!;
-        ui().message('Published', `"${esc(r.name)}" (v${esc(r.version)}) is in the SOL marketplace. You get 8% of copiers' new profit; Nomad ${format0Hash(num(((r.fees ?? {}) as J).platformPercent))}%.`);
-        reloadMarket();
-      }, 300);
-      window.setTimeout(() => window.clearInterval(check), 60_000);
-    });
-    return;
-  }
   prompt('Publish a strategy', fromTwin ? "Name your twin's strategy. Copiers pay you 8% of the profit they make with it." : 'Name the strategy on your Strategy tab. Copiers pay you 8% of the profit they make with it.',
     'Strategy name', '', 'Publish', (name) => {
       if (!name) return;
@@ -591,13 +549,8 @@ const mktLoad = newLoad();
 const mineLoad = newLoad();
 
 function reloadMarket(): void {
-  const chain = onchain();
-  if (!mktSort || (chain && !['top', 'popular', 'new'].includes(mktSort))) mktSort = chain ? 'top' : 'styles';
-  if (!chain && !['styles', 'new', 'top', 'popular'].includes(mktSort)) mktSort = 'styles';
-  if (mktTab === 'browse') {
-    if (chain) fetchSol(mktLoad, 'Marketplace', '/sol-strategies?sort=' + mktSort);
-    else void fetchInto(mktLoad, 'GET', '/api/strategies?sort=' + mktSort, null, false);
-  } else if (chain) fetchSol(mineLoad, 'My strategies', '/sol-strategies/mine', true);
+  if (!['styles', 'new', 'top', 'popular'].includes(mktSort)) mktSort = 'styles';
+  if (mktTab === 'browse') void fetchInto(mktLoad, 'GET', '/api/strategies?sort=' + mktSort, null, false);
   else void fetchInto(mineLoad, 'GET', '/api/strategies/mine');
 }
 
@@ -607,15 +560,6 @@ function copyStrategy(s: J): void {
   marketState.copiedStrategyId = null;
   marketState.copiedSol = null;
   applyProfileTo(st as unknown as AgentStrategyLike, (s.profile ?? {}) as J);
-  if (onchain()) {
-    const c = solCopyOf(s);
-    marketState.copiedSol = c;
-    marketState.copiedName = c.name;
-    rememberCopy(host());
-    const [title, body] = solCopyMessage(c, String(s.creatorName), solCopyIsOwn(c, marketOnchain.walletAddress?.() ?? null));
-    ui().message(esc(title), esc(body));
-    return;
-  }
   marketState.copiedStrategyId = String(s.strategyId);
   marketState.copiedName = String(s.name);
   rememberCopy(host());
@@ -633,8 +577,7 @@ let mktItems: J[] = [];
 
 function marketCard(s: J, i: number): string {
   const rec = (s.record ?? {}) as J;
-  const chain = onchain();
-  const copying = (chain ? marketState.copiedSol?.id ?? null : marketState.copiedStrategyId) === (s.strategyId ?? null);
+  const copying = marketState.copiedStrategyId === (s.strategyId ?? null);
   const tags = [typeof s.style === 'string' ? s.style : '', ...(((s.tags as string[] | undefined) ?? []))].filter(Boolean).join(' · ');
   let stats: string;
   let action: string;
@@ -658,12 +601,11 @@ const market: ScreenDef = {
     reloadMarket();
   },
   render() {
-    const chain = onchain();
-    const sorts: [string, string][] = chain ? [['top', 'Top'], ['popular', 'Popular'], ['new', 'New']] : [['styles', 'By style'], ['new', 'Promising'], ['top', 'Top'], ['popular', 'Popular']];
+    const sorts: [string, string][] = [['styles', 'By style'], ['new', 'Promising'], ['top', 'Top'], ['popular', 'Popular']];
     const downState = (mktTab === 'browse' ? mktLoad : mineLoad).state;
     const down = downState === 'error' || downState === 'off';
     const bar = `<div class="v2-row v2-wrap v2-ag-mbar${down ? ' v2-ag-down' : ''}"${down ? ' aria-disabled="true"' : ''}>${mktTab === 'browse' ? chips(sorts, mktSort, 'mkt-sort') : ''}<div class="v2-grow"></div>${seg([['browse', 'Browse'], ['mine', 'My strategies']], mktTab, 'mkt-tab')}${btn(`${ico('plus', 0.9)} Publish`, 'mkt-publish', { h: 'violet' })}</div>`;
-    const note = `<div class="v2-xs v2-mut">${chain ? 'Copy a strategy for your SOL Agent. Its creator gets 8% and Nomad 2% of the new profit it makes you, paid on chain; never of losses.' : 'Copy a strategy for your Coins Agent. Its creator gets 8% and Nomad 2% of the profit it makes you, never of losses.'}</div>`;
+    const note = `<div class="v2-xs v2-mut">Copy a strategy for your Coins Agent. Its creator gets 8% and Nomad 2% of the profit it makes you, never of losses. To back a pro's agent with NEAR, see Back a pro.</div>`;
     const l = mktTab === 'browse' ? mktLoad : mineLoad;
     const wait = loadBody(l, 'store');
     let body: string;
@@ -703,18 +645,15 @@ const market: ScreenDef = {
 
 let mineItems: J[] = [];
 function mineBody(j: J): string {
-  const chain = onchain();
   mineItems = arr(j.strategies);
   if (!mineItems.length)
     return `<div class="v2-panel v2-body"><div class="v2-empty">${ico('store', 5)}You haven't published a strategy yet. Publish your Strategy tab's settings (or your twin) and copiers pay you 8% of the profit it makes them.${btn('Publish', 'mkt-publish', { h: 'gold' })}</div></div>`;
-  const tiles = chain
-    ? `<div class="v2-card v2-grow"><b style="font-size:1.5em">${esc(marketOnchain.sol?.(BigInt(String(j.earned ?? '0'))) ?? String(j.earned ?? '0'))}</b><div class="v2-xs v2-mut">Earned from copiers (paid on chain)</div></div>`
-    : `<div class="v2-card v2-grow"><b style="font-size:1.5em">${fmt(num(j.earned))}</b><div class="v2-xs v2-mut">Coins earned from copiers</div></div><div class="v2-card v2-grow"><b style="font-size:1.5em">${fmt(num(j.paid))}</b><div class="v2-xs v2-mut">Paid out</div></div>`;
-  const rows = mineItems.map((s, i) => {
+  const tiles = `<div class="v2-card v2-grow"><b style="font-size:1.5em">${fmt(num(j.earned))}</b><div class="v2-xs v2-mut">Coins earned from copiers</div></div><div class="v2-card v2-grow"><b style="font-size:1.5em">${fmt(num(j.paid))}</b><div class="v2-xs v2-mut">Paid out</div></div>`;
+  const rows = mineItems.map((s) => {
     const rec = (s.record ?? {}) as J;
     const need = (s.listing ?? {}) as J;
     const state = !s.listed ? ['Old version', ''] : s.qualified ? ['Copyable', 'ok'] : need.minDays !== undefined ? [`Not copyable yet · ${fmt(num(rec.hands))}/${fmt(num(need.minHands))} hands`, ''] : [`Not listed yet · ${fmt(num(rec.hands))}/${fmt(num(need.minHands))} hands`, ''];
-    return `<div class="v2-card v2-row v2-wrap"><b class="v2-grow">${esc(s.name)} <span class="v2-xs v2-mut">v${esc(s.version)}</span></b><span class="v2-pill ${state[1]}">${esc(state[0])}</span><span class="v2-sm">${num(rec.copiers)} copiers · ${fmt(num(rec.hands))} hands · <b class="${tone(num(rec.net))}">${signed(num(rec.net))}</b> for copiers</span>${chain && s.listed ? btn('Run', 'mine-run', { h: 'blue', c: 'sm', v: i }) : ''}</div>`;
+    return `<div class="v2-card v2-row v2-wrap"><b class="v2-grow">${esc(s.name)} <span class="v2-xs v2-mut">v${esc(s.version)}</span></b><span class="v2-pill ${state[1]}">${esc(state[0])}</span><span class="v2-sm">${num(rec.copiers)} copiers · ${fmt(num(rec.hands))} hands · <b class="${tone(num(rec.net))}">${signed(num(rec.net))}</b> for copiers</span></div>`;
   }).join('');
   return `<div class="v2-panel v2-col v2-scroll v2-body"><div class="v2-row v2-ag-tiles">${tiles}</div>${rows}</div>`;
 }

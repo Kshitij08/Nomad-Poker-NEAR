@@ -3,7 +3,7 @@
  *
  * Auth: every sign-in route returns a `SessionResponse`. The client keeps `token` and sends it as
  * `Authorization: Bearer <token>`. Tokens are opaque and stored hashed on the server; they last 30 days.
- * Sending a guest's token to a wallet / Google / email sign-in links that identity to the guest (keeping its
+ * Sending a guest's token to a NEAR / Google / email sign-in links that identity to the guest (keeping its
  * balance) unless the identity already belongs to another player, in which case you are signed in to that player.
  *
  * Errors: non-2xx responses carry `ApiErrorBody`.
@@ -14,8 +14,6 @@ export const API_PREFIX = '/v1';
 export const Routes = {
   health: '/v1/health',
   guest: '/v1/auth/guest',
-  walletChallenge: '/v1/auth/wallet/challenge',
-  walletVerify: '/v1/auth/wallet/verify',
   nearChallenge: '/v1/auth/near/challenge',
   nearVerify: '/v1/auth/near/verify',
   google: '/v1/auth/google',
@@ -29,6 +27,7 @@ export const Routes = {
 // ---- Players and identities ---------------------------------------------------------------------
 
 export type PlayerKind = 'guest' | 'registered';
+/** 'wallet' (the old Solana sign-in) is no longer offered; old identity rows may still carry it. */
 export type IdentityProvider = 'wallet' | 'google' | 'email' | 'near';
 
 export interface PlayerProfile {
@@ -47,14 +46,14 @@ export interface PlayerProfile {
 
 export interface LinkedIdentity {
   provider: IdentityProvider;
-  /** Wallet address, Google account email (or id when hidden), or email address. */
+  /** NEAR account id, Google account email (or id when hidden), or email address. */
   label: string;
   linkedAt: string;
 }
 
 // ---- Money --------------------------------------------------------------------------------------
 
-/** Play-money currencies kept in the ledger. SOL never touches this ledger (devnet escrow only). */
+/** Play-money currencies kept in the ledger. NEAR never touches this ledger (escrow only). */
 export type Currency = 'coins' | 'gems' | 'xp' | 'streak_tokens';
 export const CURRENCIES: readonly Currency[] = ['coins', 'gems', 'xp', 'streak_tokens'];
 
@@ -89,25 +88,6 @@ export interface SessionResponse {
 
 export interface GuestRequest {
   displayName?: string;
-}
-
-export interface WalletChallengeRequest {
-  /** Base58 Solana public key. */
-  address: string;
-}
-
-export interface WalletChallengeResponse {
-  nonce: string;
-  /** The exact text the wallet must sign (Sign In With Solana style). */
-  message: string;
-  expiresAt: string;
-}
-
-export interface WalletVerifyRequest {
-  address: string;
-  nonce: string;
-  /** Base58 ed25519 signature of the UTF-8 `message` from the challenge. */
-  signature: string;
 }
 
 /** NEAR sign-in (NEP-413 signed message): ask for a challenge for a NEAR account. */
@@ -198,31 +178,6 @@ export type ErrorCode =
 
 export interface ApiErrorBody {
   error: { code: ErrorCode; message: string };
-}
-
-/** The wallet sign-in message. The server builds it; exported so tests and clients can show / check it. */
-export function walletSignInMessage(p: {
-  domain: string;
-  address: string;
-  uri: string;
-  chainId: string;
-  nonce: string;
-  issuedAt: string;
-  expiresAt: string;
-}): string {
-  return [
-    `${p.domain} wants you to sign in with your Solana account:`,
-    p.address,
-    '',
-    'Sign in to Nomad Poker.',
-    '',
-    `URI: ${p.uri}`,
-    'Version: 1',
-    `Chain ID: ${p.chainId}`,
-    `Nonce: ${p.nonce}`,
-    `Issued At: ${p.issuedAt}`,
-    `Expiration Time: ${p.expiresAt}`,
-  ].join('\n');
 }
 
 // ---- Progress and rewards (Phase 3: the server decides every reward) -----------------------------
@@ -465,19 +420,14 @@ export interface LeaderboardPage {
 // ---- Shop (Phase 3) -------------------------------------------------------------------------------
 
 /**
- * The shop. The server owns prices and effects; a client only names an item. Coins purchases debit the ledger;
- * SOL purchases (devnet) quote an intent the player pays with a transfer carrying the intent id as its memo, which
- * the server checks on chain before applying the item.
+ * The shop. The server owns prices and effects; a client only names an item. Purchases are paid in Coins and debit
+ * the ledger.
  */
 export const ShopRoutes = {
   /** GET — the catalogue, what the caller owns and their running boost. */
   catalog: '/v1/shop',
   /** POST `{ itemId, requestId }` — buy with Coins. Retrying the same requestId changes nothing. */
   buy: '/v1/shop/buy',
-  /** POST `{ itemId }` — quote a SOL purchase (devnet): amount, treasury, memo. */
-  solIntent: '/v1/shop/sol/intent',
-  /** POST `{ intentId, signature }` — the transfer landed: check it on chain and apply the item. */
-  solConfirm: '/v1/shop/sol/confirm',
 } as const;
 
 export type ShopCategoryName = 'xp' | 'skins' | 'coins';
@@ -491,7 +441,7 @@ export type ShopEffect =
   | { kind: 'xp_boost'; hours: number }
   /** A card back from one of the room themes, worn at every table (theme id, e.g. 'Neon_City'). */
   | { kind: 'card_back'; theme: string }
-  /** Coins (chips) credited to the ledger. Sold for devnet SOL in On-chain mode only. */
+  /** Coins (chips) credited to the ledger. Not sold for Coins (clients show them as "Coming soon"). */
   | { kind: 'coins'; amount: number };
 
 export interface ShopItemInfo {
@@ -501,8 +451,6 @@ export interface ShopItemInfo {
   blurb: string;
   /** Coins price, or null when not sold for Coins. */
   priceCoins: number | null;
-  /** Devnet SOL price in lamports, or null when not sold for SOL. */
-  priceLamports: number | null;
   effect: ShopEffect;
   /** One-time items (card backs) can be bought once; the rest any number of times. */
   oneTime: boolean;
@@ -515,8 +463,6 @@ export interface ShopCatalogResponse {
   owned: string[];
   /** When the caller's 2× XP boost ends (ISO), or null. */
   xpBoostUntil: string | null;
-  /** Whether SOL purchases are open on this server (devnet RPC and treasury configured). */
-  solEnabled: boolean;
 }
 
 export interface ShopBuyRequest {
@@ -534,47 +480,23 @@ export interface ShopBuyResponse {
   levelsPaid: number[];
 }
 
-export interface ShopSolIntentRequest {
-  itemId: string;
-}
-
-export interface ShopSolIntentResponse {
-  intentId: string;
-  lamports: number;
-  /** Devnet address to pay. */
-  treasury: string;
-  /** The memo the transfer must carry (the intent id). */
-  memo: string;
-  expiresAt: string;
-}
-
-export interface ShopSolConfirmRequest {
-  intentId: string;
-  signature: string;
-}
-
-const LAMPORTS_PER_SOL_ = 1_000_000_000;
-const sol = (n: number) => Math.round(n * LAMPORTS_PER_SOL_);
-
-const deck = (theme: string, name: string, coins: number, solPrice: number, ribbon?: string): ShopItemInfo => ({
+const deck = (theme: string, name: string, coins: number, ribbon?: string): ShopItemInfo => ({
   id: `deck:${theme}`,
   category: 'skins',
   name,
   blurb: 'Card back · worn at every table',
   priceCoins: coins,
-  priceLamports: sol(solPrice),
   effect: { kind: 'card_back', theme },
   oneTime: true,
   ...(ribbon ? { ribbon } : {}),
 });
 
-const coinPack = (id: string, amount: number, solPrice: number, ribbon?: string): ShopItemInfo => ({
+const coinPack = (id: string, amount: number, ribbon?: string): ShopItemInfo => ({
   id,
   category: 'coins',
   name: `${amount.toLocaleString('en-US')} Coins`,
   blurb: 'Coins added to your balance',
   priceCoins: null,
-  priceLamports: sol(solPrice),
   effect: { kind: 'coins', amount },
   oneTime: false,
   ...(ribbon ? { ribbon } : {}),
@@ -585,19 +507,19 @@ const coinPack = (id: string, amount: number, solPrice: number, ribbon?: string)
  * online). Theme ids are the room themes (apps/web src/theming THEMES). Room themes themselves are not sold.
  */
 export const SHOP_ITEMS: readonly ShopItemInfo[] = [
-  { id: 'xp-boost-1h', category: 'xp', name: 'XP boost · 1 h', blurb: '2× XP from every hand for 1 hour', priceCoins: 2_000, priceLamports: sol(0.002), effect: { kind: 'xp_boost', hours: 1 }, oneTime: false },
-  { id: 'xp-boost-24h', category: 'xp', name: 'XP boost · 24 h', blurb: '2× XP from every hand for 24 hours', priceCoins: 12_000, priceLamports: sol(0.01), effect: { kind: 'xp_boost', hours: 24 }, oneTime: false, ribbon: 'POPULAR' },
-  { id: 'xp-pack', category: 'xp', name: 'XP pack', blurb: '+5,000 XP now', priceCoins: 8_000, priceLamports: sol(0.006), effect: { kind: 'xp', amount: 5_000 }, oneTime: false },
-  { id: 'xp-level', category: 'xp', name: 'Level up', blurb: 'Jump to the start of your next level', priceCoins: 25_000, priceLamports: sol(0.02), effect: { kind: 'level_up' }, oneTime: false },
-  deck('Default', 'Solana deck', 8_000, 0.006, 'HOT'),
-  deck('Neon_City', 'Neon City deck', 10_000, 0.008, 'NEW'),
-  deck('Forest', 'Forest deck', 6_000, 0.004),
-  deck('Desert', 'Desert deck', 6_000, 0.004),
-  deck('Town', 'Town deck', 6_000, 0.004),
-  // Coins (chip) packs: SOL only (On-chain mode, devnet). Demo mode shows real-money packs as "Coming soon".
-  coinPack('coins-5k', 5_000, 0.005),
-  coinPack('coins-25k', 25_000, 0.02, 'HOT'),
-  coinPack('coins-60k', 60_000, 0.04),
-  coinPack('coins-150k', 150_000, 0.075, 'BEST VALUE'),
+  { id: 'xp-boost-1h', category: 'xp', name: 'XP boost · 1 h', blurb: '2× XP from every hand for 1 hour', priceCoins: 2_000, effect: { kind: 'xp_boost', hours: 1 }, oneTime: false },
+  { id: 'xp-boost-24h', category: 'xp', name: 'XP boost · 24 h', blurb: '2× XP from every hand for 24 hours', priceCoins: 12_000, effect: { kind: 'xp_boost', hours: 24 }, oneTime: false, ribbon: 'POPULAR' },
+  { id: 'xp-pack', category: 'xp', name: 'XP pack', blurb: '+5,000 XP now', priceCoins: 8_000, effect: { kind: 'xp', amount: 5_000 }, oneTime: false },
+  { id: 'xp-level', category: 'xp', name: 'Level up', blurb: 'Jump to the start of your next level', priceCoins: 25_000, effect: { kind: 'level_up' }, oneTime: false },
+  deck('Default', 'Classic deck', 8_000, 'HOT'),
+  deck('Neon_City', 'Neon City deck', 10_000, 'NEW'),
+  deck('Forest', 'Forest deck', 6_000),
+  deck('Desert', 'Desert deck', 6_000),
+  deck('Town', 'Town deck', 6_000),
+  // Coins (chip) packs: not sold for Coins (priceCoins null); clients show them as "Coming soon".
+  coinPack('coins-5k', 5_000),
+  coinPack('coins-25k', 25_000, 'HOT'),
+  coinPack('coins-60k', 60_000),
+  coinPack('coins-150k', 150_000, 'BEST VALUE'),
 ];
 
