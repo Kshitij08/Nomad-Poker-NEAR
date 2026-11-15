@@ -9,6 +9,10 @@ import {
 } from '../ctx';
 import type { ScreenDef } from '../install';
 import { roomStage, roomActions, syncRoom, installRoomGestures } from './rooms';
+import { connectNear } from '../ctx';
+import { nearBalance, refreshNearBalance } from '../../near/balance';
+import { formatNear } from '../../near/backing';
+import { nearBackup, playingLocal } from '../nearAccount';
 import './lobby.css';
 
 const DISCORD_URL = 'https://discord.gg/vzsnDU5zyM';
@@ -121,6 +125,14 @@ ${this.profile ? profilePanel() : ''}`;
     mode: (v) => setMode(v),
     profile: () => {
       main.profile = !main.profile;
+      const addr = nearAccountId();
+      if (main.profile && addr) {
+        void refreshNearBalance(addr, () => ui().render());
+        void playingLocal(addr).then((v) => {
+          profileLocal = v;
+          ui().render();
+        });
+      }
     },
     'profile-close': () => {
       main.profile = false;
@@ -131,19 +143,20 @@ ${this.profile ? profilePanel() : ''}`;
       ui().show('friends', 'edit');
     },
     'pf-rename': () => renameDialog(),
-    'pf-near': () => {
-      main.profile = false;
-      ui().show('near-tables');
-    },
     'pf-near-signin': () => {
       main.profile = false;
-      void accountExtras(app()).signInWithNear?.();
+      void connectNear();
     },
+    'pf-backup': () => void nearBackup(),
   },
 };
 
+/** The profile's NEAR account was made for this player (its key is in this browser): offer a backup. */
+let profileLocal = false;
+
 function profilePanel(): string {
   const addr = nearAccountId();
+  const yocto = nearBalance(addr);
   return `<div class="v2-pop-dim"${act('profile-close')}></div>
 <div class="v2-profile v2-panel" role="dialog" aria-label="Profile">
   <div class="v2-row" style="gap:1em">
@@ -155,7 +168,9 @@ function profilePanel(): string {
   ${modeSeg()}
   <div class="v2-cap" style="margin-top:.9em">NEAR account (testnet)</div>
   <div class="v2-card v2-row" style="gap:.5em">${ico('near', 1.4)}<span class="v2-ellip v2-grow">${addr ? esc(addr) : 'Not signed in with NEAR'}</span></div>
-  <div class="v2-row" style="margin-top:.8em">${addr ? btn('Game balance &amp; tables', 'pf-near', { h: 'gold', c: 'v2-grow' }) : btn('Continue with NEAR', 'pf-near-signin', { h: 'gold', c: 'v2-grow' })}</div>
+  ${addr ? `<div class="v2-row" style="margin-top:.5em"><span class="v2-grow v2-sm v2-mut">Game balance</span><b class="v2-num">${yocto === null ? '—' : esc(formatNear(yocto))} NEAR</b></div>` : ''}
+  <div class="v2-row" style="margin-top:.8em">${addr ? btn(`${ico('plus', 0.9)} Deposit`, 'near-deposit', { h: 'gold', c: 'v2-grow' }) + btn('Withdraw', 'near-withdraw', { h: 'ghost', c: 'v2-grow' }) : btn('Continue with NEAR', 'pf-near-signin', { h: 'gold', c: 'v2-grow' })}</div>
+  ${addr && profileLocal ? `<div class="v2-row" style="margin-top:.4em">${btn('Back up my NEAR key', 'pf-backup', { h: 'ghost', c: 'sm v2-grow' })}</div>` : ''}
 </div>`;
 }
 

@@ -19,7 +19,7 @@ import { shopScreens } from './screens/shop';
 import { tournamentScreens } from './screens/tournaments';
 import { agentScreens } from './screens/agents';
 import { entryScreens, installEntryOverlays } from './screens/entry';
-import { openNearTableLink } from './screens/nearTables';
+import { installNearPlay, openNearTableLink } from './nearPlay';
 
 declare module '../app/app' {
   interface Services {
@@ -60,6 +60,7 @@ export function install(ctx: AppContext): void {
   }
   wire(ctx, host, ui, byUnity);
   installEntryOverlays(ctx, host, ui);
+  installNearPlay(ui);
   openNearTableLink(ctx.params, ui);
 }
 
