@@ -52,7 +52,11 @@ export const MAX_BLOCKS_AHEAD = 600n;
  * browser key and paid from the player's account (apps/web/src/near/localKey.ts); with no deposit they may be relayed.
  */
 const ESCROW_METHODS = new Set(['deposit', 'withdraw', 'buy_in', 'create_hosted_table', 'close_table', 'reclaim', 'register', 'leave', 'create_tournament', 'cancel_tournament']);
-const TABLE_METHODS = new Set(['join_pool', 'leave_pool', 'claim_earnings', 'register_agent', 'back', 'withdraw', 'set_loss_limit']);
+// A pro's own agent moves too (update_agent, the NEAR AI private strategy, the pool loss limit): no NEAR attached.
+const TABLE_METHODS = new Set([
+  'join_pool', 'leave_pool', 'claim_earnings', 'register_agent', 'back', 'withdraw', 'set_loss_limit',
+  'update_agent', 'set_private_strategy', 'clear_private_strategy', 'set_pool_loss_limit',
+]);
 
 /** The contracts (and their methods) the relayer will call. */
 export function relayAllowlist(env: Env): Map<string, Set<string>> {

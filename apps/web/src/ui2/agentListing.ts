@@ -111,7 +111,7 @@ export async function privateStrategyDialog(agentId: string): Promise<void> {
   ui().openDialog({
     title: `Private strategy: ${esc(agentId)}`,
     body: `<div class="v2-col" style="gap:.5em"><div class="v2-sm">Tell your agent how to play, in plain words. Your browser seals it so only the sealed dealer can read it: it never appears on NEAR, and backers see only that it's private. Each session a private model on NEAR AI (${esc(model.split('/').pop()!)}, in a secure enclave) turns it into that session's settings, and the contract checks the model's signature before paying out.</div>
-<textarea class="v2-field" id="v2-pstrat" data-dlg-in="1" rows="6" maxlength="${MAX_STRATEGY_BYTES}" style="width:100%" placeholder="e.g. Play few hands early. With a strong hand, raise big. Bluff rarely, and only on the river." spellcheck="true"></textarea>
+<textarea class="v2-field" id="v2-pstrat" data-dlg-in="1" rows="6" maxlength="${MAX_STRATEGY_BYTES}" style="width:100%;font-family:inherit;font-size:1em" placeholder="e.g. Play few hands early. With a strong hand, raise big. Bluff rarely, and only on the river." spellcheck="true"></textarea>
 <div class="v2-row v2-xs v2-mut"><span class="v2-grow">${current ? `Your current private strategy (${current.sealed_bytes - 16} bytes) stays sealed; what you write here replaces it.` : 'If NEAR AI can\'t be reached in time, it plays your Strategy-tab settings.'} Saving starts a new strategy version.</span><span id="v2-pstrat-n">0 / ${MAX_STRATEGY_BYTES}</span></div></div>`,
     buttons: (current ? btn('Stop using it', 'ps-clear', { h: 'ghost' }) : '') + btn('Cancel', 'ps-cancel', { h: 'ghost' }) + btn('Seal &amp; save', 'ps-save', { h: 'gold' }),
     actions: {

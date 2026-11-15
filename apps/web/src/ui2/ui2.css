@@ -407,3 +407,5 @@ html[data-orient='portrait'] .v2-cnt { font-size: max(0.7em, 11px); }
 :root:root .v2-back { background: linear-gradient(color-mix(in srgb, #ad84ff 30%, var(--v2-panel-solid)), color-mix(in srgb, #ad84ff 12%, var(--v2-panel-solid))); border-color: #ad84ff; box-shadow: 0 0 0.7em color-mix(in srgb, #ad84ff 30%, transparent); }
 /* The coin on a gold plate needs no dark rim any more (the fill is dark). */
 :root:root .v2-b.gold img.v2-ico[src*='ico_coin'] { filter: none; }
+/* A button with a second, smaller line under its label (e.g. Host a table's stakes). */
+.v2-b.v2-b-stack { flex-direction: column; gap: 0.15em; white-space: normal; line-height: 1.15; }

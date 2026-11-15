@@ -366,3 +366,12 @@ describe('the relayer', () => {
     expect(row).toEqual({ hash, methods: 'withdraw', deposit: '0', status: 'ok' });
   });
 });
+
+describe('relayAllowlist', () => {
+  it("relays a pro's own agent moves (no NEAR attached), not owner-only ones", async () => {
+    const { relayAllowlist } = await import('../nearAccounts');
+    const table = relayAllowlist({ NEAR_TABLE_CONTRACT: 'table.nomad-poker.testnet' } as Env).get('table.nomad-poker.testnet')!;
+    for (const m of ['register_agent', 'update_agent', 'set_private_strategy', 'clear_private_strategy', 'set_pool_loss_limit', 'leave_pool']) expect(table.has(m), m).toBe(true);
+    for (const m of ['set_near_ai_signer', 'set_strategy_key', 'submit_session', 'correct_cost_basis']) expect(table.has(m), m).toBe(false);
+  });
+});
