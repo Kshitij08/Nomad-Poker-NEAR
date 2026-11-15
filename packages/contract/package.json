@@ -5,7 +5,8 @@
   "type": "module",
   "description": "The API contract shared by the web app and the API Worker: routes, request and response types, error codes.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./near": "./src/near.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

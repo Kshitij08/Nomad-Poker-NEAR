@@ -29,6 +29,8 @@ const STAGES = {
     listingMinDays: '0',
     nearRpc: 'https://test.rpc.fastnear.com',
     nearEscrow: 'nomad-escrow.testnet',
+    nearTable: 'table.nomad-poker.testnet',
+    nearSponsor: 'nomad-players.testnet',
   },
   staging: {
     worker: 'nomad-poker-near-api-staging',
@@ -43,6 +45,8 @@ const STAGES = {
     listingMinDays: '0',
     nearRpc: 'https://test.rpc.fastnear.com',
     nearEscrow: 'nomad-escrow.testnet',
+    nearTable: 'table.nomad-poker.testnet',
+    nearSponsor: 'nomad-players.testnet',
   },
   production: {
     // Not set up yet: create the database and bucket, put the database id here and list the production web origin.
@@ -59,6 +63,8 @@ const STAGES = {
     listingMinDays: '',
     nearRpc: '',
     nearEscrow: '',
+    nearTable: '',
+    nearSponsor: '',
   },
 } as const;
 
@@ -85,6 +91,11 @@ export default defineConfig(({ mode }) => {
         NEAR_RPC_URL: bindings.text(s.nearRpc),
         // NEAR tournaments: the escrow holding their stakes (read-only here; the game server is its operator).
         NEAR_ESCROW: bindings.text(s.nearEscrow),
+        // NEAR accounts made for players and gasless moves (src/nearAccounts.ts): the relayer calls the escrow and this
+        // contract; the sponsor creates the accounts and pays the gas. Its key is the NEAR_SPONSOR_KEY secret.
+        NEAR_TABLE_CONTRACT: bindings.text(s.nearTable),
+        NEAR_SPONSOR_ID: bindings.text(s.nearSponsor),
+        NEAR_SPONSOR_KEY: bindings.secret(),
         EMAIL_DEV_ECHO: bindings.text(s.emailDevEcho),
         // Google sign-in: the web client id (public). Android / iOS client ids join this list when those apps get one.
         GOOGLE_CLIENT_IDS: bindings.text(GOOGLE_CLIENT_IDS.join(',')),

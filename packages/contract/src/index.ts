@@ -16,6 +16,10 @@ export const Routes = {
   guest: '/v1/auth/guest',
   nearChallenge: '/v1/auth/near/challenge',
   nearVerify: '/v1/auth/near/verify',
+  /** A NEAR account made for you (a sub-account of the sponsor; the key stays in your browser). */
+  nearAccount: '/v1/near/account',
+  /** Gasless calls: a NEP-366 signed delegate action from your app-made account, paid by the sponsor. */
+  nearRelay: '/v1/near/relay',
   google: '/v1/auth/google',
   emailStart: '/v1/auth/email/start',
   emailVerify: '/v1/auth/email/verify',
@@ -114,6 +118,35 @@ export interface NearVerifyRequest {
   nonce: string;
 }
 
+/**
+ * "Create my NEAR account": the browser made an ed25519 key pair and sends the public half; the API creates
+ * `<id>.<sponsor>` on chain with that key as its only full-access key and a small starting balance. The player then
+ * signs in with that key through the ordinary NEAR challenge / verify, which links the account.
+ */
+export interface NearAccountRequest {
+  /** "ed25519:<base58>". */
+  publicKey: string;
+}
+
+export interface NearAccountResponse {
+  accountId: string;
+  /** NEAR the sponsor sent the account (yoctoNEAR): storage plus the starting amount. */
+  funded: string;
+  /** The account-creating transaction (base58). */
+  txHash: string;
+}
+
+/** A borsh SignedDelegateAction (NEP-366), base64. */
+export interface NearRelayRequest {
+  signedDelegate: string;
+}
+
+export interface NearRelayResponse {
+  txHash: string;
+  /** The function call's return value when it was JSON; null otherwise. */
+  value: unknown;
+}
+
 export interface GoogleSignInRequest {
   /** A Google ID token (JWT) from Google Identity Services / the native SDK. */
   idToken: string;
@@ -174,7 +207,10 @@ export type ErrorCode =
   | 'escrow_missing'
   | 'escrow_mismatch'
   | 'escrow_unpaid'
-  | 'escrow_registered';
+  | 'escrow_registered'
+  // The relayer: the delegate action broke a rule (contract, method, deposit, signature, replay), or NEAR refused it.
+  | 'relay_refused'
+  | 'relay_failed';
 
 export interface ApiErrorBody {
   error: { code: ErrorCode; message: string };

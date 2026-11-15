@@ -25,7 +25,12 @@ import {
   type NearChallengeRequest,
   type NearChallengeResponse,
   type NearVerifyRequest,
+  type NearAccountRequest,
+  type NearAccountResponse,
+  type NearRelayRequest,
+  type NearRelayResponse,
 } from '@nomad/contract';
+import { createPlayerAccount, isAppMadeAccount, relay } from './nearAccounts';
 import {
   findPlayer,
   cleanDisplayName,
@@ -235,8 +240,23 @@ export function createApp(): Hono<AppEnv> {
       fail(503, 'internal', "Couldn't reach NEAR to check your key. Try again in a moment.");
     }
     if (access !== 'full-access') fail(401, 'unauthorized', `That key can't sign in for ${account}: it must be one of the account's full-access keys.`);
-    const res = await completeSignIn(c.env.DB, { provider: 'near', subject: account, label: account }, account.length > 24 ? `${account.slice(0, 10)}…${account.slice(-10)}` : account, await optionalPlayer(c));
+    const caller = await optionalPlayer(c);
+    // An account made here (k3j9x2ab1q.nomad-players.testnet) is no name to play under: keep the player's own.
+    const name = isAppMadeAccount(c.env, account) ? (caller?.display_name ?? 'Player') : account.length > 24 ? `${account.slice(0, 10)}…${account.slice(-10)}` : account;
+    const res = await completeSignIn(c.env.DB, { provider: 'near', subject: account, label: account }, name, caller);
     return c.json(res, res.created ? 201 : 200);
+  });
+
+  // NEAR without a wallet (src/nearAccounts.ts): an account made for you, and gasless moves through the relayer.
+  app.post(Routes.nearAccount, requirePlayer, async (c) => {
+    const { publicKey } = await readJson<NearAccountRequest>(c.req.raw);
+    const res = await createPlayerAccount(c.env, c.get('player').id, requireString(publicKey, 'publicKey', 128));
+    return c.json<NearAccountResponse>(res, 201);
+  });
+
+  app.post(Routes.nearRelay, requirePlayer, async (c) => {
+    const { signedDelegate } = await readJson<NearRelayRequest>(c.req.raw);
+    return c.json<NearRelayResponse>(await relay(c.env, c.get('player').id, requireString(signedDelegate, 'signedDelegate', 12_000)));
   });
 
   app.post(Routes.google, async (c) => {
