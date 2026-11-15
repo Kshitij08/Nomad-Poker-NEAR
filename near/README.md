@@ -20,7 +20,7 @@ action under the betting rules.
 
 ## Live on testnet
 
-- Dealer: OutLayer project `nomad-poker.testnet/nomad-dealer` (agents v2, version `dd32d428ae`)
+- Dealer: OutLayer project `nomad-poker.testnet/nomad-dealer` (agents v2 and NEAR-AI agents, version `e18a6962bb`)
 - Contract: `table.nomad-poker.testnet`, operator `feeder.nomad-poker.testnet` (the feeder; see Operator below)
 - Agents: `nomad-a` (pro `pro.nomad-poker.testnet`, Autopilot), `nomad-b` (`pro-b`, Daredevil), `nomad-c` (`pro-c`,
   Trapper), `nomad-d` (`pro-d`, a custom Guardian), `nomad-e` (`pro`, Guardian; no pool). The pro accounts are
@@ -34,10 +34,10 @@ action under the betting rules.
 Checks, no accounts needed:
 
 ```bash
-cd poker-core && cargo test --release --features seal,agent,serde
+cd poker-core && cargo test --release --features seal,agent,nearai
 cd table-spike && cargo test
 cd poker-wasm && cargo test --release
-cd feeder && npm test
+cd feeder && npm test                 # includes nearai.test.ts (a real NEAR AI signature)
 ```
 
 Rust builds and tests run in WSL (aws-lc-sys does not build on Windows); Node runs on Windows.
@@ -188,6 +188,67 @@ versions per open session), so the contract deploys over the old one with `near 
 pools, positions, earnings and history are untouched. This version also fixes the vault config read:
 `set_vault_config` was never read back, because `LazyOption::new(key, None)` does not load storage (none was set on
 testnet).
+
+## NEAR-AI agents: a private strategy, chosen by a private model
+
+A pro can keep their strategy secret and still let backers check how the agent was played. They write instructions
+in plain words ("aggressive heads-up specialist; bluff half as much after a losing run"); a private model on NEAR AI
+Cloud, running in a TEE, turns them into each session's v2 profile inside the sealed dealer. The text never appears on
+chain; the model's signed choice does.
+
+1. **Seal.** The pro's browser seals the text to the dealer's X25519 key (`get_strategy_key()`), with the agent id as
+   associated data, and stores only the ciphertext: `set_private_strategy(agent_id, model, eph, ct)`
+   (`sealStrategy` in `feeder/src/nearai.ts`; `poker_core::seal::seal_strategy` in Rust). The dealer made its key
+   once (`strategy_key` action) from fresh randomness and keeps it in OutLayer worker storage, which every version of
+   the project can read and nobody outside the sealed runtime can. This is a new strategy version (the track record
+   restarts); the agent's v2 profile stays as its fallback. `clear_private_strategy` goes back.
+2. **Choose.** `open_backed_session` puts the sealed text in the NEAR-AI seat's request (`profiles[i].private`). Once
+   per session per NEAR-AI seat, the dealer opens it, asks the model (`poker_core::nearai::request_body`: system
+   rules, the private text, the agent's public results, a fresh nonce; thinking off, at most 120 tokens) with the
+   `NEAR_AI_API_KEY` project secret, reads the reply into a profile (`profile_from_response`), and fetches NEAR AI's
+   signature for it. Then it plays the session deterministically with that profile. A model that cannot be asked in
+   time (the dealer stops starting calls after 35 s of OutLayer's 60 s) plays the fallback, listed in
+   `near_ai_errors`.
+3. **Prove.** The dealer's output carries, per NEAR-AI seat: `seat`, `agent_id`, `model`, `chat_id`, the raw
+   `response` (only the numbers), `signature_text` (`<model>:<sha256 of request>:<sha256 of response>`), `signature`
+   (EIP-191, secp256k1) and `signing_address`, and the `profile`. `submit_session(..., near_ai)` checks each one on
+   chain: the address is on the table's list of attested signers for that model (`set_near_ai_signer`, owner, after
+   `scripts/verify-near-ai.ts --signer <model>` checks its TDX quote binds the address), the signature recovers to
+   it (`ecrecover`), it signs exactly this response, and the response says exactly this profile. The dealer's VRF
+   attestation covers the profiles it played, so a proof cannot be dropped or swapped. Proofs are kept in the session
+   record (`near_ai`).
+4. **Check.** Anyone: `node scripts/verify-near-ai.ts <session_id> --attest` re-checks every proof from the record and
+   asks NEAR AI Cloud for the model's attestation with a fresh nonce (the quote's REPORTDATA must be the signing address
+   followed by the nonce). The quote's own Intel signature chain and the GPU evidence: https://cloud.near.ai/verify.
+   The web app can call `verifyNearAiProof(record.near_ai[i], signers)` and `checkAttestation(model, address)` from
+   `feeder/src/nearai.ts` (only @noble and fetch).
+
+What stays private and what does not: the strategy text is on chain only sealed; NEAR AI sees it inside the model's
+TEE; the public signature names only the request's hash, and the request has a fresh nonce so guessed texts cannot be
+checked against it. The model's reply is public, so the dealer and the contract refuse replies with reasoning text.
+
+**On testnet:** model `Qwen/Qwen3.6-35B-A3B-FP8` (Private TEE), signer `0xfdbd7952498b333206f360d71d97a1e0961e8ddf`;
+nomad-b and nomad-d are NEAR-AI agents. Session `ailive-1` was the first ([proofs](scripts/reports/near-ai-ailive-1.md)).
+A session costs about 350 tokens per NEAR-AI agent, about $0.00012 at this model's price ($0.17 / $1.10 per million
+input / output tokens), and adds about 4 s to the dealer run.
+
+| Method / view | Who | Shape |
+| --- | --- | --- |
+| `set_private_strategy(agent_id, model, eph, ct)` → strategy version | the agent's pro | `eph` 32-byte hex, `ct` hex of 17 to 1016 bytes |
+| `clear_private_strategy(agent_id)` → strategy version | the agent's pro | |
+| `get_private_strategy(agent_id)` | view | `{ model, sealed_bytes, set_at }` or null; also `get_agent(..).private_strategy` |
+| `get_strategy_key()` | view | dealer X25519 public key, hex |
+| `set_strategy_key(public_key_hex)`, `set_near_ai_signer(model, signing_address, allowed)` | owner | |
+| `get_near_ai_signers()` | view | `[{ model, signing_addresses: ["0x…"] }]` |
+| `submit_session(..., near_ai?)` | anyone | `near_ai`: `[{ seat, agent_id, model, chat_id, response, signature_text, signature, signing_address, profile }]` |
+| `get_session_record(id).near_ai` | view | the same proofs; `seat` is the listed seat, `seat_order.indexOf(seat)` its table position |
+
+The feeder attaches the secret to each dealer run (`secrets_ref: {profile: "default", account_id: OWNER}`; set
+`SECRETS_PROFILE`/`SECRETS_ACCOUNT` to change it). Make an agent a NEAR-AI agent from the command line:
+
+```bash
+node scripts/near-ai-agent.ts --agent nomad-b --pro pro-b.nomad-poker.testnet --file strategy.txt
+```
 
 ## Operator: the feeder's limited key
 

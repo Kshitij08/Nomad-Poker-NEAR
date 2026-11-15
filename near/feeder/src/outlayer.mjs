@@ -4,10 +4,14 @@
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class OutlayerClient {
-  constructor({ api = "https://testnet-api.outlayer.ai", project, paymentKey, pollMs = 2000, timeoutMs = 20 * 60_000, fetchImpl = fetch }) {
+  /**
+   * @param secretsRef { profile, account_id } of the project secrets to attach to each run (the dealer reads
+   *                   NEAR_AI_API_KEY from them); the payment key's owner must be on the secret's access list.
+   */
+  constructor({ api = "https://testnet-api.outlayer.ai", project, paymentKey, secretsRef = null, pollMs = 2000, timeoutMs = 20 * 60_000, fetchImpl = fetch }) {
     if (!project) throw new Error("project is required (owner/name)");
     if (!paymentKey) throw new Error("paymentKey is required");
-    Object.assign(this, { api, project, pollMs, timeoutMs, fetch: fetchImpl });
+    Object.assign(this, { api, project, secretsRef, pollMs, timeoutMs, fetch: fetchImpl });
     // Kept off `this` so it never ends up in a log of the client.
     this.#key = paymentKey;
   }
@@ -36,7 +40,7 @@ export class OutlayerClient {
 
   /** Starts a dealer run and returns its call id. */
   async submit(input) {
-    const body = await this.#request(`/call/${this.project}`, { method: "POST", body: JSON.stringify({ input, async: true }) });
+    const body = await this.#request(`/call/${this.project}`, { method: "POST", body: JSON.stringify({ input, async: true, ...(this.secretsRef ? { secrets_ref: this.secretsRef } : {}) }) });
     if (!body.call_id) throw new Error(`OutLayer did not accept the call: ${JSON.stringify(body)}`);
     return body.call_id;
   }

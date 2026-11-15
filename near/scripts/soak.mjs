@@ -54,7 +54,7 @@ console.log(`soak: ${SESSIONS} sessions x up to ${HANDS} hands, ${agents.join(",
 
 // ---------------------------------------------------------------------------- run
 const keys = JSON.parse(await readFile(env.OUTLAYER_KEYS_FILE ?? join(homedir(), ".outlayer", "testnet", "payment-keys.json"), "utf8"));
-const dealer = new OutlayerClient({ api: env.OUTLAYER_API, project: env.PROJECT ?? "nomad-poker.testnet/nomad-dealer", paymentKey: keys[`testnet:${OWNER}:payment-key:${env.KEY_NONCE ?? 1}`] });
+const dealer = new OutlayerClient({ api: env.OUTLAYER_API, project: env.PROJECT ?? "nomad-poker.testnet/nomad-dealer", paymentKey: keys[`testnet:${OWNER}:payment-key:${env.KEY_NONCE ?? 1}`], secretsRef: { profile: env.SECRETS_PROFILE ?? "default", account_id: OWNER } });
 const table = new TableClient({ rpc: env.RPC, contractId: TABLE, operator: OPERATOR, operatorKey: await keyOf(OPERATOR, FEEDER_CREDS) });
 const poker = await loadPoker(env.POKER_WASM ?? join(HERE, "..", "poker-wasm", "target", "wasm32-unknown-unknown", "release", "poker_wasm.wasm"));
 const feeder = new SessionFeeder({

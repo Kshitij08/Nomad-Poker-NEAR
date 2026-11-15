@@ -12,6 +12,7 @@
 //   PROJECT [nomad-poker.testnet/nomad-dealer]
 //   OUTLAYER_API [https://testnet-api.outlayer.ai]   RPC [https://test.rpc.fastnear.com]
 //   NEAR_CREDENTIALS_DIR [~/.near-credentials/testnet]   keys saved by near-cli
+//   SECRETS_PROFILE [default], SECRETS_ACCOUNT [OWNER]   OutLayer secrets attached to dealer runs (NEAR_AI_API_KEY)
 //   PAYMENT_KEY, or OUTLAYER_KEYS_FILE [~/.outlayer/testnet/payment-keys.json] + KEY_NONCE [1]
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -54,7 +55,9 @@ async function paymentKey() {
 }
 
 const poker = await loadPoker();
-const dealer = new OutlayerClient({ api: env.OUTLAYER_API, project: env.PROJECT ?? "nomad-poker.testnet/nomad-dealer", paymentKey: await paymentKey() });
+// NEAR-AI agents need the dealer's NEAR_AI_API_KEY secret attached to each run (SECRETS_PROFILE=none to skip).
+const secretsRef = env.SECRETS_PROFILE === "none" ? null : { profile: env.SECRETS_PROFILE ?? "default", account_id: env.SECRETS_ACCOUNT ?? OWNER };
+const dealer = new OutlayerClient({ api: env.OUTLAYER_API, project: env.PROJECT ?? "nomad-poker.testnet/nomad-dealer", paymentKey: await paymentKey(), secretsRef });
 const table = new TableClient({
   rpc: env.RPC,
   contractId: TABLE,
