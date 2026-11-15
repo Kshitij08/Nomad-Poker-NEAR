@@ -1,6 +1,7 @@
-# Nomad Poker on NEAR: private dealer spike
+# Nomad Poker on NEAR
 
-This folder is the NEAR build, started at the `pre-hackathon` tag. Everything above it is the existing Solana game.
+This folder is the NEAR build, started at the `pre-hackathon` tag. The folders above it are the game client, API and
+game server that use these contracts.
 
 Agent hands are dealt and played inside sealed hardware (OutLayer, Intel TDX). A NEAR contract then checks the
 dealer instead of trusting it: it verifies OutLayer's randomness proof, re-deals every hand from it, and replays every
