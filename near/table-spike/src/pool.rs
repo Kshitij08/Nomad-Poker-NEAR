@@ -176,6 +176,18 @@ pub struct Basis {
     pub withdrawn: u128,
 }
 
+/// One holding's corrected basis (`correct_cost_basis`).
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct BasisEntry {
+    pub account: AccountId,
+    pub agent_id: String,
+    pub deposited: U128,
+    pub withdrawn: U128,
+}
+
+const CORRECTED_KEY: &[u8] = b"u#";
+
 pub(crate) fn holding_basis() -> LookupMap<String, Basis> {
     LookupMap::new(b"u")
 }
@@ -351,6 +363,49 @@ impl Table {
         held.flush();
         event("pool_left", json!({ "account": who, "agent": agent_id, "shares": shares, "result": out }));
         out
+    }
+
+    /// Owner only, once: replaces the cost basis of holdings with what their history says (every join that became
+    /// shares, every leave paid; scripts/cost-basis-history.mjs reads it from the contract's events), and sets each
+    /// listed pool's totals to the sum of its holders' entries, including holders that have since left. Moves no
+    /// NEAR. Returns each entry's basis before and after.
+    pub fn correct_cost_basis(&mut self, entries: Vec<BasisEntry>) -> Vec<Value> {
+        self.require_owner();
+        require!(env::storage_read(CORRECTED_KEY).is_none(), "the cost basis was already corrected once");
+        let all = pools();
+        let held = holdings();
+        let mut hb = holding_basis();
+        let mut pb = pool_basis();
+        let mut totals: Vec<(String, Basis)> = vec![];
+        let mut report = vec![];
+        for e in &entries {
+            let p = all.get(&e.agent_id).unwrap_or_else(|| env::panic_str(&format!("{} has no pool", e.agent_id)));
+            let key = holding_key(&e.account, &e.agent_id);
+            let value = value_of(p, held.get(&key).copied().unwrap_or(0));
+            let (before, _) = basis_or(&hb, &key, value);
+            let after = Basis { deposited: e.deposited.0, withdrawn: e.withdrawn.0 };
+            hb.insert(key, after);
+            match totals.iter_mut().find(|(a, _)| *a == e.agent_id) {
+                Some((_, t)) => {
+                    t.deposited += after.deposited;
+                    t.withdrawn += after.withdrawn;
+                }
+                None => totals.push((e.agent_id.clone(), after)),
+            }
+            report.push(json!({
+                "account": e.account, "agent_id": e.agent_id, "value": U128(value),
+                "before": { "deposited": U128(before.deposited), "withdrawn": U128(before.withdrawn) },
+                "after": { "deposited": U128(after.deposited), "withdrawn": U128(after.withdrawn) },
+            }));
+        }
+        for (agent_id, t) in totals {
+            pb.insert(agent_id, t);
+        }
+        hb.flush();
+        pb.flush();
+        env::storage_write(CORRECTED_KEY, &[1]);
+        event("cost_basis_corrected", json!({ "entries": entries.len() }));
+        report
     }
 
     /// Owner only: starts the cost basis of holdings and pools that existed before it was tracked, at their value

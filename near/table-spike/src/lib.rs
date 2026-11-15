@@ -1379,4 +1379,57 @@ mod tests {
         t.join_pool("agent-0".into());
         assert_eq!(pnl(&t, "alice.near", "agent-0").1, value + NEAR as i128);
     }
+
+    #[test]
+    fn the_cost_basis_is_corrected_once_from_history_and_pools_match_their_holders() {
+        let (mut t, _, _) = backed_table();
+        for (who, amount) in [("alice.near", NEAR), ("bob.near", NEAR / 2), ("carol.near", NEAR / 4)] {
+            as_who(who, amount, 1);
+            t.join_pool("agent-0".into());
+        }
+        // Carol leaves; then the pool gains 10% (a stand-in for a winning session).
+        let carol_shares: u128 = t.get_holding(acct("carol.near"), "agent-0".into())["shares"].as_str().unwrap().parse().unwrap();
+        as_who("carol.near", 0, 2);
+        t.leave_pool("agent-0".into(), U128(carol_shares));
+        let mut ps = pool::pools();
+        ps.get_mut("agent-0").unwrap().balance += 3 * NEAR / 20;
+        ps.flush();
+        // As after the upgrade: every basis started at the value then (P&L 0).
+        let mut hb = pool::holding_basis();
+        let mut pb = pool::pool_basis();
+        for who in ["alice.near", "bob.near", "carol.near"] {
+            hb.remove(&pool::holding_key(&acct(who), "agent-0"));
+        }
+        pb.remove("agent-0");
+        hb.flush();
+        pb.flush();
+        as_who("table.near", 0, 3);
+        t.init_cost_basis(vec![(acct("alice.near"), "agent-0".into()), (acct("bob.near"), "agent-0".into())], vec!["agent-0".into()]);
+        assert_eq!(pnl(&t, "alice.near", "agent-0").3, 0);
+
+        let entries = vec![
+            pool::BasisEntry { account: acct("alice.near"), agent_id: "agent-0".into(), deposited: U128(NEAR), withdrawn: U128(0) },
+            pool::BasisEntry { account: acct("bob.near"), agent_id: "agent-0".into(), deposited: U128(NEAR / 2), withdrawn: U128(0) },
+            pool::BasisEntry { account: acct("carol.near"), agent_id: "agent-0".into(), deposited: U128(NEAR / 4), withdrawn: U128(NEAR / 4) },
+        ];
+        as_who("alice.near", 0, 4);
+        assert!(panics(|| t.correct_cost_basis(entries.clone())).contains("owner only"));
+        let before_pool = t.get_pool("agent-0".into()).unwrap();
+        as_who("table.near", 0, 4);
+        let report = t.correct_cost_basis(entries.clone());
+        assert_eq!(report.len(), 3);
+        // Alice's and Bob's P&L now count from their joins: each gained 10% of what they put in.
+        let (a, b) = (pnl(&t, "alice.near", "agent-0"), pnl(&t, "bob.near", "agent-0"));
+        assert!((a.3 - (NEAR / 10) as i128).abs() < 10, "{a:?}");
+        assert!((b.3 - (NEAR / 20) as i128).abs() < 10, "{b:?}");
+        // The pool's totals are its holders', including Carol, who left.
+        let pool = t.get_pool("agent-0".into()).unwrap();
+        assert_eq!((pool.deposited.0, pool.withdrawn.0), (NEAR + NEAR / 2 + NEAR / 4, NEAR / 4));
+        let pool_pnl = pool.value.0 as i128 + pool.withdrawn.0 as i128 - pool.deposited.0 as i128;
+        assert!((pool_pnl - (a.3 + b.3)).abs() < 10);
+        // Bookkeeping only: no NEAR moved.
+        assert_eq!((pool.value, pool.shares, pool.balance), (before_pool.value, before_pool.shares, before_pool.balance));
+        // Once only.
+        assert!(panics(|| t.correct_cost_basis(entries)).contains("already corrected"));
+    }
 }
