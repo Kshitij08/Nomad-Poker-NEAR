@@ -542,7 +542,7 @@ const hostScreen: ScreenDef = {
     const nearT = T.hNear;
     const fee = (nearT ? NEAR_FEES : HOST_FEES)[T.hFee]!;
     const prize = (nearT ? NEAR_PRIZES : HOST_PRIZES)[T.hPrize]!;
-    const amt = (n: number): string => (nearT ? `${nearText(n)} (${N0(n)} chips)` : `${N0(n)} Coins`);
+    const amt = (n: number): string => (nearT ? nearText(n) : `${N0(n)} Coins`);
     const max = HOST_MAX[T.hMax]!;
     const speed = HOST_SPEEDS[T.hSpeed]!;
     const name = T.hName.trim();
@@ -559,16 +559,17 @@ const hostScreen: ScreenDef = {
     ${optRow('Visibility', ['Public', 'Private (code)'], T.hPrivate ? 1 : 0, 'h-vis')}
   </div>
   <div class="v2-panel v2-col v2-hsum"><b class="v2-h">Summary</b>
+    <div class="v2-col v2-scroll v2-hsum-list">
     <div class="v2-kv"><span>Name</span><b class="v2-ellip" data-tname-out>${esc(name || 'Your tournament')}</b></div>
     <div class="v2-kv"><span>Starts</span><b>${esc(startLabel(HOST_STARTS[T.hStart]!))}</b></div>
     <div class="v2-kv"><span>Stakes</span><b>${nearT ? 'NEAR (escrow)' : 'Coins'}</b></div>
     <div class="v2-kv"><span>Entry</span><b>${fee === 0 ? 'Free' : amt(fee)}</b></div>
     <div class="v2-kv"><span>Players</span><b>up to ${max}</b></div>
     <div class="v2-kv"><span>Prize if full</span><b>${amt(nearT ? prize + fee * max - Math.floor((fee * max) / 20) : prize + fee * max)}</b></div>
-    <div class="v2-kv"><span>Payout</span><b>1st 60% · 2nd 40%${nearT ? ' · 5% of entries fee' : ''}</b></div>
+    <div class="v2-kv"><span>Payout</span><b>1st 60% · 2nd 40%${nearT ? ' · 5% fee' : ''}</b></div>
     <div class="v2-kv"><span>Speed</span><b>${speedShort(speed)} · ${blindsText(speed)}</b></div>
     <div class="v2-kv"><span>Visibility</span><b>${T.hPrivate ? 'Private (code)' : 'Public'}</b></div>
-    <div class="v2-grow"></div>
+    </div>
     ${nearT ? `<div class="v2-xs v2-mut">${nearIdentity() ? `Hosted as ${esc(nearIdentity()!)}: your wallet creates it on the escrow${prize > 0 ? ' and pays your prize' : ''}.` : 'Sign in with NEAR to host a NEAR tournament.'}</div>`
       : prize > 0 ? `<div class="v2-xs v2-mut">Your ${N0(prize)} Coins prize is taken from your balance.</div>` : ''}
     <div class="v2-hcta-d">${btn('Create Tournament', 'h-create', { h: 'gold', c: 'lg w' })}</div>

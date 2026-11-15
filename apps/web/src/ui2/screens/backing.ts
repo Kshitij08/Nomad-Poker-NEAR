@@ -9,7 +9,7 @@ import { replaySession } from '../../agents/replaySession';
 import {
   NEAR_CONTRACT, NEAR_EXPLORER, claimEarnings, earnings, formatNear, holding, joinPool, leavePool, listAgents, parseNear, position, priceChangePct,
   recentSessions, registerAgent, sessionRecord, styleWords, validAgentId,
-  type AgentCard, type Holding, type Position, type SessionSummary,
+  type AgentCard, type Holding, type Position, type SessionRecord, type SessionSummary, withdrawPosition,
 } from '../../near/backing';
 import { replaySettled, toAgentReplay } from '../../near/replay';
 import { openCrossChain } from './backingIntents';
@@ -32,6 +32,7 @@ const state = {
   positions: new Map<string, Position>(),
   earned: '0',
   sessions: [] as SessionSummary[],
+  records: new Map<string, SessionRecord>(),
   /** A wallet action in progress ("Confirm in your wallet…"), or its result. */
   note: '',
 };
@@ -49,6 +50,10 @@ async function load(): Promise<void> {
     const [cards, sessions] = await Promise.all([listAgents(), recentSessions(12)]);
     state.cards = cards;
     state.sessions = sessions;
+    // Each listed session's record, for its results (cached: settled records don't change).
+    const missing = sessions.filter((s) => !state.records.has(s.session_id));
+    const recs = await Promise.all(missing.map((s) => sessionRecord(s.session_id).catch(() => null)));
+    missing.forEach((s, i) => recs[i] && state.records.set(s.session_id, recs[i]));
     state.holdings.clear();
     state.positions.clear();
     state.earned = '0';
@@ -93,22 +98,41 @@ async function connect(): Promise<void> {
 
 // ------------------------------------------------------------------ views
 
+/** Your profit or loss on a pool stake: value + taken out − put in. Null until the contract reports cost basis. */
+function holdingPnl(h: Holding | undefined): bigint | null {
+  if (!h || h.deposited == null) return null;
+  return big(h.value) + big(h.pending_in) + big(h.withdrawn) - big(h.deposited);
+}
+
+/** Your P&L on an agent: the pool stake plus your own (vault) position. Null when neither is known. */
+function agentPnl(id: string): bigint | null {
+  const hp = holdingPnl(state.holdings.get(id));
+  const p = state.positions.get(id);
+  const vp = p && (big(p.deposited) > 0n || big(p.net) !== 0n) ? big(p.net) : null;
+  return hp === null && vp === null ? null : (hp ?? 0n) + (vp ?? 0n);
+}
+
+const pnlText = (v: bigint | null): string => (v === null ? '—' : `<span class="${tone(v)}">${signedNear(v)}</span>`);
+const staked = (h: Holding | undefined): boolean => !!h && big(h.shares) > 0n;
+
 function proCard(c: AgentCard, i: number): string {
   const a = c.agent;
   const p = c.pool;
   const h = state.holdings.get(a.id);
   const pct = p ? priceChangePct(p.price) : 0;
-  const stake = h && big(h.shares) > 0n ? `${formatNear(h.value)} NEAR` : h && big(h.pending_in) > 0n ? 'Joining' : '—';
+  const mine = staked(h);
+  const stake = mine ? `${formatNear(h!.value)}` : h && big(h.pending_in) > 0n ? 'Joining' : '—';
   const playing = p && big(p.at_table) > 0n;
   const stats = [
     [p ? `${formatNear(p.value, 3)}` : '0', 'NEAR in pool'],
-    [p ? `<span class="${tone(pct)}">${pct > 0 ? '+' : ''}${pct.toFixed(1)}%</span>` : '—', 'since start'],
-    [fmt(a.sessions), 'sessions'],
+    [p ? `<span class="${tone(pct)}">${pct > 0 ? '+' : ''}${pct.toFixed(1)}%</span>` : '—', 'pool since start'],
     [stake, 'your stake'],
+    [mine || state.positions.has(a.id) ? pnlText(agentPnl(a.id)) : '—', 'your P&amp;L'],
   ].map(([v, l]) => `<div><b>${v}</b><div class="v2-xs v2-mut">${l}</div></div>`).join('');
-  const action = btn(h && big(h.shares) > 0n ? 'Add more' : 'Back', 'bk-join', { h: 'gold', c: 'w', v: i });
-  const leave = h && big(h.shares) > 0n ? btn('Leave', 'bk-leave', { h: 'ghost', c: 'sm', v: i }) : '';
-  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(a.id)}</b><div class="v2-xs v2-mut v2-ellip">by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div>${leave}</div><span class="v2-pill" style="width:max-content">${esc(styleWords(a.tight, a.aggro))}</span><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div>${action}${btn('From another chain', 'bk-xchain', { h: 'ghost', c: 'sm w', v: i })}</div>`;
+  const leaving = h && big(h.pending_out_shares) > 0n;
+  const action = btn(mine ? 'Add stake' : 'Stake', 'bk-join', { h: 'gold', c: 'v2-grow', v: i })
+    + (mine ? btn(leaving ? 'Withdrawing…' : 'Withdraw', 'bk-leave', { h: 'violet', c: 'v2-grow', v: i, dis: !!leaving }) : '');
+  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(a.id)}</b><div class="v2-xs v2-mut v2-ellip">by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div></div><span class="v2-pill" style="width:max-content">${esc(styleWords(a.tight, a.aggro))}</span><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div><div class="v2-row" style="gap:.4em">${action}</div>${btn('Stake from another chain', 'bk-xchain', { h: 'ghost', c: 'sm w', v: i })}</div>`;
 }
 
 function prosView(): string {
@@ -120,33 +144,74 @@ function mineView(): string {
   const listBtn = btn(`${ico('plus', 0.9)} List your agent`, 'bk-register', { h: 'violet' });
   if (!state.account)
     return `<div class="v2-bk-body"><div class="v2-empty">${ico('robot', 5)}Connect a NEAR wallet to see your stakes and list an agent.${btn('Connect NEAR wallet', 'bk-connect', { h: 'gold' })}</div></div>`;
+  let total = 0n;
+  let pnlSum: bigint | null = null;
   const rows = state.cards
-    .map(({ agent }) => {
+    .map(({ agent }, i) => {
       const h = state.holdings.get(agent.id);
       const p = state.positions.get(agent.id);
-      const parts: string[] = [];
-      if (h && big(h.shares) > 0n) parts.push(`${formatNear(h.value)} NEAR in the pool`);
-      if (h && big(h.pending_in) > 0n) parts.push(`${formatNear(h.pending_in)} NEAR joining after this session`);
-      if (h && big(h.pending_out_shares) > 0n) parts.push('leaving after this session');
-      if (p && big(p.balance) + big(p.at_table) > 0n) parts.push(`${formatNear(big(p.balance) + big(p.at_table))} NEAR backed on your own, <b class="${tone(big(p.net))}">${signedNear(big(p.net))}</b>`);
-      return parts.length ? `<div class="v2-card v2-row v2-wrap"><b class="v2-grow">${esc(agent.id)}</b><span class="v2-sm">${parts.join(' · ')}</span></div>` : '';
+      const inPool = staked(h) ? big(h!.value) : 0n;
+      const own = p ? big(p.balance) + big(p.at_table) : 0n;
+      const joining = h ? big(h.pending_in) : 0n;
+      if (inPool + own + joining === 0n && !(h && big(h.pending_out_shares) > 0n)) return '';
+      total += inPool + own + joining;
+      const pnl = agentPnl(agent.id);
+      if (pnl !== null) pnlSum = (pnlSum ?? 0n) + pnl;
+      const notes: string[] = [];
+      if (joining > 0n) notes.push(`${formatNear(joining)} NEAR joins after this session`);
+      if (h && big(h.pending_out_shares) > 0n) notes.push('withdrawing after this session');
+      if (own > 0n) notes.push(`${formatNear(own)} NEAR backed on your own${p && big(p.at_table) > 0n ? ' (part at a table)' : ''}`);
+      const actions = (staked(h) && !(big(h!.pending_out_shares) > 0n) ? btn('Withdraw', 'bk-leave', { h: 'violet', c: 'sm', v: i }) : '')
+        + (p && big(p.balance) > 0n ? btn('Withdraw own', 'bk-vwithdraw', { h: 'ghost', c: 'sm', v: i }) : '')
+        + btn('Add stake', 'bk-join', { h: 'gold', c: 'sm', v: i });
+      return `<div class="v2-bk-st v2-ag-row"><div><b>${esc(agent.id)}</b>${notes.length ? `<div class="v2-xs v2-mut">${notes.join(' · ')}</div>` : ''}</div><span class="v2-num"><span class="v2-ag-k">Stake </span>${formatNear(inPool + own + joining)} NEAR</span><b class="v2-num"><span class="v2-ag-k">P&amp;L </span>${pnlText(pnl)}</b><span class="v2-row" style="gap:.35em;justify-content:flex-end">${actions}</span></div>`;
     })
     .join('');
   const mine = state.cards.filter((c) => c.agent.owner === state.account);
   const earned = big(state.earned);
-  const tiles = `<div class="v2-row v2-ag-tiles"><div class="v2-card v2-grow"><b style="font-size:1.5em">${formatNear(earned)} NEAR</b><div class="v2-xs v2-mut">Earned from your agents (8% of the profit they make backers)</div>${earned > 0n ? btn('Claim', 'bk-claim', { h: 'gold', c: 'sm' }) : ''}</div><div class="v2-card v2-grow"><b style="font-size:1.5em">${mine.length}</b><div class="v2-xs v2-mut">Agents you listed${mine.length ? `: ${mine.map((c) => esc(c.agent.id)).join(', ')}` : ''}</div>${listBtn}</div></div>`;
-  return `<div class="v2-col v2-scroll v2-bk-body">${tiles}${rows || `<div class="v2-empty">You haven't backed an agent yet.${btn('Browse agents', 'bk-view', { h: 'gold', v: 'pros' })}</div>`}</div>`;
+  const tile = (v: string, l: string, extra = '') => `<div class="v2-card v2-grow"><b style="font-size:1.5em">${v}</b><div class="v2-xs v2-mut">${l}</div>${extra}</div>`;
+  const tiles = `<div class="v2-row v2-wrap v2-ag-tiles">${tile(`${formatNear(total)} NEAR`, 'Staked on agents')}${tile(pnlText(pnlSum), 'Your P&amp;L')}${tile(`${formatNear(earned)} NEAR`, 'Earned from your agents (8% of the profit they make backers)', earned > 0n ? btn('Claim', 'bk-claim', { h: 'gold', c: 'sm' }) : '')}${tile(String(mine.length), `Agents you listed${mine.length ? `: ${mine.map((c) => esc(c.agent.id)).join(', ')}` : ''}`, listBtn)}</div>`;
+  const table = rows
+    ? `<div class="v2-bk-st v2-ag-hdr"><span>Agent</span><span>Stake</span><span>P&amp;L</span><span></span></div>${rows}<div class="v2-xs v2-mut">P&amp;L is what your stake is worth now plus what you took out, minus what you put in.</div>`
+    : `<div class="v2-empty">You haven't staked on an agent yet.${btn('Browse agents', 'bk-view', { h: 'gold', v: 'pros' })}</div>`;
+  return `<div class="v2-col v2-scroll v2-bk-body">${tiles}${table}</div>`;
 }
+
+/** Each seat's result in a session, in NEAR (cash-out − buy-in), from its settled payouts. */
+function seatNets(rec: SessionRecord | null | undefined): { agent: string; net: bigint }[] | null {
+  return rec?.payouts?.seats.map((p) => ({ agent: p.agent, net: big(p.cash_out) - big(p.buy_in) })) ?? null;
+}
+
+/** Agents you own or stake on. */
+const yours = (id: string): boolean =>
+  state.cards.some((c) => c.agent.id === id && c.agent.owner === state.account) || staked(state.holdings.get(id)) || state.positions.has(id);
 
 function sessionsView(): string {
   if (!state.sessions.length) return `<div class="v2-bk-body"><div class="v2-empty">${ico('eye', 5)}No settled sessions yet. They show here once an agent session settles on NEAR.</div></div>`;
+  let hands = 0;
+  let moved = 0n;
+  let yourNet: bigint | null = null;
   const rows = state.sessions
     .map((s, i) => {
+      hands += s.hands;
       const when = new Date(Number(big(s.settled_at) / 1_000_000n));
-      return `<div class="v2-card v2-row v2-wrap"><b>${esc(s.session_id)}</b><span class="v2-grow v2-sm v2-mut">${esc(s.agents.join(' · '))}</span><span class="v2-sm">${s.hands} hands · ${esc(when.toLocaleString())}</span>${btn(`${ico('eye', 0.9)} Watch`, 'bk-watch', { h: 'violet', c: 'sm', v: i })}</div>`;
+      const nets = seatNets(state.records.get(s.session_id));
+      let result = '<span class="v2-mut">—</span>';
+      if (nets) {
+        const top = [...nets].sort((a, b) => (b.net > a.net ? 1 : b.net < a.net ? -1 : 0))[0];
+        moved += nets.reduce((t, n) => t + (n.net > 0n ? n.net : 0n), 0n);
+        for (const n of nets) if (yours(n.agent)) yourNet = (yourNet ?? 0n) + n.net;
+        result = top && top.net !== 0n
+          ? `${esc(top.agent)} <b class="${tone(top.net)}">${signedNear(top.net)}</b>`
+          : '<span class="v2-mut">Even</span>';
+      }
+      const agents = s.agents.map((a) => (yours(a) ? `<b class="v2-goldc">${esc(a)}</b>` : esc(a))).join(' vs ');
+      return `<div class="v2-bk-ss v2-ag-row"><b><span class="v2-ag-k">Session </span>${esc(s.session_id)}</b><span class="v2-ellip">${agents}</span><span class="v2-num"><span class="v2-ag-k">Hands </span>${s.hands}</span><span class="v2-sm">${esc(when.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))}</span><span><span class="v2-ag-k">Top </span>${result}</span><span style="justify-self:end">${btn(`${ico('eye', 0.9)} Watch`, 'bk-watch', { h: 'violet', c: 'sm', v: i })}</span></div>`;
     })
     .join('');
-  return `<div class="v2-col v2-scroll v2-bk-body">${rows}<div class="v2-xs v2-mut">Watch re-deals every hand in your browser from the dealer's randomness proof and replays each bet, then checks the final stacks against what the contract paid.</div></div>`;
+  const tile = (v: string, l: string) => `<div class="v2-card v2-grow"><b style="font-size:1.5em">${v}</b><div class="v2-sm v2-mut">${l}</div></div>`;
+  const tiles = `<div class="v2-row v2-wrap v2-ag-tiles">${tile(String(state.sessions.length), 'Sessions')}${tile(fmt(hands), 'Total hands')}${tile(`${formatNear(moved)} NEAR`, 'Won across seats')}${tile(pnlText(yourNet), 'Your agents, net')}</div>`;
+  return `<div class="v2-col v2-scroll v2-bk-body">${tiles}<div class="v2-bk-ss v2-ag-hdr"><span>Session</span><span>Agents</span><span>Hands</span><span>Settled</span><span>Top result</span><span></span></div>${rows}<div class="v2-xs v2-mut">Results are each seat's cash-out minus buy-in, before fees. Watch re-deals every hand in your browser from the dealer's randomness proof and replays each bet, then checks the final stacks against what the contract paid.</div></div>`;
 }
 
 // ------------------------------------------------------------------ actions
@@ -157,29 +222,63 @@ function join(i: number): void {
   if (!state.account) return void connect();
   const playing = c.pool && big(c.pool.at_table) > 0n;
   const other = `<div class="v2-xs v2-mut" style="margin-top:.5em">Holding crypto on another chain? ${btn('See a live quote', 'bk-xchain', { h: 'ghost', c: 'sm', v: i })}</div>`;
-  prompt(`Back ${c.agent.id}`, (playing
+  prompt(`Stake on ${c.agent.id}`, (playing
     ? 'The pool is playing a session now: your NEAR joins at the value it settles at.'
     : "You get pool shares at today's value. At most 25% of the pool plays in any one session. Backers get 90% of the profit; the pro 8%, Nomad 2%; never of losses.") + other,
-  'Amount in NEAR, e.g. 0.5', '', 'Join pool', (v) => {
+  'Amount in NEAR, e.g. 0.5', '', 'Stake', (v) => {
     let amount: bigint;
     try {
       amount = parseNear(v);
       if (amount <= 0n) throw new Error('Enter an amount above 0.');
     } catch (e) {
-      return ui().message('Back ' + esc(c.agent.id), esc((e as Error).message));
+      return ui().message('Stake on ' + esc(c.agent.id), esc((e as Error).message));
     }
-    void walletAct('Confirm in your wallet to join the pool…', `You joined ${c.agent.id}'s pool.`, () => joinPool(c.agent.id, amount));
+    void walletAct('Confirm in your wallet to stake…', `You staked ${formatNear(amount)} NEAR on ${c.agent.id}.`, () => joinPool(c.agent.id, amount));
   }, 14);
 }
 
+/** Withdraw some or all of a pool stake: the NEAR amount becomes pool shares at today's price. */
 function leave(i: number): void {
   const c = state.cards[i];
   const h = c && state.holdings.get(c.agent.id);
-  if (!c || !h) return;
+  if (!c || !h || !staked(h)) return;
+  const value = big(h.value);
   const playing = c.pool && big(c.pool.at_table) > 0n;
-  ui().message(`Leave ${esc(c.agent.id)}?`, `Your stake is worth ${formatNear(h.value)} NEAR.${playing ? ' The pool is playing now: you leave at the value it settles at.' : ''} It goes back to your wallet.`, 'Leave pool', () => {
-    void walletAct('Confirm in your wallet to leave the pool…', playing ? 'Leaving after this session settles.' : `You left ${c.agent.id}'s pool.`, () => leavePool(c.agent.id, h.shares));
-  }, 'Cancel', undefined, 'red');
+  const title = `Withdraw from ${esc(c.agent.id)}`;
+  prompt(title, `Your stake is worth ${formatNear(value)} NEAR. It goes back to your wallet${playing ? ' once the session playing now settles, at the value it settles at' : ''}.`, 'Amount in NEAR', formatNear(value, 24), 'Withdraw', (v) => {
+    let amount: bigint;
+    try {
+      amount = parseNear(v);
+      if (amount <= 0n) throw new Error('Enter an amount above 0.');
+      if (amount > value) throw new Error(`Your stake is worth ${formatNear(value)} NEAR.`);
+    } catch (e) {
+      return ui().message(title, esc((e as Error).message));
+    }
+    // All of it, or the matching share of it (rounded down, so it never asks for more than you hold).
+    const shares = amount >= value || value === 0n ? big(h.shares) : (big(h.shares) * amount) / value;
+    if (shares <= 0n) return ui().message(title, 'That amount is too small to withdraw.');
+    void walletAct('Confirm in your wallet to withdraw…', playing ? 'Withdrawing after this session settles.' : `Withdrew about ${formatNear(amount)} NEAR to your wallet.`, () => leavePool(c.agent.id, shares.toString()));
+  }, 30);
+}
+
+/** Withdraw your own (vault) position's idle balance. */
+function withdrawOwn(i: number): void {
+  const c = state.cards[i];
+  const p = c && state.positions.get(c.agent.id);
+  if (!c || !p) return;
+  const idle = big(p.balance);
+  const title = `Withdraw from ${esc(c.agent.id)}`;
+  if (idle <= 0n) return ui().message(title, 'Nothing idle to withdraw: it is at a table. It comes back when the session settles.');
+  prompt(title, `${formatNear(idle)} NEAR is idle in your own position and can go back to your wallet.`, 'Amount in NEAR', formatNear(idle, 24), 'Withdraw', (v) => {
+    let amount: bigint;
+    try {
+      amount = parseNear(v);
+      if (amount <= 0n || amount > idle) throw new Error(`Enter up to ${formatNear(idle)} NEAR.`);
+    } catch (e) {
+      return ui().message(title, esc((e as Error).message));
+    }
+    void walletAct('Confirm in your wallet to withdraw…', `Withdrew ${formatNear(amount)} NEAR to your wallet.`, () => withdrawPosition(c.agent.id, amount));
+  }, 30);
 }
 
 /** The Strategy tab's settings as the contract's profile: tight (plays few hands) and aggro, 0–100. */
@@ -262,6 +361,7 @@ export function backingScreen(header: (on: string) => string): ScreenDef {
       'bk-connect': () => void connect(),
       'bk-join': (v) => join(Number(v)),
       'bk-leave': (v) => leave(Number(v)),
+      'bk-vwithdraw': (v) => withdrawOwn(Number(v)),
       'bk-xchain': (v) => {
         const c = state.cards[Number(v)];
         if (c) openCrossChain(c.agent.id, () => join(Number(v)));

@@ -146,11 +146,11 @@ export function openCrossChain(agentId: string, backWithNear: () => void): void 
   }
   const chainName = (): string => picked()?.chainName ?? 'another chain';
   ui().openDialog({
-    title: `Back ${esc(agentId)} from another chain`,
+    title: `Stake on ${esc(agentId)} from another chain`,
     wide: true,
     body,
     get buttons() {
-      return btn('Back with NEAR', 'ix-near', { h: 'ghost' }) + btn(`Fund from ${esc(chainName())}`, 'ix-fund', { h: 'gold', dis: true, title: 'Mainnet only: Nomad runs on NEAR testnet' });
+      return btn('Stake with NEAR', 'ix-near', { h: 'ghost' }) + btn(`Fund from ${esc(chainName())}`, 'ix-fund', { h: 'gold', dis: true, title: 'Mainnet only: Nomad runs on NEAR testnet' });
     },
     actions: {
       'ix-chain': (v) => {

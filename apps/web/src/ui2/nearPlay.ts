@@ -198,10 +198,20 @@ export async function nearSitAt(tableId: string): Promise<void> {
   const c = table?.config ?? t.config;
   if (!table) return ui().message(esc(t.name), isHostedTableId(t.id) ? "This table wasn't found on NEAR." : "This table isn't open on NEAR yet.");
   if (table.closed) return ui().message(esc(t.name), 'This table is closed.');
-  prompt(`Buy in: ${t.name}`, `Blinds ${c.small_blind} / ${c.big_blind}. Buy in for ${formatN0(c.min_buy_in)} to ${formatN0(c.max_buy_in)} chips (${nearOf(c.min_buy_in)} to ${nearOf(c.max_buy_in)} NEAR; a chip is 0.001 NEAR). ${rakeBps() / 100}% goes to the house; you sit with the rest. Your game balance (${formatNear(balance)} NEAR) is used first, then your wallet.`, 'Chips', String(c.min_buy_in), 'Buy in & sit', (v) => {
-    const err = buyInError(v, c, table, seat, chipYocto());
+  const min = nearOf(c.min_buy_in);
+  const max = nearOf(c.max_buy_in);
+  const fromBalance = balance > 0n ? ` Paid from your game balance (${formatNear(balance)} NEAR) first.` : '';
+  prompt(`Buy in: ${t.name}`, `Buy in with ${min} to ${max} NEAR. ${rakeBps() / 100}% house fee.${fromBalance}`, 'Amount in NEAR', min, 'Buy in & sit', (v) => {
+    let chips: number;
+    try {
+      chips = yoctoToChips(parseNear(v), chipYocto());
+    } catch {
+      return ui().message(`Buy in: ${esc(t.name)}`, 'Enter an amount in NEAR, e.g. ' + esc(min) + '.');
+    }
+    if (chips < c.min_buy_in || chips > c.max_buy_in) return ui().message(`Buy in: ${esc(t.name)}`, `Buy in with ${esc(min)} to ${esc(max)} NEAR.`);
+    const err = buyInError(String(chips), c, table, seat, chipYocto());
     if (err) return ui().message(`Buy in: ${esc(t.name)}`, esc(err));
-    const plan = buyInPlan(Number(v.trim()), balance, rakeBps(), chipYocto());
+    const plan = buyInPlan(chips, balance, rakeBps(), chipYocto());
     void (async () => {
       const ok = await send(r.local, plan.attach > 0n ? `Confirm the buy-in in your wallet (${formatNear(plan.attach)} NEAR from the wallet)…` : 'Confirm the buy-in in your wallet…', 'Bought in. Taking your seat…', () => buyIn(t.id, plan));
       if (!ok) return;
@@ -209,7 +219,7 @@ export async function nearSitAt(tableId: string): Promise<void> {
       if (!now) return ui().message('NEAR', "The buy-in went through but NEAR hasn't shown your seat yet. Wait a moment, then sit again: you'll go straight in.");
       await join(t, yoctoToChips(now.locked, chipYocto()));
     })();
-  }, 6);
+  }, 14);
 }
 
 // ------------------------------------------------------------------ hosted tables

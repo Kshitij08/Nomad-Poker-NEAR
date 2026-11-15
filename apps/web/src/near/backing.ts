@@ -16,7 +16,8 @@ const YOCTO = 10n ** 24n;
 export type Agent = { id: string; owner: string; tight: number; aggro: number; sessions: number; hands: number; net_chips: number };
 export type Pool = { shares: string; value: string; price: string; hwm_price: string; at_table: string; max_buy_in_bps: number; sessions: number; pending_in: string };
 export type AgentCard = { agent: Agent; pool: Pool | null };
-export type Holding = { shares: string; value: string; pending_in: string; pending_out_shares: string };
+/** `deposited` / `withdrawn` (yoctoNEAR, all time) come with the contract's cost-basis views; P&L shows once they do. */
+export type Holding = { shares: string; value: string; pending_in: string; pending_out_shares: string; deposited?: string; withdrawn?: string };
 export type Position = { balance: string; at_table: string; net: string; deposited: string; sessions: number };
 export type SessionSummary = { session_id: string; settled_at: string; hands: number; agents: string[]; end_stacks: number[] };
 export type Payout = { backer: string | null; agent: string; pro: string; buy_in: string; cash_out: string; pro_fee: string; platform_fee: string; to_backer: string };
@@ -48,6 +49,8 @@ export const earnings = (account: string) => view<string>('get_earnings', { acco
 
 export const joinPool = (agentId: string, yocto: bigint) => nearCall(NEAR_CONTRACT, 'join_pool', { agent_id: agentId }, yocto, 30n);
 export const leavePool = (agentId: string, shares: string) => nearCall(NEAR_CONTRACT, 'leave_pool', { agent_id: agentId, shares }, 0n, 50n);
+/** Takes NEAR back out of your own (vault) position: only its idle balance, not what is at a table. */
+export const withdrawPosition = (agentId: string, yocto: bigint) => nearCall(NEAR_CONTRACT, 'withdraw', { agent_id: agentId, amount: yocto.toString() }, 0n, 50n);
 export const claimEarnings = () => nearCall(NEAR_CONTRACT, 'claim_earnings', {}, 0n, 30n);
 export const registerAgent = (agentId: string, tight: number, aggro: number) => nearCall(NEAR_CONTRACT, 'register_agent', { agent_id: agentId, tight, aggro }, 0n, 30n);
 

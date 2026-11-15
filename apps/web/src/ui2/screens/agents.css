@@ -113,3 +113,12 @@ html[data-orient='portrait'] .v2-ag-main .v2-tab { padding: 0 1em; }
 .v2-bk { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.8em; }
 .v2-bk-body { flex: 1; min-height: 0; gap: 0.6em; }
 html[data-orient='portrait'] .v2-bk { flex: 0 0 auto; }
+/* Back a pro: My stakes and Sessions tables (the History tab's row look) */
+.v2-bk-st, .v2-bk-ss { display: grid; gap: 0.6em; align-items: center; padding: 0.55em 1em; width: 100%; text-align: left; }
+.v2-bk-st { grid-template-columns: minmax(8em, 1.4fr) 9em 9em minmax(14em, 1.6fr); }
+.v2-bk-ss { grid-template-columns: 8em minmax(8em, 1.6fr) 4.5em 8em minmax(9em, 1.4fr) 7em; }
+.v2-bk-st.v2-ag-row:hover, .v2-bk-ss.v2-ag-row:hover { border-color: color-mix(in srgb, var(--v2-accent) 35%, transparent); }
+html[data-orient='portrait'] .v2-bk-st.v2-ag-row, html[data-orient='portrait'] .v2-bk-ss.v2-ag-row { grid-template-columns: 1fr 1fr; gap: 0.3em 0.8em; font-size: 0.95em; }
+html[data-orient='portrait'] .v2-bk-st.v2-ag-row > :first-child, html[data-orient='portrait'] .v2-bk-st.v2-ag-row > :last-child,
+html[data-orient='portrait'] .v2-bk-ss.v2-ag-row > :nth-child(2), html[data-orient='portrait'] .v2-bk-ss.v2-ag-row > :nth-child(5) { grid-column: 1 / -1; }
+html[data-orient='portrait'] .v2-bk-st.v2-ag-row > :last-child { justify-content: flex-start !important; }

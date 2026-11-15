@@ -158,3 +158,9 @@ html[data-orient='portrait'] .v2-tcode { padding: 0.8em; text-align: center; }
 html[data-orient='portrait'] .v2-codew { flex-direction: column; width: 100%; }
 html[data-orient='portrait'] .v2-codebox { gap: 0.35em; }
 html[data-orient='portrait'] .v2-codec { width: 2.3em; height: 2.9em; font-size: 1.4em; }
+/* Host summary: the rows scroll if they must; the note and Create Tournament stay pinned at the bottom. */
+.v2-hsum { overflow: hidden; }
+.v2-hsum-list { flex: 1; min-height: 0; gap: 0.3em; }
+.v2-hsum .v2-hcta-d { flex: 0 0 auto; }
+html[data-orient='portrait'] .v2-hsum { overflow: visible; }
+html[data-orient='portrait'] .v2-hsum-list { flex: 0 0 auto; }
