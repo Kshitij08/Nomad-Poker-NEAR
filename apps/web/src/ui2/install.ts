@@ -1,18 +1,15 @@
 /**
- * Redesign v2 (Screen Atlas). Installs after the Nomad menu and takes over the Unity screens it has a v2 version of:
- * when the menu host is asked to show one of those (by code or by the art's own SetActive navigation), the v2 layer
- * shows its screen instead and every Unity screen is hidden. Screens the atlas marks "Unchanged" (Login, Lucky Slot,
- * the message / busy dialogs…) stay Unity's; the v2 layer hides while they are up.
+ * Redesign v2 (Screen Atlas): the game's menu. Installs after the Nomad menu host (src/menu/host.ts) and draws every
+ * screen it is asked to show: each v2 screen lists the screen names it answers to (`replaces`: the old Unity menu's
+ * names, kept as the app's screen ids), and host.show(name) opens it.
  */
 import type { AppContext } from '../app/app';
 // Base v2 styles first: the screens' own stylesheets (imported by the screen modules below) override them.
 import './ui2.css';
 import type { NomadHost } from '../menu/host';
-import { weeklyAutoPrompt } from '../menu/screens/mainMenu';
 import { V2, type V2Screen } from './core';
 import { PokerSound } from '@nomad/engine';
 import { installPortraitLock } from './portraitLock';
-import { takeOverDialogs } from './globalDialogs';
 import { setUi } from './ctx';
 import { lobbyScreens } from './screens/lobby';
 import { playScreens } from './screens/play';
@@ -31,7 +28,7 @@ declare module '../app/app' {
   }
 }
 
-/** Every v2 screen; `replaces` lists the Unity screens it stands in for. */
+/** Every v2 screen; `replaces` lists the host screen names (the old Unity menu's) that open it. */
 export interface ScreenDef extends V2Screen {
   replaces?: string[];
 }
@@ -40,11 +37,6 @@ export function install(ctx: AppContext): void {
   installPortraitLock();
   const host = ctx.services.nomad;
   if (!host) return;
-  // ?ui=unity keeps the old menus (comparison and fallback).
-  if (typeof location !== 'undefined' && /[?&]ui=unity\b/.test(location.search)) return;
-
-  // Every host dialog (errors, confirms, busy notes, table Settings / Leave) renders as a v2 dialog.
-  takeOverDialogs(host.dialogs);
   const ui = new V2();
   ui.onPress = (kind) => ctx.audio?.play(kind === 'start' ? PokerSound.ButtonStart : PokerSound.ButtonGeneric);
   ctx.services.ui2 = ui;
@@ -72,40 +64,26 @@ export function install(ctx: AppContext): void {
 }
 
 function wire(ctx: AppContext, host: NomadHost, ui: V2, byUnity: Map<string, string>): void {
-  const HIDE_ALL = '__ui2__';
   const origShow = host.show.bind(host);
   const origIsShowing = host.isShowing.bind(host);
   const origGoBack = host.goBack.bind(host);
   const origAttach = host.attach.bind(host);
   const origDetach = host.detach.bind(host);
 
-  // A Unity screen the v2 layer replaces → its v2 screen; any other → Unity (v2 hides).
+  // A screen name → its v2 screen (then the host's onScreenShown hooks and refresh).
   host.show = (name: string) => {
     const id = byUnity.get(name);
-    if (id) {
-      origShow(HIDE_ALL);
-      if (ui.currentId !== id) ui.show(id);
+    if (!id) {
+      console.warn(`[ui2] no screen for '${name}'`);
       return;
     }
-    ui.hide();
+    if (ui.currentId !== id) ui.show(id);
     origShow(name);
   };
-  // The art's own SetActive navigation turns a Unity screen on without host.show: redirect it the same way.
-  for (const [name, id] of byUnity)
-    host.onScreenShown(name, () => {
-      queueMicrotask(() => {
-        origShow(HIDE_ALL);
-        if (ui.currentId !== id) ui.show(id);
-      });
-    });
-  // Partials ask "is Friends showing?" before painting or prompting: answer for the v2 screen too.
+  // "Is Friends showing?": the open v2 screen answers for the names it replaces.
   host.isShowing = (name: string) => {
-    const id = byUnity.get(name);
-    if (id && ui.currentId) {
-      const def = ui.get(ui.currentId) as { replaces?: string[] } | undefined;
-      if (def?.replaces?.includes(name)) return true;
-    }
-    return origIsShowing(name);
+    const def = ui.currentId ? (ui.get(ui.currentId) as { replaces?: string[] } | undefined) : undefined;
+    return !!def?.replaces?.includes(name) || origIsShowing(name);
   };
   // Escape / Android back: v2 dialog, then v2 screen's back target, then the host's own.
   host.goBack = () => {
@@ -123,14 +101,12 @@ function wire(ctx: AppContext, host: NomadHost, ui: V2, byUnity: Map<string, str
     ui.el.remove();
     origDetach();
   };
-  // No pop-ups before the first hand: the weekly reward waits behind the dock's dot.
-  weeklyAutoPrompt.enabled = false;
   // Weekly rewards and missions open as v2 pages.
   host.actions.openWeeklyRewards = () => host.show('__v2:weekly');
   byUnity.set('__v2:weekly', 'weekly');
   host.actions.openMissions = () => host.show('LevelRewards');
   // Data changes repaint the open v2 screen.
-  for (const ev of ['wallet:changed', 'account:changed', 'progression:changed', 'retention:changed', 'stake:changed', 'engagement:changed', 'agents:changed', 'web3:wallet-changed', 'tournaments:ready'])
+  for (const ev of ['wallet:changed', 'account:changed', 'progression:changed', 'retention:changed', 'stake:changed', 'engagement:changed', 'agents:changed','tournaments:ready'])
     ctx.events.on(ev, () => ui.render());
   host.onRefresh(() => ui.render());
 }

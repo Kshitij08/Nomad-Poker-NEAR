@@ -3,7 +3,7 @@
  * Core/Leaderboards, Game/Leaderboards, Analytics).
  *
  * Services (see services.ts): wallet, account (replaces the base LocalAccount), leaderboards, friends, avatars,
- * telemetry, economy. Nomad partials (nomad/social.ts): Friends, PartyMenu, Leaderboard. Screen: 'friends' (FriendsHud's
+ * telemetry, economy. Screen: 'friends' (FriendsHud's
  * sheet + avatar picker, overlay). The friends invite toast is a persistent layer above the screens.
  *
  * Backend: the Nomad server when the account module has one (ctx.services.nomadApi — it installs first): account,
@@ -26,7 +26,6 @@ import { Friends } from './social/friends';
 import { AccountAvatar } from './social/playerAvatar';
 import { VirtualEconomy } from './virtualEconomy';
 import { FriendsHud } from './ui/friendsHud';
-import { registerSocialPartials } from './nomad/social';
 
 export function install(ctx: AppContext): void {
   const session = ctx.services.nomadApi ?? null;
@@ -94,7 +93,6 @@ export function install(ctx: AppContext): void {
   friendsUi.openPanel = () => hud.openPanel();
   ctx.router.register('friends', (c) => hud.screen(c));
   // NomadUiHost.Social (Friends, Party) + the Leaderboard screen, on the menu module's host.
-  registerSocialPartials();
 
   void account.startUpAsync();
 

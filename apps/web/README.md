@@ -83,7 +83,8 @@ and the operator command that makes it one (`node infra/add-admin.mjs <stage> <p
 | `src/hud/` | HTML/CSS HUD over the canvas (seats, pot, betting panel) and `unityUi.ts`, the uGUI → DOM renderer every screen uses. |
 | `src/app/`, `src/modules.ts`, `src/main.ts` | App shell: screens, router, services registry, event bus; module install order; boot. |
 | `src/table/tableStage.ts`, `tableScreen.ts` | The persistent 3D table and the table screen; a `TableSession` (offline, network, tournament, PER, replay) drives it. |
-| `src/menu/` | The Nomad menu (PokerUI.unity) and NomadUiHost's binding model; other modules add their partials (`src/menu/README.md`). |
+| `src/ui2/` | The game's menu (Redesign v2): every menu screen, the dialog layer and the table chrome. |
+| `src/menu/` | The menu host the v2 screens run on (screen names, refresh, dialogs, stakes, Coins Quick Play) and the table's Leave / Settings chrome (`src/menu/README.md`). The Unity-port menu screens (PokerUI.unity) were removed. |
 | `src/theming/`, `src/economy/`, `src/retention/`, `src/agents/`, `src/tournaments/`, `src/net/`, `src/near/` | One module per Unity feature area, each with its services, screens and Nomad partial. |
 | `server/` | Local WebSocket table server (Node + tsx) running the shared engine; tournament runner in `server/tournament/` (`server/README.md`). |
 | `src/data/*.json` | Data extracted from `Assets/Test/Test.unity` and its prefabs, clips and FBX. Regenerate it with the tools below. |
@@ -102,7 +103,6 @@ node web/tools/extract-unity-scene.mjs --copy   # splines, slots, camera, dealer
 node web/tools/export-card-mesh.mjs             # card mesh from Card Deck.FBX → src/data/card-mesh.json
 node web/tools/extract-unity-hud.mjs            # HUD canvases, UI clips, sprites, fonts → src/data/unity-hud.json, ui-anims.json, public/assets/ui
 node web/tools/extract-unity-tokens.mjs         # pot token piles (PotView + Token_N prefabs) → src/data/pot-tokens.json, public/assets/tokens (run after the HUD and scene extractors)
-node web/tools/extract-unity-menu.mjs           # Nomad menu screens (PokerUI.unity) → src/data/menu-ui.json, public/assets/menu
 node web/tools/extract-unity-themes.mjs         # themes → src/data/theming-themes.json, public/assets/theming
 node web/tools/extract-unity-retention.mjs      # retention UI → src/data/retention-ui.json, public/assets/retention
 node web/tools/extract-economy-ui.mjs           # Friends sheet, login panel → src/data/economy-ui.json, public/assets/economy

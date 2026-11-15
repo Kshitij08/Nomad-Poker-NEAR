@@ -4,7 +4,7 @@
  * card's own bar carries the actions: "Sit down" is Quick Play at that room's stake, "With friends" opens Party.
  */
 import { StakeTableSkin, type Theme } from '../../menu/stakes';
-import { joinFreePlay } from '../../menu/screens/mainMenu';
+import { joinFreePlay } from '../../menu/play';
 import { formatN0, type StakeTier } from '@nomad/engine';
 import { esc, act, btn } from '../core';
 import { ico } from '../icons';

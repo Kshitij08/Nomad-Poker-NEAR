@@ -121,7 +121,7 @@ What it serves, and which web features use it:
 | `POST /api/auth/playfab` (PlayFab ticket → 1-hour JWT), `/api/tournaments…`, `/api/me/tournaments` | Live tournaments (`tournaments/api/apiClient.ts`) | `?tournaments=live&tournamentBackend=<url>` plus `?online=1` |
 | `/internal/tournaments/*` (internal API key) | Tournament table runner in `web/server/tournament` (`POKER_TOURNAMENT_BACKEND_URL`, `POKER_INTERNAL_API_KEY`) | server-side environment only |
 | `/api/agent/start, stop, progress, result, active, history, hands` | Coins Agents (`agents/agentBackend.ts`) | `?agentBackend=<url>` |
-| `/api/strategies…`, `/api/style/twin`, `/api/style/coach` | Market (`menu/screens/market.ts`) | through a `backendApi` service |
+| `/api/strategies…`, `/api/style/twin`, `/api/style/coach` | Agents › Marketplace / My twin / Coach (`ui2/screens/agents.ts`, `menu/market.ts`) | through a `backendApi` service |
 | `/api/party/*`, `/api/quickplay/overflow`, `/internal/*` | Unity dedicated server (VPS) | not used by the web client |
 
 **Gaps found in the code:**

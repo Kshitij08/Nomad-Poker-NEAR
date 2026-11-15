@@ -205,7 +205,7 @@ export class AgentStrategyState {
     }
   }
 
-  // ---- the menu's agentStrategy service shape (src/menu/screens/market.ts AgentStrategyLike)
+  // ---- the menu's agentStrategy service shape (apps/web/src/menu/market.ts AgentStrategyLike)
 
   readonly brainClassic = BRAIN_CLASSIC;
   readonly brainSmart = BRAIN_SMART;

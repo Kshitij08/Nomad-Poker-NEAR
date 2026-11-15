@@ -136,5 +136,5 @@ rule: centred panels scale up to fill the column.
 
 `table/tableStage.ts` (construct `PortraitTable`, call `apply`/`frame`), `hud/worldCanvas.ts` and `three/hudDepth.ts`
 (read `canvasSpace.ts`), `hud/bettingPanel.ts`, `menu/table/nomadTableHud.ts`, `net/chrome/netChrome.ts`,
-`tournaments/ui/retentionDom.ts` (portrait scaler + rects), `menu/ui/canvas.ts`, `web3/ui/ugui.ts`,
+`tournaments/ui/retentionDom.ts` (portrait scaler + rects), `web3/ui/ugui.ts`,
 `retention/ui/retentionUi.ts`, `economy/ui/canvas.ts` (portrait reference + `portraitMenuLayout`), `index.html` (metas).

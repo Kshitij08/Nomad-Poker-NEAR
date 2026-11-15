@@ -1,10 +1,9 @@
 /** Play: Choose your table, Party, Watch; Play for NEAR (nearTables.ts). In On-chain, Tables and Party open Play for NEAR. Atlas: Redesign v2 › Play. */
 import { StakeCatalog, formatN0, type StakeTier } from '@nomad/engine';
-import { joinFreePlay } from '../../menu/screens/mainMenu';
+import { joinFreePlay } from '../../menu/play';
 import { StakeTableSkin, type Theme } from '../../menu/stakes';
-import { MENU_DATA } from '../../menu/data';
 import { assetUrl } from '../../hud/unityUi';
-import { startParty, startWatch } from '../../economy/nomad/social';
+import { startParty, startWatch } from '../../economy/party';
 import { cloudGameServer } from '../../net/serverUrl';
 import { btn, esc, act, input } from '../core';
 import { ico } from '../icons';
@@ -23,10 +22,10 @@ export const ROOMS: { theme: Theme; name: string; color: string }[] = [
 ];
 
 /**
- * Sharper copies of the room art: the menu export is 1541×578 and looked soft on the big room cards (and upscaled 2-3×
+ * The room art, sharper than the Unity menu export (1541×578 looked soft on the big room cards and upscaled 2-3×
  * on phones). These are the same scenes at 2048×768 (theming/) and 2880×1080 (Nomad, 3d/).
  */
-const ROOM_ART_HI: Partial<Record<Theme, string>> = {
+const ROOM_ART: Record<Theme, string> = {
   Default: 'assets/3d/BG.webp',
   Forest: 'assets/theming/Forest/Forest_bg.webp',
   Town: 'assets/theming/Town/Town_bg.webp',
@@ -36,15 +35,8 @@ const ROOM_ART_HI: Partial<Record<Theme, string>> = {
 
 /** The room's table background art (the scene the table plays in), or null. */
 export function roomArt(theme: Theme): string | null {
-  const hi = ROOM_ART_HI[theme];
-  if (hi) return assetUrl(hi);
-  try {
-    const pack = MENU_DATA.themes.find((t) => t.theme === theme);
-    const sp = pack?.tableBackground ? MENU_DATA.sprites[pack.tableBackground] : null;
-    return sp?.file ? assetUrl(sp.file) : null;
-  } catch {
-    return null;
-  }
+  const art = ROOM_ART[theme];
+  return art ? assetUrl(art) : null;
 }
 
 export const bgArt = (theme: Theme, color: string): string => {
@@ -265,7 +257,7 @@ const watch: ScreenDef & { tables: LiveTable[] | null; error: string; timer: Ret
   },
 };
 
-/** Private tables buy in for 500–1,000 Coins (economy/nomad/social.ts PrivateMinBuyIn). */
+/** Private tables buy in for 500–1,000 Coins (economy/party.ts PrivateMinBuyIn). */
 const PARTY_MIN_BUYIN = 500;
 
 export function playScreens(): ScreenDef[] {

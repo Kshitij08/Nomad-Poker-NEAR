@@ -21,8 +21,6 @@ import { StakeSelectScreen } from './screens/stakeSelectScreen';
 import { LuckySlotScreen } from './screens/luckySlotScreen';
 import type { TableProgressTracker } from './tableProgress';
 import type { PokerEvent } from '@nomad/engine/events/pokerEvent';
-import { registerNomadPartial } from '../menu/host';
-import { bindNomadRetention } from './nomadPartial';
 
 declare module '../app/app' {
   interface Services {
@@ -84,7 +82,6 @@ export function install(ctx: AppContext): void {
   svc.openWeeklyRewards = () => push('weekly-reward');
   svc.openMissions = () => push('missions');
   svc.openDailySpin = () => (ctx.services.nomad ? ctx.services.nomad.actions.openDailySpin?.() ?? push('lucky-slot') : push('lucky-slot'));
-  registerNomadPartial((host, c) => bindNomadRetention(host, c));
 
   // Table progress hooks: the table session emits these (PokerClientGame's progression hooks).
   let tracker: TableProgressTracker | null = null;

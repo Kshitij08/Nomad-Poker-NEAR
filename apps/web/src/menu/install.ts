@@ -1,9 +1,6 @@
 import type { AppContext, Screen } from '../app/app';
 import { addTableChrome } from '../table/tableScreen';
 import { NomadHost, registerNomadPartial } from './host';
-import { bindMenu } from './screens/mainMenu';
-import { bindTableSelect } from './screens/tableSelect';
-import { bindMarket } from './screens/market';
 import { nomadTableChrome } from './table/nomadTableHud';
 import { PokerAudio } from './audio';
 import { PokerFunnel } from './funnel';
@@ -12,7 +9,7 @@ import './menu.css';
 
 declare module '../app/app' {
   interface Services {
-    /** The Nomad menu host (NomadUiHost): screens, find / bind, dialogs, onScreenShown. See src/menu/README.md. */
+    /** The Nomad menu host: screen navigation, dialogs, stakes, refresh. See src/menu/README.md. */
     nomad?: NomadHost;
   }
 }
@@ -41,8 +38,8 @@ export function install(ctx: AppContext): void {
   window.addEventListener('pagehide', () => PokerFunnel.quitting());
   const host = new NomadHost(ctx);
   ctx.services.nomad = host;
-  // NomadUiHost.Init: the menu's own binders, then the other modules' partials (registered from their install()).
-  host.init([bindMenu, bindTableSelect, bindMarket]);
+  // The other modules' partials (registered from their install()).
+  host.init();
   ctx.router.register('menu', () => new MenuScreen(host));
   addTableChrome(nomadTableChrome(host));
   (window as unknown as Record<string, unknown>).__nomad = host;
