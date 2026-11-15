@@ -47,6 +47,33 @@ export interface TableEventPayload {
   event: PokerEvent;
 }
 
+/**
+ * The highest level celebrated, per player, in this browser's storage. Keyed by the Nomad player id when signed in
+ * (else one key for local play). Storage that throws (private mode) just keeps nothing.
+ */
+function seenLevelStore(ctx: AppContext): { get(): number; set(level: number): void } {
+  const key = (): string => {
+    const me = (ctx.services as unknown as { nomadApi?: { me?: { player?: { id?: string } } | null } }).nomadApi?.me;
+    return `nomad.levelUpSeen.${me?.player?.id ?? 'local'}`;
+  };
+  return {
+    get() {
+      try {
+        return Number(localStorage.getItem(key())) || 0;
+      } catch {
+        return 0;
+      }
+    },
+    set(level) {
+      try {
+        localStorage.setItem(key(), String(level));
+      } catch {
+        /* nothing kept */
+      }
+    },
+  };
+}
+
 export function install(ctx: AppContext): void {
   const svc = new RetentionService({
     events: ctx.events,
@@ -56,6 +83,7 @@ export function install(ctx: AppContext): void {
     },
   });
   ctx.services.retention = svc;
+  svc.levelUps.seen = seenLevelStore(ctx);
   wireCloud(ctx, svc);
 
   // A Nomad server owns retention (account module): its snapshot is the state, its answers are the rewards, and the

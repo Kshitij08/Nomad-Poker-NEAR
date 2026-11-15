@@ -258,8 +258,19 @@ export class PlayerProgression {
  * LevelUpPanel's static half: baselines the level at install, queues every level gained (Pending), and suppresses
  * celebrations while a cloud reload hydrates the account. `show(level)` is called when the panel should open.
  */
+/** The highest level already celebrated for the current player, kept between visits (null: not kept). */
+export interface SeenLevelStore {
+  get(): number;
+  set(level: number): void;
+}
+
 export class LevelUpQueue {
   readonly pending: number[] = [];
+  /**
+   * Kept between visits: on start the level can be read before the account's balances land, so a level the player
+   * already celebrated could otherwise be queued again on every load.
+   */
+  seen: SeenLevelStore | null = null;
   private lastSeenLevel = -1;
   /**
    * The highest level already reached (celebrated or baselined). A reading can dip for a moment (the wallet is swapped
@@ -317,15 +328,22 @@ export class LevelUpQueue {
       return;
     }
     if (this.lastSeenLevel >= 0 && now > this.highWater) {
-      for (let lv = Math.max(this.lastSeenLevel, this.highWater) + 1; lv <= now; lv++) if (!this.pending.includes(lv)) this.pending.push(lv);
+      const already = this.seen?.get() ?? 0;
+      for (let lv = Math.max(this.lastSeenLevel, this.highWater) + 1; lv <= now; lv++) if (lv > already && !this.pending.includes(lv)) this.pending.push(lv);
       this.highWater = now;
     }
     this.lastSeenLevel = now;
-    if (this.autoShow && !this.showing && this.pending.length > 0) this.show(this.pending.shift()!);
+    if (this.autoShow && !this.showing && this.pending.length > 0) this.show(this.celebrate(this.pending.shift()!));
   }
 
   /** Continue: the next queued level, or null to close. */
   next(): number | null {
-    return this.pending.length > 0 ? this.pending.shift()! : null;
+    return this.pending.length > 0 ? this.celebrate(this.pending.shift()!) : null;
+  }
+
+  /** A level handed to the screen: remembered as celebrated. */
+  private celebrate(level: number): number {
+    if (this.seen && level > this.seen.get()) this.seen.set(level);
+    return level;
   }
 }

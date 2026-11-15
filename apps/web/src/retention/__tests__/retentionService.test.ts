@@ -144,6 +144,29 @@ describe('PlayerProgression', () => {
     expect(shown).toEqual([2]);
     expect(r.levelUps.pending).toEqual([]);
   });
+  it('never celebrates a level again on a later visit, even if start-up reads the level low first', () => {
+    let kept = 0;
+    const seen = { get: () => kept, set: (l: number) => (kept = l) };
+    // First visit: level 2 is reached and celebrated, and remembered.
+    const first = setup();
+    first.r.levelUps.seen = seen;
+    first.r.progression.addXp(100, 'test');
+    expect(first.shown).toEqual([2]);
+    expect(kept).toBe(2);
+    // Next visit: the start-up reading is level 1 (balances not landed yet), then the real level 2 arrives.
+    const again = setup();
+    again.r.levelUps.seen = seen;
+    const xp = again.wallet.xp;
+    again.wallet.xp = 100;
+    again.r.progression.notifyChanged();
+    expect(again.shown).toEqual([]);
+    expect(again.r.levelUps.pending).toEqual([]);
+    // A higher level is still celebrated.
+    again.wallet.xp = xp + 600;
+    again.r.progression.notifyChanged();
+    expect(again.shown.length).toBe(1);
+    expect(kept).toBeGreaterThan(2);
+  });
   it('takes the first server snapshot as the baseline, not as level ups', () => {
     const { r, wallet, shown } = setup();
     const backend = { snapshot: null as unknown, spin: async () => null, claimLogin: async () => null, claimMission: async () => null };
