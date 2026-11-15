@@ -4,10 +4,13 @@
 //   node src/cli.mjs [--table-id live] [--sessions 3] [--hands 30] [--speed 1] [--ahead 1] [--store <file>]
 //
 // Environment (defaults in brackets):
-//   OWNER [nomad-poker.testnet]           settles sessions and owns the OutLayer payment key
-//   TABLE [table.nomad-poker.testnet]     the table contract; its own key opens sessions
+//   OWNER [nomad-poker.testnet]           owns the OutLayer payment key (its key is not needed)
+//   TABLE [table.nomad-poker.testnet]     the table contract
+//   OPERATOR [feeder.nomad-poker.testnet] opens and settles sessions: the account the owner named with set_operator.
+//                                         Its key in NEAR_CREDENTIALS_DIR may be a function-call key limited to
+//                                         open_backed_session, open_session, submit_session, cancel_session.
 //   PROJECT [nomad-poker.testnet/nomad-dealer]
-//   OUTLAYER_API [https://testnet-api.outlayer.ai]   RPC [https://rpc.testnet.near.org]
+//   OUTLAYER_API [https://testnet-api.outlayer.ai]   RPC [https://test.rpc.fastnear.com]
 //   NEAR_CREDENTIALS_DIR [~/.near-credentials/testnet]   keys saved by near-cli
 //   PAYMENT_KEY, or OUTLAYER_KEYS_FILE [~/.outlayer/testnet/payment-keys.json] + KEY_NONCE [1]
 import { readFile } from "node:fs/promises";
@@ -18,6 +21,7 @@ import { loadPoker } from "./poker.mjs";
 import { OutlayerClient } from "./outlayer.mjs";
 import { TableClient, loadKey } from "./table.mjs";
 import { SessionFeeder, FileStore, humanPace } from "./feeder.mjs";
+import { PRESETS } from "./profiles.mjs";
 
 const { values: a } = parseArgs({
   options: {
@@ -38,6 +42,7 @@ const { values: a } = parseArgs({
 const env = process.env;
 const OWNER = env.OWNER ?? "nomad-poker.testnet";
 const TABLE = env.TABLE ?? "table.nomad-poker.testnet";
+const OPERATOR = env.OPERATOR ?? "feeder.nomad-poker.testnet";
 
 async function paymentKey() {
   if (env.PAYMENT_KEY) return env.PAYMENT_KEY;
@@ -53,10 +58,8 @@ const dealer = new OutlayerClient({ api: env.OUTLAYER_API, project: env.PROJECT 
 const table = new TableClient({
   rpc: env.RPC,
   contractId: TABLE,
-  owner: TABLE,
-  ownerKey: await loadKey(TABLE),
-  settler: OWNER,
-  settlerKey: await loadKey(OWNER),
+  operator: OPERATOR,
+  operatorKey: await loadKey(OPERATOR),
 });
 
 const speed = Number(a.speed);
@@ -66,12 +69,8 @@ const backed = a.agents
 const feeder = new SessionFeeder({
   tableId: a["table-id"],
   backed,
-  seats: [
-    { profile: { tight: 10, aggro: 80 }, stack: 300 },
-    { profile: { tight: 30, aggro: 60 }, stack: 300 },
-    { profile: { tight: 5, aggro: 90 }, stack: 300 },
-    { profile: { tight: 40, aggro: 50 }, stack: 300 },
-  ],
+  // An unbacked demo table: the app's four playstyles (v2 profiles, in hundredths).
+  seats: PRESETS.map((profile) => ({ profile, stack: 300 })),
   hands: Number(a.hands),
   ahead: Number(a.ahead),
   dealer,

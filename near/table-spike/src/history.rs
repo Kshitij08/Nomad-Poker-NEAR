@@ -5,12 +5,13 @@
 //! verified. Sessions settled before this module existed have no record here.
 
 use crate::pool::{pools, PoolView};
-use crate::vault::{agents, Agent};
+use crate::strategy::{self, AgentView, ListingView, PoolLimitsView};
+use crate::vault::agents;
 use crate::{Table, TableExt};
 use near_sdk::json_types::U64;
 use near_sdk::serde_json::{json, Value};
 use near_sdk::store::LookupMap;
-use near_sdk::{env, near, require};
+use near_sdk::{env, near};
 
 /// An append-only list kept outside the contract's state struct: a length under its own key plus one entry per
 /// index. (A `store::Vector` keeps its length in the state struct, so it cannot be rebuilt from a prefix.)
@@ -57,13 +58,23 @@ pub(crate) fn index_agent(agent_id: &str) {
 }
 
 /// Keeps a settled session's replay record and adds it to the recent list.
-pub(crate) fn record_session(session_id: &str, request: &str, alpha: &str, signature_hex: &str, actions: &str, stacks: &[u64], payouts: &Option<Value>) {
+///
+/// Everything in the record is by table position. For a session seated from its randomness, `seat_order[p]` is the
+/// listed seat that sat at position p, and `stacks` and `profiles` are already in table order, so a replay needs no
+/// reordering.
+pub(crate) fn record_session(session_id: &str, request: &str, alpha: &str, signature_hex: &str, actions: &str, stacks: &[u64], payouts: &Option<Value>, order: Option<&[usize]>) {
     let req: Value = near_sdk::serde_json::from_str(request).unwrap_or(Value::Null);
+    let by_position = |v: &Value| match (order, v.as_array()) {
+        (Some(o), Some(a)) if a.len() == o.len() => Value::Array(poker_core::session::seat(a, o)),
+        _ => v.clone(),
+    };
     let rec = json!({
         "session_id": session_id,
         "settled_at": U64(env::block_timestamp()),
-        "stacks": req["stacks"],
-        "profiles": req["profiles"],
+        "seating": req["seating"],
+        "seat_order": order,
+        "stacks": by_position(&req["stacks"]),
+        "profiles": by_position(&req["profiles"]),
         "button": req["button"],
         "sb": req["sb"],
         "bb": req["bb"],
@@ -82,8 +93,12 @@ pub(crate) fn record_session(session_id: &str, request: &str, alpha: &str, signa
 
 #[near(serializers = [json])]
 pub struct AgentCard {
-    pub agent: Agent,
+    pub agent: AgentView,
     pub pool: Option<PoolView>,
+    /// Whether new backers may join, and the track record so far.
+    pub listing: ListingView,
+    /// The pool's loss limit and drawdown.
+    pub limits: PoolLimitsView,
 }
 
 #[near]
@@ -93,11 +108,22 @@ impl Table {
         let idx = agent_index();
         let ags = agents();
         let pls = pools();
+        let r = strategy::rules();
         let from = from_index.unwrap_or(0);
         let to = (from + limit.unwrap_or(50).min(100)).min(idx.len());
         (from..to)
             .filter_map(|i| idx.get(i))
-            .filter_map(|id| ags.get(id).map(|a| AgentCard { agent: a.clone(), pool: pls.get(id).map(PoolView::from) }))
+            .filter_map(|id| {
+                let a = ags.get(id)?;
+                let x = strategy::ext_of(a);
+                let pool = pls.get(id);
+                Some(AgentCard {
+                    agent: strategy::agent_view(a, &x),
+                    pool: pool.map(PoolView::from),
+                    listing: strategy::listing_of(a, &x, &r, pool),
+                    limits: strategy::pool_limits_of(a, &pool.cloned().unwrap_or_default()),
+                })
+            })
             .collect()
     }
 
@@ -107,7 +133,7 @@ impl Table {
 
     /// Adds agents registered before the index existed. Owner only; skips ids already listed.
     pub fn index_agents(&mut self, agent_ids: Vec<String>) {
-        require!(env::predecessor_account_id() == self.owner, "owner only");
+        self.require_owner();
         let mut idx = agent_index();
         let ags = agents();
         for id in agent_ids {
