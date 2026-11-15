@@ -52,7 +52,14 @@ export const leavePool = (agentId: string, shares: string) => nearCall(NEAR_CONT
 /** Takes NEAR back out of your own (vault) position: only its idle balance, not what is at a table. */
 export const withdrawPosition = (agentId: string, yocto: bigint) => nearCall(NEAR_CONTRACT, 'withdraw', { agent_id: agentId, amount: yocto.toString() }, 0n, 50n);
 export const claimEarnings = () => nearCall(NEAR_CONTRACT, 'claim_earnings', {}, 0n, 30n);
-export const registerAgent = (agentId: string, tight: number, aggro: number) => nearCall(NEAR_CONTRACT, 'register_agent', { agent_id: agentId, tight, aggro }, 0n, 30n);
+/** One set of the Strategy tab's five numbers, in hundredths (the contract's `Numbers`). */
+export type ProfileNumbers = { fold_below: number; raise_above: number; aggression: number; bluff_chance: number; raise_size: number };
+/** An agent's v2 strategy as the contract stores it: the five numbers, position weight, per-street overrides, style name. */
+export type AgentProfile = ProfileNumbers & { position_weight: number; streets: (ProfileNumbers | null)[]; style?: string };
+export const getAgent = (agent_id: string) => view<(Agent & { profile?: AgentProfile; strategy_version?: number }) | null>('get_agent', { agent_id });
+export const registerAgent = (agentId: string, profile: AgentProfile) => nearCall(NEAR_CONTRACT, 'register_agent', { agent_id: agentId, profile }, 0n, 30n);
+/** A new strategy version for an agent you listed (backers see the change). */
+export const updateAgent = (agentId: string, profile: AgentProfile) => nearCall(NEAR_CONTRACT, 'update_agent', { agent_id: agentId, profile }, 0n, 30n);
 
 /** The contract's rule for agent ids. */
 export const validAgentId = (id: string): boolean => /^[a-z0-9-]{1,32}$/.test(id);
