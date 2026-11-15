@@ -13,6 +13,8 @@ import {
 } from '../../near/backing';
 import { replaySettled, toAgentReplay } from '../../near/replay';
 import { openCrossChain } from './backingIntents';
+import { getNearAiSigners, verifyNearAiProof } from '../../near/nearAi';
+import { nearAiLabel } from '../agentListing';
 import { nearAccount, nearSigner } from '../../near/wallet';
 import { btn, esc, fmt, seg } from '../core';
 import { ico } from '../icons';
@@ -32,6 +34,10 @@ const state = {
   earned: '0',
   sessions: [] as SessionSummary[],
   records: new Map<string, SessionRecord>(),
+  /** Attested NEAR AI signing addresses (lowercase), for checking each session's model proofs here. */
+  aiSigners: null as string[] | null,
+  /** Session id → its NEAR AI proofs all check out (absent: the session has none). */
+  aiOk: new Map<string, boolean>(),
   /** A wallet action in progress ("Confirm in your wallet…"), or its result. */
   note: '',
 };
@@ -53,6 +59,8 @@ async function load(): Promise<void> {
     const missing = sessions.filter((s) => !state.records.has(s.session_id));
     const recs = await Promise.all(missing.map((s) => sessionRecord(s.session_id).catch(() => null)));
     missing.forEach((s, i) => recs[i] && state.records.set(s.session_id, recs[i]));
+    state.aiSigners ??= await getNearAiSigners().then((l) => l.flatMap((m) => m.signing_addresses.map((a) => a.toLowerCase()))).catch(() => null);
+    for (const [id, rec] of state.records) if (rec.near_ai?.length && !state.aiOk.has(id)) state.aiOk.set(id, aiProofsOk(rec));
     state.holdings.clear();
     state.positions.clear();
     state.earned = '0';
@@ -134,7 +142,7 @@ function proCard(c: AgentCard, i: number): string {
   const leaving = h && big(h.pending_out_shares) > 0n;
   const action = btn(mine ? 'Add stake' : 'Stake', 'bk-join', { h: 'gold', c: 'v2-grow', v: i })
     + (mine ? btn(leaving ? 'Withdrawing…' : 'Withdraw', 'bk-leave', { h: 'violet', c: 'v2-grow', v: i, dis: !!leaving }) : '');
-  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(a.id)}</b><div class="v2-xs v2-mut v2-ellip">by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div></div><span class="v2-pill" style="width:max-content">${esc(styleWords(a.tight, a.aggro))}</span><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div><div class="v2-row" style="gap:.4em">${action}</div>${btn('Stake from another chain', 'bk-xchain', { h: 'ghost', c: 'sm w', v: i })}</div>`;
+  return `<div class="v2-card v2-col v2-ag-mcard"><div class="v2-row">${ico('robot', 2.4)}<div class="v2-grow"><b class="v2-ellip" style="display:block;font-size:1.1em">${esc(a.id)}</b><div class="v2-xs v2-mut v2-ellip">by ${esc(a.owner)}${playing ? ' · <span class="v2-good">playing now</span>' : ''}</div></div></div><div class="v2-row v2-wrap" style="gap:.35em"><span class="v2-pill" style="width:max-content">${esc(a.private_strategy ? 'Private strategy' : styleWords(a.tight, a.aggro))}</span>${a.private_strategy ? `<span class="v2-pill v2-ai-pill" title="${AI_CARD_TIP}">${nearAiLabel(a.private_strategy.model)}</span>` : ''}</div><div class="v2-row v2-ag-mstats">${stats}</div><div class="v2-xs v2-mut">${fmt(a.sessions)} sessions · ${fmt(a.hands)} hands · ${a.net_chips >= 0 ? '+' : ''}${fmt(a.net_chips)} chips all time</div><div class="v2-row" style="gap:.4em">${action}</div>${btn('Stake from another chain', 'bk-xchain', { h: 'ghost', c: 'sm w', v: i })}</div>`;
 }
 
 function prosView(): string {
@@ -188,6 +196,15 @@ function seatNets(rec: SessionRecord | null | undefined): { agent: string; net: 
 const yours = (id: string): boolean =>
   state.cards.some((c) => c.agent.id === id && c.agent.owner === state.account) || staked(state.holdings.get(id)) || state.positions.has(id);
 
+const AI_CARD_TIP = "Its pro's plain-words strategy is sealed to the dealer. Each session a private model on NEAR AI picks its settings, and the contract checks the model's signature.";
+const AI_OK_TIP = "The private model's signed choices checked out in your browser";
+const AI_BAD_TIP = 'A NEAR AI proof did not check out';
+
+/** Every NEAR AI proof in a record checks out here (signature, attested signer, the profile played). */
+function aiProofsOk(rec: SessionRecord): boolean {
+  return (rec.near_ai ?? []).every((p) => verifyNearAiProof(p, state.aiSigners));
+}
+
 function sessionsView(): string {
   if (!state.sessions.length) return `<div class="v2-bk-body"><div class="v2-empty">${ico('eye', 5)}No settled sessions yet. They show here once an agent session settles on NEAR.</div></div>`;
   let hands = 0;
@@ -207,13 +224,15 @@ function sessionsView(): string {
           ? `${esc(top.agent)} <b class="${tone(top.net)}">${signedNear(top.net)}</b>`
           : '<span class="v2-mut">Even</span>';
       }
-      const agents = s.agents.map((a) => (yours(a) ? `<b class="v2-goldc">${esc(a)}</b>` : esc(a))).join(' vs ');
+      const ai = state.aiOk.get(s.session_id);
+      const aiMark = ai === undefined ? '' : ` <span class="v2-pill ${ai ? 'v2-ai-pill' : 'bad'}" title="${ai ? AI_OK_TIP : AI_BAD_TIP}">NEAR AI ${ai ? '✓' : '✗'}</span>`;
+      const agents = s.agents.map((a) => (yours(a) ? `<b class="v2-goldc">${esc(a)}</b>` : esc(a))).join(' vs ') + aiMark;
       return `<div class="v2-bk-ss v2-ag-row"><b><span class="v2-ag-k">Session </span>${esc(s.session_id)}</b><span class="v2-ellip">${agents}</span><span class="v2-num"><span class="v2-ag-k">Hands </span>${s.hands}</span><span class="v2-sm">${esc(when.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))}</span><span><span class="v2-ag-k">Top </span>${result}</span><span style="justify-self:end">${btn(`${ico('eye', 0.9)} Watch`, 'bk-watch', { h: 'violet', c: 'sm', v: i })}</span></div>`;
     })
     .join('');
   const tile = (v: string, l: string) => `<div class="v2-card v2-grow"><b style="font-size:1.5em">${v}</b><div class="v2-sm v2-mut">${l}</div></div>`;
-  const tiles = `<div class="v2-row v2-wrap v2-ag-tiles">${tile(String(state.sessions.length), 'Sessions')}${tile(fmt(hands), 'Total hands')}${tile(`${formatNear(moved)} NEAR`, 'Won across seats')}${tile(pnlText(yourNet), 'Your agents, net')}</div>`;
-  return `<div class="v2-col v2-scroll v2-bk-body">${tiles}<div class="v2-bk-ss v2-ag-hdr"><span>Session</span><span>Agents</span><span>Hands</span><span>Settled</span><span>Top result</span><span></span></div>${rows}<div class="v2-xs v2-mut">Results are each seat's cash-out minus buy-in, before fees. Watch re-deals every hand in your browser from the dealer's randomness proof and replays each bet, then checks the final stacks against what the contract paid.</div></div>`;
+  const tiles = `<div class="v2-row v2-wrap v2-ag-tiles">${tile(String(state.sessions.length), 'Sessions')}${tile(fmt(hands), 'Total hands')}${tile(`${formatNear(moved)} NEAR`, 'Won across seats')}${tile(pnlText(yourNet), 'Agents you stake on, at the table')}</div>`;
+  return `<div class="v2-col v2-scroll v2-bk-body">${tiles}<div class="v2-bk-ss v2-ag-hdr"><span>Session</span><span>Agents</span><span>Hands</span><span>Settled</span><span>Top result</span><span></span></div>${rows}<div class="v2-xs v2-mut">Results are each seat's cash-out minus buy-in, before fees: the whole table, not your share. Your own P&amp;L is under My stakes. Watch re-deals every hand in your browser from the dealer's randomness proof and replays each bet, then checks the final stacks against what the contract paid.</div></div>`;
 }
 
 // ------------------------------------------------------------------ actions
@@ -293,6 +312,7 @@ async function watch(i: number): Promise<void> {
     if (!rec) throw new Error('That session is no longer on the contract.');
     const out = await replaySettled(rec);
     const verified = out.stacks.join() === rec.end_stacks.join();
+    const ai = rec.near_ai?.length ? aiProofsOk(rec) : null;
     const names = rec.payouts?.seats.map((p) => p.agent) ?? s.agents;
     // Cards face up for your own agent, else one you back, else the first seat; the caption says which.
     const owned = names.findIndex((n) => state.cards.some((c) => c.agent.id === n && c.agent.owner === state.account));
@@ -300,10 +320,11 @@ async function watch(i: number): Promise<void> {
     const focus = owned >= 0 ? owned : backed >= 0 ? backed : 0;
     const hands = out.hands.map((h) => toAgentReplay(h, names, rec.sb, rec.bb, focus));
     state.note = '';
+    if (ai === false) return ui().message('NEAR AI proof does not check out', `A private model's signed choice in ${esc(s.session_id)} doesn't match what was played, or isn't from an attested NEAR AI signer. Don't trust this session.`);
     if (!verified) return ui().message('Replay does not match', `Your browser's replay of ${esc(s.session_id)} ends with different stacks than the contract recorded. Don't trust this session.`);
     await app().router.navigate('table', {
       session: replaySession(hands, {
-        title: `${s.session_id} · verified`,
+        title: `${s.session_id} · verified${ai ? ' · NEAR AI choice verified' : ''}`,
         backLabel: 'Back to sessions',
         focusLabel: owned >= 0 ? 'your agent' : backed >= 0 ? 'you back it' : '',
         returnTo: app().router.has('menu') ? 'menu' : undefined,

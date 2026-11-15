@@ -3,6 +3,7 @@
  * node; writes go through the player's wallet (wallet.ts). Amounts are yoctoNEAR strings, as the contract returns them.
  */
 import { viewContract } from './rpc';
+import type { NearAiProof, PrivateStrategyView } from './nearAi';
 import { nearCall } from './wallet';
 
 export { NEAR_RPC } from './rpc';
@@ -13,7 +14,8 @@ export const NEAR_EXPLORER = 'https://testnet.nearblocks.io';
 export const PRICE_SCALE = 1_000_000_000;
 const YOCTO = 10n ** 24n;
 
-export type Agent = { id: string; owner: string; tight: number; aggro: number; sessions: number; hands: number; net_chips: number };
+/** `profile`, `strategy_version` and `private_strategy` (a NEAR-AI agent: its sealed text's model and size) come with agents v2. */
+export type Agent = { id: string; owner: string; tight: number; aggro: number; sessions: number; hands: number; net_chips: number; profile?: AgentProfile; strategy_version?: number; private_strategy?: PrivateStrategyView | null };
 export type Pool = { shares: string; value: string; price: string; hwm_price: string; at_table: string; max_buy_in_bps: number; sessions: number; pending_in: string };
 export type AgentCard = { agent: Agent; pool: Pool | null };
 /** `deposited` / `withdrawn` (yoctoNEAR, all time) come with the contract's cost-basis views; P&L shows once they do. */
@@ -34,6 +36,8 @@ export type SessionRecord = {
   actions: string;
   end_stacks: number[];
   payouts: { seats: Payout[] } | null;
+  /** The private model's signed choice for each NEAR-AI seat (checked on chain before settling). */
+  near_ai?: NearAiProof[];
 };
 
 /** A read-only call on the table contract (NEAR RPC `call_function`). */

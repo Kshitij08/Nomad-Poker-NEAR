@@ -1,0 +1,42 @@
+[
+ {
+  "seat": 0,
+  "agent_id": "nomad-b",
+  "model": "Qwen/Qwen3.6-35B-A3B-FP8",
+  "chat_id": "31faa954b03f419c993d417c73589493",
+  "response": "{\"id\":\"31faa954b03f419c993d417c73589493\",\"object\":\"chat.completion\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\n  \\\"fold_below\\\": 20,\\n  \\\"raise_above\\\": 15,\\n  \\\"aggression\\\": 85,\\n  \\\"bluff_chance\\\": 5,\\n  \\\"raise_size\\\": 110,\\n  \\\"position_weight\\\": 70\\n}\"},\"finish_reason\":\"stop\",\"logprobs\":null,\"matched_stop\":248046}],\"model\":\"Qwen/Qwen3.6-35B-A3B-FP8\",\"created\":1794710011,\"usage\":{\"prompt_tokens\":290,\"total_tokens\":354,\"completion_tokens\":64,\"prompt_tokens_details\":{\"cached_tokens\":0},\"reasoning_tokens\":0,\"completion_tokens_details\":null}}",
+  "signature_text": "Qwen/Qwen3.6-35B-A3B-FP8:4739dc39cfe2cd212b494b892a9284635dd54e02835adb5c2f80cc2782cba0a3:5b96969f23093b7a58d9154c72472a7d429ca53391d1c3fba0443e8e0a0ec10f",
+  "signature": "0xcd13f8dee63b507a112c697ea1d9ce454c3f9c3c0f2705f4c29ae4d1491e102c0987b9c8fbece726518cd46cabbfe48d5811d2bb55559a053b2ff136925ff2b91c",
+  "signing_address": "0xfdbd7952498b333206f360d71d97a1e0961e8ddf",
+  "profile": {
+   "fold_below": 20,
+   "raise_above": 45,
+   "aggression": 85,
+   "bluff_chance": 5,
+   "raise_size": 110,
+   "position_weight": 70,
+   "streets": [],
+   "style": "NEAR AI"
+  }
+ },
+ {
+  "seat": 1,
+  "agent_id": "nomad-d",
+  "model": "Qwen/Qwen3.6-35B-A3B-FP8",
+  "chat_id": "58540bbf646a47a8a67c58de7070cde9",
+  "response": "{\"id\":\"58540bbf646a47a8a67c58de7070cde9\",\"object\":\"chat.completion\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\n  \\\"fold_below\\\": 50,\\n  \\\"raise_above\\\": 75,\\n  \\\"aggression\\\": 15,\\n  \\\"bluff_chance\\\": 0,\\n  \\\"raise_size\\\": 100,\\n  \\\"position_weight\\\": 40\\n}\"},\"finish_reason\":\"stop\",\"logprobs\":null,\"matched_stop\":248046}],\"model\":\"Qwen/Qwen3.6-35B-A3B-FP8\",\"created\":1794710012,\"usage\":{\"prompt_tokens\":279,\"total_tokens\":343,\"completion_tokens\":64,\"prompt_tokens_details\":{\"cached_tokens\":0},\"reasoning_tokens\":0,\"completion_tokens_details\":null}}",
+  "signature_text": "Qwen/Qwen3.6-35B-A3B-FP8:77dec3df2fda52f6f1517a31cd96e6fac19606f8b7267f530be18de7e622689e:c8ea6d644a93cbab70d2e8dd725a840aa5131060c5fc3785d256415951591bfb",
+  "signature": "0xe32cb1bc158ec5512aa9733913973ed8393797de3a10019c299d60614abc2b21798a09b7edec8a61494dbe4c0d33f519d9a8bfa82ff41c60db2c74406938dd011c",
+  "signing_address": "0xfdbd7952498b333206f360d71d97a1e0961e8ddf",
+  "profile": {
+   "fold_below": 50,
+   "raise_above": 75,
+   "aggression": 15,
+   "bluff_chance": 0,
+   "raise_size": 100,
+   "position_weight": 40,
+   "streets": [],
+   "style": "NEAR AI"
+  }
+ }
+]

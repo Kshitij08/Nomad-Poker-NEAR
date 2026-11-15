@@ -122,3 +122,5 @@ html[data-orient='portrait'] .v2-bk-st.v2-ag-row, html[data-orient='portrait'] .
 html[data-orient='portrait'] .v2-bk-st.v2-ag-row > :first-child, html[data-orient='portrait'] .v2-bk-st.v2-ag-row > :last-child,
 html[data-orient='portrait'] .v2-bk-ss.v2-ag-row > :nth-child(2), html[data-orient='portrait'] .v2-bk-ss.v2-ag-row > :nth-child(5) { grid-column: 1 / -1; }
 html[data-orient='portrait'] .v2-bk-st.v2-ag-row > :last-child { justify-content: flex-start !important; }
+/* NEAR AI: an agent playing a private strategy chosen by a private model */
+.v2-pill.v2-ai-pill { width: max-content; color: #7ff7d0; border-color: color-mix(in srgb, #2ee3a8 55%, transparent); background: color-mix(in srgb, #2ee3a8 14%, transparent); }
