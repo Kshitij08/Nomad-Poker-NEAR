@@ -1,20 +1,23 @@
 /**
  * A NEAR account made for you: its key lives in this browser (localStorage, this origin only), so On-chain works
  * without a wallet. The API creates `<id>.players.nomad-poker.testnet` with this key as its only full-access key; sign-in is
- * the ordinary NEP-413 challenge / verify, signed here; contract calls are NEP-366 delegate actions the API's relayer
- * sends and pays gas for (deposits still come from the account's own NEAR). The key can be backed up as a near-cli
+ * the ordinary NEP-413 challenge / verify, signed here. Contract calls with no NEAR attached are NEP-366 delegate actions
+ * the API's relayer sends and pays gas for. Calls that attach NEAR go as ordinary transactions signed here and paid from
+ * the account (gas is a fraction of a millinear): a meta-transaction's deposit would be paid by the relayer. The key can be backed up as a near-cli
  * style JSON file and restored on another device (or imported into a wallet).
  */
 import { ed25519 } from '@noble/curves/ed25519';
 import { sha256 } from '@noble/hashes/sha2';
 import { Routes, type NearAccountResponse, type NearRelayResponse } from '@nomad/contract';
 import {
+  base58Decode,
   encodeSignedDelegate,
   functionCall,
   parseSecretKey,
   publicKeyText,
   secretKeyText,
   signDelegate,
+  signTransaction,
   TGAS,
   toBase64,
 } from '@nomad/contract/near';
@@ -127,6 +130,66 @@ const rpc: Rpc = async <T>(method: string, params: unknown) => {
 
 let lastNonce = 0n;
 
+/** The key's next nonce (never one this page already used) and the latest final block. */
+async function nextNonce(k: LocalKey, rpcImpl: Rpc): Promise<{ nonce: bigint; height: bigint; hash: string }> {
+  const [key, block] = await Promise.all([
+    rpcImpl<{ nonce: number | string }>('query', { request_type: 'view_access_key', finality: 'optimistic', account_id: k.accountId, public_key: k.publicKey }),
+    rpcImpl<{ header: { height: number; hash: string } }>('block', { finality: 'final' }),
+  ]);
+  const chainNonce = BigInt(key.nonce);
+  lastNonce = (chainNonce > lastNonce ? chainNonce : lastNonce) + 1n;
+  return { nonce: lastNonce, height: BigInt(block.header.height), hash: block.header.hash };
+}
+
+type Status = { SuccessValue?: string; Failure?: unknown };
+type Outcome = { status: Status; receipts_outcome: { outcome: { status: Status } }[] };
+
+/** The first failure in a transaction's outcome, in the contract's words when it panicked; null when it went through. */
+export function outcomeFailure(o: Outcome): string | null {
+  const f = [o.status, ...o.receipts_outcome.map((r) => r.outcome.status)].find((s) => s && 'Failure' in s && s.Failure);
+  if (!f) return null;
+  const text = JSON.stringify(f.Failure);
+  return (/"ExecutionError":"([^"]+)"/.exec(text)?.[1] ?? text).slice(0, 300);
+}
+
+/** Sends a call that attaches NEAR as an ordinary transaction from the account (it pays the gas, a fraction of a millinear). */
+export async function directCall(
+  k: LocalKey,
+  contractId: string,
+  methodName: string,
+  args: Record<string, unknown>,
+  deposit: bigint,
+  tgas = 50n,
+  rpcImpl: Rpc = rpc,
+): Promise<string> {
+  if (!k.accountId) throw new Error('This key has no NEAR account yet.');
+  const sk = parseSecretKey(k.secretKey)!;
+  const n = await nextNonce(k, rpcImpl);
+  const signed = await signTransaction(
+    { signerId: k.accountId, publicKey: sk.publicKey, nonce: n.nonce, receiverId: contractId, blockHash: base58Decode(n.hash)!, actions: [functionCall(methodName, args, tgas * TGAS, deposit)] },
+    signer(k),
+  );
+  const outcome = await rpcImpl<Outcome>('send_tx', { signed_tx_base64: toBase64(signed.bytes), wait_until: 'EXECUTED_OPTIMISTIC' });
+  const failure = outcomeFailure(outcome);
+  if (failure) throw new Error(failure);
+  return signed.hash;
+}
+
+/** A call as the account kept here: relayed (gasless) when it attaches no NEAR, else sent directly. */
+export async function localCall(
+  k: LocalKey,
+  send: (signedDelegate: string) => Promise<NearRelayResponse>,
+  contractId: string,
+  methodName: string,
+  args: Record<string, unknown>,
+  deposit = 0n,
+  tgas = 50n,
+  rpcImpl: Rpc = rpc,
+): Promise<void> {
+  if (deposit > 0n) await directCall(k, contractId, methodName, args, deposit, tgas, rpcImpl);
+  else await relayCall(k, send, contractId, methodName, args, 0n, tgas, rpcImpl);
+}
+
 /**
  * Signs a call as a delegate action (the key's next nonce, valid ~5 minutes) and hands it to `send` (the API relayer).
  * `deposit` in yoctoNEAR comes from the account; gas is the sponsor's.
@@ -142,20 +205,16 @@ export async function relayCall(
   rpcImpl: Rpc = rpc,
 ): Promise<NearRelayResponse> {
   if (!k.accountId) throw new Error('This key has no NEAR account yet.');
+  if (deposit > 0n) throw new Error('The relayer sends no NEAR: use directCall.');
   const sk = parseSecretKey(k.secretKey)!;
-  const [key, block] = await Promise.all([
-    rpcImpl<{ nonce: number | string }>('query', { request_type: 'view_access_key', finality: 'optimistic', account_id: k.accountId, public_key: k.publicKey }),
-    rpcImpl<{ header: { height: number } }>('block', { finality: 'final' }),
-  ]);
-  const chainNonce = BigInt(key.nonce);
-  lastNonce = (chainNonce > lastNonce ? chainNonce : lastNonce) + 1n;
+  const n = await nextNonce(k, rpcImpl);
   const signed = await signDelegate(
     {
       senderId: k.accountId,
       receiverId: contractId,
       actions: [functionCall(methodName, args, tgas * TGAS, deposit)],
-      nonce: lastNonce,
-      maxBlockHeight: BigInt(block.header.height) + VALID_BLOCKS,
+      nonce: n.nonce,
+      maxBlockHeight: n.height + VALID_BLOCKS,
       publicKey: sk.publicKey,
     },
     signer(k),

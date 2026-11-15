@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Routes } from '@nomad/contract';
-import { decodeSignedDelegate, fromBase64, parsePublicKey, TGAS, verifyDelegate } from '@nomad/contract/near';
+import { base58Encode, decodeSignedDelegate, decodeSignedTransaction, fromBase64, parsePublicKey, TGAS, transactionHash, verifyDelegate } from '@nomad/contract/near';
 import { backupJson, createNearAccount, loadLocalKey, localSigner, nep413Hash, pendingKey, relayCall, restoreBackup, setLocalAccount, type SessionLike } from '../localKey';
 import { nearCall, nearRoute } from '../wallet';
 
@@ -86,34 +86,53 @@ describe('moves through the relayer', () => {
     const k = setLocalAccount('abcdefghij.nomad-players.testnet');
     const sent: string[] = [];
     const send = async (b64: string) => (sent.push(b64), { txHash: 'h', value: null });
-    await relayCall(k, send, 'nomad-escrow.testnet', 'buy_in', { table_id: 'poker-money-st50', amount: '50000000000000000000000' }, 10n ** 22n, 30n, rpc(41));
+    await relayCall(k, send, 'nomad-escrow.testnet', 'buy_in', { table_id: 'poker-money-st50', amount: '50000000000000000000000' }, 0n, 30n, rpc(41));
     const d = decodeSignedDelegate(fromBase64(sent[0]!)!);
     expect(await verifyDelegate(d)).toBe(true);
     expect(d.delegate).toMatchObject({ senderId: k.accountId, receiverId: 'nomad-escrow.testnet', nonce: 42n, maxBlockHeight: 5300n });
     const a = d.delegate.actions[0]!;
     expect(a.type).toBe('FunctionCall');
     if (a.type !== 'FunctionCall') return;
-    expect(a).toMatchObject({ methodName: 'buy_in', gas: 30n * TGAS, deposit: 10n ** 22n });
+    expect(a).toMatchObject({ methodName: 'buy_in', gas: 30n * TGAS, deposit: 0n });
     expect(JSON.parse(new TextDecoder().decode(a.args))).toEqual({ table_id: 'poker-money-st50', amount: '50000000000000000000000' });
     // A second move before the node shows the first one's nonce still gets a fresh nonce.
     await relayCall(k, send, 'nomad-escrow.testnet', 'withdraw', { amount: '1' }, 0n, 50n, rpc(41));
     expect(decodeSignedDelegate(fromBase64(sent[1]!)!).delegate.nonce).toBe(43n);
   });
 
-  it('nearCall goes through the relayer only when you play as the account kept here', async () => {
+  it('never relays attached NEAR (the relayer would pay it)', async () => {
+    pendingKey();
+    const k = setLocalAccount('abcdefghij.nomad-players.testnet');
+    await expect(relayCall(k, async () => ({ txHash: 'h', value: null }), 'nomad-escrow.testnet', 'deposit', {}, 1n, 30n, rpc(1))).rejects.toThrow(/sends no NEAR/);
+  });
+
+  it('nearCall: no NEAR attached goes through the relayer, NEAR attached is a transaction from the account', async () => {
     pendingKey();
     const k = setLocalAccount('abcdefghij.nomad-players.testnet');
     const relayed: string[] = [];
     nearRoute.relay = async (b64) => (relayed.push(b64), { txHash: 'h', value: null });
     nearRoute.identity = () => k.accountId;
+    const direct: string[] = [];
+    const blockHash = base58Encode(new Uint8Array(32).fill(3));
     vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
-      const { method } = JSON.parse(String(init.body));
-      const result = method === 'block' ? { header: { height: 10 } } : { nonce: 7, permission: 'FullAccess' };
+      const { method, params } = JSON.parse(String(init.body));
+      if (method === 'send_tx') direct.push(params.signed_tx_base64);
+      const result =
+        method === 'block' ? { header: { height: 10, hash: blockHash } }
+        : method === 'send_tx' ? { status: { SuccessValue: '' }, receipts_outcome: [] }
+        : { nonce: 7, permission: 'FullAccess' };
       return new Response(JSON.stringify({ jsonrpc: '2.0', id: 'x', result }));
     });
-    await nearCall('nomad-escrow.testnet', 'deposit', {}, 5n, 30n);
+    await nearCall('nomad-escrow.testnet', 'withdraw', { amount: '1' }, 0n, 30n);
     expect(relayed).toHaveLength(1);
     expect(decodeSignedDelegate(fromBase64(relayed[0]!)!).delegate.senderId).toBe(k.accountId);
+    await nearCall('nomad-escrow.testnet', 'deposit', {}, 5n, 30n);
+    expect(relayed).toHaveLength(1);
+    const { transaction: t, signature } = decodeSignedTransaction(fromBase64(direct[0]!)!);
+    expect(t).toMatchObject({ signerId: k.accountId, receiverId: 'nomad-escrow.testnet' });
+    expect(t.nonce > 7n).toBe(true);
+    expect(t.actions[0]).toMatchObject({ type: 'FunctionCall', methodName: 'deposit', deposit: 5n });
+    expect(await verify(k.publicKey, signature, await transactionHash(t))).toBe(true);
     nearRoute.identity = () => null;
     nearRoute.relay = null;
   });

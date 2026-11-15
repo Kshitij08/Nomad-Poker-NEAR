@@ -71,13 +71,14 @@ export async function localAccount(): Promise<import('./localKey').LocalKey | nu
 
 /**
  * Calls a contract method as the NEAR account you play with. `deposit` is in yoctoNEAR. An account made for you signs
- * here and the API's relayer pays the gas; otherwise the wallet sends it (connecting first if needed).
+ * here: the API's relayer sends calls with no NEAR attached (gasless), the account sends the rest itself. Otherwise the
+ * wallet sends it (connecting first if needed).
  */
 export async function nearCall(contractId: string, methodName: string, args: Record<string, unknown>, deposit = 0n, tgas = 50n): Promise<void> {
   const local = await localAccount();
   if (local) {
-    const { relayCall } = await import('./localKey');
-    await relayCall(local, nearRoute.relay!, contractId, methodName, args, deposit, tgas);
+    const { localCall } = await import('./localKey');
+    await localCall(local, nearRoute.relay!, contractId, methodName, args, deposit, tgas);
     return;
   }
   const c = await load();

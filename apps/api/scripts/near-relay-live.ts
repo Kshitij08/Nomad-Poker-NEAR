@@ -1,14 +1,15 @@
 /**
  * Live check of "Create my NEAR account" and the relayer on NEAR testnet, with the API running in this process (Hono
  * app + the node:sqlite D1 stand-in) and real RPC. Makes one player account under the sponsor, signs in with its key,
- * then deposits 0.06 NEAR, buys in at poker-money-st50 for 50 chips (0.05 NEAR, from the game balance) and withdraws the
- * remaining 0.01 NEAR, every move a relayed delegate action. The seat's locked NEAR stays at the table until the game
+ * then deposits 0.06 NEAR (an ordinary transaction from the account: the relayer never attaches NEAR, since a
+ * meta-transaction's deposit is paid by the relayer), buys in at poker-money-st50 for 50 chips (0.05 NEAR, from the game
+ * balance) and withdraws the remaining 0.01 NEAR, both relayed delegate actions (gas paid by the sponsor). The seat's locked NEAR stays at the table until the game
  * server cashes it out (or the escrow's reclaim).
  *
  *   NEAR_SPONSOR_KEY=ed25519:... npx tsx scripts/near-relay-live.ts
  */
 import { Routes, type NearAccountResponse, type NearChallengeResponse, type NearRelayResponse, type SessionResponse, type MeResponse } from '@nomad/contract';
-import { encodeSignedDelegate, functionCall, publicKeyText, signDelegate, TGAS, toBase64, YOCTO_PER_NEAR } from '@nomad/contract/near';
+import { base58Decode, encodeSignedDelegate, functionCall, publicKeyText, signDelegate, signTransaction, TGAS, toBase64, YOCTO_PER_NEAR } from '@nomad/contract/near';
 import { D1Shim } from '@nomad/db/testing/d1Shim';
 import { createApp } from '../src/app';
 import type { Env } from '../src/env';
@@ -72,6 +73,19 @@ token = (await call<SessionResponse>('POST', Routes.nearVerify, { accountId: acc
 const me = await call<MeResponse>('GET', Routes.me, undefined, token);
 log(`signed in with the browser key; identities: ${me.identities.map((i) => `${i.provider}:${i.label}`).join(', ')}`);
 
+async function direct(method: string, args: Record<string, unknown>, deposit: bigint): Promise<void> {
+  const [key, block] = await Promise.all([
+    rpc<{ nonce: number }>('query', { request_type: 'view_access_key', finality: 'optimistic', account_id: account, public_key: publicKeyText(publicKey) }),
+    rpc<{ header: { hash: string } }>('block', { finality: 'final' }),
+  ]);
+  const signed = await signTransaction(
+    { signerId: account, publicKey, nonce: BigInt(key.nonce) + 1n, receiverId: ESCROW, blockHash: base58Decode(block.header.hash)!, actions: [functionCall(method, args, 30n * TGAS, deposit)] },
+    sign,
+  );
+  const o = await rpc<{ status: unknown }>('send_tx', { signed_tx_base64: toBase64(signed.bytes), wait_until: 'EXECUTED_OPTIMISTIC' });
+  log(`${method} (direct, from the account): tx ${signed.hash} → ${JSON.stringify(o.status)}`);
+}
+
 async function move(method: string, args: Record<string, unknown>, deposit: bigint): Promise<NearRelayResponse> {
   const [key, block] = await Promise.all([
     rpc<{ nonce: number }>('query', { request_type: 'view_access_key', finality: 'optimistic', account_id: account, public_key: publicKeyText(publicKey) }),
@@ -82,17 +96,18 @@ async function move(method: string, args: Record<string, unknown>, deposit: bigi
     sign,
   );
   const r = await call<NearRelayResponse>('POST', Routes.nearRelay, { signedDelegate: toBase64(encodeSignedDelegate(signed)) }, token);
-  log(`${method}: tx ${r.txHash} → ${JSON.stringify(r.value)}`);
+  log(`${method} (relayed): tx ${r.txHash} → ${JSON.stringify(r.value)}`);
   return r;
 }
 
 const gameBalance = async () => BigInt(await viewFunction<string>(RPC, ESCROW, 'get_balance', { account }));
-await move('deposit', {}, (6n * YOCTO_PER_NEAR) / 100n);
+await direct('deposit', {}, (6n * YOCTO_PER_NEAR) / 100n);
 log(`game balance ${near(await gameBalance())} NEAR`);
 await move('buy_in', { table_id: TABLE_ID, amount: ((5n * YOCTO_PER_NEAR) / 100n).toString() }, 0n);
 log(`seat at ${TABLE_ID}: ${JSON.stringify(await viewFunction(RPC, ESCROW, 'get_seat', { table_id: TABLE_ID, player: account }))}`);
 const left = await gameBalance();
 await move('withdraw', { amount: left.toString() }, 0n);
 log(`game balance ${near(await gameBalance())} NEAR; account ${near(await balanceOf(account))} NEAR`);
+await new Promise((r) => setTimeout(r, 4000)); // gas refunds land a few blocks later
 const sponsorAfter = await balanceOf(SPONSOR);
 log(`sponsor ${near(sponsorAfter)} NEAR (spent ${near(sponsorBefore - sponsorAfter)}: ${near(BigInt(made.funded))} funding + gas)`);

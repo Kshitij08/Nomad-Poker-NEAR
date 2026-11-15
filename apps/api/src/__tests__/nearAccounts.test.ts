@@ -176,12 +176,13 @@ async function playerWithAccount() {
 }
 
 let nonceSeq = 0n;
-/** A delegate action from `p` (by default: deposit 0.05 NEAR to the escrow), signed with its key, base64. */
+const WITHDRAW = (YOCTO_PER_NEAR / 100n).toString();
+/** A delegate action from `p` (by default: withdraw 0.01 NEAR from the escrow), signed with its key, base64. */
 async function delegate(p: { keys: Keys; accountId: string }, over: Partial<DelegateAction> = {}, signWith?: Keys): Promise<string> {
   const d: DelegateAction = {
     senderId: p.accountId,
     receiverId: ESCROW,
-    actions: [functionCall('deposit', {}, 30n * TGAS, YOCTO_PER_NEAR / 20n)],
+    actions: [functionCall('withdraw', { amount: WITHDRAW }, 30n * TGAS, 0n)],
     nonce: height * 1_000_000n + ++nonceSeq,
     maxBlockHeight: height + 100n,
     publicKey: p.keys.publicKey,
@@ -257,23 +258,21 @@ describe('Create my NEAR account', () => {
 });
 
 describe('the relayer', () => {
-  it('sends a deposit paid by the sponsor: the player keeps their NEAR minus the deposit only', async () => {
+  it('sends a move with no attached NEAR, gas paid by the sponsor', async () => {
     const p = await playerWithAccount();
-    const sponsorBefore = chain.get(SPONSOR)!.balance;
     const r = await relay(p.token, await delegate(p));
     expect(r.status).toBe(200);
     expect(r.body.txHash).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
-    expect(r.body.value).toBe((YOCTO_PER_NEAR / 20n).toString());
-    expect(calls).toEqual([{ sender: p.accountId, receiver: ESCROW, method: 'deposit', deposit: YOCTO_PER_NEAR / 20n, args: {} }]);
-    expect(chain.get(p.accountId)!.balance).toBe(YOCTO_PER_NEAR / 10n - YOCTO_PER_NEAR / 20n);
-    expect(chain.get(SPONSOR)!.balance).toBe(sponsorBefore);
+    expect(r.body.value).toBe('0');
+    expect(calls).toEqual([{ sender: p.accountId, receiver: ESCROW, method: 'withdraw', deposit: 0n, args: { amount: WITHDRAW } }]);
+    expect(chain.get(p.accountId)!.balance).toBe(YOCTO_PER_NEAR / 10n);
   });
 
-  it('calls the table contract too (join_pool, claim_earnings)', async () => {
+  it('calls the table contract too (leave_pool, claim_earnings)', async () => {
     const p = await playerWithAccount();
-    expect((await relay(p.token, await delegate(p, { receiverId: TABLE, actions: [functionCall('join_pool', { agent_id: 'nomad-a' }, 30n * TGAS, 10n ** 22n)] }))).status).toBe(200);
+    expect((await relay(p.token, await delegate(p, { receiverId: TABLE, actions: [functionCall('leave_pool', { agent_id: 'nomad-a', shares: '1' }, 30n * TGAS, 0n)] }))).status).toBe(200);
     expect((await relay(p.token, await delegate(p, { receiverId: TABLE, actions: [functionCall('claim_earnings', {}, 30n * TGAS, 0n)] }))).status).toBe(200);
-    expect(calls.map((c) => c.method)).toEqual(['join_pool', 'claim_earnings']);
+    expect(calls.map((c) => c.method)).toEqual(['leave_pool', 'claim_earnings']);
   });
 
   it('refuses a replay of the same signed move before paying for it', async () => {
@@ -292,10 +291,11 @@ describe('the relayer', () => {
     ['a method not on the list', { actions: [functionCall('cash_out', { table_id: 't', player: 'x', amount: '1', key: 'k' }, 30n * TGAS, 0n)] }, /doesn't call cash_out/],
     ['an owner method', { actions: [functionCall('set_operator', { operator: 'me.testnet' }, 30n * TGAS, 0n)] }, /doesn't call set_operator/],
     ['a prototype key as a method', { actions: [functionCall('constructor', {}, 30n * TGAS, 0n)] }, /doesn't call constructor/],
-    ['a deposit on a method that takes none', { actions: [functionCall('withdraw', { amount: '1' }, 30n * TGAS, 1n)] }, /takes no deposit/],
-    ['a deposit over 1 NEAR', { actions: [functionCall('deposit', {}, 30n * TGAS, YOCTO_PER_NEAR + 1n)] }, /at most 1 NEAR/],
-    ['deposits adding up to over 1 NEAR', { actions: [functionCall('deposit', {}, 30n * TGAS, YOCTO_PER_NEAR), functionCall('deposit', {}, 30n * TGAS, 1n)] }, /at most 1 NEAR/],
-    ['too much gas', { actions: [functionCall('deposit', {}, 101n * TGAS, 1n)] }, /Too much gas/],
+    // A meta-transaction's deposits are paid by the relayer: any attached NEAR would be the sponsor's.
+    ['a deposit (the sponsor would pay it)', { actions: [functionCall('deposit', {}, 30n * TGAS, YOCTO_PER_NEAR / 20n)] }, /sends no NEAR/],
+    ['one yoctoNEAR attached', { actions: [functionCall('withdraw', { amount: '1' }, 30n * TGAS, 1n)] }, /sends no NEAR/],
+    ['a buy-in topped up with NEAR', { actions: [functionCall('buy_in', { table_id: 't' }, 30n * TGAS, 10n ** 22n)] }, /sends no NEAR/],
+    ['too much gas', { actions: [functionCall('withdraw', { amount: '1' }, 101n * TGAS, 0n)] }, /Too much gas/],
     ['a transfer', { actions: [{ type: 'Transfer' as const, deposit: 1n }] }, /only sends contract calls/],
     ['adding a key', { actions: [{ type: 'AddKey' as const, publicKey: new Uint8Array(32), fullAccess: true as const }] }, /only sends contract calls/],
     ['no actions', { actions: [] }, /one to four/],
@@ -363,6 +363,6 @@ describe('the relayer', () => {
     const { decodeSignedDelegate } = await import('@nomad/contract/near');
     const hash = base58Encode(await delegateHash(decodeSignedDelegate(Uint8Array.from(Buffer.from(sd, 'base64'))).delegate));
     const row = await env.DB.prepare('SELECT hash, methods, deposit, status FROM near_relays').first();
-    expect(row).toEqual({ hash, methods: 'deposit', deposit: (YOCTO_PER_NEAR / 20n).toString(), status: 'ok' });
+    expect(row).toEqual({ hash, methods: 'withdraw', deposit: '0', status: 'ok' });
   });
 });

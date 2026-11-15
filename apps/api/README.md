@@ -65,16 +65,18 @@ NEAR account**:
    the same key returns the same account.
 3. The browser signs in with that key through the ordinary NEP-413 challenge / verify, which links the account to the
    player (guest, Google or email) like a wallet's. The player keeps their display name.
-4. Contract calls are NEP-366 delegate actions signed in the browser and sent to `POST /v1/near/relay`. The relayer
+4. Contract calls that attach no NEAR are NEP-366 delegate actions signed in the browser and sent to
+   `POST /v1/near/relay`. Calls that attach NEAR (deposit, a buy-in topped up from the account, tournament entry,
+   join_pool, back) go as ordinary transactions signed in the browser and paid from the account (gas is a fraction of
+   a millinear): in a meta-transaction **the relayer pays the delegate's deposit**, so relaying those would spend the
+   sponsor's NEAR (seen in the first live run). The relayer
    refuses anything that isn't the caller's own app-made account and its registered key, a call to `NEAR_ESCROW`
    (`deposit`, `withdraw`, `buy_in`, `create_hosted_table`, `close_table`, `reclaim`, `register`, `leave`,
    `create_tournament`, `cancel_tournament`) or `NEAR_TABLE_CONTRACT` (`join_pool`, `leave_pool`, `claim_earnings`,
-   `register_agent`, `back`, `withdraw`, `set_loss_limit`), a deposit on a method that takes none, more than 1 NEAR
-   attached, more than 100 Tgas a call or 250 Tgas in all, a move that expired or is valid for more than 600 blocks, a
+   `register_agent`, `back`, `withdraw`, `set_loss_limit`), any attached NEAR, more than 100 Tgas a call or 250 Tgas in all, a move that expired or is valid for more than 600 blocks, a
    bad signature, or a move it already relayed (by its NEP-366 hash, before paying anything). 30 moves per player in
    10 minutes, 300 a day. It wraps the move in a transaction the sponsor signs (`send_tx`, waiting for execution) and
-   returns a contract panic in the contract's own words. Deposits come from the player's account; the sponsor pays
-   gas only. Wallet players are not relayed: their wallet pays, as before. `near_accounts` and `near_relays`
+   returns a contract panic in the contract's own words. The sponsor pays gas only (unused gas is refunded to it). Wallet players are not relayed: their wallet pays, as before. `near_accounts` and `near_relays`
    (migration 0017) record both.
 
 Setup (testnet): the sponsor is `players.nomad-poker.testnet` (a sub-account of `nomad-poker.testnet`, funded from it) (`NEAR_SPONSOR_ID` in `cloudflare.config.ts`). Its key is
@@ -82,8 +84,8 @@ the Worker secret `NEAR_SPONSOR_KEY`, never in the repo: the `private_key` from
 `~/.near-credentials/testnet/players.nomad-poker.testnet.json` (WSL), `ed25519:<base58>`. Put it in the git-ignored
 `.secrets.staging.json` next to `SPIN_SECRET` (`npm run deploy:staging` uploads it) or set it with
 `npx cf secret put NEAR_SPONSOR_KEY --mode staging`. For `npm run dev`, put it in `.dev.vars` (git-ignored). Without
-it the two routes answer 501 and the app offers wallets only. Keep the sponsor topped up: each account costs about
-0.1 NEAR plus ~0.0005 NEAR gas, each relayed move ~0.0005 NEAR.
+it the two routes answer 501 and the app offers wallets only. Keep the sponsor topped up: live on testnet, an account
+cost 0.1 NEAR plus ~0.003 NEAR gas and a relayed move ~0.002 NEAR after refunds.
 
 ## Commands (in this folder)
 

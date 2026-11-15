@@ -8,7 +8,7 @@
  *   most NEAR_NEW_ACCOUNTS_PER_DAY a day across everyone. The player then signs in with that key through the ordinary
  *   NEP-413 challenge / verify, which links the account like a wallet's.
  * - Gasless moves (`POST /v1/near/relay`): the browser signs a NEP-366 delegate action; the API checks it only calls
- *   the app's contracts and methods with sane gas and deposits, was signed by the key it registered, is fresh and was
+ *   the app's contracts and methods with sane gas and no attached NEAR (a meta-transaction's deposits would be the sponsor's), was signed by the key it registered, is fresh and was
  *   never relayed before, then wraps it in a transaction the sponsor signs and pays gas for. Only app-made accounts are
  *   relayed (wallet players pay their own gas, as before). Deposits still come from the player's own account.
  */
@@ -37,8 +37,6 @@ import type { Env } from './env';
 export const DEFAULT_NEW_ACCOUNT_YOCTO = YOCTO_PER_NEAR / 10n;
 export const MAX_NEW_ACCOUNT_YOCTO = YOCTO_PER_NEAR / 2n;
 export const DEFAULT_NEW_ACCOUNTS_PER_DAY = 50;
-/** The most NEAR one relayed move may attach (the player's own NEAR; this is a sanity cap). */
-export const MAX_RELAY_DEPOSIT = YOCTO_PER_NEAR;
 export const MAX_ACTION_GAS = 100n * TGAS;
 export const MAX_TOTAL_GAS = 250n * TGAS;
 /** Relays per player: 30 in 10 minutes, 300 a day. */
@@ -47,32 +45,18 @@ export const RELAY_DAILY = { count: 300, ms: 24 * 3_600_000 };
 /** A delegate action must expire within this many blocks (about 10 minutes on testnet). */
 export const MAX_BLOCKS_AHEAD = 600n;
 
-/** Methods the relayer pays for, by contract kind; `true` = payable (deposit up to MAX_RELAY_DEPOSIT), else 0. */
-const ESCROW_METHODS: Record<string, boolean> = {
-  deposit: true,
-  withdraw: false,
-  buy_in: true,
-  create_hosted_table: false,
-  close_table: false,
-  reclaim: false,
-  register: true,
-  leave: false,
-  create_tournament: true,
-  cancel_tournament: false,
-};
-const TABLE_METHODS: Record<string, boolean> = {
-  join_pool: true,
-  leave_pool: false,
-  claim_earnings: false,
-  register_agent: false,
-  back: true,
-  withdraw: false,
-  set_loss_limit: false,
-};
+/**
+ * Methods the relayer pays gas for. Never with an attached deposit: in a NEP-366 meta-transaction the relayer pays the
+ * delegate's deposits too (seen live: a relayed 0.06 NEAR deposit came out of the sponsor). Calls that attach NEAR
+ * (deposit, buy_in topped up from the account, register, join_pool, back) go as ordinary transactions signed by the
+ * browser key and paid from the player's account (apps/web/src/near/localKey.ts); with no deposit they may be relayed.
+ */
+const ESCROW_METHODS = new Set(['deposit', 'withdraw', 'buy_in', 'create_hosted_table', 'close_table', 'reclaim', 'register', 'leave', 'create_tournament', 'cancel_tournament']);
+const TABLE_METHODS = new Set(['join_pool', 'leave_pool', 'claim_earnings', 'register_agent', 'back', 'withdraw', 'set_loss_limit']);
 
 /** The contracts (and their methods) the relayer will call. */
-export function relayAllowlist(env: Env): Map<string, Record<string, boolean>> {
-  const m = new Map<string, Record<string, boolean>>();
+export function relayAllowlist(env: Env): Map<string, Set<string>> {
+  const m = new Map<string, Set<string>>();
   if (env.NEAR_ESCROW) m.set(env.NEAR_ESCROW, ESCROW_METHODS);
   if (env.NEAR_TABLE_CONTRACT) m.set(env.NEAR_TABLE_CONTRACT, TABLE_METHODS);
   return m;
@@ -123,18 +107,14 @@ export function relayRuleBreak(env: Env, d: SignedDelegate['delegate'], own: { a
   if (!methods) return `The relayer only calls the game's contracts, not ${d.receiverId}.`;
   if (d.actions.length === 0 || d.actions.length > 4) return 'Send one to four contract calls.';
   let gas = 0n;
-  let deposit = 0n;
   for (const a of d.actions) {
     if (a.type !== 'FunctionCall') return 'The relayer only sends contract calls.';
-    if (!Object.hasOwn(methods, a.methodName)) return `The relayer doesn't call ${a.methodName}.`;
-    const payable = methods[a.methodName];
-    if (!payable && a.deposit !== 0n) return `${a.methodName} takes no deposit.`;
+    if (!methods.has(a.methodName)) return `The relayer doesn't call ${a.methodName}.`;
+    if (a.deposit !== 0n) return 'The relayer sends no NEAR: send calls that attach NEAR from your own account.';
     if (a.gas > MAX_ACTION_GAS) return 'Too much gas for one call.';
     gas += a.gas;
-    deposit += a.deposit;
   }
   if (gas > MAX_TOTAL_GAS) return 'Too much gas.';
-  if (deposit > MAX_RELAY_DEPOSIT) return `The relayer attaches at most ${MAX_RELAY_DEPOSIT / YOCTO_PER_NEAR} NEAR per move.`;
   if (d.maxBlockHeight <= height) return 'This move expired; try again.';
   if (d.maxBlockHeight > height + MAX_BLOCKS_AHEAD) return 'This move is valid for too long; sign it again.';
   return null;
@@ -205,7 +185,7 @@ function valueOf(o: FinalOutcome, executor: string): unknown {
  * Signs `actions` to `receiverId` as the sponsor and waits for them to run. Reads the sponsor key's nonce each time and
  * retries a nonce clash (two requests at once) twice.
  */
-export async function sponsorSend(url: string, sponsor: Sponsor, receiverId: string, actions: NearAction[]): Promise<{ hash: string; outcome: FinalOutcome }> {
+export async function sponsorSend(url: string, sponsor: Sponsor, receiverId: string, actions: NearAction[], waitUntil: 'EXECUTED_OPTIMISTIC' | 'FINAL' = 'EXECUTED_OPTIMISTIC'): Promise<{ hash: string; outcome: FinalOutcome }> {
   for (let attempt = 0; ; attempt++) {
     const [block, nonce] = await Promise.all([latestBlock(url), keyNonce(url, sponsor.accountId, sponsor.publicKey)]);
     const signed = await signTransaction(
@@ -213,7 +193,7 @@ export async function sponsorSend(url: string, sponsor: Sponsor, receiverId: str
       sponsor.sign,
     );
     try {
-      const outcome = await rpc<FinalOutcome>(url, 'send_tx', { signed_tx_base64: btoa(String.fromCharCode(...signed.bytes)), wait_until: 'EXECUTED_OPTIMISTIC' });
+      const outcome = await rpc<FinalOutcome>(url, 'send_tx', { signed_tx_base64: btoa(String.fromCharCode(...signed.bytes)), wait_until: waitUntil });
       return { hash: signed.hash, outcome };
     } catch (e) {
       if (attempt < 2 && e instanceof NearRpcError && /InvalidNonce/.test(e.message)) continue;
@@ -270,7 +250,8 @@ export async function createPlayerAccount(env: Env, playerId: string, publicKeyI
       { type: 'CreateAccount' },
       { type: 'Transfer', deposit: funded },
       { type: 'AddKey', publicKey: key, fullAccess: true },
-    ]);
+      // FINAL: sign-in checks the key at final finality right after this answer.
+    ], 'FINAL');
   } catch (e) {
     console.warn('[near account] send', e);
     await undo();
