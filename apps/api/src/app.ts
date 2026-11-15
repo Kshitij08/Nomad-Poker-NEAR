@@ -45,6 +45,7 @@ import {
 } from '@nomad/db/accounts';
 import type { AppEnv, Env, PlayerRow } from './env';
 import { verifyGoogleIdToken } from './google';
+import { mountAgentMarket } from './agentMarket';
 import { accessKeyOf, base64Decode, base64Encode, isAccountId, parseEd25519Key, tournamentEscrow, verifyNep413 } from './near';
 import * as ledger from '@nomad/db/ledger';
 import * as progress from '@nomad/db/progress';
@@ -155,6 +156,9 @@ const writeLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
 
 export function createApp(): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
+
+  // Server-to-server and HMAC-signed, so it sits ahead of CORS and the per-address write limit (agentMarket.ts).
+  mountAgentMarket(app);
 
   app.use(
     '*',

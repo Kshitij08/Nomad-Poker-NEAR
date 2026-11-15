@@ -7,7 +7,7 @@
 import { NomadHost } from '../../menu/host';
 import { isDemo, isMine as isMineOf, isOpen, isRegistered, type MineResult, type TournamentInfo } from '../../tournaments/api/tournamentInfo';
 import { N0, blindsText, payout, speedShort, startLabel } from '../../tournaments/format';
-import { HOST_FEES, HOST_MAX, HOST_PRIZES, HOST_SPEEDS, HOST_STARTS } from '../../tournaments/menu/nomadTournaments';
+import { HOST_FEES, HOST_MAX, HOST_PRIZES, HOST_SPEEDS, HOST_STARTS } from '../../tournaments/hostOptions';
 import { BlindSchedule } from '@nomad/engine/tournament/blindSchedule';
 import { btn, chips, esc, input, tabs, act, seg } from '../core';
 import { ico } from '../icons';

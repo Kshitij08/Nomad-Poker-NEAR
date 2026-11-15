@@ -100,6 +100,14 @@ export class TableHost extends RoomHost {
     const ledger = this.money
       ? new NearChipLedger(opts.db, opts.near!.operator, opts.near!.escrow, room, opts.log, isNearHostedRoom(room) ? hostedBlinds(room) : null)
       : new D1ChipLedger(opts.db, room, (lock) => this.stillSeated(lock), opts.log);
+    // A fresh instance of a NEAR table: seats an earlier instance left behind (it died mid-session) are paid back first.
+    if (ledger instanceof NearChipLedger) {
+      const openedAt = Date.now();
+      this.queue(`recover ${room}`, async () => {
+        const n = await ledger.recoverLeftovers(openedAt);
+        if (n) opts.log('info', `[TableHost] recovered ${n} NEAR seat(s) left by a previous instance`);
+      });
+    }
     this.agents = new AgentDesk({
       db: opts.db,
       room,

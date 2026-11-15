@@ -27,23 +27,22 @@ Debug URL flags:
   Cloudflare game server too (`?netServer=staging`, or both `VITE_` URLs), Coins Agents play at its tables
   (`/v1/agents/*`), tournaments are live on the API and run in the game server's rooms, and the market, My Twin and the
   coach answer from the API (`backendApi` in `src/account/install.ts`).
-- `?api=staging&account=1`: open the Nomad account panel against the staging API (guest, wallet, email-link sign-in; ledger balance). `?api=local` uses `npm run dev` in `apps/api`.
+- `?api=staging&account=1`: open the Nomad account panel against the staging API (guest, NEAR, email-link sign-in; ledger balance). `?api=local` uses `npm run dev` in `apps/api`.
 - `?netServer=staging`: multiplayer on the staging game server (Cloudflare) with chips on the Nomad ledger; signs in to the staging API as a guest if needed.
 - `?net=create&netPlayer=Alice` / `?net=<CODE>&netPlayer=Bob`: two-tab multiplayer against the local server.
 
 ### Live backends are OFF by default
 
-Nothing calls the live PlayFab title, the deployed (Railway) servers, Photon or Solana mainnet unless you opt in:
+Nothing calls the live PlayFab title, the deployed (Railway) servers, Photon or NEAR mainnet unless you opt in:
 PlayFab is gone (Phase 4): accounts, the economy, friends, invites and leaderboards are the Nomad server's when an
-API is configured, else the game plays offline on a local guest. `?web3deployed=1` / `?web3backend=` /
-`?perbackend=` point web3 at a backend; `?tournaments=live&tournamentBackend=<url>`; `?agentBackend=<url>`. Web3 uses
-devnet and never signs or sends without an explicit user action. Photon Fusion has no browser client, so multiplayer
+API is configured, else the game plays offline on a local guest. `?tournaments=live&tournamentBackend=<url>`;
+`?agentBackend=<url>`. On-chain mode uses NEAR testnet and never signs or sends without an explicit action in the
+player's own wallet. Photon Fusion has no browser client, so multiplayer
 runs on `web/server` (the ported engine with PokerServerGame's rules, byte-identical event codec) — local only until
 it is deployed somewhere (`docs/hosting.md`). How to turn each live feature on, and what production needs:
 `docs/live-backends.md` (also covers replacing PlayFab).
 
-Endpoint-override flags (`?netServer=`, `?web3backend=`, `?perbackend=`, `?web3rpc=`, `?tournamentBackend=`,
-`?agentBackend=`) work in dev builds only (`src/app/flags.ts`). Production builds ignore them unless the URL's origin
+Endpoint-override flags (`?netServer=`, `?tournamentBackend=`, `?agentBackend=`) work in dev builds only (`src/app/flags.ts`). Production builds ignore them unless the URL's origin
 is listed in `VITE_ALLOWED_ENDPOINTS` (comma-separated) or the build sets `VITE_ALLOW_ENDPOINT_FLAGS=1` (staging);
 `VITE_NET_SERVER=wss://…` sets the table server a deployed build uses.
 
@@ -84,8 +83,9 @@ and the operator command that makes it one (`node infra/add-admin.mjs <stage> <p
 | `src/hud/` | HTML/CSS HUD over the canvas (seats, pot, betting panel) and `unityUi.ts`, the uGUI → DOM renderer every screen uses. |
 | `src/app/`, `src/modules.ts`, `src/main.ts` | App shell: screens, router, services registry, event bus; module install order; boot. |
 | `src/table/tableStage.ts`, `tableScreen.ts` | The persistent 3D table and the table screen; a `TableSession` (offline, network, tournament, PER, replay) drives it. |
-| `src/menu/` | The Nomad menu (PokerUI.unity) and NomadUiHost's binding model; other modules add their partials (`src/menu/README.md`). |
-| `src/theming/`, `src/economy/`, `src/retention/`, `src/agents/`, `src/tournaments/`, `src/net/`, `src/web3/` | One module per Unity feature area, each with its services, screens and Nomad partial. |
+| `src/ui2/` | The game's menu (Redesign v2): every menu screen, the dialog layer and the table chrome. |
+| `src/menu/` | The menu host the v2 screens run on (screen names, refresh, dialogs, stakes, Coins Quick Play) and the table's Leave / Settings chrome (`src/menu/README.md`). The Unity-port menu screens (PokerUI.unity) were removed. |
+| `src/theming/`, `src/economy/`, `src/retention/`, `src/agents/`, `src/tournaments/`, `src/net/`, `src/near/` | One module per Unity feature area, each with its services, screens and Nomad partial. |
 | `server/` | Local WebSocket table server (Node + tsx) running the shared engine; tournament runner in `server/tournament/` (`server/README.md`). |
 | `src/data/*.json` | Data extracted from `Assets/Test/Test.unity` and its prefabs, clips and FBX. Regenerate it with the tools below. |
 | `docs/` | Behaviour and HUD specs read from the Unity code and scene. |
@@ -103,12 +103,9 @@ node web/tools/extract-unity-scene.mjs --copy   # splines, slots, camera, dealer
 node web/tools/export-card-mesh.mjs             # card mesh from Card Deck.FBX → src/data/card-mesh.json
 node web/tools/extract-unity-hud.mjs            # HUD canvases, UI clips, sprites, fonts → src/data/unity-hud.json, ui-anims.json, public/assets/ui
 node web/tools/extract-unity-tokens.mjs         # pot token piles (PotView + Token_N prefabs) → src/data/pot-tokens.json, public/assets/tokens (run after the HUD and scene extractors)
-node web/tools/extract-unity-menu.mjs           # Nomad menu screens (PokerUI.unity) → src/data/menu-ui.json, public/assets/menu
 node web/tools/extract-unity-themes.mjs         # themes → src/data/theming-themes.json, public/assets/theming
 node web/tools/extract-unity-retention.mjs      # retention UI → src/data/retention-ui.json, public/assets/retention
 node web/tools/extract-economy-ui.mjs           # Friends sheet, login panel → src/data/economy-ui.json, public/assets/economy
-node web/tools/extract-web3-ui.mjs              # wallet / cash-out / private-table panels → public/assets/web3
-node web/tools/extract-web3-idl.mjs             # slimmed PER IDL for instruction encoding
 ```
 
 Each module's `MANIFEST.md` under `public/assets/` maps every copied file back to its Unity source.
@@ -123,21 +120,19 @@ Ported: the table (3D deal/reveal/return, river slam, pot chips, HUD, sound), th
 menu and every screen it shows (table select, stakes, settings, market, friends, party, leaderboard, tournaments,
 Agents, level rewards, Lucky Slot, weekly rewards), themes, PlayFab economy/progress/social (offline by default),
 multiplayer (quick play, parties, chat, reactions, voice over WebRTC, reconnect), tournaments (offline practice and
-server-run), Coins Agents with replays, and Solana wallet / PER private tables (escrow money tables were removed on 9 Nov 2026).
+server-run), Coins Agents with replays, and On-chain mode on NEAR testnet (NEAR sign-in, NEAR money tables on the escrow with a Verify panel, hosted tables, NEAR tournaments, backing pro agents). The Solana version was removed in the NEAR hackathon fork.
 
 Known gaps and deliberate differences are listed in each module's report notes and code comments; the main ones:
 the world-space HUD is depth-sorted against opaque 3D cards and tokens like Unity (`src/three/hudDepth.ts`), but
 not against transparent VFX, and the river slam's lens distortion does not bend the DOM HUD; particle VFX: the turn ring
 is a CSS approximation and the win burst is missing (plan in `docs/particle-effects.md`); remaining Unity differences
 are ranked in `docs/parity/README.md`; some portrait panels are only scaled (`docs/portrait-design.md`);
-the offline "Play offline" table is a web addition and does not take the buy-in from the wallet; and the copied
-marketplace SOL strategy (`CopiedSol`) is ported but only verified offline (its listing, fee terms and payout need a
-live backend).
+and the offline "Play offline" table is a web addition and does not take the buy-in from the wallet.
 
 ## Store apps (Capacitor, Phase 8)
 
 `android/` and `ios/` are the native shells around this app (`capacitor.config.ts`; app id provisional). A store build
-turns SOL features off and points at a stage's servers:
+points at a stage's servers:
 
 ```bash
 VITE_STORE_BUILD=1 VITE_API_URL=https://nomad-poker-near-api-staging.kshitijiitgn.workers.dev VITE_NET_SERVER=https://nomad-poker-near-game-staging.kshitijiitgn.workers.dev npm run build

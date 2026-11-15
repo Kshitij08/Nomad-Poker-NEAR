@@ -1,8 +1,8 @@
 /**
  * The game systems the Nomad menu calls, as OPTIONAL services other modules install (economy, retention, net,
- * theming, agents, tournaments, web3). They are read by name through `svc()` rather than declared on `Services`, so
- * this module never fights another module's declaration of the same key. Every call site checks presence and falls
- * back to the offline behaviour noted next to it (see README.md "Services the menu calls").
+ * agents). They are read by name through `svc()` rather than declared on `Services`, so this module never fights
+ * another module's declaration of the same key. Every call site checks presence and falls back to the offline
+ * behaviour noted next to it.
  */
 import type { AppContext } from '../app/app';
 import type { StakeTier } from '@nomad/engine';
@@ -56,27 +56,12 @@ export interface NetLike {
   cancelSearch?(): void;
 }
 
-/** ThemeManager (theming, ctx.services.theme): SetTheme on a table card pick (StakeTableSkin.SelectThemeTable). */
-export interface ThemingLike {
-  setTheme?(theme: string): void;
-}
-
-/** FriendsHud (economy social). */
-export interface FriendsLike {
-  openAvatarPicker?(): void;
-}
-
-/** TournamentApiClient.CallAsync (tournaments / agents): the backend calls the marketplace dialogs make. */
+/** TournamentApiClient.CallAsync (tournaments / agents): the Agent backend calls (menu/market.ts). */
 export interface BackendApiLike {
   call(method: string, path: string, json?: string | null, auth?: boolean): Promise<{ ok: boolean; body: string; error: string }>;
 }
 
-/** AgentDeployGateway.FetchHandHistoryAsync (agents): one page of a Coins Agent session's hands. */
-export interface AgentHandsLike {
-  fetchHandHistory?(deploymentId: string, take: number, skip: number): Promise<{ total: number; hands: unknown[] } | null>;
-}
-
-/** WebAudio volume setters (see README: the diff for src/audio/webAudio.ts). */
+/** WebAudio volume setters. */
 export interface VolumeSink {
   setVolumes(master: number, music: number, sfx: number): void;
 }
@@ -85,10 +70,7 @@ export interface MenuDeps {
   progression: ProgressionLike;
   retention: RetentionLike;
   net: NetLike;
-  theme: ThemingLike;
-  friends: FriendsLike;
   backendApi: BackendApiLike;
-  agentHands: AgentHandsLike;
 }
 
 /** An optional service by name (undefined when its module has not installed it). */
@@ -112,16 +94,3 @@ export function canClaimLogin(ctx: AppContext): boolean {
 export function accountExtras(ctx: AppContext): AccountExtras {
   return ctx.services.account as unknown as AccountExtras;
 }
-
-/** Every service method the menu expects, for the report / README (kept next to the interfaces above). */
-export const EXPECTED_SERVICES = [
-  'account.isGuest / busy / lastError / keepSignedIn / setKeepSignedIn / signInAsGuest / signInWithGoogle / signInWithNear / signInWithEmail / addRecoveryLogin / rename',
-  'wallet.coins (VirtualWallet) + "wallet:changed"',
-  'retention.progression.level / levelProgress01, retention.engagement.canSpin() / previewLogin().canClaim, retention.stakes (StakeSelection), retention.openWeeklyRewards / openMissions (else router "weekly-reward" / "missions")',
-  'net.quickPlay({tier,buyIn}) / freePlayJoin({tier,buyIn}) / cancelSearch',
-  'theme.setTheme(theme)',
-  'friends.openAvatarPicker',
-  'backendApi.call(method, path, json, auth)',
-  'agentHands.fetchHandHistory(deploymentId, take, skip)',
-  'audio.setVolumes(master, music, sfx)',
-] as const;

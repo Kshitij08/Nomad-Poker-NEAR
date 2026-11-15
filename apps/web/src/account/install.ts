@@ -112,7 +112,7 @@ export function install(ctx: AppContext): void {
       history.replaceState(history.state, '', url);
       await session.emailVerify(emailToken);
       // The player lands on the v2 menu with a confirmation, not the developer account overlay (that stays behind
-      // ?account=1). The v2 UI is optional (?ui=unity), so it is loaded lazily and only told when it is up.
+      // ?account=1). The v2 UI is loaded lazily and only told when it is up.
       const ok = session.signedIn && !session.error;
       void import('../ui2/ctx')
         .then(({ ui }) => {

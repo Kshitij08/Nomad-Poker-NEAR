@@ -58,6 +58,15 @@ export interface Env {
   /** Optional: the coach adds a short note written by Claude. Unset: the computed report only. */
   ANTHROPIC_API_KEY?: string;
   COACH_MODEL?: string;
+  /**
+   * NEAR AI Agent Market (agentMarket.ts): the `webhook_secret` set on the listed agent (HMAC of its hire callbacks)
+   * and the agent's `aat_` token it delivers results with. Unset secret: the webhook answers 503.
+   */
+  AGENT_MARKET_WEBHOOK_SECRET?: string;
+  AGENT_MARKET_TOKEN?: string;
+  /** Defaults: https://market.near.ai, table.nomad-poker.testnet, https://nomad-poker-near.vercel.app. */
+  AGENT_MARKET_API?: string;
+  APP_URL?: string;
 }
 
 export type AppEnv = {

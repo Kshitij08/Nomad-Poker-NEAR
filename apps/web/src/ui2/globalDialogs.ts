@@ -1,10 +1,9 @@
 /**
- * One dialog system for the whole game. The Nomad host's dialogs (NomadDialogs: message, form, busy, settings) were
- * Unity-styled panels used from ~100 call sites (errors, confirms, wallet, net, the table's Leave and Settings). They
- * now render as v2 dialogs (bottom sheets in portrait) on a fixed layer over everything — the menu, the table, the
- * Unity screens that remain — so every modal in the game looks and behaves the same.
+ * One dialog system for the whole game: the menu host's dialogs (host.dialogs: message, form, busy note, settings),
+ * used from ~100 call sites (errors, confirms, wallet, net, the table's Leave and Settings), render as v2 dialogs
+ * (bottom sheets in portrait) on a fixed layer over everything — the menu and the table — so every modal in the game
+ * looks and behaves the same.
  */
-import type { NomadDialogs } from '../menu/dialogs';
 import { PokerAudio } from '../menu/audio';
 import { esc } from './core';
 
@@ -27,7 +26,7 @@ export function richText(s: string): string {
     .replace(/\n/g, '<br>');
 }
 
-class GlobalDialogs {
+export class GlobalDialogs {
   private readonly root: HTMLElement;
   private open = false;
   private busy = false;
@@ -184,23 +183,4 @@ class GlobalDialogs {
 let instance: GlobalDialogs | null = null;
 export function globalDialogs(): GlobalDialogs {
   return (instance ??= new GlobalDialogs());
-}
-
-/** Routes the host's dialog box API into the v2 dialogs. Panels built from Unity parts (panel / window) stay. */
-export function takeOverDialogs(d: NomadDialogs): void {
-  const g = globalDialogs();
-  const dd = d as unknown as Record<string, unknown>;
-  dd.message = (...a: Parameters<NomadDialogs['message']>) => g.message(...a);
-  dd.form = (...a: Parameters<NomadDialogs['form']>) => g.form(...a);
-  dd.busy = (title: string, text: string) => g.busyNote(title, text);
-  dd.closeBusy = () => g.closeBusy();
-  dd.settings = (leave?: () => void, account?: [string, () => void][]) => g.settings(leave, account ?? []);
-  const origClose = d.close.bind(d);
-  dd.close = () => {
-    if (g.isOpen) g.close();
-    else origClose();
-  };
-  const origOpen = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(d), 'isOpen')?.get?.bind(d);
-  Object.defineProperty(d, 'isOpen', { get: () => g.isOpen || !!origOpen?.(), configurable: true });
-  g.onClosed.push(() => d.onClosed.forEach((fn) => fn()));
 }

@@ -1,5 +1,5 @@
 /** Lobby: Main menu (with the profile popover) and Settings. Atlas: Redesign v2 › Lobby. */
-import { openDailySpin, settingsAccountExtras } from '../../menu/screens/mainMenu';
+import { openDailySpin } from '../../menu/play';
 import { PokerAudio } from '../../menu/audio';
 import { btn, esc, fmt, slider, out, act } from '../core';
 import { ico, preloadArt } from '../icons';
@@ -177,7 +177,6 @@ function renameDialog(): void {
 export function openSettings(): void {
   const acc = accountExtras(app());
   const rows: [string, () => void][] = [];
-  const h = host();
   if (signedIn() && (acc.isGuest ?? true)) {
     if (acc.signInWithNear) rows.push(['Save with NEAR', () => void acc.signInWithNear!()]);
     if (acc.signInWithGoogle) rows.push(['Save with Google', () => void acc.signInWithGoogle!()]);
@@ -202,7 +201,6 @@ export function openSettings(): void {
       });
     }]);
   }
-  for (const extra of settingsAccountExtras) extra(h, rows);
   const actions: Record<string, () => void> = {
     'set-close': () => ui().closeDialog(),
     'set-discord': () => openUrl(DISCORD_URL),
