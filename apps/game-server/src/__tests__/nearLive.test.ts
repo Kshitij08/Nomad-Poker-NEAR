@@ -21,7 +21,7 @@ import { NearOperator, base58Decode } from '../nearOperator';
 const LIVE = process.env.NEAR_LIVE === '1';
 const API = process.env.NEAR_LIVE_API ?? 'http://localhost:8788';
 const GAME = process.env.NEAR_LIVE_GAME ?? 'http://localhost:8789';
-const ORIGIN = 'http://localhost:5183';
+const ORIGIN = process.env.NEAR_LIVE_ORIGIN ?? 'http://localhost:5183';
 const RPC = 'https://test.rpc.fastnear.com';
 const ESCROW = 'nomad-escrow.testnet';
 /** NEAR_LIVE_HOSTED=1: the first account hosts a fresh st50 table on the escrow and both play there. */

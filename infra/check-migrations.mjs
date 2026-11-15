@@ -13,7 +13,7 @@ if (!DBS[stage]) {
 }
 const cf = fileURLToPath(new URL('../node_modules/cf/bin/cf', import.meta.url));
 const dir = fileURLToPath(new URL('../packages/db/migrations', import.meta.url));
-const pending = JSON.parse(execFileSync(process.execPath, [cf, 'd1', 'migrations', 'list', '--dir', dir, DBS[stage]], { encoding: 'utf8' }));
+const pending = JSON.parse(execFileSync(process.execPath, [cf, 'd1', 'migrations', 'list', '--mode', stage, '--dir', dir, DBS[stage]], { encoding: 'utf8' }));
 if (pending.length) {
   console.error(`${stage} D1 has ${pending.length} migration(s) not applied: ${pending.map((m) => m.name ?? m).join(', ')}`);
   console.error(`apply them first: (cd apps/api && npm run db:migrate:${stage})`);

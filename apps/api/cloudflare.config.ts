@@ -34,7 +34,7 @@ const STAGES = {
     worker: 'nomad-poker-near-api-staging',
     d1: { id: '50f75a10-aabe-4ffc-874a-30e2565d2934', name: 'nomad-poker-near-staging' },
     r2: 'nomad-poker-near-hands-staging',
-    origins: ['https://nomad-poker-near.vercel.app', 'http://localhost:5180', 'http://127.0.0.1:5180', 'capacitor://localhost', 'https://localhost'],
+    origins: ['https://nomad-poker-near-app.vercel.app', 'https://nomad-poker-near.vercel.app', 'http://localhost:5180', 'http://127.0.0.1:5180', 'capacitor://localhost', 'https://localhost'],
     limiterNamespace: '7202',
     writeLimiterNamespace: '7205',
     emailDevEcho: '1',

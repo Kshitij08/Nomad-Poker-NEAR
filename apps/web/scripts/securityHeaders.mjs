@@ -1,42 +1,31 @@
-// The web app's security headers (Phase 7), shared by the Vercel deploy (deploy-vercel.mjs) and the local check
-// (serve-dist.mjs). The Content-Security-Policy allows only what the build talks to: this origin, the stage's API,
-// game server (https and wss) and PER service (private tables), Solana devnet RPC and MagicBlock's devnet TEE. The old
-// stack's Railway backends are not
-// allowed (the web3 module already refuses them unless ?web3deployed=1; on a deployed build the policy blocks them too).
+// The web app's security headers, shared by the Vercel deploy (deploy-vercel.mjs) and the local check (serve-dist.mjs).
+//
+// NEAR: NEAR Connect (the wallet picker) loads its wallet list from GitHub, each wallet's icon from that wallet's own
+// host, and runs the picked wallet's own script in a sandboxed frame that inherits this page's policy; those scripts
+// talk to their wallet's servers and NEAR RPC nodes. The set of hosts changes as wallets are added, so scripts, frames,
+// images and connections are allowed from any https origin (and inline, for the wallet frames). The replay of a
+// settled agent session runs poker-core as WebAssembly ('wasm-unsafe-eval'). What stays locked: no embedding of this
+// page, no plugins, the base URL and form targets are this site only.
 
-/** @param {{ api: string, game: string, per?: string, extraConnect?: string[] }} stage */
+/** @param {{ api: string, game: string, extraConnect?: string[] }} stage */
 export function securityHeaders(stage) {
   const origins = [stage.api, stage.game].filter(Boolean).map((u) => new URL(u).origin);
   const ws = origins.map((o) => o.replace(/^http/, 'ws'));
-  // The PER service is plain HTTPS (no sockets). Without it the private tables' lobby, Quick Play and Agents fail
-  // with "HTTP 0" (found on staging, 9 Nov: deposits worked, they go to devnet and the rollup directly).
-  if (stage.per) origins.push(new URL(stage.per).origin);
-  const connect = [
-    "'self'",
-    ...origins,
-    ...ws,
-    'https://api.devnet.solana.com',
-    'wss://api.devnet.solana.com',
-    'https://devnet-tee.magicblock.app',
-    'https://accounts.google.com/gsi/',
-    'wss://devnet-tee.magicblock.app',
-    ...(stage.extraConnect ?? []),
-  ];
+  const connect = ["'self'", ...origins, ...ws, 'https:', 'wss:', ...(stage.extraConnect ?? [])];
   const csp = [
     "default-src 'self'",
-    // Vite emits module scripts only (no inline script). No WebAssembly: its only user was the TEE badge's verifier,
-    // removed 9 Nov 2026.
-    // Google Identity Services (Sign in with Google): its script, its button frame and its stylesheet.
-    "script-src 'self' https://accounts.google.com/gsi/client",
+    // Vite's module scripts, Google Identity Services, NEAR Connect's wallet scripts (inline in their frames), poker-core.
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https:",
     // The UI sets element styles from script; style attributes need 'unsafe-inline'.
-    "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
-    // Uploaded profile pictures are served by the API (/v1/pictures).
-    `img-src 'self' data: blob:${stage.api ? ' ' + new URL(stage.api).origin : ''}`,
+    "style-src 'self' 'unsafe-inline' https:",
+    // Uploaded profile pictures (the API) and the wallets' icons.
+    "img-src 'self' data: blob: https:",
     "media-src 'self' data: blob:",
-    "font-src 'self' data:",
+    "font-src 'self' data: https:",
     `connect-src ${connect.join(' ')}`,
     "worker-src 'self' blob:",
-    "frame-src https://accounts.google.com/gsi/",
+    // Google sign-in's button and NEAR Connect's wallet frames.
+    "frame-src 'self' blob: data: https:",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
@@ -48,6 +37,7 @@ export function securityHeaders(stage) {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     // Table voice uses the microphone; nothing else.
     'Permissions-Policy': 'camera=(), geolocation=(), payment=(), usb=(), microphone=(self)',
+    // Wallets that open a popup (Meteor's web wallet) talk back to this window.
     'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
     'Strict-Transport-Security': 'max-age=31536000',
   };
