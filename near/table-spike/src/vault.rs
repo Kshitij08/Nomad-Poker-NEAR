@@ -420,7 +420,12 @@ impl Table {
             }
             pros.push(a.owner.clone());
             let x = strategy::ext_of(a);
-            profiles.push(near_sdk::serde_json::from_str::<Value>(&x.profile_json).unwrap());
+            let mut profile = near_sdk::serde_json::from_str::<Value>(&x.profile_json).unwrap();
+            // A NEAR-AI agent also carries its sealed strategy: the dealer asks its model for this session's profile.
+            if let Some(block) = crate::nearai::private_block(a) {
+                profile["private"] = block;
+            }
+            profiles.push(profile);
             versions.push(x.version);
         }
         let stacks = vec![buy_in_chips.0; n];

@@ -225,6 +225,8 @@ pub struct AgentView {
     pub created_at: U64,
     pub profile: Profile,
     pub strategy_version: u32,
+    /// Set for a NEAR-AI agent: its model plays from a private strategy; `profile` is the fallback.
+    pub private_strategy: Option<crate::nearai::PrivateStrategyView>,
 }
 
 pub fn agent_view(a: &Agent, x: &AgentExt) -> AgentView {
@@ -239,6 +241,7 @@ pub fn agent_view(a: &Agent, x: &AgentExt) -> AgentView {
         created_at: a.created_at,
         profile: x.profile(),
         strategy_version: x.version,
+        private_strategy: crate::nearai::private_view(&a.id),
     }
 }
 

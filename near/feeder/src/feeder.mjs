@@ -133,14 +133,15 @@ export class SessionFeeder extends EventEmitter {
     }
     const fetchedMs = Date.now() - t0;
     // attest_*: the dealer's VRF signature over the actions; the contract requires it for the sessions it opens.
-    const { alpha, signature_hex, actions, attest_alpha = null, attest_signature_hex = null } = answer.output;
+    // near_ai: NEAR-AI seats' signed model replies (the contract checks them and keeps them with the session).
+    const { alpha, signature_hex, actions, attest_alpha = null, attest_signature_hex = null, near_ai = [], near_ai_errors = [] } = answer.output;
 
     const t1 = Date.now();
     const settled = await this.#retry(
       `settle ${id}`,
       async () => {
         try {
-          return await this.table.submitSession({ sessionId: id, alpha, signature_hex, actions, attest_alpha, attest_signature_hex });
+          return await this.table.submitSession({ sessionId: id, alpha, signature_hex, actions, attest_alpha, attest_signature_hex, near_ai: near_ai.length ? near_ai : null });
         } catch (e) {
           // Settled by an earlier attempt whose answer was lost: the stored result stands.
           if (/not pending/.test(e.message)) return { ok: true, already: true };
@@ -170,7 +171,7 @@ export class SessionFeeder extends EventEmitter {
     const lastButton = detail.hands.at(-1)?.button ?? st.button;
     await this.store.save({ index: st.index + 1, stacks: next, button: (lastButton + 1) % this.seats.length });
 
-    const session = { id, index: st.index, seatOrder: order, settleTx: settled.tx ?? null, hands: detail.hands, startStacks: stacks, endStacks: detail.stacks, rebuys, payouts: settled.payouts ?? null, alpha, signature_hex, fetchedMs, runMs: answer.runMs, cost: answer.cost, settleMs, readyAt: Date.now() };
+    const session = { id, index: st.index, seatOrder: order, settleTx: settled.tx ?? null, nearAi: near_ai, nearAiErrors: near_ai_errors, hands: detail.hands, startStacks: stacks, endStacks: detail.stacks, rebuys, payouts: settled.payouts ?? null, alpha, signature_hex, fetchedMs, runMs: answer.runMs, cost: answer.cost, settleMs, readyAt: Date.now() };
     this.emit("ready", session);
     return session;
   }

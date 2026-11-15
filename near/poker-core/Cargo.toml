@@ -11,10 +11,13 @@ seal = ["dep:x25519-dalek", "dep:chacha20poly1305"]
 agent = []
 # serde derives on the strategy profile (contract, dealer, wasm).
 serde = ["dep:serde"]
+# NEAR-AI agents: the model request and reply parsing (dealer and contract).
+nearai = ["serde", "dep:serde_json"]
 
 [dependencies]
 sha2 = { version = "0.10", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
+serde_json = { version = "1", optional = true }
 x25519-dalek = { version = "2", features = ["static_secrets"], optional = true }
 chacha20poly1305 = { version = "0.10", optional = true }
 

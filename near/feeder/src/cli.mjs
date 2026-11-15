@@ -106,6 +106,10 @@ feeder.on("ready", (s) => {
     for (const m of p.pool_moves ?? []) console.log(`${clock()}        pool: ${JSON.stringify(m)}`);
   }
 });
+feeder.on("ready", (s) => {
+  for (const p of s.nearAi ?? []) console.log(`${clock()}      NEAR AI: ${p.agent_id} played ${JSON.stringify({ fold_below: p.profile.fold_below, raise_above: p.profile.raise_above, aggression: p.profile.aggression, bluff_chance: p.profile.bluff_chance, raise_size: p.profile.raise_size, position_weight: p.profile.position_weight })}, chosen by ${p.model} (chat ${p.chat_id}, signer ${p.signing_address})`);
+  for (const e of s.nearAiErrors ?? []) console.log(`${clock()}      NEAR AI: ${e.agent_id} played its fallback profile: ${e.error}`);
+});
 feeder.on("session-end", (e) => {
   const rebuys = e.rebuys.length ? `, rebuys: ${e.rebuys.map((r) => `seat ${r.seat}`).join(", ")}` : "";
   console.log(`${clock()}  ■ ${e.id} done, stacks ${e.endStacks.join(" ")}${rebuys}`);

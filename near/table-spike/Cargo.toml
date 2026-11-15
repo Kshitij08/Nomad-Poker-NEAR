@@ -8,16 +8,17 @@ description = "Test table contract: asks the OutLayer dealer for a hand, then ve
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-near-sdk = "5"
-poker-core = { path = "../poker-core", features = ["serde"] }
+near-sdk = { version = "5", features = ["unstable"] }
+poker-core = { path = "../poker-core", features = ["serde", "nearai"] }
 serde_json = "1.0"
 hex = "0.4"
 uint = { version = "0.10", default-features = false }
 
 [dev-dependencies]
-poker-core = { path = "../poker-core", features = ["agent", "serde"] }
-near-sdk = { version = "5", features = ["unit-testing"] }
+poker-core = { path = "../poker-core", features = ["agent", "serde", "nearai", "seal"] }
+near-sdk = { version = "5", features = ["unit-testing", "unstable"] }
 ed25519-dalek = "2"
+k256 = { version = "0.13", features = ["ecdsa"] }
 
 [profile.release]
 codegen-units = 1
