@@ -9,7 +9,9 @@ import { btn, esc, act, input } from '../core';
 import { ico } from '../icons';
 import { ui, host, app, S, onchain, topBar, signedIn, needCoins, getCoinsRoute } from '../ctx';
 import type { ScreenDef } from '../install';
-import { nearTablesScreen } from './nearTables';
+import { hostedTables, forgetHostedTable, nearCloseHosted, nearCopyLink, nearHostTable, nearSitAt, rememberHostedTable, tableIdFrom } from '../nearPlay';
+import { nearAccountId } from '../ctx';
+import { yoctoToChips } from '../../near/escrow';
 import './play.css';
 
 /** The five rooms (Unity TableSelect cards), cheapest first. */
@@ -48,14 +50,15 @@ export const bgArt = (theme: Theme, color: string): string => {
 
 
 /** On-chain, the Coins table screens hand over to Play for NEAR. */
-const toNear = (): void => queueMicrotask(() => ui().show('near-tables'));
+/** On-chain, the rooms on the main menu are the NEAR tables: the Coins table list hands over to them. */
+const toRooms = (): void => queueMicrotask(() => ui().show('main'));
 
 const tables: ScreenDef & { theme: Theme } = {
   id: 'tables',
   replaces: ['TableSelect_TownLobby'],
   theme: 'Town',
   open() {
-    if (onchain()) return toNear();
+    if (onchain()) return toRooms();
     this.theme = StakeTableSkin.themeFor(host().stakes.resolve().minBuyIn);
   },
   render() {
@@ -145,10 +148,11 @@ const party: ScreenDef = {
   replaces: ['PartyMenu'],
   input: { code: '' },
   open() {
-    if (onchain()) return toNear();
     this.input = { code: '' };
+    if (onchain()) void hostedTables.load();
   },
   render() {
+    if (onchain()) return nearParty(this.input?.code ?? '');
     return topBar('Play with friends') + `<div class="v2-body">
 <div class="v2-party-sub v2-mut">Private tables with friends</div>
 <div class="v2-party">
@@ -158,6 +162,20 @@ const party: ScreenDef = {
 </div></div>`;
   },
   actions: {
+    'nh-host': () => void nearHostTable(),
+    'nh-join': () => {
+      const id = tableIdFrom(party.input?.code ?? '');
+      if (!id) return ui().message('Join a table', 'Paste the invite link (or table id) your friend shared.');
+      rememberHostedTable(id);
+      void nearSitAt(id);
+    },
+    'nh-sit': (v) => void nearSitAt(String(v)),
+    'nh-link': (v) => void nearCopyLink(String(v)),
+    'nh-close': (v) => void nearCloseHosted(String(v)),
+    'nh-forget': (v) => {
+      forgetHostedTable(String(v));
+      void hostedTables.load();
+    },
     create: () => {
       if (!signedIn()) return host().show('Login');
       if (needCoins(PARTY_MIN_BUYIN, 'A private table')) return;
@@ -172,6 +190,29 @@ const party: ScreenDef = {
     },
   },
 };
+
+/** Play with friends in On-chain: host a NEAR table, join one by its link, and the tables you host or joined. */
+function nearParty(code: string): string {
+  const me = nearAccountId();
+  const rows = hostedTables.list.map(({ t, table, seat }) => {
+    const open = !!table && !table.closed;
+    const mine = seat && BigInt(seat.locked) > 0n ? yoctoToChips(seat.locked) : 0;
+    const iHost = !!table?.host && table.host === me;
+    const status = mine ? `<span class="v2-good">your seat: ${formatN0(mine)} chips</span>` : !table ? 'not found on NEAR' : table.closed ? 'closed' : `${table.seated} / ${table.config.seats} seated`;
+    const who = table ? (iHost ? 'hosted by you' : `hosted by ${esc(table.host ?? '?')}`) + (table.invite_only ? ' · invite-only' : '') : '';
+    return `<div class="v2-card v2-col" style="gap:.45em"><div><b>${esc(t.name.replace('Hosted · ', ''))}</b> <span class="v2-xs v2-mut">${t.config.small_blind} / ${t.config.big_blind}</span><div class="v2-xs v2-mut">${who}${who ? ' · ' : ''}${status}</div></div><div class="v2-row v2-wrap" style="gap:.4em">${open || mine ? btn(mine ? 'Sit' : 'Buy in & sit', 'nh-sit', { h: 'gold', c: 'sm', v: t.id }) : ''}${open ? btn('Copy link', 'nh-link', { h: 'violet', c: 'sm', v: t.id }) : ''}${iHost && open ? btn('Close', 'nh-close', { h: 'ghost', c: 'sm', v: t.id }) : ''}${!open && !mine ? btn('Remove', 'nh-forget', { h: 'ghost', c: 'sm', v: t.id }) : ''}</div></div>`;
+  }).join('');
+  const list = hostedTables.loading && !hostedTables.list.length
+    ? '<div class="v2-empty">Loading from NEAR…</div>'
+    : rows || '<div class="v2-empty">Tables you host, or join with a link, show here.</div>';
+  return topBar('Play with friends') + `<div class="v2-body">
+<div class="v2-party-sub v2-mut">Your own NEAR tables: the escrow holds every stake</div>
+<div class="v2-party">
+  <div class="v2-panel v2-col v2-party-card">${ico('cards', 7)}<b class="v2-h">Host a table</b><div class="v2-mut">Pick the stakes, invite friends by NEAR account or share the link.</div><div class="v2-grow"></div>${btn('Host a table', 'nh-host', { h: 'gold', c: 'w' })}</div>
+  <div class="v2-panel v2-col v2-party-card">${ico('friends', 7)}<b class="v2-h">Join a table</b><div class="v2-mut">Paste the invite link a friend shared.</div>${input('code', code, 'Invite link', { max: 200, cls: 'v2-party-code' })}<div class="v2-grow"></div><button class="v2-b blue w" data-a="nh-join" data-enter="code">Join table</button></div>
+  <div class="v2-panel v2-col v2-party-card v2-scroll"><b class="v2-h">Your tables</b>${list}</div>
+</div></div>`;
+}
 
 // ------------------------------------------------------------------ Watch (spectate)
 
@@ -261,5 +302,5 @@ const watch: ScreenDef & { tables: LiveTable[] | null; error: string; timer: Ret
 const PARTY_MIN_BUYIN = 500;
 
 export function playScreens(): ScreenDef[] {
-  return [tables, party, watch, nearTablesScreen];
+  return [tables, party, watch];
 }

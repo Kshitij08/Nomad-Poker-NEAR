@@ -12,6 +12,7 @@ import { ui, host, S, onchain, signedIn, needCoins } from '../ctx';
 import { HOUSE_TABLES, type HouseTable } from '../../near/escrow';
 import { formatNear } from '../../near/backing';
 import { ROOMS, bgArt, levelOf, roomArt } from './play';
+import { nearSitAt } from '../nearPlay';
 import './rooms.css';
 
 /** The room on show. */
@@ -226,8 +227,7 @@ export const roomActions = {
   'room-pick': (v: string) => select(v as Theme),
   'room-friends': () => {
     applyTheme();
-    // On-chain: host or join a NEAR table (Play for NEAR has Host a table and invite links).
-    if (onchain()) return ui().show('near-tables');
+    // Play with friends: in On-chain it hosts and joins NEAR tables (play.ts).
     host().show('PartyMenu');
   },
   'room-sit': () => {
@@ -235,7 +235,7 @@ export const roomActions = {
     const h = host();
     if (!signedIn()) return h.show('Login');
     const i = levelOf(rooms.theme);
-    if (onchain()) return ui().show('near-tables', nearTableOf(i).id);
+    if (onchain()) return void nearSitAt(nearTableOf(i).id);
     const tier = roomTier(rooms.theme);
     if (needCoins(tier.startingStack, `The ${ROOMS[i]!.name} room`)) return;
     void joinFreePlay(h, tier, tier.startingStack, 'quick');

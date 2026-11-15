@@ -115,8 +115,8 @@ export function coinCap(): string {
     const yocto = nearBalance(account);
     if (account && yocto === null) void refreshNearBalance(account, () => _ui?.render());
     const t = !account ? 'Connect' : yocto === null ? '—' : formatNear(yocto, 3);
-    // Not connected: the wallet picker. Connected: Play for NEAR (game balance, Deposit / Withdraw, tables).
-    const a = account ? 'data-a="go" data-v="near-tables" aria-label="NEAR game balance"' : 'data-a="near-connect" aria-label="Connect your NEAR wallet"';
+    // Not connected: NEAR sign-in. Connected: Deposit (like the Coins capsule's +, which gets more Coins).
+    const a = account ? 'data-a="near-deposit" aria-label="NEAR game balance, deposit"' : 'data-a="near-connect" aria-label="Connect your NEAR wallet"';
     return `<button class="v2-coin" ${a}>${ico('near', 1.9)}<b class="v2-num">${esc(t)}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
   }
   return `<button class="v2-coin" data-a="get-coins" aria-label="Coins, get more">${ico('coin', 1.9)}<b class="v2-num">${fmt(heldCoins ?? coins())}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
