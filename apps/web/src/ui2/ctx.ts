@@ -19,6 +19,8 @@ export function setUi(ui: V2, ctx: AppContext, host: NomadHost): void {
   _host = host;
   // "Get Coins" anywhere (locked room, coin balance +): free Coins in Demo, the Shop when it sells (getCoinsRoute).
   ui.globalActions['get-coins'] = () => getCoinsRoute().go();
+  // The On-chain capsule before a NEAR wallet is connected.
+  ui.globalActions['near-connect'] = () => void connectNear();
 }
 export const ui = (): V2 => _ui;
 export const app = (): AppContext => _ctx;
@@ -112,8 +114,10 @@ export function coinCap(): string {
     const account = nearAccountId();
     const yocto = nearBalance(account);
     if (account && yocto === null) void refreshNearBalance(account, () => _ui?.render());
-    const t = !account ? 'Sign in' : yocto === null ? '—' : formatNear(yocto, 3);
-    return `<button class="v2-coin" data-a="go" data-v="near-tables" aria-label="NEAR game balance">${ico('near', 1.9)}<b class="v2-num">${esc(t)}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
+    const t = !account ? 'Connect' : yocto === null ? '—' : formatNear(yocto, 3);
+    // Not connected: the wallet picker. Connected: Play for NEAR (game balance, Deposit / Withdraw, tables).
+    const a = account ? 'data-a="go" data-v="near-tables" aria-label="NEAR game balance"' : 'data-a="near-connect" aria-label="Connect your NEAR wallet"';
+    return `<button class="v2-coin" ${a}>${ico('near', 1.9)}<b class="v2-num">${esc(t)}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
   }
   return `<button class="v2-coin" data-a="get-coins" aria-label="Coins, get more">${ico('coin', 1.9)}<b class="v2-num">${fmt(heldCoins ?? coins())}</b><span class="v2-plus">${ico('plus', 0.8)}</span></button>`;
 }
@@ -125,12 +129,41 @@ export function modeSeg(): string {
 }
 
 /** Switches play mode. Register as the screen's `mode` action. On-chain asks for NEAR sign-in where it's needed. */
-export async function setMode(v: string): Promise<void> {
+export async function setMode(v: string, connect = true): Promise<void> {
   const want = v === 'chain';
   if (want === onchain()) return;
+  // On-chain plays as your NEAR account: without one, open the wallet first; backing out stays in Demo.
+  if (want && connect && !nearAccountId() && !(await connectNear())) return;
   NomadPlayMode.onchain = want;
   if (want) void refreshNearBalance(nearAccountId(), () => _ui.render());
   _ui.render();
+}
+
+let connecting: Promise<boolean> | null = null;
+
+/** NEAR sign-in through the wallet picker (it links to the account you're playing as). True once signed in with NEAR. */
+export function connectNear(): Promise<boolean> {
+  connecting ??= (async () => {
+    const acc = accountExtras(_ctx);
+    if (!acc.signInWithNear) {
+      _ui.message('On-chain', 'NEAR sign-in needs the Nomad server, which this build does not set.');
+      return false;
+    }
+    try {
+      await acc.signInWithNear();
+    } catch (e) {
+      _ui.message('Continue with NEAR', esc(friendlyError(e, "Couldn't connect your NEAR wallet. Try again.")));
+      return false;
+    }
+    const ok = !!nearAccountId();
+    if (!ok) {
+      const why = (acc as { lastError?: string | null }).lastError;
+      if (why && !/cancel/i.test(why)) _ui.message('Continue with NEAR', esc(why));
+    } else void refreshNearBalance(nearAccountId(), () => _ui.render());
+    _ui.render();
+    return ok;
+  })().finally(() => (connecting = null));
+  return connecting;
 }
 
 /** The play mode as a small pill (sub-screens): the switch itself lives on the main menu and the profile popover. */

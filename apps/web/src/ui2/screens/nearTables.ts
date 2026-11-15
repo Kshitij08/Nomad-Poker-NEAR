@@ -354,7 +354,7 @@ export const nearTablesScreen: ScreenDef = {
   /** `arg`: a table id to sit at once loaded (the lobby's Sit Down in On-chain). */
   open(arg) {
     // NEAR tables are On-chain play: arriving from Demo (an invite link, the coin capsule) switches the mode.
-    if (!onchain()) void setMode('chain');
+    if (!onchain()) void setMode('chain', false); // this screen has its own Continue with NEAR
     void load().then(() => {
       const i = typeof arg === 'string' ? allTables().findIndex((t) => t.id === arg) : -1;
       if (i >= 0 && state.account) void sit(i);
