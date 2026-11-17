@@ -25,16 +25,21 @@ export const ROOMS: { theme: Theme; name: string; color: string }[] = [
 ];
 
 /**
- * The room art, sharper than the Unity menu export (1541×578 looked soft on the big room cards and upscaled 2-3×
- * on phones). These are the same scenes at 2048×768 (theming/) and 2880×1080 (Nomad, 3d/).
+ * The room-card art: the room scenes at 1280×480 (WebP, about 30-80 KB each, made from the 2048×768 / 2880×1080
+ * originals next to them). Sharp on the room cards at 2× and a quarter of the download, so the menu fills in fast.
  */
 const ROOM_ART: Record<Theme, string> = {
-  Default: 'assets/3d/BG.webp',
-  Forest: 'assets/theming/Forest/Forest_bg.webp',
-  Town: 'assets/theming/Town/Town_bg.webp',
-  Desert: 'assets/theming/Desert/Desert_bg.webp',
-  Neon_City: 'assets/theming/Neon_City/Neon_City_bg.webp',
+  Default: 'assets/3d/BG_card.webp',
+  Forest: 'assets/theming/Forest/Forest_bg_card.webp',
+  Town: 'assets/theming/Town/Town_bg_card.webp',
+  Desert: 'assets/theming/Desert/Desert_bg_card.webp',
+  Neon_City: 'assets/theming/Neon_City/Neon_City_bg_card.webp',
 };
+
+/** What the first screen shows: every room card and the menu backdrop (for the loading screen to wait on). */
+export function firstScreenArt(): string[] {
+  return [...ROOMS.map((r) => roomArt(r.theme)).filter((u): u is string => !!u), assetUrl('assets/menu/galaxy/nomad_bg.webp')];
+}
 
 /** The room's table background art (the scene the table plays in), or null. */
 export function roomArt(theme: Theme): string | null {

@@ -7,6 +7,7 @@ import { ticker } from './anim/tween';
 import { MODULES } from './modules';
 import { bindThemeToTable } from './theming/install';
 import type { CardFace } from './table/cardView';
+import { firstScreenArt } from './ui2/screens/play';
 
 /**
  * Boot: the persistent table stage, the router, base services, then every module. Starts on the menu
@@ -47,7 +48,9 @@ const stage = new TableStage(
 const events = new EventBus();
 const router = new Router(document.getElementById('screens')!);
 const audio = new WebAudio();
-void audio.load();
+// The first screen's art downloads first (it starts here, while the modules load); the sound effects follow once the
+// first screen is up, so they don't compete with it. play() is silent for a clip that hasn't arrived yet.
+const art = preloadImages(firstScreenArt(), (done, total) => setBootProgress(done / total));
 const ctx: AppContext = { router, services: { account: new LocalAccount(events) }, audio, params, events };
 router.attach(ctx);
 router.register('table', (c) => new TableScreen(c, stage));
@@ -84,7 +87,40 @@ function hideBootCover(): void {
   el.classList.add('out');
   window.setTimeout(() => el.remove(), 400);
 }
-void boot().finally(hideBootCover);
+
+/** Downloads and decodes images; reports each one done (loaded or failed). Resolves when all are done. */
+function preloadImages(urls: string[], onEach: (done: number, total: number) => void): Promise<void> {
+  let done = 0;
+  return Promise.all(
+    urls.map(async (url) => {
+      const img = new Image();
+      img.decoding = 'async';
+      (img as HTMLImageElement & { fetchPriority?: string }).fetchPriority = 'high';
+      img.src = url;
+      try {
+        await img.decode();
+      } catch {
+        /* a missing picture just falls back to the room's colour */
+      }
+      onEach(++done, urls.length);
+    }),
+  ).then(() => undefined);
+}
+
+/** The loading bar on the cover (0..1). */
+function setBootProgress(f: number): void {
+  const bar = document.getElementById('boot-bar');
+  if (bar) bar.style.transform = `scaleX(${Math.max(0.08, Math.min(1, f))})`;
+}
+
+/** The first screen is up and its art is in (or 6 s have passed on a slow connection): show it, then load sounds. */
+void boot()
+  .then(() => Promise.race([art, new Promise((r) => window.setTimeout(r, 6000))]))
+  .finally(() => {
+    setBootProgress(1);
+    hideBootCover();
+    window.setTimeout(() => void audio.load(), 300);
+  });
 
 /** ?demo=1: scripted hand that exercises every card animation without the engine. */
 function runDemoHand(): void {
